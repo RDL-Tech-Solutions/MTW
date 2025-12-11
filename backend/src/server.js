@@ -1,0 +1,122 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import compression from 'compression';
+import dotenv from 'dotenv';
+import { testConnection } from './config/database.js';
+import { connectRedis } from './config/redis.js';
+import logger from './config/logger.js';
+import routes from './routes/index.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { generalLimiter } from './middleware/rateLimiter.js';
+import { startCronJobs } from './services/cron/index.js';
+
+// Carregar variáveis de ambiente
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middlewares de segurança
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN?.split(',') || '*',
+  credentials: true
+}));
+
+// Middlewares gerais
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Logging
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined', {
+    stream: {
+      write: (message) => logger.info(message.trim())
+    }
+  }));
+}
+
+// Rate limiting
+app.use('/api', generalLimiter);
+
+// Rotas
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'MTW Promo API',
+    version: '1.0.0',
+    docs: '/api/health'
+  });
+});
+
+app.use('/api', routes);
+
+// Handlers de erro
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+// Inicialização do servidor
+const startServer = async () => {
+  try {
+    // Testar conexão com banco de dados
+    logger.info('🔄 Testando conexão com Supabase...');
+    const dbConnected = await testConnection();
+    if (!dbConnected) {
+      throw new Error('Falha ao conectar com Supabase');
+    }
+
+    // Conectar ao Redis
+    logger.info('🔄 Conectando ao Redis...');
+    const redisConnected = await connectRedis();
+    if (!redisConnected) {
+      logger.warn('⚠️  Redis não conectado. Cache desabilitado.');
+    }
+
+    // Iniciar cron jobs
+    if (process.env.ENABLE_CRON_JOBS === 'true') {
+      logger.info('🔄 Iniciando cron jobs...');
+      startCronJobs();
+    }
+
+    // Iniciar servidor
+    app.listen(PORT, () => {
+      logger.info(`🚀 Servidor rodando na porta ${PORT}`);
+      logger.info(`📝 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`🌐 API disponível em: http://localhost:${PORT}/api`);
+    });
+  } catch (error) {
+    logger.error(`❌ Erro ao iniciar servidor: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+// Tratamento de erros não capturados
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM recebido. Encerrando servidor...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT recebido. Encerrando servidor...');
+  process.exit(0);
+});
+
+// Iniciar
+startServer();
+
+export default app;

@@ -1,0 +1,23 @@
+import Notification from '../../models/Notification.js';
+import ClickTracking from '../../models/ClickTracking.js';
+import logger from '../../config/logger.js';
+
+export const cleanupOldData = async () => {
+  try {
+    logger.info('🔄 Iniciando limpeza de dados antigos...');
+
+    // Deletar notificações lidas com mais de 30 dias
+    await Notification.deleteOld(30);
+    logger.info('Notificações antigas removidas');
+
+    // Deletar cliques com mais de 90 dias
+    await ClickTracking.deleteOld(90);
+    logger.info('Cliques antigos removidos');
+
+    // Aqui você pode adicionar mais limpezas conforme necessário
+
+    logger.info('✅ Limpeza de dados concluída');
+  } catch (error) {
+    logger.error(`Erro na limpeza de dados: ${error.message}`);
+  }
+};
