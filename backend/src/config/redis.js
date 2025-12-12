@@ -82,6 +82,28 @@ export const cacheDel = async (key) => {
   }
 };
 
+export const cacheDelByPattern = async (pattern) => {
+  if (!isRedisAvailable) return false;
+  try {
+    const keys = [];
+    for await (const key of redisClient.scanIterator({
+      MATCH: pattern,
+      COUNT: 100
+    })) {
+      keys.push(key);
+    }
+    
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao deletar cache por padrão:', error);
+    return false;
+  }
+};
+
 export const cacheFlush = async () => {
   if (!isRedisAvailable) return false;
   try {

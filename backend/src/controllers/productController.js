@@ -2,7 +2,7 @@ import Product from '../models/Product.js';
 import ClickTracking from '../models/ClickTracking.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
-import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
+import { cacheGet, cacheSet, cacheDel, cacheDelByPattern } from '../config/redis.js';
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
@@ -13,7 +13,7 @@ class ProductController {
     try {
       const cacheKey = `products:${JSON.stringify(req.query)}`;
       const cached = await cacheGet(cacheKey);
-      
+
       if (cached) {
         return res.json(successResponse(cached));
       }
@@ -49,7 +49,7 @@ class ProductController {
   static async create(req, res, next) {
     try {
       const product = await Product.create(req.body);
-      await cacheDel('products:*');
+      await cacheDelByPattern('products:*');
 
       logger.info(`Produto criado: ${product.id}`);
 
@@ -77,7 +77,7 @@ class ProductController {
     try {
       const { id } = req.params;
       const product = await Product.update(id, req.body);
-      await cacheDel('products:*');
+      await cacheDelByPattern('products:*');
 
       logger.info(`Produto atualizado: ${id}`);
       res.json(successResponse(product, 'Produto atualizado com sucesso'));
@@ -91,7 +91,7 @@ class ProductController {
     try {
       const { id } = req.params;
       await Product.delete(id);
-      await cacheDel('products:*');
+      await cacheDelByPattern('products:*');
 
       logger.info(`Produto deletado: ${id}`);
       res.json(successResponse(null, 'Produto deletado com sucesso'));
@@ -105,7 +105,7 @@ class ProductController {
     try {
       const { id } = req.params;
       const { days = 30 } = req.query;
-      
+
       const history = await Product.getPriceHistory(id, parseInt(days));
       res.json(successResponse(history));
     } catch (error) {
@@ -137,7 +137,7 @@ class ProductController {
     try {
       const { id } = req.params;
       const { limit = 5 } = req.query;
-      
+
       const products = await Product.findRelated(id, parseInt(limit));
       res.json(successResponse(products));
     } catch (error) {

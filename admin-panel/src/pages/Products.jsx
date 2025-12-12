@@ -73,13 +73,13 @@ export default function Products() {
 
   const handleDelete = async (id) => {
     if (!confirm('Deseja realmente deletar este produto?')) return;
-    
+
     try {
       await api.delete(`/products/${id}`);
-      
+
       // Atualizar lista localmente removendo o produto deletado
       setProducts(products.filter(p => p.id !== id));
-      
+
       toast({
         title: "Sucesso!",
         description: "Produto deletado com sucesso.",
@@ -189,12 +189,18 @@ export default function Products() {
     try {
       // Função para converter preço string para número
       const parsePrice = (priceStr) => {
-        if (!priceStr) return null;
-        // Remove tudo exceto números
-        const cleaned = String(priceStr).replace(/[^\d]/g, '');
-        const number = parseFloat(cleaned) || null;
+        if (!priceStr && priceStr !== 0) return null;
+        if (typeof priceStr === 'number') return priceStr;
+
+        // Substituir vírgula por ponto se houver
+        const normalized = String(priceStr).replace(',', '.');
+
+        // Remover tudo que não for dígito ou ponto
+        const cleaned = normalized.replace(/[^\d.]/g, '');
+
+        const number = parseFloat(cleaned);
         console.log(`parsePrice("${priceStr}") => cleaned: "${cleaned}" => number: ${number}`);
-        return number;
+        return isNaN(number) ? null : number;
       };
 
       // Converter campos do formulário para o formato esperado pelo backend
@@ -255,10 +261,10 @@ export default function Products() {
       if (error.response?.data?.details) {
         console.error('❌ Detalhes dos erros:', error.response.data.details);
       }
-      
+
       let errorMessage;
       const details = error.response?.data?.details;
-      
+
       if (Array.isArray(details)) {
         // Se details for um array, mapear os erros
         errorMessage = details.map(d => `${d.field}: ${d.message}`).join(', ');
@@ -269,7 +275,7 @@ export default function Products() {
         // Caso contrário, usar a mensagem de erro padrão
         errorMessage = error.response?.data?.error || error.response?.data?.message || "Erro ao salvar produto.";
       }
-      
+
       toast({
         title: "Erro!",
         description: errorMessage,
@@ -282,7 +288,7 @@ export default function Products() {
   const detectCategory = (productName) => {
     if (!productName) return '';
     const name = productName.toLowerCase();
-    
+
     // Mapear palavras-chave para categorias
     const categoryMap = {
       'eletrônicos': ['celular', 'smartphone', 'tablet', 'notebook', 'computador', 'fone', 'headphone', 'mouse', 'teclado', 'monitor', 'tv', 'televisão', 'camera', 'câmera'],
@@ -299,14 +305,14 @@ export default function Products() {
     for (const [categoryName, keywords] of Object.entries(categoryMap)) {
       if (keywords.some(keyword => name.includes(keyword))) {
         // Encontrar o ID da categoria pelo nome
-        const category = categories.find(cat => 
-          cat.name.toLowerCase().includes(categoryName) || 
+        const category = categories.find(cat =>
+          cat.name.toLowerCase().includes(categoryName) ||
           categoryName.includes(cat.name.toLowerCase())
         );
         return category ? category.id : '';
       }
     }
-    
+
     return '';
   };
 
@@ -331,7 +337,7 @@ export default function Products() {
             Gerencie os produtos do sistema
           </p>
         </div>
-        
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => {
@@ -373,7 +379,7 @@ export default function Products() {
                     type="url"
                     placeholder="https://shopee.com.br/... ou https://mercadolivre.com.br/..."
                     value={formData.affiliate_url}
-                    onChange={(e) => setFormData({...formData, affiliate_url: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, affiliate_url: e.target.value })}
                     className="flex-1"
                   />
                   <Button
@@ -408,7 +414,7 @@ export default function Products() {
                     id="name"
                     placeholder="Ex: Smartphone Samsung Galaxy A54"
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                   />
                 </div>
@@ -418,7 +424,7 @@ export default function Products() {
                     id="platform"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={formData.platform}
-                    onChange={(e) => setFormData({...formData, platform: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
                   >
                     <option value="shopee">Shopee</option>
                     <option value="mercadolivre">Mercado Livre</option>
@@ -426,14 +432,14 @@ export default function Products() {
                   </select>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="description">Descrição</Label>
                 <Input
                   id="description"
                   placeholder="Descrição do produto..."
                   value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 />
               </div>
 
@@ -446,7 +452,7 @@ export default function Products() {
                     step="0.01"
                     placeholder="0.00"
                     value={formData.price}
-                    onChange={(e) => setFormData({...formData, price: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     required
                   />
                 </div>
@@ -458,7 +464,7 @@ export default function Products() {
                     step="0.01"
                     placeholder="0.00"
                     value={formData.discount_price}
-                    onChange={(e) => setFormData({...formData, discount_price: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, discount_price: e.target.value })}
                   />
                 </div>
               </div>
@@ -470,7 +476,7 @@ export default function Products() {
                   type="url"
                   placeholder="https://..."
                   value={formData.image_url}
-                  onChange={(e) => setFormData({...formData, image_url: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                 />
                 {formData.image_url && (
                   <div className="mt-2">
@@ -486,7 +492,7 @@ export default function Products() {
                     id="category_id"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={formData.category_id}
-                    onChange={(e) => setFormData({...formData, category_id: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                   >
                     <option value="">Selecione uma categoria</option>
                     {categories.map(category => (
@@ -502,7 +508,7 @@ export default function Products() {
                     id="coupon_id"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={formData.coupon_id}
-                    onChange={(e) => setFormData({...formData, coupon_id: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, coupon_id: e.target.value })}
                   >
                     <option value="">Nenhum cupom</option>
                     {coupons.map(coupon => (
@@ -571,10 +577,10 @@ export default function Products() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {product.image_url && (
-                          <img 
-                            src={product.image_url} 
-                            alt={product.name} 
-                            className="w-10 h-10 rounded object-cover" 
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-10 h-10 rounded object-cover"
                           />
                         )}
                         <div>
