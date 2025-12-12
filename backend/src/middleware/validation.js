@@ -42,28 +42,28 @@ export const loginSchema = Joi.object({
 export const createProductSchema = Joi.object({
   name: Joi.string().min(3).max(500).required(),
   image_url: Joi.string().uri().required(),
-  platform: Joi.string().valid('shopee', 'mercadolivre').required(),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon').required(),
   current_price: Joi.number().positive().required(),
   old_price: Joi.number().positive().allow(null),
   discount_percentage: Joi.number().min(0).max(100).allow(null),
-  category_id: Joi.string().uuid().required(),
-  coupon_id: Joi.string().uuid().allow(null),
+  category_id: Joi.string().uuid().allow('', null).optional(),
+  coupon_id: Joi.string().uuid().allow('', null).optional(),
   affiliate_link: Joi.string().uri().required(),
-  external_id: Joi.string().required(),
+  external_id: Joi.string().allow('', null).optional(),
   stock_available: Joi.boolean().default(true)
 });
 
 export const updateProductSchema = Joi.object({
   name: Joi.string().min(3).max(500),
   image_url: Joi.string().uri(),
-  platform: Joi.string().valid('shopee', 'mercadolivre'),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon'),
   current_price: Joi.number().positive(),
   old_price: Joi.number().positive().allow(null),
   discount_percentage: Joi.number().min(0).max(100).allow(null),
-  category_id: Joi.string().uuid(),
-  coupon_id: Joi.string().uuid().allow(null),
+  category_id: Joi.string().uuid().allow('', null),
+  coupon_id: Joi.string().uuid().allow('', null),
   affiliate_link: Joi.string().uri(),
-  external_id: Joi.string(),
+  external_id: Joi.string().allow('', null),
   stock_available: Joi.boolean(),
   is_active: Joi.boolean()
 }).min(1);

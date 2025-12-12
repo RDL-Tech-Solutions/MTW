@@ -7,6 +7,7 @@ import notificationRoutes from './notificationRoutes.js';
 import analyticsRoutes from './analyticsRoutes.js';
 import favoriteRoutes from './favoriteRoutes.js';
 import botRoutes from './botRoutes.js';
+import linkAnalyzerRoutes from './linkAnalyzerRoutes.js';
 
 const router = express.Router();
 
@@ -28,5 +29,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/favorites', favoriteRoutes);
 router.use('/bots', botRoutes);
+router.use('/link-analyzer', linkAnalyzerRoutes);
 
 export default router;

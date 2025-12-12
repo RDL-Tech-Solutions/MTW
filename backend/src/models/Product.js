@@ -88,8 +88,7 @@ class Product {
     let query = supabase
       .from('products_full')
       .select('*', { count: 'exact' })
-      .eq('is_active', true)
-      .eq('stock_available', true);
+      .eq('is_active', true);
 
     // Aplicar filtros
     if (category) query = query.eq('category_id', category);
@@ -142,11 +141,11 @@ class Product {
     return data;
   }
 
-  // Deletar produto
+  // Deletar produto (soft delete)
   static async delete(id) {
     const { error } = await supabase
       .from('products')
-      .delete()
+      .update({ is_active: false })
       .eq('id', id);
 
     if (error) throw error;

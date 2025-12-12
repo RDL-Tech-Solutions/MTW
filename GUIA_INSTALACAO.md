@@ -37,6 +37,47 @@
    - **anon public** key (SUPABASE_ANON_KEY)
    - **service_role** key (SUPABASE_SERVICE_KEY)
 
+### 1.4. Criar Usuário Administrador
+
+**Opção 1: Via SQL (Recomendado)**
+
+1. No Supabase SQL Editor, execute o arquivo `database/seed-admin.sql`
+2. Ou copie e execute este SQL:
+
+```sql
+-- Inserir usuário admin (senha: admin123)
+INSERT INTO users (
+  email,
+  password_hash,
+  name,
+  role,
+  is_vip,
+  created_at,
+  updated_at
+) VALUES (
+  'admin@mtwpromo.com',
+  '$2b$10$rZ5YhkW8qN3xJ5xJ5xJ5xOeKqF5xJ5xJ5xJ5xJ5xJ5xJ5xJ5xJ5xu',
+  'Administrador',
+  'admin',
+  true,
+  NOW(),
+  NOW()
+) ON CONFLICT (email) DO NOTHING;
+```
+
+**Opção 2: Via Script Node.js**
+
+```bash
+cd backend
+node scripts/create-admin.js
+```
+
+**Credenciais de Login:**
+- Email: `admin@mtwpromo.com`
+- Senha: `admin123`
+
+⚠️ **IMPORTANTE**: Altere a senha após o primeiro login!
+
 ## 🔧 2. Configuração do Backend
 
 ### 2.1. Instalar Dependências

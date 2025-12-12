@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
+import { Toaster } from './components/ui/toaster';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -8,6 +9,7 @@ import Coupons from './pages/Coupons';
 import Categories from './pages/Categories';
 import Users from './pages/Users';
 import Analytics from './pages/Analytics';
+import Bots from './pages/Bots';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -31,8 +33,10 @@ function App() {
           <Route path="categories" element={<Categories />} />
           <Route path="users" element={<Users />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="bots" element={<Bots />} />
         </Route>
       </Routes>
+      <Toaster />
     </Router>
   );
 }

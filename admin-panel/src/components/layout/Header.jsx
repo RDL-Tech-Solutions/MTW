@@ -1,31 +1,53 @@
 import { useAuthStore } from '../../stores/authStore';
-import { LogOut, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, User, Shield } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 
 export default function Header() {
   const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
+    <header className="bg-card border-b">
       <div className="flex items-center justify-between px-6 py-4">
         <div>
-          <h2 className="text-xl font-semibold text-gray-800">
+          <h2 className="text-xl font-semibold">
             Bem-vindo, {user?.name || 'Admin'}
           </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Painel Administrativo MTW Promo
+          </p>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <User className="w-4 h-4" />
-            <span>{user?.email}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 px-4 py-2 bg-muted rounded-lg">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <User className="h-4 w-4 text-primary" />
+            </div>
+            <div className="text-sm">
+              <div className="font-medium">{user?.email}</div>
+              {user?.role === 'admin' && (
+                <Badge variant="destructive" className="mt-1">
+                  <Shield className="mr-1 h-3 w-3" />
+                  Admin
+                </Badge>
+              )}
+            </div>
           </div>
 
-          <button
-            onClick={logout}
-            className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:text-primary transition-colors"
+          <Button
+            variant="outline"
+            onClick={handleLogout}
           >
-            <LogOut className="w-4 h-4" />
-            <span>Sair</span>
-          </button>
+            <LogOut className="mr-2 h-4 w-4" />
+            Sair
+          </Button>
         </div>
       </div>
     </header>

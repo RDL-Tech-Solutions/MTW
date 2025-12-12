@@ -1,53 +1,54 @@
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, Search, Heart, User } from 'lucide-react-native';
-import HomeScreen from '../screens/HomeScreen';
-import CategoriesScreen from '../screens/CategoriesScreen';
-import FavoritesScreen from '../screens/FavoritesScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import React, { useEffect } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { useAuthStore } from '../stores/authStore';
+import AuthNavigator from './AuthNavigator';
+import TabNavigator from './TabNavigator';
+import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
+import { SCREEN_NAMES } from '../utils/constants';
+import { ActivityIndicator, View } from 'react-native';
+import colors from '../theme/colors';
 
-const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
 export default function AppNavigator() {
+  const { isAuthenticated, isLoading, initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor: '#DC2626',
-        tabBarInactiveTintColor: '#6B7280',
-        headerShown: false,
-      }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: 'Início',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="Categories"
-        component={CategoriesScreen}
-        options={{
-          tabBarLabel: 'Categorias',
-          tabBarIcon: ({ color, size }) => <Search color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="Favorites"
-        component={FavoritesScreen}
-        options={{
-          tabBarLabel: 'Favoritos',
-          tabBarIcon: ({ color, size }) => <Heart color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarLabel: 'Perfil',
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
-        }}
-      />
-    </Tab.Navigator>
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!isAuthenticated ? (
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+        ) : (
+          <>
+            <Stack.Screen name="Main" component={TabNavigator} />
+            <Stack.Screen 
+              name={SCREEN_NAMES.PRODUCT_DETAILS} 
+              component={ProductDetailsScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Detalhes do Produto',
+                headerStyle: {
+                  backgroundColor: colors.white,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }

@@ -61,16 +61,26 @@ class AuthController {
         );
       }
 
-      // Verificar senha
-      const isValidPassword = await comparePassword(password, user.password);
-      if (!isValidPassword) {
+      // Verificar senha (tentar password_hash primeiro, depois password)
+      const passwordToCompare = user.password_hash || user.password;
+      if (!passwordToCompare) {
+        logger.error(`Usuário ${email} não tem senha configurada`);
         return res.status(401).json(
           errorResponse(ERROR_MESSAGES.INVALID_CREDENTIALS, ERROR_CODES.INVALID_CREDENTIALS)
         );
       }
 
-      // Remover senha do retorno
+      const isValidPassword = await comparePassword(password, passwordToCompare);
+      if (!isValidPassword) {
+        logger.warn(`Tentativa de login falhou para: ${email}`);
+        return res.status(401).json(
+          errorResponse(ERROR_MESSAGES.INVALID_CREDENTIALS, ERROR_CODES.INVALID_CREDENTIALS)
+        );
+      }
+
+      // Remover senhas do retorno
       delete user.password;
+      delete user.password_hash;
 
       // Gerar tokens
       const token = generateToken({ id: user.id, email: user.email, role: user.role });

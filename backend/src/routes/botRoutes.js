@@ -1,11 +1,11 @@
 import express from 'express';
 import botController from '../controllers/botController.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Todas as rotas requerem autenticação de admin
-router.use(authenticate, requireAdmin);
+router.use(authenticateToken, requireAdmin);
 
 // Rotas de canais
 router.get('/channels', botController.listChannels);
