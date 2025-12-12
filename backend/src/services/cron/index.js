@@ -6,6 +6,7 @@ import { sendNotifications } from './sendNotifications.js';
 import { cleanupOldData } from './cleanupOldData.js';
 import { syncProducts } from './syncProducts.js';
 import { monitorExpiredCoupons } from './monitorExpiredCoupons.js';
+import autoSyncCron from '../../cron/autoSyncCron.js';
 
 export const startCronJobs = () => {
   logger.info('🕐 Iniciando cron jobs...');
@@ -59,6 +60,12 @@ export const startCronJobs = () => {
     } catch (error) {
       logger.error(`Erro no cron de monitoramento: ${error.message}`);
     }
+  });
+
+  // Iniciar sincronização automática de produtos (Shopee & Mercado Livre)
+  // Intervalo configurável pelo painel admin
+  autoSyncCron.start().catch(error => {
+    logger.error(`Erro ao iniciar auto-sync cron: ${error.message}`);
   });
 
   logger.info('✅ Cron jobs iniciados com sucesso');

@@ -8,6 +8,7 @@ import analyticsRoutes from './analyticsRoutes.js';
 import favoriteRoutes from './favoriteRoutes.js';
 import botRoutes from './botRoutes.js';
 import linkAnalyzerRoutes from './linkAnalyzerRoutes.js';
+import syncRoutes from './syncRoutes.js';
 
 const router = express.Router();
 
@@ -30,5 +31,6 @@ router.use('/analytics', analyticsRoutes);
 router.use('/favorites', favoriteRoutes);
 router.use('/bots', botRoutes);
 router.use('/link-analyzer', linkAnalyzerRoutes);
+router.use('/sync', syncRoutes);
 
 export default router;

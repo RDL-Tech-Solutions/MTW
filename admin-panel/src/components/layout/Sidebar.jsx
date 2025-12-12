@@ -5,7 +5,8 @@ import {
   Ticket, 
   FolderTree, 
   Users, 
-  BarChart3 
+  BarChart3,
+  RefreshCw
 } from 'lucide-react';
 
 const navigation = [
@@ -15,6 +16,7 @@ const navigation = [
   { name: 'Categorias', href: '/categories', icon: FolderTree },
   { name: 'Usuários', href: '/users', icon: Users },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Automação', href: '/auto-sync', icon: RefreshCw },
 ];
 
 export default function Sidebar() {

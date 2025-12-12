@@ -5,15 +5,15 @@ class LinkAnalyzer {
   // Detectar plataforma pelo link
   detectPlatform(url) {
     const urlLower = url.toLowerCase();
-    
+
     if (urlLower.includes('shopee.com.br') || urlLower.includes('shp.ee')) {
       return 'shopee';
     }
-    if (urlLower.includes('mercadolivre.com') || 
-        urlLower.includes('mercadolibre.com') || 
-        urlLower.includes('mercadol') ||
-        urlLower.includes('mlb') ||
-        urlLower.includes('produto.mercadolivre')) {
+    if (urlLower.includes('mercadolivre.com') ||
+      urlLower.includes('mercadolibre.com') ||
+      urlLower.includes('mercadol') ||
+      urlLower.includes('mlb') ||
+      urlLower.includes('produto.mercadolivre')) {
       return 'mercadolivre';
     }
     if (urlLower.includes('amazon.com.br') || urlLower.includes('amzn.to')) {
@@ -49,23 +49,23 @@ class LinkAnalyzer {
       });
 
       const $ = cheerio.load(response.data);
-      
+
       // Extrair informações do HTML
-      const name = $('meta[property="og:title"]').attr('content') || 
-                   $('._3g6Hq1').text() ||
-                   $('title').text();
-      
-      const description = $('meta[property="og:description"]').attr('content') || 
-                         $('._2u0jt9').text();
-      
+      const name = $('meta[property="og:title"]').attr('content') ||
+        $('._3g6Hq1').text() ||
+        $('title').text();
+
+      const description = $('meta[property="og:description"]').attr('content') ||
+        $('._2u0jt9').text();
+
       const imageUrl = $('meta[property="og:image"]').attr('content') ||
-                      $('._3-N-Xx img').first().attr('src');
-      
+        $('._3-N-Xx img').first().attr('src');
+
       // Tentar extrair preços
-      const priceText = $('._3n5NQx').first().text() || 
-                       $('._1w9jLI').first().text();
+      const priceText = $('._3n5NQx').first().text() ||
+        $('._1w9jLI').first().text();
       const currentPrice = this.parsePrice(priceText);
-      
+
       const oldPriceText = $('._3_FVSo').first().text();
       const oldPrice = this.parsePrice(oldPriceText) || currentPrice;
 
@@ -98,47 +98,104 @@ class LinkAnalyzer {
       });
 
       const $ = cheerio.load(response.data);
-      
+
       let currentPrice = 0;
       let oldPrice = 0;
 
-      // Tentar extrair preço atual
-      const priceSelectors = [
-        '.andes-money-amount__fraction',
-        '.price-tag-fraction',
-        '[class*="price"] [class*="fraction"]',
-        '.ui-pdp-price__second-line .andes-money-amount__fraction'
-      ];
+      // Helper para extrair preço completo (inteiro + centavos)
+      const extractFullPrice = (container) => {
+        const fraction = $(container).find('.andes-money-amount__fraction').text().trim();
+        const cents = $(container).find('.andes-money-amount__cents').text().trim();
+        if (fraction) {
+          return this.parsePrice(`${fraction},${cents || '00'}`);
+        }
+        return 0;
+      };
 
-      for (const selector of priceSelectors) {
-        const priceText = $(selector).first().text();
-        if (priceText) {
-          currentPrice = this.parsePrice(priceText);
-          if (currentPrice > 0) {
-            console.log(`   💰 Preço atual encontrado (${selector}):`, currentPrice);
-            break;
-          }
+      '.andes-money-amount--previous' // Classe de preço anterior
+      // ESTRATÉGIA: SCAN COMPLETO E FILTRAGEM
+      // Em vez de confiar em um único seletor, vamos pegar TODOS os preços da página,
+      // classificar o contexto de cada um e decidir qual é o preço real.
+
+      const allPrices = [];
+
+      // Helper para limpar texto
+      const hasRestrictedTerms = (text) => /cupom|off|desconto|economize/i.test(text);
+
+      $('.andes-money-amount').each((i, el) => {
+        const container = $(el);
+        const price = extractFullPrice(container);
+        if (price <= 0) return;
+
+        // Contexto
+        const parent = container.parent();
+        const grandParent = parent.parent();
+        const parentText = parent.text();
+        const grandParentText = grandParent.text();
+
+        let type = 'candidate'; // default
+
+        // 1. É preço antigo (riscado)?
+        if (container.closest('.ui-pdp-price__original-value').length ||
+          container.closest('s').length ||
+          parent.is('s')) {
+          type = 'oldPrice';
+        }
+        // 2. É parcela?
+        else if (container.closest('.ui-pdp-installments__price').length ||
+          /\d+x/i.test(parentText) ||
+          container.closest('.ui-pdp-price__sub-titles').length) {
+          type = 'installment';
+        }
+        // 3. É Cupom ou Desconto?
+        else if (hasRestrictedTerms(parentText) ||
+          hasRestrictedTerms(grandParentText) ||
+          container.closest('.ui-pdp-coupon').length ||
+          container.closest('.andes-money-amount--discount').length) {
+          type = 'coupon';
+        }
+        // 4. É um valor muito baixo isolado (provavel erro ou centavos soltos)?
+        // (Opcional, mas ajuda a filtrar lixo)
+
+        allPrices.push({ price, type, context: parentText.substring(0, 50) });
+      });
+
+      console.log('📊 Todos os preços encontrados:', allPrices);
+
+      // Decidir Old Price
+      // Pegar o MAIOR valor classificado como 'oldPrice'
+      const oldPriceCandidates = allPrices.filter(p => p.type === 'oldPrice').map(p => p.price);
+      if (oldPriceCandidates.length > 0) {
+        oldPrice = Math.max(...oldPriceCandidates);
+      }
+
+      // Decidir Current Price
+      // Pegar candidatos válidos
+      const validCandidates = allPrices.filter(p => p.type === 'candidate').map(p => p.price);
+
+      if (validCandidates.length > 0) {
+        // A lógica aqui é: O preço do produto geralmente é o MAIOR valor encontrado que NÃO é oldPrice.
+        // Valores menores costumam ser: valor de parcela mal classificado, valor de desconto (ex: "40 off"), etc.
+        // Exceção: Se houver ranges, mas no ML geralmente é um preço único.
+
+        // Filtrar candidatos que sejam iguais ao oldPrice ( redundância )
+        const nonOldCandidates = validCandidates.filter(p => p !== oldPrice);
+
+        if (nonOldCandidates.length > 0) {
+          currentPrice = Math.max(...nonOldCandidates);
+        } else if (validCandidates.length > 0) {
+          // Se só sobrou igual ao oldPrice, então current = old (sem desconto)
+          currentPrice = Math.max(...validCandidates);
         }
       }
 
-      // Tentar extrair preço antigo (com desconto)
-      const oldPriceSelectors = [
-        '.andes-money-amount--previous .andes-money-amount__fraction',
-        '.ui-pdp-price__original-value .andes-money-amount__fraction',
-        '[class*="original"] [class*="fraction"]',
-        's[class*="previous"] .andes-money-amount__fraction'
-      ];
-
-      for (const selector of oldPriceSelectors) {
-        const oldPriceText = $(selector).first().text();
-        if (oldPriceText) {
-          oldPrice = this.parsePrice(oldPriceText);
-          if (oldPrice > 0 && oldPrice > currentPrice) {
-            console.log(`   💸 Preço original encontrado (${selector}):`, oldPrice);
-            break;
-          }
-        }
+      // Fallback: JSON-LD e Meta se nada visual for encontrado
+      if (!currentPrice) {
+        const metaPrice = $('meta[itemprop="price"]').attr('content');
+        if (metaPrice) currentPrice = parseFloat(metaPrice);
       }
+
+      console.log('   ✅ Decisão Final - Current:', currentPrice, 'Old:', oldPrice);
 
       return {
         currentPrice: currentPrice,
@@ -148,6 +205,48 @@ class LinkAnalyzer {
       console.error('Erro no scraping de preços:', error.message);
       return { currentPrice: 0, oldPrice: 0 };
     }
+  }
+
+  // ... (outros métodos) ...
+
+  // Converter texto de preço para número
+  parsePrice(priceText) {
+    if (!priceText) return 0;
+
+    // Converter para string e limpar espaços
+    let text = String(priceText).trim();
+
+    // Se já for numérico mascarado de string ("123.45"), tentar parse direto se não tiver vírgula
+    if (!text.includes(',') && !isNaN(parseFloat(text)) && text.includes('.')) {
+      // Pode ser formato US, mas no contexto BR é arriscado. 
+      // Vamos assumir formato BR (1.000 é mil).
+    }
+
+    // Remover "R$" ou outros prefixos
+    text = text.replace(/[^\d.,]/g, '');
+
+    // Caso especial: apenas números (ex: "1200") -> 1200
+    if (/^\d+$/.test(text)) {
+      return parseFloat(text);
+    }
+
+    // Caso BRL: "1.200,50" -> remover ponto, trocar virgula por ponto
+    // ou "1200,50"
+    if (text.includes(',')) {
+      // Remove pontos de milhar
+      text = text.replace(/\./g, '');
+      // Troca vírgula decimal por ponto
+      text = text.replace(',', '.');
+    } else {
+      // Se não tem vírgula, mas tem ponto: "1.200" (mil e duzentos) ou "10.90" (dez e noventa - raro em scraping pt-br puro, mas possível em meta tag)
+      // Se tiver apenas 1 ponto e for no final (ex 12.90), pode ser US.
+      // Mas no padrão BR, ponto é milhar. Então "1.200" vira 1200.
+      // "50.00" vira 5000? Sim, em pt-br. Se for 50 reais, seria 50,00.
+      text = text.replace(/\./g, '');
+    }
+
+    const price = parseFloat(text);
+    return isNaN(price) ? 0 : price;
   }
 
   // Extrair ID do produto do Mercado Livre da URL
@@ -175,14 +274,20 @@ class LinkAnalyzer {
   async getMeliProductFromAPI(productId) {
     try {
       console.log('🔍 Buscando produto na API do ML:', productId);
-      
+
       // Tentar como item primeiro
       let response;
       let product;
-      
+
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
+      };
+
       try {
         response = await axios.get(`https://api.mercadolibre.com/items/${productId}`, {
-          timeout: 10000
+          timeout: 10000,
+          headers
         });
         product = response.data;
         console.log('   ✅ Produto encontrado como ITEM');
@@ -190,18 +295,20 @@ class LinkAnalyzer {
         // Se falhar, tentar como produto de catálogo
         console.log('   ⚠️ Não é um item, tentando como produto de catálogo...');
         response = await axios.get(`https://api.mercadolibre.com/products/${productId}`, {
-          timeout: 10000
+          timeout: 10000,
+          headers
         });
         product = response.data;
         console.log('   ✅ Produto encontrado como CATÁLOGO');
-        
+
         // Produtos de catálogo têm estrutura diferente
         // Precisamos buscar o buy_box_winner para pegar o preço
         if (product.buy_box_winner) {
           const itemId = product.buy_box_winner.item_id;
           console.log('   🔍 Buscando item vencedor:', itemId);
           const itemResponse = await axios.get(`https://api.mercadolibre.com/items/${itemId}`, {
-            timeout: 10000
+            timeout: 10000,
+            headers
           });
           product = itemResponse.data;
         }
@@ -223,20 +330,20 @@ class LinkAnalyzer {
         const allPrices = product.title.match(/R\$\s*([\d.,]+)/g);
         if (allPrices && allPrices.length > 0) {
           console.log('   💡 Preços encontrados no título:', allPrices);
-          
+
           // Parsear todos os preços e pegar o MAIOR (que é o preço do produto, não o cupom)
           const parsedPrices = allPrices.map(p => {
             const match = p.match(/R\$\s*([\d.,]+)/);
             return match ? this.parsePrice(match[1]) : 0;
           }).filter(p => p > 0);
-          
+
           console.log('   💰 Preços parseados:', parsedPrices);
-          
+
           if (parsedPrices.length > 0) {
             // Pegar o MAIOR preço (produto) ao invés do menor (cupom)
             const extractedPrice = Math.max(...parsedPrices);
             console.log('   🎯 Maior preço (produto):', extractedPrice);
-            
+
             // Se o preço no título for menor que o price da API, é um desconto
             if (extractedPrice > 0 && extractedPrice < currentPrice) {
               oldPrice = currentPrice;
@@ -290,7 +397,7 @@ class LinkAnalyzer {
         const apiData = await this.getMeliProductFromAPI(productId);
         if (apiData) {
           console.log('✅ Dados obtidos via API do Mercado Livre!');
-          
+
           // Se a API não retornou desconto, tentar scraping para pegar
           if (apiData.oldPrice === 0) {
             console.log('⚠️ API não retornou desconto, tentando scraping...');
@@ -301,14 +408,14 @@ class LinkAnalyzer {
               apiData.currentPrice = scrapedData.currentPrice;
             }
           }
-          
+
           return apiData;
         }
       }
 
       // FALLBACK: Se a API falhar, usar scraping
       console.log('⚠️ API falhou, tentando scraping...');
-      
+
       const response = await axios.get(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -320,25 +427,25 @@ class LinkAnalyzer {
       });
 
       const $ = cheerio.load(response.data);
-      
+
       // Tentar múltiplos seletores para nome
-      const name = $('meta[property="og:title"]').attr('content') || 
-                   $('.ui-pdp-title').text() ||
-                   $('h1.ui-pdp-title').text() ||
-                   $('h1').first().text() ||
-                   $('title').text().split('|')[0];
-      
+      const name = $('meta[property="og:title"]').attr('content') ||
+        $('.ui-pdp-title').text() ||
+        $('h1.ui-pdp-title').text() ||
+        $('h1').first().text() ||
+        $('title').text().split('|')[0];
+
       // Tentar múltiplos seletores para descrição
       const description = $('meta[property="og:description"]').attr('content') ||
-                         $('.ui-pdp-description__content').text() ||
-                         $('meta[name="description"]').attr('content');
-      
+        $('.ui-pdp-description__content').text() ||
+        $('meta[name="description"]').attr('content');
+
       // Tentar múltiplos seletores para imagem
       const imageUrl = $('meta[property="og:image"]').attr('content') ||
-                      $('.ui-pdp-image').first().attr('src') ||
-                      $('img.ui-pdp-image').first().attr('src') ||
-                      $('figure img').first().attr('src');
-      
+        $('.ui-pdp-image').first().attr('src') ||
+        $('img.ui-pdp-image').first().attr('src') ||
+        $('figure img').first().attr('src');
+
       // Extrair preços - múltiplos seletores
       let currentPrice = 0;
       let oldPrice = 0;
@@ -424,10 +531,10 @@ class LinkAnalyzer {
       console.log('🔗 URL original:', url);
       const finalUrl = await this.followRedirects(url);
       console.log('🔗 URL final:', finalUrl);
-      
+
       const platform = this.detectPlatform(finalUrl);
       console.log('🏷️ Plataforma detectada:', platform);
-      
+
       if (platform === 'shopee') {
         return await this.extractShopeeInfo(finalUrl);
       } else if (platform === 'mercadolivre') {
@@ -461,17 +568,17 @@ class LinkAnalyzer {
   // Converter texto de preço para número
   parsePrice(priceText) {
     if (!priceText) return 0;
-    
+
     // Converter para string
     const text = String(priceText);
-    
+
     // No Brasil: 1.299,90 ou 1299,90 ou 1299
     // Remover pontos (separador de milhar) e substituir vírgula por ponto
     const cleaned = text
       .replace(/[^\d,]/g, '')   // Remove tudo exceto números e vírgula
       .replace(/\./g, '')       // Remove pontos (milhar)
       .replace(',', '.');        // Vírgula vira ponto decimal
-    
+
     const price = parseFloat(cleaned);
     return isNaN(price) ? 0 : price;
   }
