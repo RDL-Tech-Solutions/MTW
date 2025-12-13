@@ -73,9 +73,9 @@ export const CRON_INTERVALS = {
 
 // Limites de taxa
 export const RATE_LIMITS = {
-  WINDOW_MS: 15 * 60 * 1000, // 15 minutos
-  MAX_REQUESTS: 100,
-  MAX_REQUESTS_AUTH: 200
+  WINDOW_MS: 60 * 1000, // 1 minuto
+  MAX_REQUESTS: 200, // 200 requisições por minuto
+  MAX_REQUESTS_AUTH: 500 // 500 para usuários autenticados
 };
 
 // Mensagens de erro

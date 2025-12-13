@@ -7,7 +7,8 @@ import {
   Users, 
   BarChart3,
   RefreshCw,
-  Zap
+  Zap,
+  Bot
 } from 'lucide-react';
 
 const navigation = [
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Usuários', href: '/users', icon: Users },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Automação', href: '/auto-sync', icon: RefreshCw },
+  { name: 'Bots', href: '/bots', icon: Bot },
 ];
 
 export default function Sidebar() {

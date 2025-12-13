@@ -134,15 +134,42 @@ class MeliSync {
           const title = container.find('.ui-search-item__title').text().trim();
 
           // Imagem (Tentar múltiplos seletores e atributos lazy load)
-          let thumbnail = container.find('img.ui-search-result-image__element').attr('src');
-          if (!thumbnail) thumbnail = container.find('img.ui-search-result-image__element').data('src');
-          if (!thumbnail) thumbnail = container.find('.ui-search-result-image__element').first().attr('src');
-          if (!thumbnail) thumbnail = container.find('img[decoding="async"]').first().attr('src');
-
-          // Se for imagem de placeholder transparente, tentar data-src
-          if (thumbnail && thumbnail.includes('data:image')) {
-            const realSrc = container.find('img.ui-search-result-image__element').data('src');
-            if (realSrc) thumbnail = realSrc;
+          let thumbnail = null;
+          const imgElement = container.find('img.ui-search-result-image__element').first();
+          
+          // Tentar atributos em ordem de preferência
+          const imgAttrs = ['data-src', 'data-lazy', 'data-original', 'src'];
+          for (const attr of imgAttrs) {
+            const val = imgElement.attr(attr);
+            if (val && !val.includes('data:image') && val.startsWith('http')) {
+              thumbnail = val;
+              break;
+            }
+          }
+          
+          // Fallback: tentar outros seletores de imagem
+          if (!thumbnail) {
+            const altImgSelectors = [
+              'img[decoding="async"]',
+              '.ui-search-result-image img',
+              'img'
+            ];
+            for (const sel of altImgSelectors) {
+              const img = container.find(sel).first();
+              for (const attr of imgAttrs) {
+                const val = img.attr(attr);
+                if (val && !val.includes('data:image') && val.startsWith('http')) {
+                  thumbnail = val;
+                  break;
+                }
+              }
+              if (thumbnail) break;
+            }
+          }
+          
+          // Último fallback: converter thumbnail pequeno para tamanho maior
+          if (thumbnail && thumbnail.includes('-I.jpg')) {
+            thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
           }
 
           // Preço Atual
@@ -244,15 +271,31 @@ class MeliSync {
 
             const title = container.find('.poly-component__title').text().trim();
 
-            let thumbnail = container.find('img.poly-component__image').attr('src');
-            if (!thumbnail) thumbnail = container.find('img.poly-card__img').attr('src'); // Outra classe comum
-            if (!thumbnail) thumbnail = container.find('img.poly-component__image').data('src');
-            if (!thumbnail) thumbnail = container.find('img').first().attr('src');
-
-            if (thumbnail && thumbnail.includes('data:image')) {
-              let realSrc = container.find('img.poly-component__image').data('src');
-              if (!realSrc) realSrc = container.find('img.poly-card__img').data('src');
-              if (realSrc) thumbnail = realSrc;
+            // Imagem (Tentar múltiplos seletores e atributos lazy load para layout Poly)
+            let thumbnail = null;
+            const imgSelectors = [
+              'img.poly-component__image',
+              'img.poly-card__img',
+              'img[data-src]',
+              'img'
+            ];
+            const imgAttrs = ['data-src', 'data-lazy', 'data-original', 'src'];
+            
+            for (const sel of imgSelectors) {
+              const img = container.find(sel).first();
+              for (const attr of imgAttrs) {
+                const val = img.attr(attr);
+                if (val && !val.includes('data:image') && val.startsWith('http')) {
+                  thumbnail = val;
+                  break;
+                }
+              }
+              if (thumbnail) break;
+            }
+            
+            // Converter thumbnail pequeno para tamanho maior se possível
+            if (thumbnail && thumbnail.includes('-I.jpg')) {
+              thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
             }
 
             const priceText = container.find('.poly-price__current .andes-money-amount__fraction').first().text();
@@ -353,6 +396,37 @@ class MeliSync {
   }
 
   /**
+   * Validar e melhorar URL da imagem
+   */
+  improveImageUrl(imageUrl) {
+    if (!imageUrl) return null;
+    
+    // Se for placeholder (data:image), retornar null
+    if (imageUrl.includes('data:image')) {
+      return null;
+    }
+    
+    // Se não começar com http, retornar null
+    if (!imageUrl.startsWith('http')) {
+      return null;
+    }
+    
+    // Converter thumbnail do ML para tamanho maior
+    // Padrão ML: -I.jpg (pequeno) -> -O.jpg (original/grande)
+    let improvedUrl = imageUrl;
+    if (improvedUrl.includes('-I.jpg')) {
+      improvedUrl = improvedUrl.replace('-I.jpg', '-O.jpg');
+    }
+    
+    // Garantir HTTPS
+    if (improvedUrl.startsWith('http://')) {
+      improvedUrl = improvedUrl.replace('http://', 'https://');
+    }
+    
+    return improvedUrl;
+  }
+
+  /**
    * Filtrar produtos que realmente são promoções
    */
   filterMeliPromotions(products, minDiscountPercentage = 10) {
@@ -376,15 +450,21 @@ class MeliSync {
         discount = ((originalPrice - currentPrice) / originalPrice) * 100;
       }
 
-      // Se tem cupom, adicionar cupom ao desconto efetivo?
-      // Por enquanto, vamos considerar o cupom separado.
-      // Mas para passar no filtro, se tiver cupom, deve passar.
+      // Melhorar URL da imagem
+      let imageUrl = this.improveImageUrl(product.thumbnail);
+      
+      // Se não conseguiu imagem válida, tentar buscar via API do item
+      if (!imageUrl && product.id) {
+        logger.warn(`⚠️ Produto ${product.id} sem imagem válida, será necessário buscar via API`);
+        // Usamos um placeholder temporário - será substituído quando buscar detalhes
+        imageUrl = `https://http2.mlstatic.com/D_NQ_NP_${product.id}-O.jpg`;
+      }
 
       if (discount >= minDiscountPercentage || hasCoupon) {
         promotions.push({
           external_id: `mercadolivre-${product.id}`,
           name: product.title,
-          image_url: product.thumbnail,
+          image_url: imageUrl || 'https://via.placeholder.com/300x300?text=Sem+Imagem',
           platform: 'mercadolivre',
           current_price: currentPrice,
           old_price: originalPrice || 0, // Garantir 0 se null
@@ -429,6 +509,34 @@ class MeliSync {
   }
 
   /**
+   * Buscar imagem de alta qualidade via API do ML
+   */
+  async fetchHighQualityImage(productId) {
+    try {
+      const meliId = productId.replace('mercadolivre-', '');
+      const response = await axios.get(`https://api.mercadolibre.com/items/${meliId}`, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      const item = response.data;
+      
+      // Prioridade: pictures[0].secure_url > pictures[0].url > thumbnail
+      if (item.pictures && item.pictures.length > 0) {
+        const pic = item.pictures[0];
+        return pic.secure_url || pic.url || item.thumbnail;
+      }
+      
+      return item.thumbnail;
+    } catch (error) {
+      logger.warn(`⚠️ Não foi possível buscar imagem de alta qualidade para ${productId}`);
+      return null;
+    }
+  }
+
+  /**
    * Salvar produto no banco de dados
    */
   async saveMeliToDatabase(product, Product) {
@@ -466,6 +574,19 @@ class MeliSync {
 
         logger.info(`📦 Produto já existe: ${product.name}`);
         return { product: existing, isNew: false };
+      }
+
+      // Verificar se a imagem é válida, se não, buscar via API
+      if (!product.image_url || 
+          product.image_url.includes('data:image') || 
+          product.image_url.includes('placeholder') ||
+          !product.image_url.startsWith('http')) {
+        logger.info(`🖼️ Buscando imagem de alta qualidade para: ${product.name}`);
+        const highQualityImage = await this.fetchHighQualityImage(product.external_id);
+        if (highQualityImage) {
+          product.image_url = highQualityImage;
+          logger.info(`✅ Imagem de alta qualidade obtida`);
+        }
       }
 
       // Processar Cupom antes de criar

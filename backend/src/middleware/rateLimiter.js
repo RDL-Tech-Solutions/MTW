@@ -1,7 +1,21 @@
 import rateLimit from 'express-rate-limit';
 import { RATE_LIMITS } from '../config/constants.js';
 
-// Rate limiter geral
+// Função para verificar se usuário é admin autenticado
+const isAuthenticatedAdmin = (req) => {
+  // Verificar token de autorização e role admin
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Em desenvolvimento, ser mais permissivo
+    if (process.env.NODE_ENV === 'development') {
+      return true;
+    }
+    return req.user?.role === 'admin';
+  }
+  return false;
+};
+
+// Rate limiter geral - mais permissivo para admins
 export const generalLimiter = rateLimit({
   windowMs: RATE_LIMITS.WINDOW_MS,
   max: RATE_LIMITS.MAX_REQUESTS,
@@ -12,6 +26,7 @@ export const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => isAuthenticatedAdmin(req), // Pular para admins autenticados
 });
 
 // Rate limiter para autenticação (mais restritivo)

@@ -7,26 +7,45 @@ class NotificationLog {
       event_type,
       platform,
       channel_id,
+      channel_name,
       payload,
-      status = 'pending',
+      status,
+      success,
+      message_id,
       error_message = null
     } = logData;
 
-    const { data, error } = await supabase
-      .from('notification_logs')
-      .insert([{
-        event_type,
-        platform,
-        channel_id,
-        payload,
-        status,
-        error_message
-      }])
-      .select()
-      .single();
+    // Determinar status baseado em success se não fornecido
+    const finalStatus = status || (success ? 'sent' : (success === false ? 'failed' : 'pending'));
 
-    if (error) throw error;
-    return data;
+    const insertData = {
+      event_type: event_type || 'unknown',
+      platform: platform || 'unknown',
+      channel_id: channel_id || null,
+      payload: payload || {}, // Payload vazio como objeto em vez de null
+      status: finalStatus,
+      error_message: error_message || null
+    };
+
+    // Adicionar campos opcionais se a tabela suportar
+    if (channel_name) insertData.channel_name = channel_name;
+    if (message_id) insertData.message_id = message_id;
+    if (success !== undefined) insertData.success = success;
+
+    try {
+      const { data, error } = await supabase
+        .from('notification_logs')
+        .insert([insertData])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      // Log do erro mas não falhar silenciosamente
+      console.error('Erro ao criar log de notificação:', error.message);
+      return null;
+    }
   }
 
   // Buscar log por ID

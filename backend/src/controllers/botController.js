@@ -1,9 +1,11 @@
 import BotChannel from '../models/BotChannel.js';
+import BotConfig from '../models/BotConfig.js';
 import NotificationLog from '../models/NotificationLog.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
 import whatsappService from '../services/bots/whatsappService.js';
 import telegramService from '../services/bots/telegramService.js';
 import logger from '../config/logger.js';
+import axios from 'axios';
 
 class BotController {
   // Listar todos os canais de bot
@@ -268,13 +270,17 @@ class BotController {
   // Verificar status dos bots
   async checkStatus(req, res) {
     try {
+      const config = await BotConfig.get();
+      
       const status = {
         whatsapp: {
-          configured: !!(process.env.WHATSAPP_API_URL && process.env.WHATSAPP_API_TOKEN),
+          configured: config.whatsapp_enabled && !!config.whatsapp_api_token,
+          enabled: config.whatsapp_enabled,
           channels: await BotChannel.countActive('whatsapp')
         },
         telegram: {
-          configured: !!process.env.TELEGRAM_BOT_TOKEN,
+          configured: config.telegram_enabled && !!config.telegram_bot_token,
+          enabled: config.telegram_enabled,
           channels: await BotChannel.countActive('telegram')
         }
       };
@@ -282,7 +288,11 @@ class BotController {
       // Verificar se Telegram está funcionando
       if (status.telegram.configured) {
         try {
-          status.telegram.bot_info = await telegramService.getBotInfo();
+          const token = config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+          const response = await axios.get(`https://api.telegram.org/bot${token}/getMe`, {
+            timeout: 5000
+          });
+          status.telegram.bot_info = response.data.result;
           status.telegram.working = true;
         } catch (error) {
           status.telegram.working = false;
@@ -299,6 +309,412 @@ class BotController {
       res.status(500).json({
         success: false,
         message: 'Erro ao verificar status',
+        error: error.message
+      });
+    }
+  }
+
+  // ============================================
+  // CONFIGURAÇÕES
+  // ============================================
+
+  // Buscar configurações
+  async getConfig(req, res) {
+    try {
+      const config = await BotConfig.get();
+      
+      // Mascarar tokens sensíveis para exibição
+      const safeConfig = {
+        ...config,
+        telegram_bot_token: config.telegram_bot_token 
+          ? `${config.telegram_bot_token.substring(0, 10)}...${config.telegram_bot_token.slice(-5)}`
+          : '',
+        whatsapp_api_token: config.whatsapp_api_token
+          ? `${config.whatsapp_api_token.substring(0, 10)}...${config.whatsapp_api_token.slice(-5)}`
+          : '',
+        // Indicar se está configurado
+        telegram_token_set: !!config.telegram_bot_token,
+        whatsapp_token_set: !!config.whatsapp_api_token
+      };
+
+      res.json({
+        success: true,
+        data: safeConfig
+      });
+    } catch (error) {
+      logger.error(`Erro ao buscar configurações: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar configurações',
+        error: error.message
+      });
+    }
+  }
+
+  // Salvar configurações
+  async saveConfig(req, res) {
+    try {
+      const configData = req.body;
+      
+      // Campos válidos na tabela bot_config
+      const validFields = [
+        'telegram_enabled',
+        'telegram_bot_token',
+        'telegram_bot_username',
+        'telegram_parse_mode',
+        'telegram_disable_preview',
+        'whatsapp_enabled',
+        'whatsapp_api_url',
+        'whatsapp_api_token',
+        'whatsapp_phone_number_id',
+        'whatsapp_business_account_id',
+        'notify_new_products',
+        'notify_new_coupons',
+        'notify_expired_coupons',
+        'notify_price_drops',
+        'min_discount_to_notify',
+        'message_template_product',
+        'message_template_coupon',
+        'rate_limit_per_minute',
+        'delay_between_messages'
+      ];
+      
+      // Filtrar apenas campos válidos
+      const filteredData = {};
+      for (const field of validFields) {
+        if (configData[field] !== undefined) {
+          filteredData[field] = configData[field];
+        }
+      }
+      
+      // Se o token vier mascarado (com ...), não atualizar
+      if (filteredData.telegram_bot_token && filteredData.telegram_bot_token.includes('...')) {
+        delete filteredData.telegram_bot_token;
+      }
+      if (filteredData.whatsapp_api_token && filteredData.whatsapp_api_token.includes('...')) {
+        delete filteredData.whatsapp_api_token;
+      }
+
+      const config = await BotConfig.upsert(filteredData);
+      
+      logger.info('⚙️ Configurações de bots atualizadas');
+
+      res.json({
+        success: true,
+        message: 'Configurações salvas com sucesso',
+        data: config
+      });
+    } catch (error) {
+      logger.error(`Erro ao salvar configurações: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar configurações',
+        error: error.message
+      });
+    }
+  }
+
+  // Testar conexão do Telegram
+  async testTelegram(req, res) {
+    try {
+      const { token } = req.body;
+      
+      // Usar token fornecido ou buscar do banco/env
+      let botToken = token;
+      
+      // Se token não fornecido ou é mascarado, buscar do banco
+      if (!botToken || botToken.includes('...')) {
+        const config = await BotConfig.get();
+        botToken = config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+      }
+
+      if (!botToken) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token do Telegram não configurado. Cole o token do @BotFather e salve as configurações primeiro.'
+        });
+      }
+
+      // Verificar se ainda é um token mascarado (erro de lógica)
+      if (botToken.includes('...')) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token salvo está mascarado. Por favor, insira o token completo novamente.'
+        });
+      }
+
+      logger.info(`🔍 Testando conexão Telegram com token: ${botToken.substring(0, 10)}...`);
+
+      // Testar conexão
+      const response = await axios.get(`https://api.telegram.org/bot${botToken}/getMe`, {
+        timeout: 10000
+      });
+
+      const botInfo = response.data.result;
+
+      logger.info(`✅ Telegram conectado: @${botInfo.username}`);
+
+      res.json({
+        success: true,
+        message: 'Conexão com Telegram bem sucedida!',
+        data: {
+          bot_id: botInfo.id,
+          bot_name: botInfo.first_name,
+          bot_username: botInfo.username,
+          can_join_groups: botInfo.can_join_groups,
+          can_read_all_group_messages: botInfo.can_read_all_group_messages
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao testar Telegram: ${error.message}`);
+      
+      let errorMessage = 'Erro ao conectar com o Telegram';
+      if (error.response?.status === 401) {
+        errorMessage = 'Token inválido. Verifique se o token está correto.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Bot não encontrado. Verifique se o token está correto e completo.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Timeout na conexão. Tente novamente.';
+      }
+
+      res.status(400).json({
+        success: false,
+        message: errorMessage,
+        error: error.message
+      });
+    }
+  }
+
+  // Testar conexão do WhatsApp
+  async testWhatsApp(req, res) {
+    try {
+      const { api_url, api_token, phone_number_id } = req.body;
+
+      // Usar valores fornecidos ou buscar do banco
+      let config = { api_url, api_token, phone_number_id };
+      
+      if (!api_url || !api_token) {
+        const savedConfig = await BotConfig.get();
+        config = {
+          api_url: api_url || savedConfig.whatsapp_api_url || process.env.WHATSAPP_API_URL,
+          api_token: api_token || savedConfig.whatsapp_api_token || process.env.WHATSAPP_API_TOKEN,
+          phone_number_id: phone_number_id || savedConfig.whatsapp_phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID
+        };
+      }
+
+      if (!config.api_url || !config.api_token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Configurações do WhatsApp não encontradas'
+        });
+      }
+
+      // Testar conexão - verificar número de telefone
+      const response = await axios.get(
+        `${config.api_url}/${config.phone_number_id}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${config.api_token}`
+          },
+          timeout: 10000
+        }
+      );
+
+      res.json({
+        success: true,
+        message: 'Conexão com WhatsApp bem sucedida!',
+        data: {
+          phone_number_id: response.data.id,
+          display_phone_number: response.data.display_phone_number,
+          verified_name: response.data.verified_name
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao testar WhatsApp: ${error.message}`);
+      
+      let errorMessage = 'Erro ao conectar com o WhatsApp';
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        errorMessage = 'Token inválido ou sem permissão.';
+      }
+
+      res.status(400).json({
+        success: false,
+        message: errorMessage,
+        error: error.message
+      });
+    }
+  }
+
+  // Enviar mensagem de teste para canal específico
+  async sendTestToChannel(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const channel = await BotChannel.findById(id);
+      if (!channel) {
+        return res.status(404).json({
+          success: false,
+          message: 'Canal não encontrado'
+        });
+      }
+
+      // Usar identifier ou channel_id
+      const channelId = channel.identifier || channel.channel_id;
+      const channelName = channel.name || channel.channel_name || 'Canal';
+
+      const config = await BotConfig.get();
+      let result;
+
+      if (channel.platform === 'telegram') {
+        const token = config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+        if (!token) {
+          return res.status(400).json({
+            success: false,
+            message: 'Token do Telegram não configurado. Vá em Configurações e salve o token primeiro.'
+          });
+        }
+
+        logger.info(`📤 Enviando teste para Telegram: ${channelId}`);
+
+        const message = `🤖 *Teste de Bot Telegram*
+
+✅ Bot configurado e funcionando!
+📱 Sistema MTW Promo
+⏰ ${new Date().toLocaleString('pt-BR')}
+🆔 Canal: ${channelName}
+
+Você receberá notificações automáticas sobre:
+🔥 Novas promoções
+🎟 Novos cupons
+⏰ Cupons expirando`;
+
+        try {
+          const response = await axios.post(
+            `https://api.telegram.org/bot${token}/sendMessage`,
+            {
+              chat_id: channelId,
+              text: message,
+              parse_mode: 'Markdown'
+            },
+            { timeout: 10000 }
+          );
+
+          result = {
+            platform: 'telegram',
+            message_id: response.data.result.message_id
+          };
+          
+          logger.info(`✅ Mensagem enviada com sucesso para ${channelId}`);
+        } catch (telegramError) {
+          // Tratar erros específicos do Telegram
+          const errorDescription = telegramError.response?.data?.description || telegramError.message;
+          logger.error(`❌ Erro Telegram: ${errorDescription}`);
+          
+          let userMessage = 'Erro ao enviar mensagem';
+          
+          if (errorDescription.includes('chat not found')) {
+            userMessage = 'Chat não encontrado. Verifique se o Chat ID está correto e se o bot foi adicionado ao grupo.';
+          } else if (errorDescription.includes('bot was blocked')) {
+            userMessage = 'O bot foi bloqueado pelo usuário.';
+          } else if (errorDescription.includes('bot is not a member')) {
+            userMessage = 'O bot não é membro do grupo. Adicione o bot ao grupo primeiro.';
+          } else if (errorDescription.includes('PEER_ID_INVALID')) {
+            userMessage = 'ID do chat inválido. Para grupos, use o formato -100XXXXXXXXXX';
+          } else if (errorDescription.includes('group chat was upgraded')) {
+            userMessage = 'O grupo foi convertido em supergrupo. O Chat ID mudou, obtenha o novo ID.';
+          } else {
+            userMessage = `Erro do Telegram: ${errorDescription}`;
+          }
+          
+          return res.status(400).json({
+            success: false,
+            message: userMessage,
+            error: errorDescription
+          });
+        }
+      } else if (channel.platform === 'whatsapp') {
+        const whatsappConfig = {
+          apiUrl: config.whatsapp_api_url || process.env.WHATSAPP_API_URL,
+          apiToken: config.whatsapp_api_token || process.env.WHATSAPP_API_TOKEN,
+          phoneNumberId: config.whatsapp_phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID
+        };
+
+        if (!whatsappConfig.apiUrl || !whatsappConfig.apiToken) {
+          return res.status(400).json({
+            success: false,
+            message: 'WhatsApp não configurado'
+          });
+        }
+
+        const message = `🤖 *Teste de Bot WhatsApp*
+
+✅ Bot configurado e funcionando!
+📱 Sistema MTW Promo
+⏰ ${new Date().toLocaleString('pt-BR')}
+🆔 Canal: ${channelName}`;
+
+        const response = await axios.post(
+          `${whatsappConfig.apiUrl}/${whatsappConfig.phoneNumberId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            to: channelId,
+            type: 'text',
+            text: { body: message }
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${whatsappConfig.apiToken}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+
+        result = {
+          platform: 'whatsapp',
+          message_id: response.data.messages?.[0]?.id
+        };
+      }
+
+      // Registrar log (usando promotion_new até migration ser executada)
+      await NotificationLog.create({
+        channel_id: channel.id,
+        channel_name: channelName,
+        platform: channel.platform,
+        event_type: 'promotion_new', // TODO: mudar para 'test' após executar migration 005
+        success: true,
+        message_id: result?.message_id,
+        payload: { type: 'test_message', channel_identifier: channelId, is_test: true }
+      });
+
+      res.json({
+        success: true,
+        message: 'Mensagem de teste enviada com sucesso!',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Erro ao enviar teste: ${error.message}`);
+      
+      // Registrar falha no log
+      try {
+        if (channel) {
+          await NotificationLog.create({
+            channel_id: channel.id,
+            channel_name: channelName,
+            platform: channel.platform,
+            event_type: 'promotion_new', // TODO: mudar para 'test' após executar migration 005
+            success: false,
+            error_message: error.message,
+            payload: { type: 'test_message_failed', error: error.message, is_test: true }
+          });
+        }
+      } catch (logError) {
+        logger.error(`Erro ao registrar log: ${logError.message}`);
+      }
+
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao enviar mensagem de teste',
         error: error.message
       });
     }
