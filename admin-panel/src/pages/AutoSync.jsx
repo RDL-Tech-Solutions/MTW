@@ -38,7 +38,7 @@ export default function AutoSync() {
     try {
       const response = await api.get('/sync/config');
       const data = response.data.data;
-      
+
       // Garantir que valores numéricos sejam válidos
       setConfig({
         shopee_enabled: data.shopee_enabled || false,
@@ -85,7 +85,7 @@ export default function AutoSync() {
     try {
       setLoading(true);
       await api.post('/sync/config', config);
-      
+
       toast({
         title: "Sucesso!",
         description: "Configuração salva com sucesso.",
@@ -105,14 +105,37 @@ export default function AutoSync() {
   };
 
   const handleRunNow = async () => {
+    // Validação básica
+    if (!config.shopee_enabled && !config.mercadolivre_enabled) {
+      toast({
+        title: "Atenção",
+        description: "Selecione pelo menos uma plataforma para sincronizar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!config.keywords || config.keywords.trim() === '') {
+      toast({
+        title: "Atenção",
+        description: "Adicione palavras-chave para buscar produtos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setRunning(true);
-      
+
+      // 1. Salvar configuração atual primeiro para garantir que o backend use os dados da tela
+      await api.post('/sync/config', config);
+
       toast({
         title: "Sincronização iniciada",
-        description: "Aguarde enquanto buscamos novos produtos...",
+        description: "Configuração salva. Buscando produtos...",
       });
 
+      // 2. Executar Sincronização
       const response = await api.post('/sync/run-now');
       const results = response.data.data;
 
@@ -122,6 +145,7 @@ export default function AutoSync() {
       toast({
         title: "Sincronização concluída!",
         description: `${totalNew} produtos novos de ${totalFound} encontrados.`,
+        variant: totalNew > 0 ? "default" : "secondary" // Destaque se achou algo
       });
 
       fetchHistory();
@@ -227,7 +251,7 @@ export default function AutoSync() {
           {/* Plataformas */}
           <div className="space-y-4">
             <Label className="text-base">Plataformas</Label>
-            
+
             <div className="flex items-center space-x-2">
               <Switch
                 checked={config.shopee_enabled}
