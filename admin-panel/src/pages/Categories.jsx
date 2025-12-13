@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Tag, Grid, List } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -14,6 +14,7 @@ export default function Categories() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' ou 'table'
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -29,9 +30,26 @@ export default function Categories() {
   const fetchCategories = async () => {
     try {
       const response = await api.get('/categories');
-      setCategories(response.data.data || []);
+      // A API retorna { success: true, data: [...] }
+      let categoriesData = [];
+      
+      if (response.data?.success && response.data?.data) {
+        if (Array.isArray(response.data.data)) {
+          categoriesData = response.data.data;
+        } else if (response.data.data.categories && Array.isArray(response.data.data.categories)) {
+          categoriesData = response.data.data.categories;
+        }
+      } else if (Array.isArray(response.data)) {
+        categoriesData = response.data;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        categoriesData = response.data.data;
+      }
+      
+      setCategories(categoriesData);
+      console.log('✅ Categorias carregadas:', categoriesData.length);
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -206,14 +224,34 @@ export default function Categories() {
                 {filteredCategories.length} categoria(s) encontrada(s)
               </CardDescription>
             </div>
-            <div className="relative w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar categorias..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
+            <div className="flex gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar categorias..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <div className="flex border rounded-md">
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="rounded-r-none"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <Grid className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="rounded-l-none"
+                  onClick={() => setViewMode('table')}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -222,10 +260,10 @@ export default function Categories() {
             <div className="text-center text-muted-foreground py-8">
               Nenhuma categoria encontrada
             </div>
-          ) : (
+          ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredCategories.map((category) => (
-                <Card key={category.id} className="relative group">
+                <Card key={category.id} className="relative group hover:shadow-lg transition-shadow">
                   <CardContent className="pt-6">
                     <div className="flex flex-col items-center text-center space-y-3">
                       <div className="text-5xl">{category.icon || '📦'}</div>
@@ -237,10 +275,15 @@ export default function Categories() {
                           </p>
                         )}
                       </div>
-                      <Badge variant="secondary">
+                      <Badge variant={category.is_active ? "default" : "secondary"}>
                         <Tag className="mr-1 h-3 w-3" />
                         {category.product_count || 0} produtos
                       </Badge>
+                      {!category.is_active && (
+                        <Badge variant="outline" className="text-xs">
+                          Inativa
+                        </Badge>
+                      )}
                     </div>
                     <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                       <Button
@@ -263,6 +306,66 @@ export default function Categories() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-3">Ícone</th>
+                    <th className="text-left p-3">Nome</th>
+                    <th className="text-left p-3">Slug</th>
+                    <th className="text-left p-3">Descrição</th>
+                    <th className="text-center p-3">Produtos</th>
+                    <th className="text-center p-3">Status</th>
+                    <th className="text-right p-3">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCategories.map((category) => (
+                    <tr key={category.id} className="border-b hover:bg-muted/50">
+                      <td className="p-3 text-2xl">{category.icon || '📦'}</td>
+                      <td className="p-3 font-medium">{category.name}</td>
+                      <td className="p-3 text-sm text-muted-foreground">
+                        <code className="bg-muted px-2 py-1 rounded text-xs">{category.slug}</code>
+                      </td>
+                      <td className="p-3 text-sm text-muted-foreground max-w-xs truncate">
+                        {category.description || '-'}
+                      </td>
+                      <td className="p-3 text-center">
+                        <Badge variant="secondary">
+                          {category.product_count || 0}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Badge variant={category.is_active ? "default" : "outline"}>
+                          {category.is_active ? 'Ativa' : 'Inativa'}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleEdit(category)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDelete(category.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

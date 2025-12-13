@@ -19,6 +19,7 @@ export default function Products() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [platformFilter, setPlatformFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [analyzingLink, setAnalyzingLink] = useState(false);
@@ -65,6 +66,9 @@ export default function Products() {
       if (platformFilter && platformFilter !== 'all') {
         params.platform = platformFilter;
       }
+      if (categoryFilter && categoryFilter !== 'all') {
+        params.category = categoryFilter;
+      }
 
       const response = await api.get('/products', { params });
 
@@ -90,21 +94,49 @@ export default function Products() {
     }
   };
 
-  // Debounce search e filtro de plataforma
+  // Debounce search e filtros
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchProducts(1);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, platformFilter]);
+  }, [searchTerm, platformFilter, categoryFilter]);
 
   const fetchCategories = async () => {
     try {
       const response = await api.get('/categories');
-      setCategories(response.data.data.categories || []);
+      // A API retorna { success: true, data: [...] }
+      // Então response.data = { success: true, data: [...] }
+      // E response.data.data = array de categorias
+      let categoriesData = [];
+      
+      if (response.data?.success && response.data?.data) {
+        // Se response.data.data é um array, usar diretamente
+        if (Array.isArray(response.data.data)) {
+          categoriesData = response.data.data;
+        } 
+        // Se response.data.data tem uma propriedade categories (fallback)
+        else if (response.data.data.categories && Array.isArray(response.data.data.categories)) {
+          categoriesData = response.data.data.categories;
+        }
+      } else if (Array.isArray(response.data)) {
+        // Fallback: se response.data já é um array
+        categoriesData = response.data;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        // Fallback: se response.data.data é um array
+        categoriesData = response.data.data;
+      }
+      
+      // Filtrar apenas categorias ativas
+      categoriesData = categoriesData.filter(cat => cat.is_active !== false);
+      
+      setCategories(categoriesData);
+      console.log('✅ Categorias carregadas:', categoriesData.length, 'categorias', categoriesData);
     } catch (error) {
-      console.error('Erro ao carregar categorias:', error);
+      console.error('❌ Erro ao carregar categorias:', error);
+      console.error('Resposta completa:', error.response?.data);
+      setCategories([]);
     }
   };
 
@@ -590,6 +622,18 @@ export default function Products() {
                 <option value="amazon">Amazon</option>
                 <option value="aliexpress">AliExpress</option>
                 <option value="general">Geral</option>
+              </select>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="flex h-10 min-w-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Todas as Categorias</option>
+                {categories.map(category => (
+                  <option key={category.id} value={category.id}>
+                    {category.icon} {category.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

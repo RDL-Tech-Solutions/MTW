@@ -1,7 +1,7 @@
 import Category from '../models/Category.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
-import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
+import { cacheGet, cacheSet, cacheDel, cacheDelByPattern } from '../config/redis.js';
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 
@@ -9,18 +9,25 @@ class CategoryController {
   // Listar categorias
   static async list(req, res, next) {
     try {
-      const cacheKey = 'categories:all';
-      const cached = await cacheGet(cacheKey);
+      // Limpar cache para garantir dados atualizados
+      await cacheDel('categories:all');
       
-      if (cached) {
-        return res.json(successResponse(cached));
-      }
-
+      logger.info('📊 Buscando categorias com contagem de produtos...');
       const categories = await Category.findAllWithCount();
-      await cacheSet(cacheKey, categories, CACHE_TTL.CATEGORIES);
+      logger.info(`✅ ${categories.length} categorias encontradas`);
+      
+      // Log das contagens para debug
+      categories.forEach(cat => {
+        logger.info(`   - ${cat.name} (ID: ${cat.id}): ${cat.product_count} produtos`);
+      });
+
+      // Cachear resultado
+      await cacheSet('categories:all', categories, CACHE_TTL.CATEGORIES);
 
       res.json(successResponse(categories));
     } catch (error) {
+      logger.error(`❌ Erro ao listar categorias: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
       next(error);
     }
   }
@@ -71,7 +78,7 @@ class CategoryController {
         description,
         is_active
       });
-      await cacheDel('categories:*');
+      await cacheDelByPattern('categories:*');
 
       logger.info(`Categoria criada: ${category.name}`);
       res.status(201).json(successResponse(category, 'Categoria criada com sucesso'));
@@ -85,7 +92,7 @@ class CategoryController {
     try {
       const { id } = req.params;
       const category = await Category.update(id, req.body);
-      await cacheDel('categories:*');
+      await cacheDelByPattern('categories:*');
 
       logger.info(`Categoria atualizada: ${id}`);
       res.json(successResponse(category, 'Categoria atualizada com sucesso'));
@@ -99,7 +106,7 @@ class CategoryController {
     try {
       const { id } = req.params;
       await Category.delete(id);
-      await cacheDel('categories:*');
+      await cacheDelByPattern('categories:*');
 
       logger.info(`Categoria deletada: ${id}`);
       res.json(successResponse(null, 'Categoria deletada com sucesso'));

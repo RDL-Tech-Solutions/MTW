@@ -138,6 +138,9 @@ class TelegramService {
             if (caption && caption.trim().length > 0) {
               payload.caption = caption;
               payload.parse_mode = options.parse_mode || 'Markdown';
+              if (options.disable_web_page_preview !== undefined) {
+                payload.disable_web_page_preview = options.disable_web_page_preview;
+              }
             }
             logger.info(`📤 Tentando enviar por URL direta...`);
             const response = await axios.post(
@@ -224,33 +227,29 @@ class TelegramService {
         throw new Error(`URL da imagem inválida: ${imageUrl}`);
       }
       
-      // Remover completamente links da mensagem para evitar preview automático
-      // Substituir por texto simples que não seja detectado como link
-      const messageWithoutPreview = message.replace(
-        /(https?:\/\/[^\s]+)/g, 
-        () => '🔗 [Link disponível - consulte a descrição]'
-      );
-      
-      // Enviar imagem COM a mensagem como caption (juntos)
+      // Manter o link de afiliado na mensagem, mas desabilitar preview automático
+      // O Telegram permite links na caption, mas podemos desabilitar o preview
       logger.info(`📸 Enviando imagem com mensagem como caption para chat ${chatId}`);
       logger.info(`   URL completa: ${imageUrl}`);
-      logger.info(`   Caption length: ${messageWithoutPreview.length}`);
+      logger.info(`   Caption length: ${message?.length || 0}`);
       
       const photoOptions = {
         ...options,
-        parse_mode: 'HTML' // Usar HTML para melhor controle da formatação
+        parse_mode: 'HTML', // Usar HTML para melhor controle da formatação
+        disable_web_page_preview: true // Desabilitar preview automático de links
       };
       
       // Tentar enviar com HTML primeiro
       let photoResult;
       try {
-        photoResult = await this.sendPhoto(chatId, imageUrl, messageWithoutPreview, photoOptions);
+        photoResult = await this.sendPhoto(chatId, imageUrl, message, photoOptions);
       } catch (htmlError) {
         logger.warn(`⚠️ Erro com HTML, tentando sem parse_mode: ${htmlError.message}`);
-        // Tentar sem parse_mode
-        photoResult = await this.sendPhoto(chatId, imageUrl, messageWithoutPreview, {
+        // Tentar sem parse_mode, mas manter o link
+        photoResult = await this.sendPhoto(chatId, imageUrl, message, {
           ...options,
-          parse_mode: undefined
+          parse_mode: undefined,
+          disable_web_page_preview: true
         });
       }
       
@@ -278,12 +277,8 @@ class TelegramService {
       // Fallback: tentar enviar apenas mensagem
       try {
         logger.warn(`⚠️ Tentando fallback: enviar apenas mensagem sem imagem`);
-        // Remover links da mensagem para evitar preview automático
-        const messageWithoutPreview = message.replace(
-          /(https?:\/\/[^\s]+)/g, 
-          (url) => `\`${url}\``
-        );
-        return await this.sendMessage(chatId, messageWithoutPreview, { 
+        // Manter o link de afiliado na mensagem, apenas desabilitar preview
+        return await this.sendMessage(chatId, message, { 
           ...options, 
           disable_web_page_preview: true 
         });
@@ -430,6 +425,12 @@ class TelegramService {
       }
     }
 
+    // Formatar link de afiliado de forma clara e visível
+    const affiliateLink = promotion.affiliate_link || 'Link não disponível';
+    const linkDisplay = affiliateLink.startsWith('http') 
+      ? `🔗 *Link de Afiliado:*\n${affiliateLink}` 
+      : `🔗 ${affiliateLink}`;
+
     return `🔥 *Nova Promoção!*
 
 🛍 *${promotion.name}*
@@ -439,7 +440,7 @@ ${oldPrice}💰 *R$ ${promotion.current_price.toFixed(2)}* ${discount}
 🏪 Loja: ${this.getPlatformName(promotion.platform)}
 📦 Categoria: ${categoryName}
 
-[🔗 Ver Oferta](${promotion.affiliate_link})
+${linkDisplay}
 
 ⚡ Aproveite antes que acabe!`;
   }

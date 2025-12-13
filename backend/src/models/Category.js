@@ -1,4 +1,5 @@
 import supabase from '../config/database.js';
+import logger from '../config/logger.js';
 
 class Category {
   // Criar nova categoria
@@ -113,24 +114,73 @@ class Category {
       .from('products')
       .select('*', { count: 'exact', head: true })
       .eq('category_id', id)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .not('category_id', 'is', null);
 
-    if (error) throw error;
-    return count;
+    if (error) {
+      logger.error(`Erro ao contar produtos da categoria ${id}: ${error.message}`);
+      return 0;
+    }
+    return count || 0;
   }
 
   // Buscar categorias com contagem de produtos
   static async findAllWithCount() {
-    const categories = await this.findAll();
-    
-    const categoriesWithCount = await Promise.all(
-      categories.map(async (category) => {
-        const count = await this.countProducts(category.id);
-        return { ...category, product_count: count };
-      })
-    );
+    try {
+      const categories = await this.findAll();
+      
+      // Buscar contagem de produtos por categoria usando uma query agregada
+      // Isso é mais eficiente que buscar todos os produtos
+      const { data: productCounts, error: countError } = await supabase
+        .from('products')
+        .select('category_id, id')
+        .eq('is_active', true)
+        .not('category_id', 'is', null);
 
-    return categoriesWithCount;
+      if (countError) {
+        logger.error(`Erro ao buscar contagem de produtos: ${countError.message}`);
+        logger.error(`Detalhes do erro: ${JSON.stringify(countError)}`);
+      }
+
+      logger.info(`Produtos encontrados para contagem: ${productCounts?.length || 0}`);
+
+      // Criar mapa de contagens por category_id
+      const countMap = {};
+      if (productCounts && Array.isArray(productCounts)) {
+        productCounts.forEach(product => {
+          const catId = product.category_id;
+          if (catId) {
+            // Converter para string para garantir comparação correta
+            const catIdStr = String(catId);
+            countMap[catIdStr] = (countMap[catIdStr] || 0) + 1;
+          }
+        });
+      }
+
+      logger.info(`Mapa de contagens: ${JSON.stringify(countMap)}`);
+
+      // Adicionar contagem a cada categoria
+      const categoriesWithCount = categories.map(category => {
+        // Converter ID da categoria para string para comparação
+        const catIdStr = String(category.id);
+        const count = countMap[catIdStr] || 0;
+        
+        logger.info(`Categoria ${category.name} (ID: ${category.id}): ${count} produtos`);
+        
+        return {
+          ...category,
+          product_count: count
+        };
+      });
+
+      return categoriesWithCount;
+    } catch (error) {
+      logger.error(`Erro ao buscar categorias com contagem: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
+      // Fallback: retornar categorias sem contagem
+      const categories = await this.findAll();
+      return categories.map(cat => ({ ...cat, product_count: 0 }));
+    }
   }
 }
 

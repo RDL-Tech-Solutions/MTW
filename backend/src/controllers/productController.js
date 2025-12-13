@@ -50,6 +50,7 @@ class ProductController {
     try {
       const product = await Product.create(req.body);
       await cacheDelByPattern('products:*');
+      await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
       logger.info(`Produto criado: ${product.id}`);
 
@@ -78,6 +79,7 @@ class ProductController {
       const { id } = req.params;
       const product = await Product.update(id, req.body);
       await cacheDelByPattern('products:*');
+      await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
       logger.info(`Produto atualizado: ${id}`);
       res.json(successResponse(product, 'Produto atualizado com sucesso'));
@@ -92,6 +94,7 @@ class ProductController {
       const { id } = req.params;
       await Product.delete(id);
       await cacheDelByPattern('products:*');
+      await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
       logger.info(`Produto deletado: ${id}`);
       res.json(successResponse(null, 'Produto deletado com sucesso'));
