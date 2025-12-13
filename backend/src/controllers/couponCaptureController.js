@@ -38,7 +38,7 @@ class CouponCaptureController {
     try {
       const { platform } = req.params;
 
-      if (!['shopee', 'mercadolivre', 'amazon', 'aliexpress'].includes(platform)) {
+      if (!['shopee', 'mercadolivre', 'amazon', 'aliexpress', 'gatry'].includes(platform)) {
         return res.status(400).json({
           success: false,
           message: 'Plataforma inválida'
@@ -550,6 +550,190 @@ class CouponCaptureController {
       res.status(500).json({
         success: false,
         message: 'Erro ao reativar cupom',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Listar cupons pendentes de aprovação
+   */
+  async listPendingCoupons(req, res) {
+    try {
+      const { page = 1, limit = 20, platform, search } = req.query;
+
+      const result = await Coupon.findPendingApproval({
+        page: parseInt(page),
+        limit: parseInt(limit),
+        platform,
+        search
+      });
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Erro ao listar cupons pendentes: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao listar cupons pendentes',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Aprovar cupom
+   */
+  async approveCoupon(req, res) {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      const coupon = await Coupon.approve(id, updates);
+
+      // Notificar sobre novo cupom aprovado
+      try {
+        const couponNotificationService = (await import('../services/coupons/couponNotificationService.js')).default;
+        await couponNotificationService.notifyNewCoupon(coupon);
+      } catch (notifError) {
+        logger.warn(`Erro ao notificar cupom aprovado: ${notifError.message}`);
+      }
+
+      res.json({
+        success: true,
+        message: 'Cupom aprovado com sucesso',
+        data: coupon
+      });
+    } catch (error) {
+      logger.error(`Erro ao aprovar cupom: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao aprovar cupom',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Rejeitar cupom
+   */
+  async rejectCoupon(req, res) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const coupon = await Coupon.reject(id, reason);
+
+      res.json({
+        success: true,
+        message: 'Cupom rejeitado com sucesso',
+        data: coupon
+      });
+    } catch (error) {
+      logger.error(`Erro ao rejeitar cupom: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao rejeitar cupom',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Aprovar múltiplos cupons
+   */
+  async approveBatch(req, res) {
+    try {
+      const { ids, updates = {} } = req.body;
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'IDs inválidos'
+        });
+      }
+
+      const approved = [];
+      const errors = [];
+
+      for (const id of ids) {
+        try {
+          const coupon = await Coupon.approve(id, updates);
+          approved.push(coupon);
+
+          // Notificar sobre novo cupom aprovado
+          try {
+            const couponNotificationService = (await import('../services/coupons/couponNotificationService.js')).default;
+            await couponNotificationService.notifyNewCoupon(coupon);
+          } catch (notifError) {
+            logger.warn(`Erro ao notificar cupom aprovado: ${notifError.message}`);
+          }
+        } catch (error) {
+          errors.push({ id, error: error.message });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `${approved.length} cupons aprovados`,
+        data: {
+          approved: approved.length,
+          errors: errors.length,
+          details: errors
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao aprovar cupons em lote: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao aprovar cupons',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Rejeitar múltiplos cupons
+   */
+  async rejectBatch(req, res) {
+    try {
+      const { ids, reason = '' } = req.body;
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'IDs inválidos'
+        });
+      }
+
+      const rejected = [];
+      const errors = [];
+
+      for (const id of ids) {
+        try {
+          const coupon = await Coupon.reject(id, reason);
+          rejected.push(coupon);
+        } catch (error) {
+          errors.push({ id, error: error.message });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `${rejected.length} cupons rejeitados`,
+        data: {
+          rejected: rejected.length,
+          errors: errors.length,
+          details: errors
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao rejeitar cupons em lote: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao rejeitar cupons',
         error: error.message
       });
     }

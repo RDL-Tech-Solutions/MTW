@@ -3,6 +3,8 @@
  * Filtra códigos inválidos como PADR, SORTEIO, etc.
  */
 
+import logger from '../config/logger.js';
+
 class CouponValidator {
   /**
    * Lista de códigos inválidos conhecidos
@@ -46,9 +48,8 @@ class CouponValidator {
     /^XXX/i,            // Começa com XXX
     /^[A-Z]{1,3}$/i,    // Apenas 1-3 letras (muito curto)
     /^[0-9]{1,3}$/i,    // Apenas 1-3 números (muito curto)
-    /^[A-Z]{4,}$/i,     // Apenas letras repetidas (AAAA, BBBB, etc)
+    /^(.)\1{3,}$/i,     // Apenas caracteres repetidos (AAAA, BBBB, 0000, 1111, etc)
     /^[0-9]{4,}$/i,     // Apenas números repetidos (0000, 1111, etc)
-    /^[A-Z]+[0-9]+$/i,  // Padrão genérico tipo ABC123 (sem contexto)
   ];
 
   /**
@@ -146,11 +147,20 @@ class CouponValidator {
       };
     }
 
-    // Validar valor de desconto
-    if (!coupon.discount_value || coupon.discount_value <= 0) {
+    // Validar valor de desconto (permitir valores padrão para cupons capturados)
+    // Cupons capturados podem ter valores padrão se não detectados
+    if (coupon.discount_value !== null && coupon.discount_value !== undefined) {
+      if (coupon.discount_value <= 0) {
+        return {
+          valid: false,
+          reason: 'Valor de desconto inválido ou zero'
+        };
+      }
+    } else if (!coupon.capture_source) {
+      // Apenas rejeitar se não for cupom capturado e não tiver valor
       return {
         valid: false,
-        reason: 'Valor de desconto inválido ou zero'
+        reason: 'Valor de desconto não fornecido'
       };
     }
 
@@ -211,7 +221,6 @@ class CouponValidator {
     }
 
     if (invalidCoupons.length > 0) {
-      const logger = require('../config/logger.js').default;
       logger.warn(`⚠️ ${invalidCoupons.length} cupons inválidos filtrados:`, invalidCoupons);
     }
 

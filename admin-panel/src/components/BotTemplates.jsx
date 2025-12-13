@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Edit, Save, X, Plus, Trash2, FileText, Info } from 'lucide-react';
+import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { useToast } from '../hooks/use-toast';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Textarea } from './ui/textarea';
 
 const templateTypes = {
   new_promotion: 'Nova Promoção',
@@ -22,6 +24,18 @@ export default function BotTemplates() {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [variables, setVariables] = useState({});
   const [activeType, setActiveType] = useState(Object.keys(templateTypes)[0]);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
+  const [isTestDialogOpen, setIsTestDialogOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState(null);
+  const [testTemplate, setTestTemplate] = useState(null);
+  const [newTemplate, setNewTemplate] = useState({
+    template_type: Object.keys(templateTypes)[0],
+    platform: 'all',
+    template: '',
+    description: '',
+    is_active: true
+  });
 
   useEffect(() => {
     loadTemplates();
@@ -84,12 +98,139 @@ export default function BotTemplates() {
     }
   };
 
-  const handleToggleActive = async (id, currentStatus) => {
+  const handleCreate = async () => {
     try {
-      await api.put(`/bots/templates/${id}`, { is_active: !currentStatus });
+      if (!newTemplate.template.trim()) {
+        toast({
+          title: "Erro",
+          description: "O template não pode estar vazio",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      await api.post('/bots/templates', newTemplate);
       toast({
         title: "Sucesso",
-        description: "Status do template atualizado",
+        description: "Template criado com sucesso",
+        variant: "success"
+      });
+      setIsCreateDialogOpen(false);
+      setNewTemplate({
+        template_type: Object.keys(templateTypes)[0],
+        platform: 'all',
+        template: '',
+        description: '',
+        is_active: true
+      });
+      await loadTemplates();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao criar template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Tem certeza que deseja deletar este template?')) return;
+    
+    try {
+      await api.delete(`/bots/templates/${id}`);
+      toast({
+        title: "Sucesso",
+        description: "Template deletado com sucesso",
+        variant: "success"
+      });
+      await loadTemplates();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao deletar template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handlePreview = (template) => {
+    const varInfo = variables[template.template_type];
+    let preview = template.template;
+    
+    // Substituir variáveis com exemplos
+    if (varInfo && varInfo.variables) {
+      const exampleValues = {
+        product_name: 'Produto Exemplo',
+        current_price: 'R$ 99,90',
+        old_price: ' ~R$ 199,90~',
+        discount_percentage: '50',
+        platform_name: 'Mercado Livre',
+        affiliate_link: 'https://exemplo.com/produto',
+        coupon_section: '\n🎟️ *CUPOM DISPONÍVEL*\n\n💬 *Código:* `CUPOM10`\n💰 *Desconto:* 10% OFF\n',
+        coupon_code: 'CUPOM10',
+        discount_value: '10%',
+        valid_until: '31/12/2024',
+        min_purchase: '💳 *Compra mínima:* R$ 50,00\n',
+        coupon_title: 'Cupom de Desconto',
+        coupon_description: '\nDescrição do cupom de exemplo\n',
+        expired_date: '31/12/2024'
+      };
+
+      varInfo.variables.forEach(varName => {
+        const regex = new RegExp(`\\{${varName}\\}`, 'g');
+        preview = preview.replace(regex, exampleValues[varName] || `{${varName}}`);
+      });
+    }
+
+    setPreviewTemplate({ ...template, preview });
+    setIsPreviewDialogOpen(true);
+  };
+
+  const handleTest = async (template) => {
+    setTestTemplate(template);
+    setIsTestDialogOpen(true);
+  };
+
+  const handleSendTest = async () => {
+    try {
+      // Enviar teste para todos os canais ativos usando o endpoint de teste geral
+      await api.post('/bots/test', {
+        message: `🧪 TESTE DE TEMPLATE\n\n${testTemplate.template}`
+      });
+      
+      toast({
+        title: "Sucesso",
+        description: "Mensagem de teste enviada para os canais ativos",
+        variant: "success"
+      });
+      setIsTestDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao enviar teste",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCopyVariable = (varName) => {
+    navigator.clipboard.writeText(`{${varName}}`);
+    toast({
+      title: "Copiado!",
+      description: `Variável {${varName}} copiada para a área de transferência`,
+      variant: "success"
+    });
+  };
+
+  const handleToggleActive = async (id, currentStatus) => {
+    try {
+      const newStatus = !currentStatus;
+      await api.put(`/bots/templates/${id}`, { is_active: newStatus });
+      toast({
+        title: "Sucesso",
+        description: newStatus 
+          ? "Template ativado. Os bots usarão este template nas próximas mensagens."
+          : "Template desativado. Os bots não usarão este template.",
         variant: "success"
       });
       await loadTemplates();
@@ -125,17 +266,44 @@ export default function BotTemplates() {
               <option value="telegram">Telegram</option>
               <option value="whatsapp">WhatsApp</option>
             </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Selecione "Todas" para usar o mesmo template em ambas as plataformas, ou escolha uma específica
+            </p>
           </div>
 
           <div>
-            <Label>Template da Mensagem</Label>
-            <textarea
+            <Label>Status do Template</Label>
+            <div className="flex items-center space-x-2 mt-2">
+              <input
+                type="checkbox"
+                id="edit_template_active"
+                checked={editingTemplate.is_active}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, is_active: e.target.checked })}
+                className="h-4 w-4 rounded"
+              />
+              <Label htmlFor="edit_template_active" className="cursor-pointer">
+                Template ativo (os bots usarão este template)
+              </Label>
+            </div>
+            {!editingTemplate.is_active && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                ⚠️ Este template está inativo. Os bots não usarão este template até que seja ativado.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <Label>Template da Mensagem *</Label>
+            <Textarea
               value={editingTemplate.template}
               onChange={(e) => setEditingTemplate({ ...editingTemplate, template: e.target.value })}
               rows={15}
-              className="w-full p-2 border rounded-md font-mono text-sm"
-              placeholder="Digite o template da mensagem..."
+              className="font-mono text-sm mt-1"
+              placeholder="Digite o template da mensagem usando variáveis entre chaves..."
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Use variáveis entre chaves {'{'}{'}'} para inserir dados dinâmicos. Exemplo: {'{'}{'}'}product_name{'}'}{'}'}
+            </p>
           </div>
 
           {varInfo && (
@@ -145,9 +313,15 @@ export default function BotTemplates() {
                 Variáveis Disponíveis
               </Label>
               <div className="mt-2 p-3 bg-muted rounded-md">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mb-3">
                   {varInfo.variables?.map((varName) => (
-                    <Badge key={varName} variant="outline" className="font-mono">
+                    <Badge 
+                      key={varName} 
+                      variant="outline" 
+                      className="font-mono cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => handleCopyVariable(varName)}
+                      title="Clique para copiar"
+                    >
                       {'{'}{varName}{'}'}
                     </Badge>
                   ))}
@@ -155,11 +329,14 @@ export default function BotTemplates() {
                 {varInfo.description && (
                   <div className="mt-3 text-sm text-muted-foreground">
                     <p className="font-semibold mb-2">Descrições:</p>
-                    {Object.entries(varInfo.description).map(([key, desc]) => (
-                      <div key={key} className="mb-1">
-                        <code className="text-xs">{'{'}{key}{'}'}</code>: {desc}
-                      </div>
-                    ))}
+                    <div className="space-y-1">
+                      {Object.entries(varInfo.description).map(([key, desc]) => (
+                        <div key={key} className="flex items-start gap-2">
+                          <code className="text-xs bg-background px-1 py-0.5 rounded">{'{'}{key}{'}'}</code>
+                          <span className="text-xs">{desc}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -202,11 +379,134 @@ export default function BotTemplates() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Templates de Mensagens</h2>
-        <p className="text-muted-foreground">
-          Personalize as mensagens enviadas pelos bots. Use variáveis entre chaves {'{'}{'}'} para inserir dados dinâmicos.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Templates de Mensagens</h2>
+          <p className="text-muted-foreground">
+            Personalize as mensagens enviadas pelos bots. Use variáveis entre chaves {'{'}{'}'} para inserir dados dinâmicos.
+          </p>
+        </div>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => {
+              setNewTemplate({
+                template_type: activeType,
+                platform: 'all',
+                template: '',
+                description: '',
+                is_active: true
+              });
+            }}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Template
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Criar Novo Template</DialogTitle>
+              <DialogDescription>
+                Crie um novo template de mensagem para os bots
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Tipo de Template *</Label>
+                <select
+                  value={newTemplate.template_type}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, template_type: e.target.value })}
+                  className="w-full p-2 border rounded-md"
+                >
+                  {Object.entries(templateTypes).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label>Plataforma *</Label>
+                <select
+                  value={newTemplate.platform}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, platform: e.target.value })}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value="all">Todas (Telegram e WhatsApp)</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+              </div>
+
+              <div>
+                <Label>Template da Mensagem *</Label>
+                <Textarea
+                  value={newTemplate.template}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, template: e.target.value })}
+                  rows={12}
+                  className="font-mono text-sm"
+                  placeholder="Digite o template da mensagem..."
+                />
+                {variables[newTemplate.template_type] && (
+                  <div className="mt-2 p-3 bg-muted rounded-md">
+                    <p className="text-sm font-semibold mb-2">Variáveis Disponíveis:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {variables[newTemplate.template_type].variables?.map((varName) => (
+                        <Badge 
+                          key={varName} 
+                          variant="outline" 
+                          className="font-mono cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                          onClick={() => {
+                            const textarea = document.querySelector('textarea');
+                            const start = textarea.selectionStart;
+                            const end = textarea.selectionEnd;
+                            const text = textarea.value;
+                            const before = text.substring(0, start);
+                            const after = text.substring(end, text.length);
+                            const newValue = before + `{${varName}}` + after;
+                            setNewTemplate({ ...newTemplate, template: newValue });
+                            setTimeout(() => {
+                              textarea.focus();
+                              textarea.setSelectionRange(start + varName.length + 2, start + varName.length + 2);
+                            }, 0);
+                          }}
+                        >
+                          {'{'}{varName}{'}'}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label>Descrição (opcional)</Label>
+                <Input
+                  value={newTemplate.description}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
+                  placeholder="Descrição do template..."
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="new_template_active"
+                  checked={newTemplate.is_active}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, is_active: e.target.checked })}
+                  className="h-4 w-4 rounded"
+                />
+                <Label htmlFor="new_template_active">Template ativo</Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreate}>
+                <Save className="mr-2 h-4 w-4" />
+                Criar Template
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="space-y-6">
@@ -254,6 +554,22 @@ export default function BotTemplates() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handlePreview(template)}
+                        title="Visualizar preview"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTest(template)}
+                        title="Testar template"
+                      >
+                        <Play className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleToggleActive(template.id, template.is_active)}
                       >
                         {template.is_active ? 'Desativar' : 'Ativar'}
@@ -265,6 +581,14 @@ export default function BotTemplates() {
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(template.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -272,10 +596,24 @@ export default function BotTemplates() {
                   {editingId === template.id ? (
                     renderTemplateEditor(template)
                   ) : (
-                    <div className="bg-muted p-4 rounded-md">
-                      <pre className="whitespace-pre-wrap text-sm font-mono">
-                        {template.template}
-                      </pre>
+                    <div className="space-y-3">
+                      <div className="bg-muted p-4 rounded-md">
+                        <pre className="whitespace-pre-wrap text-sm font-mono">
+                          {template.template}
+                        </pre>
+                      </div>
+                      {template.is_active && (
+                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span>Este template está ativo e será usado pelos bots</span>
+                        </div>
+                      )}
+                      {!template.is_active && (
+                        <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Este template está inativo e não será usado pelos bots</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -293,6 +631,75 @@ export default function BotTemplates() {
           )
         ))}
       </div>
+
+      {/* Dialog de Preview */}
+      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Preview do Template</DialogTitle>
+            <DialogDescription>
+              Visualização de como a mensagem será exibida com variáveis preenchidas
+            </DialogDescription>
+          </DialogHeader>
+          {previewTemplate && (
+            <div className="space-y-4">
+              <div>
+                <Label>Template Original</Label>
+                <div className="mt-1 p-3 bg-muted rounded-md">
+                  <pre className="whitespace-pre-wrap text-sm font-mono">{previewTemplate.template}</pre>
+                </div>
+              </div>
+              <div>
+                <Label>Preview com Variáveis</Label>
+                <div className="mt-1 p-4 bg-background border rounded-md">
+                  <pre className="whitespace-pre-wrap text-sm">{previewTemplate.preview}</pre>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Teste */}
+      <Dialog open={isTestDialogOpen} onOpenChange={setIsTestDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Testar Template</DialogTitle>
+            <DialogDescription>
+              Enviar uma mensagem de teste usando este template para todos os canais ativos
+            </DialogDescription>
+          </DialogHeader>
+          {testTemplate && (
+            <div className="space-y-4">
+              <div>
+                <Label>Template</Label>
+                <div className="mt-1 p-3 bg-muted rounded-md">
+                  <pre className="whitespace-pre-wrap text-sm font-mono">{testTemplate.template}</pre>
+                </div>
+              </div>
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-md">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  ⚠️ A mensagem será enviada para todos os canais ativos configurados.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTestDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSendTest}>
+              <Send className="mr-2 h-4 w-4" />
+              Enviar Teste
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

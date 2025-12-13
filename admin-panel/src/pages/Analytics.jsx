@@ -11,6 +11,7 @@ export default function Analytics() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('7days');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchAnalytics();
@@ -18,12 +19,32 @@ export default function Analytics() {
 
   const fetchAnalytics = async () => {
     try {
+      setLoading(true);
       const response = await api.get(`/analytics/detailed?period=${period}`);
-      setAnalytics(response.data.data);
+      if (response.data && response.data.success) {
+        setAnalytics(response.data.data);
+      } else {
+        setAnalytics(null);
+      }
     } catch (error) {
       console.error('Erro ao carregar analytics:', error);
-      // Se o endpoint não existir, usar dados mockados
-      setAnalytics(null);
+      
+      // Verificar se é erro de conexão
+      if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error') || error.message.includes('CONNECTION_REFUSED')) {
+        const errorMsg = 'Backend não está acessível. Verifique se o servidor está rodando na porta 3000.';
+        console.warn('⚠️', errorMsg);
+        setError(errorMsg);
+        setAnalytics(null);
+      } else if (error.response?.status === 401 || error.response?.status === 403) {
+        const errorMsg = 'Não autorizado. Faça login novamente.';
+        console.warn('⚠️', errorMsg);
+        setError(errorMsg);
+        setAnalytics(null);
+      } else {
+        // Outros erros
+        setError(error.response?.data?.message || error.message || 'Erro ao carregar analytics');
+        setAnalytics(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -33,6 +54,40 @@ export default function Analytics() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted-foreground">Carregando analytics...</div>
+      </div>
+    );
+  }
+
+  // Mensagem de erro se o backend não estiver disponível
+  if (error && !analytics) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+            <p className="text-muted-foreground mt-1">
+              Análise detalhada de performance
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center space-y-4">
+            <div className="text-6xl">⚠️</div>
+            <h2 className="text-2xl font-semibold">Erro ao carregar analytics</h2>
+            <p className="text-muted-foreground max-w-md">
+              {error}
+            </p>
+            <button
+              onClick={() => {
+                setError(null);
+                fetchAnalytics();
+              }}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

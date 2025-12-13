@@ -49,6 +49,13 @@ export default function CouponCapture() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCoupons, setSelectedCoupons] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [pendingCoupons, setPendingCoupons] = useState([]);
+  const [pendingPagination, setPendingPagination] = useState({
+    page: 1,
+    limit: 20,
+    totalPages: 1,
+    total: 0
+  });
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -63,7 +70,8 @@ export default function CouponCapture() {
         loadSettings(),
         loadLogs(1),
         loadCoupons(1),
-        loadCronStatus()
+        loadCronStatus(),
+        loadPendingCoupons(1)
       ]);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -187,12 +195,103 @@ export default function CouponCapture() {
       setTimeout(() => {
         loadLogs(1);
         loadStats();
+        if (platform === 'gatry') {
+          loadPendingCoupons(1);
+        }
       }, 3000);
     } catch (error) {
       console.error('Erro na sincronização:', error);
       alert('Erro ao sincronizar');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const loadPendingCoupons = async (page = 1) => {
+    try {
+      const response = await api.get(`/coupon-capture/pending?page=${page}&limit=20`);
+      const data = response.data.data;
+      
+      if (Array.isArray(data)) {
+        setPendingCoupons(data);
+      } else {
+        setPendingCoupons(data.coupons || []);
+        setPendingPagination(prev => ({
+          ...prev,
+          page,
+          totalPages: data.totalPages || 1,
+          total: data.total || 0
+        }));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar cupons pendentes:', error);
+    }
+  };
+
+  const handleApproveCoupon = async (couponId, updates = {}) => {
+    try {
+      await api.put(`/coupon-capture/coupons/${couponId}/approve`, updates);
+      alert('Cupom aprovado com sucesso!');
+      loadPendingCoupons(pendingPagination.page);
+      loadCoupons(couponsPagination.page);
+      loadStats();
+    } catch (error) {
+      console.error('Erro ao aprovar cupom:', error);
+      alert('Erro ao aprovar cupom');
+    }
+  };
+
+  const handleRejectCoupon = async (couponId, reason = '') => {
+    try {
+      await api.put(`/coupon-capture/coupons/${couponId}/reject`, { reason });
+      alert('Cupom rejeitado com sucesso!');
+      loadPendingCoupons(pendingPagination.page);
+      loadStats();
+    } catch (error) {
+      console.error('Erro ao rejeitar cupom:', error);
+      alert('Erro ao rejeitar cupom');
+    }
+  };
+
+  const handleApproveBatch = async () => {
+    if (selectedCoupons.length === 0) {
+      alert('Selecione pelo menos um cupom');
+      return;
+    }
+
+    if (!confirm(`Aprovar ${selectedCoupons.length} cupom(ns)?`)) return;
+
+    try {
+      await api.post('/coupon-capture/coupons/approve-batch', { ids: selectedCoupons });
+      alert(`${selectedCoupons.length} cupom(ns) aprovado(s) com sucesso!`);
+      setSelectedCoupons([]);
+      loadPendingCoupons(pendingPagination.page);
+      loadCoupons(couponsPagination.page);
+      loadStats();
+    } catch (error) {
+      console.error('Erro ao aprovar cupons:', error);
+      alert('Erro ao aprovar cupons');
+    }
+  };
+
+  const handleRejectBatch = async () => {
+    if (selectedCoupons.length === 0) {
+      alert('Selecione pelo menos um cupom');
+      return;
+    }
+
+    const reason = prompt('Motivo da rejeição (opcional):');
+    if (reason === null) return; // Usuário cancelou
+
+    try {
+      await api.post('/coupon-capture/coupons/reject-batch', { ids: selectedCoupons, reason });
+      alert(`${selectedCoupons.length} cupom(ns) rejeitado(s) com sucesso!`);
+      setSelectedCoupons([]);
+      loadPendingCoupons(pendingPagination.page);
+      loadStats();
+    } catch (error) {
+      console.error('Erro ao rejeitar cupons:', error);
+      alert('Erro ao rejeitar cupons');
     }
   };
 
@@ -357,7 +456,8 @@ export default function CouponCapture() {
       shopee: '🛍️',
       mercadolivre: '🛒',
       amazon: '📦',
-      aliexpress: '🌐'
+      aliexpress: '🌐',
+      gatry: '🎟️'
     };
     return icons[platform] || '🎁';
   };
@@ -486,7 +586,7 @@ export default function CouponCapture() {
       <div className="bg-white rounded-lg shadow">
         <div className="border-b border-gray-200">
           <div className="flex gap-4 px-6">
-            {['overview', 'coupons', 'logs', 'settings'].map((tab) => (
+            {['overview', 'pending', 'coupons', 'logs', 'settings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -496,6 +596,7 @@ export default function CouponCapture() {
                   }`}
               >
                 {tab === 'overview' && 'Visão Geral'}
+                {tab === 'pending' && `Cupons Pendentes (${pendingPagination.total})`}
                 {tab === 'coupons' && 'Cupons Capturados'}
                 {tab === 'logs' && 'Logs de Sincronização'}
                 {tab === 'settings' && 'Configurações'}
@@ -523,7 +624,7 @@ export default function CouponCapture() {
                         disabled={syncing}
                         className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-medium disabled:opacity-50"
                       >
-                        Sincronizar
+                        {syncing ? 'Sincronizando...' : 'Sincronizar'}
                       </button>
                     </div>
 
@@ -552,6 +653,187 @@ export default function CouponCapture() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Pending Coupons Tab */}
+          {activeTab === 'pending' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Cupons Pendentes de Aprovação
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Avalie e aprove ou rejeite cupons capturados automaticamente
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleSyncPlatform('gatry')}
+                    disabled={syncing}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw size={16} className={`mr-2 ${syncing ? 'animate-spin' : ''}`} />
+                    Capturar do Gatry
+                  </Button>
+                  <Button
+                    onClick={() => loadPendingCoupons(1)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw size={16} className="mr-2" />
+                    Atualizar
+                  </Button>
+                </div>
+              </div>
+
+              {selectedCoupons.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                  <span className="text-sm font-medium text-blue-900">
+                    {selectedCoupons.length} cupom(ns) selecionado(s)
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleApproveBatch}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <CheckCircle2 size={16} className="mr-2" />
+                      Aprovar Selecionados
+                    </Button>
+                    <Button
+                      onClick={handleRejectBatch}
+                      size="sm"
+                      variant="destructive"
+                    >
+                      <XCircle size={16} className="mr-2" />
+                      Rejeitar Selecionados
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left">
+                        <button onClick={toggleSelectAll} className="text-gray-600 hover:text-gray-900">
+                          {selectedCoupons.length === pendingCoupons.length && pendingCoupons.length > 0 ? (
+                            <CheckSquare size={18} />
+                          ) : (
+                            <Square size={18} />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fonte</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plataforma</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Desconto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Título</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Validade</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {pendingCoupons.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                          Nenhum cupom pendente encontrado
+                        </td>
+                      </tr>
+                    ) : (
+                      pendingCoupons.map((coupon) => (
+                        <tr key={coupon.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleSelectCoupon(coupon.id)}
+                              className="text-gray-600 hover:text-gray-900"
+                            >
+                              {selectedCoupons.includes(coupon.id) ? (
+                                <CheckSquare size={18} className="text-blue-600" />
+                              ) : (
+                                <Square size={18} />
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                              {coupon.capture_source || 'N/A'}
+                            </span>
+                            {coupon.source_url && (
+                              <a
+                                href={coupon.source_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-xs text-blue-600 hover:underline mt-1"
+                              >
+                                Ver origem
+                              </a>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-2xl">{getPlatformIcon(coupon.platform)}</span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-sm font-bold">{coupon.code}</td>
+                          <td className="px-4 py-3">
+                            {coupon.discount_type === 'percentage'
+                              ? `${coupon.discount_value}%`
+                              : `R$ ${coupon.discount_value}`}
+                            {coupon.min_purchase > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Compra mín: R$ {coupon.min_purchase}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="max-w-xs">
+                              <p className="font-medium text-sm">{coupon.title || 'Sem título'}</p>
+                              {coupon.description && (
+                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{coupon.description}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {new Date(coupon.valid_until).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleApproveCoupon(coupon.id)}
+                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium"
+                                title="Aprovar"
+                              >
+                                <CheckCircle size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const reason = prompt('Motivo da rejeição (opcional):');
+                                  if (reason !== null) {
+                                    handleRejectCoupon(coupon.id, reason);
+                                  }
+                                }}
+                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
+                                title="Rejeitar"
+                              >
+                                <XCircle size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                currentPage={pendingPagination.page}
+                totalPages={pendingPagination.totalPages}
+                onPageChange={(p) => loadPendingCoupons(p)}
+              />
             </div>
           )}
 
@@ -645,6 +927,7 @@ export default function CouponCapture() {
                         <option value="shopee">Shopee</option>
                         <option value="amazon">Amazon</option>
                         <option value="aliexpress">AliExpress</option>
+                        <option value="gatry">Gatry</option>
                       </select>
                     </div>
                     <div>
@@ -983,6 +1266,25 @@ export default function CouponCapture() {
                         />
                         Ativar captura AliExpress
                       </label>
+                    </div>
+                  </div>
+
+                  {/* Gatry */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-bold text-gray-900 mb-3">🎟️ Gatry</h4>
+                    <div className="space-y-3">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={settings.gatry_enabled || false}
+                          onChange={(e) => handleUpdateSettings({ gatry_enabled: e.target.checked })}
+                          className="mr-2"
+                        />
+                        Ativar captura Gatry
+                      </label>
+                      <p className="text-xs text-gray-600 mt-2">
+                        Captura cupons do site gatry.com/cupons via web scraping
+                      </p>
                     </div>
                   </div>
                 </div>

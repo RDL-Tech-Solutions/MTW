@@ -9,27 +9,52 @@ class BotMessageTemplate {
    */
   static async findByType(templateType, platform = 'all') {
     try {
-      // Primeiro tentar buscar template específico da plataforma
+      // Primeiro tentar buscar template específico da plataforma e ATIVO
       let { data, error } = await supabase
         .from('bot_message_templates')
         .select('*')
         .eq('template_type', templateType)
         .eq('platform', platform)
         .eq('is_active', true)
-        .single();
+        .order('created_at', { ascending: false }) // Pegar o mais recente se houver múltiplos
+        .limit(1)
+        .maybeSingle();
 
-      // Se não encontrar, buscar template genérico (all)
-      if (error && error.code === 'PGRST116') {
+      // Se não encontrar, buscar template genérico (all) e ATIVO
+      if (!data && error?.code === 'PGRST116') {
         ({ data, error } = await supabase
           .from('bot_message_templates')
           .select('*')
           .eq('template_type', templateType)
           .eq('platform', 'all')
           .eq('is_active', true)
-          .single());
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle());
       }
 
-      if (error && error.code !== 'PGRST116') throw error;
+      // Se ainda não encontrar, buscar qualquer template do tipo (mesmo inativo) para debug
+      if (!data) {
+        ({ data, error } = await supabase
+          .from('bot_message_templates')
+          .select('*')
+          .eq('template_type', templateType)
+          .eq('platform', platform)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle());
+        
+        if (data && !data.is_active) {
+          console.warn(`⚠️ Template encontrado mas está INATIVO: ${templateType} para ${platform}`);
+          return null; // Retornar null se estiver inativo
+        }
+      }
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao buscar template:', error);
+        throw error;
+      }
+      
       return data;
     } catch (error) {
       console.error('Erro ao buscar template:', error.message);

@@ -123,7 +123,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
           await notificationDispatcher.sendToTelegramWithImage(
             telegramMessage,
             couponImagePath,
-            'coupon_update'
+            'coupon_new'
           );
           logger.info('✅ Notificação Telegram com imagem enviada');
         } else {

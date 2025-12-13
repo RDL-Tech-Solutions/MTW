@@ -38,6 +38,7 @@ class CouponSettings {
         meli_capture_campaigns: true,
         amazon_enabled: false,
         aliexpress_enabled: false,
+        gatry_enabled: true,
         notify_bots_on_new_coupon: true,
         notify_bots_on_expiration: true
       }])
@@ -153,6 +154,7 @@ class CouponSettings {
     if (settings.meli_enabled) platforms.push('mercadolivre');
     if (settings.amazon_enabled) platforms.push('amazon');
     if (settings.aliexpress_enabled) platforms.push('aliexpress');
+    if (settings.gatry_enabled) platforms.push('gatry');
     
     return platforms;
   }
@@ -172,6 +174,8 @@ class CouponSettings {
         return settings.amazon_enabled;
       case 'aliexpress':
         return settings.aliexpress_enabled;
+      case 'gatry':
+        return settings.gatry_enabled;
       default:
         return false;
     }

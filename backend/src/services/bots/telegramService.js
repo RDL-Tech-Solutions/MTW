@@ -222,9 +222,22 @@ class TelegramService {
         throw new Error('URL da imagem não fornecida');
       }
       
-      // Validar se é uma URL válida
-      if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      // Verificar se é URL HTTP ou arquivo local
+      const isHttpUrl = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      const isLocalFile = !isHttpUrl && (imageUrl.includes('\\') || imageUrl.includes('/'));
+      
+      if (!isHttpUrl && !isLocalFile) {
         throw new Error(`URL da imagem inválida: ${imageUrl}`);
+      }
+      
+      // Se for arquivo local, verificar se existe e usar diretamente no sendPhoto
+      if (isLocalFile) {
+        const fs = await import('fs');
+        if (!fs.default.existsSync(imageUrl)) {
+          throw new Error(`Arquivo de imagem não encontrado: ${imageUrl}`);
+        }
+        // Usar o caminho do arquivo diretamente - sendPhoto já suporta arquivos locais
+        logger.info(`📁 Arquivo local detectado: ${imageUrl}`);
       }
       
       // Manter o link de afiliado na mensagem, mas desabilitar preview automático

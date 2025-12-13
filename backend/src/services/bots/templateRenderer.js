@@ -12,13 +12,22 @@ class TemplateRenderer {
    */
   async render(templateType, platform, variables = {}) {
     try {
-      // Buscar template
+      logger.info(`🎨 Renderizando template: ${templateType} para ${platform}`);
+      
+      // Buscar template ativo
       const template = await BotMessageTemplate.findByType(templateType, platform);
       
       if (!template) {
-        logger.warn(`Template não encontrado: ${templateType} para ${platform}, usando template padrão`);
+        logger.warn(`⚠️ Template não encontrado: ${templateType} para ${platform}, usando template padrão`);
         return this.getDefaultTemplate(templateType, variables);
       }
+
+      if (!template.is_active) {
+        logger.warn(`⚠️ Template encontrado mas está inativo: ${templateType} para ${platform}, usando template padrão`);
+        return this.getDefaultTemplate(templateType, variables);
+      }
+
+      logger.info(`✅ Template encontrado e ativo: ${template.id} - ${template.template_type} para ${template.platform}`);
 
       // Substituir variáveis no template
       let message = template.template;
@@ -26,15 +35,19 @@ class TemplateRenderer {
       // Substituir todas as variáveis
       for (const [key, value] of Object.entries(variables)) {
         const regex = new RegExp(`\\{${key}\\}`, 'g');
-        message = message.replace(regex, value || '');
+        const replacement = value !== null && value !== undefined ? String(value) : '';
+        message = message.replace(regex, replacement);
       }
 
       // Remover linhas vazias extras
       message = message.replace(/\n{3,}/g, '\n\n').trim();
 
+      logger.debug(`📝 Mensagem renderizada (${message.length} caracteres)`);
+
       return message;
     } catch (error) {
-      logger.error(`Erro ao renderizar template: ${error.message}`);
+      logger.error(`❌ Erro ao renderizar template: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
       return this.getDefaultTemplate(templateType, variables);
     }
   }

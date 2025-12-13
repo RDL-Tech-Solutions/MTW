@@ -6,6 +6,7 @@ import shopeeCouponCapture from './shopeeCouponCapture.js';
 import meliCouponCapture from './meliCouponCapture.js';
 import amazonCouponCapture from './amazonCouponCapture.js';
 import aliExpressCouponCapture from './aliExpressCouponCapture.js';
+import gatryCouponCapture from './gatryCouponCapture.js';
 import couponNotificationService from './couponNotificationService.js';
 import CouponValidator from '../../utils/couponValidator.js';
 
@@ -32,7 +33,8 @@ class CouponCaptureService {
         shopee: { found: 0, created: 0, errors: 0 },
         mercadolivre: { found: 0, created: 0, errors: 0 },
         amazon: { found: 0, created: 0, errors: 0 },
-        aliexpress: { found: 0, created: 0, errors: 0 }
+        aliexpress: { found: 0, created: 0, errors: 0 },
+        gatry: { found: 0, created: 0, errors: 0 }
       };
 
       // Capturar de cada plataforma ativa
@@ -100,6 +102,9 @@ class CouponCaptureService {
         case 'aliexpress':
           coupons = await aliExpressCouponCapture.captureCoupons();
           break;
+        case 'gatry':
+          coupons = await gatryCouponCapture.captureCoupons();
+          break;
         default:
           throw new Error(`Plataforma desconhecida: ${platform}`);
       }
@@ -119,8 +124,10 @@ class CouponCaptureService {
           const saved = await this.saveCoupon(coupon);
           if (saved.isNew) {
             created++;
-            // Enviar notificação
-            await this.notifyNewCoupon(saved.coupon);
+            // Enviar notificação apenas se o cupom não estiver pendente de aprovação
+            if (!saved.coupon.is_pending_approval) {
+              await this.notifyNewCoupon(saved.coupon);
+            }
           }
         } catch (error) {
           errors++;
@@ -178,14 +185,34 @@ class CouponCaptureService {
       const existing = await Coupon.findByCode(couponData.code);
 
       if (existing) {
-        // Atualizar cupom existente
-        const updated = await Coupon.update(existing.id, {
-          ...couponData,
-          last_verified_at: new Date().toISOString()
-        });
+        // Se o cupom existente está pendente de aprovação e o novo também está, não atualizar
+        // Isso evita duplicatas de cupons pendentes
+        if (existing.is_pending_approval && couponData.is_pending_approval) {
+          logger.info(`Cupom ${couponData.code} já existe como pendente, ignorando duplicata`);
+          return {
+            coupon: existing,
+            isNew: false
+          };
+        }
 
+        // Se o cupom existente não está pendente, atualizar apenas se o novo não estiver pendente
+        // Cupons aprovados podem ser atualizados
+        if (!existing.is_pending_approval && !couponData.is_pending_approval) {
+          const updated = await Coupon.update(existing.id, {
+            ...couponData,
+            last_verified_at: new Date().toISOString()
+          });
+
+          return {
+            coupon: updated,
+            isNew: false
+          };
+        }
+
+        // Se o existente está aprovado e o novo está pendente, não atualizar
+        logger.info(`Cupom ${couponData.code} já existe e está aprovado, ignorando cupom pendente`);
         return {
-          coupon: updated,
+          coupon: existing,
           isNew: false
         };
       }

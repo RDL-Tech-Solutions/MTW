@@ -217,58 +217,53 @@ class BotTemplateController {
         ]
       };
 
+      const descriptions = {
+        new_promotion: {
+          product_name: 'Nome do produto',
+          current_price: 'Preço atual formatado (R$ X,XX)',
+          old_price: 'Preço antigo formatado com riscado (~R$ X,XX~)',
+          discount_percentage: 'Percentual de desconto',
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
+          affiliate_link: 'Link de afiliado do produto',
+          coupon_section: 'Seção completa do cupom (se houver) - inclui código, desconto, validade'
+        },
+        new_coupon: {
+          platform_name: 'Nome da plataforma',
+          coupon_code: 'Código do cupom (entre crases para fácil cópia)',
+          discount_value: 'Valor do desconto formatado',
+          valid_until: 'Data de validade formatada',
+          min_purchase: 'Compra mínima (se houver)',
+          coupon_title: 'Título do cupom',
+          coupon_description: 'Descrição do cupom',
+          affiliate_link: 'Link de afiliado'
+        },
+        expired_coupon: {
+          platform_name: 'Nome da plataforma',
+          coupon_code: 'Código do cupom expirado',
+          expired_date: 'Data de expiração formatada'
+        }
+      };
+
       const availableVars = variables[template_type] || [];
+      const description = descriptions[template_type] || {};
 
       res.json({
         success: true,
         data: {
           template_type,
           variables: availableVars,
-          description: this.getVariablesDescription(template_type)
+          description: description
         }
       });
     } catch (error) {
       logger.error(`Erro ao obter variáveis: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
       res.status(500).json({
         success: false,
         message: 'Erro ao obter variáveis',
         error: error.message
       });
     }
-  }
-
-  /**
-   * Descrição das variáveis
-   */
-  getVariablesDescription(templateType) {
-    const descriptions = {
-      new_promotion: {
-        product_name: 'Nome do produto',
-        current_price: 'Preço atual formatado (R$ X,XX)',
-        old_price: 'Preço antigo formatado com riscado (~R$ X,XX~)',
-        discount_percentage: 'Percentual de desconto',
-        platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
-        affiliate_link: 'Link de afiliado do produto',
-        coupon_section: 'Seção completa do cupom (se houver) - inclui código, desconto, validade'
-      },
-      new_coupon: {
-        platform_name: 'Nome da plataforma',
-        coupon_code: 'Código do cupom (entre crases para fácil cópia)',
-        discount_value: 'Valor do desconto formatado',
-        valid_until: 'Data de validade formatada',
-        min_purchase: 'Compra mínima (se houver)',
-        coupon_title: 'Título do cupom',
-        coupon_description: 'Descrição do cupom',
-        affiliate_link: 'Link de afiliado'
-      },
-      expired_coupon: {
-        platform_name: 'Nome da plataforma',
-        coupon_code: 'Código do cupom expirado',
-        expired_date: 'Data de expiração formatada'
-      }
-    };
-
-    return descriptions[templateType] || {};
   }
 }
 

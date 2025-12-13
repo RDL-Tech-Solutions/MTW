@@ -136,4 +136,43 @@ router.post('/coupons/batch', couponCaptureController.batchAction);
  */
 router.post('/coupons/:id/verify', couponCaptureController.verifyCoupon);
 
+// ========================================
+// APROVAÇÃO DE CUPONS CAPTURADOS
+// ========================================
+
+/**
+ * @route   GET /api/coupon-capture/pending
+ * @desc    Listar cupons pendentes de aprovação
+ * @access  Admin
+ */
+router.get('/pending', couponCaptureController.listPendingCoupons);
+
+/**
+ * @route   PUT /api/coupon-capture/coupons/:id/approve
+ * @desc    Aprovar cupom
+ * @access  Admin
+ */
+router.put('/coupons/:id/approve', couponCaptureController.approveCoupon);
+
+/**
+ * @route   PUT /api/coupon-capture/coupons/:id/reject
+ * @desc    Rejeitar cupom
+ * @access  Admin
+ */
+router.put('/coupons/:id/reject', couponCaptureController.rejectCoupon);
+
+/**
+ * @route   POST /api/coupon-capture/coupons/approve-batch
+ * @desc    Aprovar múltiplos cupons
+ * @access  Admin
+ */
+router.post('/coupons/approve-batch', couponCaptureController.approveBatch);
+
+/**
+ * @route   POST /api/coupon-capture/coupons/reject-batch
+ * @desc    Rejeitar múltiplos cupons
+ * @access  Admin
+ */
+router.post('/coupons/reject-batch', couponCaptureController.rejectBatch);
+
 export default router;

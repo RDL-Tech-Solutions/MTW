@@ -21,7 +21,10 @@ class Coupon {
       max_uses = null,
       current_uses = 0,
       is_vip = false,
-      is_exclusive = false
+      is_exclusive = false,
+      is_pending_approval = false,
+      capture_source = null,
+      source_url = null
     } = couponData;
 
     // Preparar dados para inserção
@@ -40,7 +43,10 @@ class Coupon {
       max_uses,
       current_uses: current_uses || 0,
       is_vip,
-      is_exclusive: is_exclusive || false
+      is_exclusive: is_exclusive || false,
+      is_pending_approval: is_pending_approval !== undefined ? is_pending_approval : false,
+      capture_source: capture_source || null,
+      source_url: source_url || null
     };
 
     // Adicionar campos opcionais se fornecidos
@@ -139,6 +145,7 @@ class Coupon {
       is_vip,
       auto_captured,
       verification_status,
+      is_pending_approval,
       search,
       min_discount,
       max_discount,
@@ -162,6 +169,7 @@ class Coupon {
     if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
     if (auto_captured !== undefined) query = query.eq('auto_captured', auto_captured);
     if (verification_status) query = query.eq('verification_status', verification_status);
+    if (is_pending_approval !== undefined) query = query.eq('is_pending_approval', is_pending_approval);
     if (discount_type) query = query.eq('discount_type', discount_type);
     if (is_general !== undefined) query = query.eq('is_general', is_general);
 
@@ -256,6 +264,34 @@ class Coupon {
 
     return await this.update(id, {
       current_uses: coupon.current_uses + 1
+    });
+  }
+
+  // Buscar cupons pendentes de aprovação
+  static async findPendingApproval(filters = {}) {
+    return await this.findAll({
+      ...filters,
+      is_pending_approval: true
+    });
+  }
+
+  // Aprovar cupom (remover pendência e ativar)
+  static async approve(id, updates = {}) {
+    return await this.update(id, {
+      ...updates,
+      is_pending_approval: false,
+      is_active: true,
+      verification_status: 'active'
+    });
+  }
+
+  // Rejeitar cupom
+  static async reject(id, reason = '') {
+    return await this.update(id, {
+      is_pending_approval: false,
+      is_active: false,
+      verification_status: 'invalid',
+      restrictions: reason ? `Rejeitado: ${reason}` : 'Rejeitado pelo administrador'
     });
   }
 
