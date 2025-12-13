@@ -73,6 +73,7 @@ class Coupon {
       limit = 20,
       platform,
       is_vip,
+      search,
       sort = 'created_at',
       order = 'desc'
     } = filters;
@@ -90,6 +91,9 @@ class Coupon {
     // Aplicar filtros
     if (platform) query = query.eq('platform', platform);
     if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
+    if (search) {
+      query = query.or(`code.ilike.%${search}%,description.ilike.%${search}%`);
+    }
 
     // Ordenação
     query = query.order(sort, { ascending: order === 'asc' });
@@ -118,6 +122,7 @@ class Coupon {
       platform,
       is_active,
       is_vip,
+      search,
       sort = 'created_at',
       order = 'desc'
     } = filters;
@@ -132,6 +137,9 @@ class Coupon {
     if (platform) query = query.eq('platform', platform);
     if (is_active !== undefined) query = query.eq('is_active', is_active);
     if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
+    if (search) {
+      query = query.or(`code.ilike.%${search}%,description.ilike.%${search}%`);
+    }
 
     // Ordenação
     query = query.order(sort, { ascending: order === 'asc' });
@@ -176,6 +184,17 @@ class Coupon {
     return true;
   }
 
+  // Deletar múltiplos cupons
+  static async deleteMany(ids) {
+    const { error } = await supabase
+      .from('coupons')
+      .delete()
+      .in('id', ids);
+
+    if (error) throw error;
+    return true;
+  }
+
   // Desativar cupom
   static async deactivate(id) {
     return await this.update(id, { is_active: false });
@@ -189,7 +208,7 @@ class Coupon {
   // Registrar uso do cupom
   static async incrementUse(id) {
     const coupon = await this.findById(id);
-    
+
     return await this.update(id, {
       current_uses: coupon.current_uses + 1
     });
@@ -236,11 +255,11 @@ class Coupon {
   // Desativar cupons expirados
   static async deactivateExpired() {
     const expiredCoupons = await this.findExpired();
-    
-    const promises = expiredCoupons.map(coupon => 
+
+    const promises = expiredCoupons.map(coupon =>
       this.deactivate(coupon.id)
     );
-    
+
     await Promise.all(promises);
     return expiredCoupons.length;
   }

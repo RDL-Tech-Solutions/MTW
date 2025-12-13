@@ -28,9 +28,9 @@ class SyncController {
   static async saveConfig(req, res, next) {
     try {
       const config = await SyncConfig.upsert(req.body);
-      
+
       logger.info('⚙️ Configuração de sincronização atualizada');
-      
+
       res.json(successResponse(config, 'Configuração salva com sucesso'));
     } catch (error) {
       next(error);
@@ -46,7 +46,7 @@ class SyncController {
       logger.info('🚀 Iniciando sincronização manual...');
 
       const config = await SyncConfig.get();
-      
+
       if (!config.shopee_enabled && !config.mercadolivre_enabled) {
         return res.status(400).json(errorResponse(
           'Nenhuma plataforma habilitada para sincronização',
@@ -62,7 +62,7 @@ class SyncController {
       // Sincronizar Mercado Livre
       if (config.mercadolivre_enabled) {
         try {
-          const meliResults = await this.syncMercadoLivre(config);
+          const meliResults = await SyncController.syncMercadoLivre(config);
           results.mercadolivre = meliResults;
         } catch (error) {
           logger.error(`❌ Erro na sincronização ML: ${error.message}`);
@@ -73,7 +73,7 @@ class SyncController {
       // Sincronizar Shopee
       if (config.shopee_enabled) {
         try {
-          const shopeeResults = await this.syncShopee(config);
+          const shopeeResults = await SyncController.syncShopee(config);
           results.shopee = shopeeResults;
         } catch (error) {
           logger.error(`❌ Erro na sincronização Shopee: ${error.message}`);
@@ -129,7 +129,7 @@ class SyncController {
     try {
       // 1. Buscar produtos
       const products = await meliSync.fetchMeliProducts(config.keywords, 50);
-      
+
       // 2. Filtrar promoções
       const promotions = meliSync.filterMeliPromotions(
         products,
@@ -203,7 +203,7 @@ class SyncController {
     try {
       // 1. Buscar produtos
       const products = await shopeeSync.fetchShopeeProducts(config.keywords, 50);
-      
+
       // 2. Filtrar promoções
       const promotions = shopeeSync.filterShopeePromotions(
         products,

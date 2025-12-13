@@ -153,11 +153,22 @@ class LinkAnalyzer {
           container.closest('.ui-pdp-coupon').length ||
           container.closest('.andes-money-amount--discount').length) {
           type = 'coupon';
+          // Tentar extrair código do cupom se existir no texto
+          const codeMatch = parentText.match(/CUPOM\s+([A-Z0-9]+)/i) ||
+            grandParentText.match(/CUPOM\s+([A-Z0-9]+)/i);
+          if (codeMatch) {
+            container.data('couponCode', codeMatch[1]);
+          }
         }
         // 4. É um valor muito baixo isolado (provavel erro ou centavos soltos)?
         // (Opcional, mas ajuda a filtrar lixo)
 
-        allPrices.push({ price, type, context: parentText.substring(0, 50) });
+        allPrices.push({
+          price,
+          type,
+          context: parentText.substring(0, 50),
+          couponCode: container.data('couponCode')
+        });
       });
 
       console.log('📊 Todos os preços encontrados:', allPrices);
@@ -189,21 +200,36 @@ class LinkAnalyzer {
         }
       }
 
-      // Fallback: JSON-LD e Meta se nada visual for encontrado
+      // Decidir Fallback: JSON-LD e Meta se nada visual for encontrado
       if (!currentPrice) {
         const metaPrice = $('meta[itemprop="price"]').attr('content');
         if (metaPrice) currentPrice = parseFloat(metaPrice);
+      }
+
+      // Detecção de Cupom
+      let coupon = null;
+      const couponCandidate = allPrices.find(p => p.type === 'coupon' && p.price > 0);
+
+      if (couponCandidate) {
+        coupon = {
+          discount_value: couponCandidate.price,
+          discount_type: 'fixed', // Assumindo R$ fixo por enquanto
+          code: couponCandidate.couponCode || `MELI-${Math.floor(Math.random() * 10000)}`, // Fallback de código
+          platform: 'mercadolivre'
+        };
+        console.log('   🎟️ Cupom detectado:', coupon);
       }
 
       console.log('   ✅ Decisão Final - Current:', currentPrice, 'Old:', oldPrice);
 
       return {
         currentPrice: currentPrice,
-        oldPrice: oldPrice > currentPrice ? oldPrice : 0
+        oldPrice: oldPrice > currentPrice ? oldPrice : 0,
+        coupon: coupon
       };
     } catch (error) {
       console.error('Erro no scraping de preços:', error.message);
-      return { currentPrice: 0, oldPrice: 0 };
+      return { currentPrice: 0, oldPrice: 0, coupon: null };
     }
   }
 
@@ -325,7 +351,31 @@ class LinkAnalyzer {
 
       // Se não encontrou desconto, tentar extrair do título
       // Exemplo: "Produto X - R$ 755" ou "Cupom R$ 100 - Produto - R$ 508,43"
+      // Se não encontrou desconto, tentar extrair do título
+      // Exemplo: "Produto X - R$ 755" ou "Cupom R$ 100 - Produto - R$ 508,43"
+      let coupon = null;
+
       if (oldPrice === 0 && product.title) {
+        // Tentar detectar Cupom explícito no título
+        const couponMatch = product.title.match(/Cupom\s+(?:de\s+)?R\$\s*([\d.,]+)/i) ||
+          product.title.match(/R\$\s*([\d.,]+)\s+OFF/i);
+
+        if (couponMatch) {
+          const couponValue = this.parsePrice(couponMatch[1]);
+          if (couponValue > 0) {
+            coupon = {
+              discount_value: couponValue,
+              discount_type: 'fixed',
+              code: `MELI-${Math.floor(Math.random() * 10000)}`, // Tentar extrair código se possível no futuro
+              platform: 'mercadolivre'
+            };
+            console.log('   🎟️ Cupom detectado no título:', coupon);
+
+            // Se temos cupom, talvez o preço atual já esteja com desconto?
+            // Mas vamos manter a lógica de preço original vs atual
+          }
+        }
+
         // Buscar todos os preços no título
         const allPrices = product.title.match(/R\$\s*([\d.,]+)/g);
         if (allPrices && allPrices.length > 0) {
@@ -359,9 +409,13 @@ class LinkAnalyzer {
 
       // Limpar o preço do título se foi extraído
       let cleanTitle = product.title;
-      if (oldPrice > 0 && product.title.includes('R$')) {
-        // Regex melhorada para remover qualquer formato de preço
-        cleanTitle = product.title.replace(/\s*-?\s*R\$\s*[\d.,]+/g, '').trim();
+      if ((oldPrice > 0 || coupon) && product.title.includes('R$')) {
+        // Regex melhorada para remover qualquer formato de preço ou cupom
+        cleanTitle = product.title
+          .replace(/Cupom\s+(?:de\s+)?R\$\s*[\d.,]+/gi, '')
+          .replace(/R\$\s*[\d.,]+\s+OFF/gi, '')
+          .replace(/\s*-?\s*R\$\s*[\d.,]+/g, '')
+          .trim();
         console.log('   🧹 Título limpo:', cleanTitle.substring(0, 50) + '...');
       }
 
@@ -371,6 +425,7 @@ class LinkAnalyzer {
       console.log('   Preço Original (API):', product.original_price);
       console.log('   Preço Antigo (final):', oldPrice);
       console.log('   Tem Desconto:', oldPrice > 0);
+      console.log('   Tem Cupom:', !!coupon);
 
       return {
         name: cleanTitle,
@@ -378,6 +433,7 @@ class LinkAnalyzer {
         imageUrl: product.thumbnail || product.pictures?.[0]?.url || '',
         currentPrice: currentPrice,
         oldPrice: oldPrice,
+        coupon: coupon,
         platform: 'mercadolivre',
         affiliateLink: product.permalink
       };
@@ -406,6 +462,10 @@ class LinkAnalyzer {
               console.log('✅ Desconto encontrado via scraping!');
               apiData.oldPrice = scrapedData.oldPrice;
               apiData.currentPrice = scrapedData.currentPrice;
+            }
+            if (scrapedData.coupon) {
+              console.log('✅ Cupom encontrado via scraping!');
+              apiData.coupon = scrapedData.coupon;
             }
           }
 
@@ -493,9 +553,27 @@ class LinkAnalyzer {
         imageUrl: imageUrl || '',
         currentPrice: currentPrice,
         oldPrice: oldPrice > currentPrice ? oldPrice : 0, // Só usar se for maior que o atual
+        coupon: null, // LinkAnalyzer (extractMeliInfo) básico sem scraping profundo de cupons ainda, mas scrapeMeliPrices cobre. 
+        // Na verdade, scrapeMeliPrices é chamado dentro de getMeliProductFromAPI, mas aqui é o fallback puro scraping.
+        // Vamos precisar re-implementar a logica de detecção de cupom aqui se quisermos consistencia, ou confiar que scrapeMeliPrices é usado
+        // quando a API não resolve. Mas este metodo extractMeliInfo é o fallback GERAL.
+        // Vamos adicionar detecção básica aqui?
+        // Sim, a logica de scrapeMeliPrices é mais robusta. Mas vamos adicionar null por enquanto.
         platform: 'mercadolivre',
         affiliateLink: url
       };
+
+      // Tentar re-scan usando scrapeMeliPrices se suspeitarmos que perdemos algo?
+      // Ou melhor, unificar a logica de scraping. O metodo scrapeMeliPrices é só PREÇO. 
+      // Este metodo extractMeliInfo faz tudo.
+      // Vou adicionar a chamada ao scrapeMeliPrices aqui para garantir captura de cupons.
+      const priceData = await this.scrapeMeliPrices(url);
+      if (priceData.coupon) {
+        result.coupon = priceData.coupon;
+      }
+      // Sobrescrever preços se scrapeMeliPrices achou algo melhor
+      if (priceData.currentPrice > 0) result.currentPrice = priceData.currentPrice;
+      if (priceData.oldPrice > 0) result.oldPrice = priceData.oldPrice;
 
       console.log('📦 Dados extraídos do Mercado Livre:');
       console.log('   Nome:', result.name.substring(0, 50) + '...');

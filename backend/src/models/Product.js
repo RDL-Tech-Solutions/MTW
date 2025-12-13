@@ -17,7 +17,7 @@ class Product {
       stock_available = true
     } = productData;
 
-    const discount_percentage = old_price 
+    const discount_percentage = old_price
       ? calculateDiscountPercentage(old_price, current_price)
       : 0;
 
@@ -124,7 +124,7 @@ class Product {
       const product = await this.findById(id);
       const oldPrice = updates.old_price || product.old_price;
       const currentPrice = updates.current_price || product.current_price;
-      
+
       if (oldPrice) {
         updates.discount_percentage = calculateDiscountPercentage(oldPrice, currentPrice);
       }
@@ -160,6 +160,17 @@ class Product {
       .from('products')
       .update({ is_active: false })
       .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  }
+
+  // Deletar múltiplos produtos (soft delete)
+  static async deleteMany(ids) {
+    const { error } = await supabase
+      .from('products')
+      .update({ is_active: false })
+      .in('id', ids);
 
     if (error) throw error;
     return true;
@@ -274,17 +285,17 @@ class Product {
   // Atualizar preço e criar histórico
   static async updatePrice(id, newPrice) {
     const product = await this.findById(id);
-    
+
     // Se o preço mudou, atualizar
     if (product.current_price !== newPrice) {
       const updates = {
         old_price: product.current_price,
         current_price: newPrice
       };
-      
+
       return await this.update(id, updates);
     }
-    
+
     return product;
   }
 

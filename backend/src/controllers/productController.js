@@ -100,6 +100,27 @@ class ProductController {
     }
   }
 
+  // Deletar múltiplos produtos (admin)
+  static async batchDelete(req, res, next) {
+    try {
+      const { ids } = req.body;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json(
+          errorResponse('Lista de IDs inválida', 'INVALID_IDS')
+        );
+      }
+
+      await Product.deleteMany(ids);
+      await cacheDelByPattern('products:*');
+
+      logger.info(`Produtos deletados em lote: ${ids.length} itens`);
+      res.json(successResponse(null, `${ids.length} produtos deletados com sucesso`));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Histórico de preços
   static async priceHistory(req, res, next) {
     try {

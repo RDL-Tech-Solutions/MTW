@@ -1,0 +1,118 @@
+import express from 'express';
+import couponCaptureController from '../controllers/couponCaptureController.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Todas as rotas requerem autenticação de admin
+router.use(authenticateToken);
+router.use(requireAdmin);
+
+// ========================================
+// SINCRONIZAÇÃO
+// ========================================
+
+/**
+ * @route   POST /api/coupon-capture/sync/all
+ * @desc    Executar sincronização manual de todas as plataformas
+ * @access  Admin
+ */
+router.post('/sync/all', couponCaptureController.syncAll);
+
+/**
+ * @route   POST /api/coupon-capture/sync/:platform
+ * @desc    Sincronizar plataforma específica
+ * @access  Admin
+ */
+router.post('/sync/:platform', couponCaptureController.syncPlatform);
+
+/**
+ * @route   POST /api/coupon-capture/check-expired
+ * @desc    Verificar e desativar cupons expirados
+ * @access  Admin
+ */
+router.post('/check-expired', couponCaptureController.checkExpired);
+
+/**
+ * @route   POST /api/coupon-capture/verify-active
+ * @desc    Verificar validade de cupons ativos
+ * @access  Admin
+ */
+router.post('/verify-active', couponCaptureController.verifyActive);
+
+// ========================================
+// ESTATÍSTICAS E LOGS
+// ========================================
+
+/**
+ * @route   GET /api/coupon-capture/stats
+ * @desc    Obter estatísticas de captura
+ * @access  Admin
+ */
+router.get('/stats', couponCaptureController.getStats);
+
+/**
+ * @route   GET /api/coupon-capture/logs
+ * @desc    Obter logs de sincronização
+ * @access  Admin
+ */
+router.get('/logs', couponCaptureController.getLogs);
+
+/**
+ * @route   GET /api/coupon-capture/cron-status
+ * @desc    Obter status dos cron jobs
+ * @access  Admin
+ */
+router.get('/cron-status', couponCaptureController.getCronStatus);
+
+// ========================================
+// CONFIGURAÇÕES
+// ========================================
+
+/**
+ * @route   GET /api/coupon-capture/settings
+ * @desc    Obter configurações do módulo
+ * @access  Admin
+ */
+router.get('/settings', couponCaptureController.getSettings);
+
+/**
+ * @route   PUT /api/coupon-capture/settings
+ * @desc    Atualizar configurações do módulo
+ * @access  Admin
+ */
+router.put('/settings', couponCaptureController.updateSettings);
+
+/**
+ * @route   POST /api/coupon-capture/toggle-auto-capture
+ * @desc    Ativar/Desativar captura automática
+ * @access  Admin
+ */
+router.post('/toggle-auto-capture', couponCaptureController.toggleAutoCapture);
+
+// ========================================
+// GESTÃO DE CUPONS
+// ========================================
+
+/**
+ * @route   GET /api/coupon-capture/coupons
+ * @desc    Listar cupons capturados
+ * @access  Admin
+ */
+router.get('/coupons', couponCaptureController.listCoupons);
+
+/**
+ * @route   PUT /api/coupon-capture/coupons/:id/expire
+ * @desc    Forçar expiração de um cupom
+ * @access  Admin
+ */
+router.put('/coupons/:id/expire', couponCaptureController.expireCoupon);
+
+/**
+ * @route   PUT /api/coupon-capture/coupons/:id/reactivate
+ * @desc    Reativar cupom
+ * @access  Admin
+ */
+router.put('/coupons/:id/reactivate', couponCaptureController.reactivateCoupon);
+
+export default router;

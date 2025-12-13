@@ -19,5 +19,6 @@ router.post('/:id/click', authenticateToken, ProductController.trackClick);
 router.post('/', authenticateToken, requireAdmin, createLimiter, validate(createProductSchema), ProductController.create);
 router.put('/:id', authenticateToken, requireAdmin, validate(updateProductSchema), ProductController.update);
 router.delete('/:id', authenticateToken, requireAdmin, ProductController.delete);
+router.post('/batch-delete', authenticateToken, requireAdmin, ProductController.batchDelete);
 
 export default router;

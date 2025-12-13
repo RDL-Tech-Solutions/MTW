@@ -6,13 +6,15 @@ import {
   FolderTree, 
   Users, 
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Produtos', href: '/products', icon: Package },
   { name: 'Cupons', href: '/coupons', icon: Ticket },
+  { name: 'Captura de Cupons', href: '/coupon-capture', icon: Zap },
   { name: 'Categorias', href: '/categories', icon: FolderTree },
   { name: 'Usuários', href: '/users', icon: Users },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

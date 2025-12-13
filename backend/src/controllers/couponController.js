@@ -12,7 +12,7 @@ class CouponController {
     try {
       const cacheKey = `coupons:active:${JSON.stringify(req.query)}`;
       const cached = await cacheGet(cacheKey);
-      
+
       if (cached) {
         return res.json(successResponse(cached));
       }
@@ -105,11 +105,32 @@ class CouponController {
     }
   }
 
+  // Deletar múltiplos cupons (admin)
+  static async batchDelete(req, res, next) {
+    try {
+      const { ids } = req.body;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json(
+          errorResponse('Lista de IDs inválida', 'INVALID_IDS')
+        );
+      }
+
+      await Coupon.deleteMany(ids);
+      await cacheDel('coupons:*');
+
+      logger.info(`Cupons deletados em lote: ${ids.length} itens`);
+      res.json(successResponse(null, `${ids.length} cupons deletados com sucesso`));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Registrar uso do cupom
   static async use(req, res, next) {
     try {
       const { id } = req.params;
-      
+
       const isValid = await Coupon.isValid(id);
       if (!isValid) {
         return res.status(400).json(

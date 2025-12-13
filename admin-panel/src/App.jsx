@@ -11,6 +11,7 @@ import Users from './pages/Users';
 import Analytics from './pages/Analytics';
 import Bots from './pages/Bots';
 import AutoSync from './pages/AutoSync';
+import CouponCapture from './pages/CouponCapture';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -36,6 +37,7 @@ function App() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="bots" element={<Bots />} />
           <Route path="auto-sync" element={<AutoSync />} />
+          <Route path="coupon-capture" element={<CouponCapture />} />
         </Route>
       </Routes>
       <Toaster />

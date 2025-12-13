@@ -19,5 +19,6 @@ router.get('/admin/all', authenticateToken, requireAdmin, CouponController.listA
 router.post('/', authenticateToken, requireAdmin, createLimiter, validate(createCouponSchema), CouponController.create);
 router.put('/:id', authenticateToken, requireAdmin, validate(updateCouponSchema), CouponController.update);
 router.delete('/:id', authenticateToken, requireAdmin, CouponController.delete);
+router.post('/batch-delete', authenticateToken, requireAdmin, CouponController.batchDelete);
 
 export default router;

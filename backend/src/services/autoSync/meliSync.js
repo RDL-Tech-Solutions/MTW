@@ -3,15 +3,18 @@ import * as cheerio from 'cheerio';
 import logger from '../../config/logger.js';
 import meliAuth from './meliAuth.js';
 import linkAnalyzer from '../linkAnalyzer.js'; // Reaproveitar helper de parsePrice
+import Coupon from '../../models/Coupon.js';
 
 class MeliSync {
   /**
    * Buscar produtos do Mercado Livre baseado em palavras-chave
    */
-  async fetchMeliProducts(keywords, limit = 50) {
+  async fetchMeliProducts(keywords, limit = 50, options = {}) {
     try {
       const searchTerms = keywords.split(',').map(k => k.trim()).filter(k => k);
       const allProducts = [];
+
+      const { forceScraping = false } = options;
 
       // Verificar se autenticação está configurada
       if (!meliAuth.isConfigured()) {
@@ -40,30 +43,38 @@ class MeliSync {
             }
           }
 
-          // Tentar API
-          const response = await axios.get('https://api.mercadolibre.com/sites/MLB/search', {
-            params: {
-              q: term,
-              limit: Math.min(limit, 50),
-            },
-            headers,
-            timeout: 10000
-          });
+          // Tentar API (se não for forçado scraping)
 
+          let usedApi = false;
 
-          if (response.data && response.data.results && response.data.results.length > 0) {
-            products = response.data.results;
-            logger.info(`   ✅ (API) ${products.length} resultados para "${term}"`);
-          } else {
-            // Se API retornar vazio (soft block), força erro para cair no catch ou trata aqui
-            // Vamos tratar aqui para evitar throw desnecessário
-            logger.warn(`   ⚠️ API retornou 0 resultados. Tentando scraping...`);
+          if (!forceScraping) {
+            try {
+              const response = await axios.get('https://api.mercadolibre.com/sites/MLB/search', {
+                params: {
+                  q: term,
+                  limit: Math.min(limit, 50),
+                },
+                headers,
+                timeout: 10000
+              });
+
+              if (response.data && response.data.results && response.data.results.length > 0) {
+                products = response.data.results;
+                logger.info(`   ✅ (API) ${products.length} resultados para "${term}"`);
+                usedApi = true;
+              }
+            } catch (apiError) {
+              logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
+            }
+          }
+
+          if (!usedApi) {
+            // Se API retornar vazio, falhar, ou scraping for forçado
+            if (forceScraping) logger.info('   🕷️ Modo Scraping forçado para capturar cupons.');
             products = await this.scrapeSearchPage(term);
           }
-        } catch (apiError) {
-          // Se for bloqueio (403), erro de servidor, ou qualquer outro erro na API
-          logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
-          products = await this.scrapeSearchPage(term);
+        } catch (error) {
+          // Catch geral do loop
         }
 
         if (products.length > 0) {
@@ -160,6 +171,49 @@ class MeliSync {
             }
           }
 
+          // Verificar Cupom na Busca (Classico)
+          let coupon = null;
+          const couponElement = container.find('.ui-search-item__coupon').first();
+
+          if (couponElement.length > 0) {
+            const couponText = couponElement.text().trim();
+            const couponValue = linkAnalyzer.parsePrice(couponText);
+
+            // Tentar extrair código
+            const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9]{3,20})/i);
+
+            if (couponValue > 0 && codeMatch) {
+              coupon = {
+                discount_value: couponValue,
+                discount_type: 'fixed',
+                code: codeMatch[1].toUpperCase(),
+                platform: 'mercadolivre'
+              };
+            }
+          } else {
+            // Tentar texto solto de 'CUPOM' 
+            const allText = container.text();
+            // Regex mais estrita para pegar código: CUPOM [CODE]
+            const codeMatch = allText.match(/CUPOM\s+([A-Z0-9]+)\s+R\$/i) || allText.match(/CUPOM\s*:?\s*([A-Z0-9]{4,15})/i);
+
+            if (codeMatch) {
+              const potentialCode = codeMatch[1];
+              if (!['DE', 'DA', 'DO', 'OFF', 'R$', 'COM', 'PARA'].includes(potentialCode.toUpperCase())) {
+                const couponMatch = allText.match(/R\$\s*([\d.,]+)/);
+                const val = couponMatch ? linkAnalyzer.parsePrice(couponMatch[1]) : 0;
+
+                if (val > 0) {
+                  coupon = {
+                    discount_value: val,
+                    discount_type: 'fixed',
+                    code: potentialCode.toUpperCase(),
+                    platform: 'mercadolivre'
+                  };
+                }
+              }
+            }
+          }
+
           if (price > 0) {
             results.push({
               id,
@@ -168,7 +222,8 @@ class MeliSync {
               thumbnail,
               price,
               original_price: originalPrice > price ? originalPrice : null,
-              available_quantity: 1
+              available_quantity: 1,
+              coupon: coupon
             });
           }
         } catch (e) { }
@@ -219,6 +274,59 @@ class MeliSync {
               }
             }
 
+            // Verificar Cupom na Busca (Poly)
+            let coupon = null;
+            const polyCoupon = container.find('.poly-component__coupon').first();
+
+            if (polyCoupon.length > 0) {
+              const couponText = polyCoupon.text().trim();
+              const couponValue = linkAnalyzer.parsePrice(couponText);
+
+              // Tentar extrair um código real se houver (ex: "CUPOM: VALE20")
+              // Na busca do ML geralmente não mostra o código, apenas "CUPOM R$ 20 OFF"
+              // Se não tiver código explícito, não vamos inventar um código aleatório.
+              // Vamos verificar se há algum padrão de código no título ou tag
+              const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9]{3,20})/i);
+
+              if (couponValue > 0 && codeMatch) {
+                coupon = {
+                  discount_value: couponValue,
+                  discount_type: 'fixed',
+                  code: codeMatch[1].toUpperCase(),
+                  platform: 'mercadolivre'
+                };
+              } else if (couponValue > 0) {
+                // Se achou valor mas não código, marcamos como cupom de clique (sem código)
+                // Mas para o sistema funcionar precisava de código. 
+                // Vamos ignorar por enquanto para não gerar lixo "MELI-RANDOM" que não funciona.
+                // O usuário relatou que "não funcionam", então melhor não capturar do que capturar lixo.
+                coupon = null;
+              }
+            } else {
+              // Tentar texto solto de 'CUPOM' no container
+              const allText = container.text();
+              // Regex mais estrita para pegar código: CUPOM [CODE]
+              const codeMatch = allText.match(/CUPOM\s+([A-Z0-9]+)\s+R\$/i) || allText.match(/CUPOM\s*:?\s*([A-Z0-9]{4,15})/i);
+
+              if (codeMatch) {
+                const potentialCode = codeMatch[1];
+                // Verificar se o "código" não é uma palavra comum como "DE", "R$", "OFF"
+                if (!['DE', 'DA', 'DO', 'OFF', 'R$', 'COM', 'PARA'].includes(potentialCode.toUpperCase())) {
+                  const couponMatch = allText.match(/R\$\s*([\d.,]+)/); // Tentar achar valor perto
+                  const val = couponMatch ? linkAnalyzer.parsePrice(couponMatch[1]) : 0;
+
+                  if (val > 0) {
+                    coupon = {
+                      discount_value: val,
+                      discount_type: 'fixed',
+                      code: potentialCode.toUpperCase(),
+                      platform: 'mercadolivre'
+                    };
+                  }
+                }
+              }
+            }
+
             if (price > 0 && id) {
               results.push({
                 id,
@@ -227,7 +335,8 @@ class MeliSync {
                 thumbnail,
                 price,
                 original_price: originalPrice > price ? originalPrice : null,
-                available_quantity: 1
+                available_quantity: 1,
+                coupon: coupon
               });
             }
           } catch (e) { }
@@ -254,24 +363,35 @@ class MeliSync {
       const currentPrice = product.price;
       const originalPrice = product.original_price;
 
-      if (!originalPrice || originalPrice <= currentPrice) {
-        continue; // Não é uma promoção real
+      // Se tiver cupom, consideramos promoção mesmo se não tiver "original price" (riscado)
+      const hasCoupon = !!product.coupon;
+
+      if (!hasCoupon && (!originalPrice || originalPrice <= currentPrice)) {
+        continue; // Não é uma promoção real (sem desconto nem cupom)
       }
 
       // Calcular desconto
-      const discount = ((originalPrice - currentPrice) / originalPrice) * 100;
+      let discount = 0;
+      if (originalPrice > currentPrice) {
+        discount = ((originalPrice - currentPrice) / originalPrice) * 100;
+      }
 
-      if (discount >= minDiscountPercentage) {
+      // Se tem cupom, adicionar cupom ao desconto efetivo?
+      // Por enquanto, vamos considerar o cupom separado.
+      // Mas para passar no filtro, se tiver cupom, deve passar.
+
+      if (discount >= minDiscountPercentage || hasCoupon) {
         promotions.push({
           external_id: `mercadolivre-${product.id}`,
           name: product.title,
           image_url: product.thumbnail,
           platform: 'mercadolivre',
           current_price: currentPrice,
-          old_price: originalPrice,
+          old_price: originalPrice || 0, // Garantir 0 se null
           discount_percentage: Math.round(discount),
           affiliate_link: product.permalink,
           stock_available: product.available_quantity > 0,
+          coupon: product.coupon,
           raw_data: product
         });
       }
@@ -324,8 +444,47 @@ class MeliSync {
           return { product: existing, isNew: true }; // Considerar como "novo" evento para logs
         }
 
+        // Se agora tem cupom e antes não tinha (ou mudou), atualizar/adicionar
+        if (product.coupon) {
+          try {
+            const couponData = {
+              ...product.coupon,
+              valid_from: new Date(),
+              valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            };
+            // Criar novo cupom
+            const newCoupon = await Coupon.create(couponData);
+
+            // Atualizar produto vinculando o cupom (mesmo se o preço não mudou, o cupom é novidade)
+            // Nota: Se já tinha cupom, vai sobrescrever com o novo (o que é bom, pois é uma nova captura/atualização)
+            await Product.update(existing.id, { coupon_id: newCoupon.id });
+            logger.info(`   🎟️ Cupom atualizado/adicionado a produto existente: ${product.name}`);
+          } catch (couponError) {
+            logger.error(`   ❌ Erro ao atualizar cupom em produto existente: ${couponError.message}`);
+          }
+        }
+
         logger.info(`📦 Produto já existe: ${product.name}`);
         return { product: existing, isNew: false };
+      }
+
+      // Processar Cupom antes de criar
+      if (product.coupon) {
+        try {
+          const couponData = {
+            ...product.coupon,
+            valid_from: new Date(),
+            valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Validade 7 dias default
+          };
+
+          // Criar cupom
+          const newCoupon = await Coupon.create(couponData);
+          product.coupon_id = newCoupon.id;
+          logger.info(`   🎟️ Cupom criado para produto: ${product.coupon.discount_value}`);
+        } catch (couponError) {
+          logger.error(`   ❌ Erro ao criar cupom: ${couponError.message}`);
+          // Segue sem cupom
+        }
       }
 
       // Gerar link de afiliado (Async)

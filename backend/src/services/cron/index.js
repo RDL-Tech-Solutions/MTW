@@ -7,6 +7,7 @@ import { cleanupOldData } from './cleanupOldData.js';
 import { syncProducts } from './syncProducts.js';
 import { monitorExpiredCoupons } from './monitorExpiredCoupons.js';
 import autoSyncCron from '../../cron/autoSyncCron.js';
+import couponCaptureCron from '../../cron/couponCaptureCron.js';
 
 export const startCronJobs = () => {
   logger.info('🕐 Iniciando cron jobs...');
@@ -66,6 +67,12 @@ export const startCronJobs = () => {
   // Intervalo configurável pelo painel admin
   autoSyncCron.start().catch(error => {
     logger.error(`Erro ao iniciar auto-sync cron: ${error.message}`);
+  });
+
+  // Iniciar captura automática de cupons (todas as plataformas)
+  // Intervalo configurável pelo painel admin
+  couponCaptureCron.startAll().catch(error => {
+    logger.error(`Erro ao iniciar coupon capture cron: ${error.message}`);
   });
 
   logger.info('✅ Cron jobs iniciados com sucesso');
