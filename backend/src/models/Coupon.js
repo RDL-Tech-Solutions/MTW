@@ -10,31 +10,44 @@ class Coupon {
       discount_type,
       discount_value,
       min_purchase = 0,
+      max_discount_value = null,
       valid_from,
       valid_until,
       is_general = true,
       applicable_products = [],
       restrictions = '',
+      description = null,
+      title = null,
       max_uses = null,
+      current_uses = 0,
       is_vip = false
     } = couponData;
 
+    // Preparar dados para inserção
+    const insertData = {
+      code,
+      platform,
+      discount_type,
+      discount_value,
+      min_purchase: min_purchase || 0,
+      max_discount_value: max_discount_value || null,
+      valid_from: valid_from || new Date().toISOString(),
+      valid_until,
+      is_general,
+      applicable_products: applicable_products || [],
+      restrictions: restrictions || '',
+      max_uses,
+      current_uses: current_uses || 0,
+      is_vip
+    };
+
+    // Adicionar campos opcionais se fornecidos
+    if (description) insertData.description = description;
+    if (title) insertData.title = title;
+
     const { data, error } = await supabase
       .from('coupons')
-      .insert([{
-        code,
-        platform,
-        discount_type,
-        discount_value,
-        min_purchase,
-        valid_from,
-        valid_until,
-        is_general,
-        applicable_products,
-        restrictions,
-        max_uses,
-        is_vip
-      }])
+      .insert([insertData])
       .select()
       .single();
 
@@ -122,7 +135,15 @@ class Coupon {
       platform,
       is_active,
       is_vip,
+      auto_captured,
+      verification_status,
       search,
+      min_discount,
+      max_discount,
+      discount_type,
+      valid_from,
+      valid_until,
+      is_general,
       sort = 'created_at',
       order = 'desc'
     } = filters;
@@ -133,12 +154,34 @@ class Coupon {
       .from('coupons')
       .select('*', { count: 'exact' });
 
-    // Aplicar filtros
+    // Aplicar filtros básicos
     if (platform) query = query.eq('platform', platform);
     if (is_active !== undefined) query = query.eq('is_active', is_active);
     if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
+    if (auto_captured !== undefined) query = query.eq('auto_captured', auto_captured);
+    if (verification_status) query = query.eq('verification_status', verification_status);
+    if (discount_type) query = query.eq('discount_type', discount_type);
+    if (is_general !== undefined) query = query.eq('is_general', is_general);
+
+    // Filtros de busca
     if (search) {
-      query = query.or(`code.ilike.%${search}%,description.ilike.%${search}%`);
+      query = query.or(`code.ilike.%${search}%,description.ilike.%${search}%,title.ilike.%${search}%`);
+    }
+
+    // Filtros de desconto
+    if (min_discount !== undefined) {
+      query = query.gte('discount_value', min_discount);
+    }
+    if (max_discount !== undefined) {
+      query = query.lte('discount_value', max_discount);
+    }
+
+    // Filtros de data
+    if (valid_from) {
+      query = query.gte('valid_from', valid_from);
+    }
+    if (valid_until) {
+      query = query.lte('valid_until', valid_until);
     }
 
     // Ordenação

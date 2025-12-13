@@ -57,6 +57,7 @@ export const SCREEN_NAMES = {
   HOME: 'Home',
   CATEGORIES: 'Categories',
   FAVORITES: 'Favorites',
+  COUPONS: 'Coupons',
   PROFILE: 'Profile',
   
   // Stack

@@ -289,6 +289,13 @@ class CouponCaptureController {
         is_active,
         auto_captured,
         verification_status,
+        search,
+        min_discount,
+        max_discount,
+        discount_type,
+        valid_from,
+        valid_until,
+        is_general,
         sort = 'created_at',
         order = 'desc'
       } = req.query;
@@ -304,6 +311,13 @@ class CouponCaptureController {
       if (is_active !== undefined) filters.is_active = is_active === 'true';
       if (auto_captured !== undefined) filters.auto_captured = auto_captured === 'true';
       if (verification_status) filters.verification_status = verification_status;
+      if (search) filters.search = search;
+      if (min_discount) filters.min_discount = parseFloat(min_discount);
+      if (max_discount) filters.max_discount = parseFloat(max_discount);
+      if (discount_type) filters.discount_type = discount_type;
+      if (valid_from) filters.valid_from = valid_from;
+      if (valid_until) filters.valid_until = valid_until;
+      if (is_general !== undefined) filters.is_general = is_general === 'true';
 
       const result = await Coupon.findAll(filters);
 
@@ -317,6 +331,169 @@ class CouponCaptureController {
       res.status(500).json({
         success: false,
         message: 'Erro ao listar cupons',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Exportar cupons para CSV/JSON
+   */
+  async exportCoupons(req, res) {
+    try {
+      const { format = 'json', ...filters } = req.query;
+
+      // Buscar todos os cupons (sem paginação para exportação)
+      const allFilters = { ...filters, limit: 10000, page: 1 };
+      const result = await Coupon.findAll(allFilters);
+      const coupons = result.coupons || result;
+
+      if (format === 'csv') {
+        // Converter para CSV
+        const headers = ['Código', 'Plataforma', 'Tipo Desconto', 'Valor Desconto', 'Compra Mínima', 
+                        'Limite Máximo', 'Válido De', 'Válido Até', 'Aplicabilidade', 'Status', 'Criado Em'];
+        
+        const csvRows = [
+          headers.join(','),
+          ...coupons.map(coupon => [
+            coupon.code,
+            coupon.platform,
+            coupon.discount_type,
+            coupon.discount_value,
+            coupon.min_purchase || 0,
+            coupon.max_discount_value || '',
+            coupon.valid_from ? new Date(coupon.valid_from).toISOString() : '',
+            coupon.valid_until ? new Date(coupon.valid_until).toISOString() : '',
+            coupon.is_general ? 'Todos' : 'Selecionados',
+            coupon.verification_status,
+            coupon.created_at ? new Date(coupon.created_at).toISOString() : ''
+          ].join(','))
+        ];
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=coupons.csv');
+        res.send(csvRows.join('\n'));
+      } else {
+        res.json({
+          success: true,
+          data: coupons,
+          total: coupons.length
+        });
+      }
+
+    } catch (error) {
+      logger.error(`Erro ao exportar cupons: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao exportar cupons',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Ações em lote nos cupons
+   */
+  async batchAction(req, res) {
+    try {
+      const { action, coupon_ids } = req.body;
+
+      if (!Array.isArray(coupon_ids) || coupon_ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Lista de IDs de cupons é obrigatória'
+        });
+      }
+
+      let updated = 0;
+      const updates = {};
+
+      switch (action) {
+        case 'expire':
+          updates.is_active = false;
+          updates.verification_status = 'expired';
+          break;
+        case 'activate':
+          updates.is_active = true;
+          updates.verification_status = 'active';
+          break;
+        case 'delete':
+          // Deletar cupons
+          for (const id of coupon_ids) {
+            try {
+              await Coupon.delete(id);
+              updated++;
+            } catch (error) {
+              logger.warn(`Erro ao deletar cupom ${id}: ${error.message}`);
+            }
+          }
+          return res.json({
+            success: true,
+            message: `${updated} cupons deletados`,
+            data: { updated }
+          });
+        default:
+          return res.status(400).json({
+            success: false,
+            message: 'Ação inválida'
+          });
+      }
+
+      // Atualizar cupons
+      for (const id of coupon_ids) {
+        try {
+          await Coupon.update(id, updates);
+          updated++;
+        } catch (error) {
+          logger.warn(`Erro ao atualizar cupom ${id}: ${error.message}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `${updated} cupons atualizados`,
+        data: { updated, action }
+      });
+
+    } catch (error) {
+      logger.error(`Erro na ação em lote: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro na ação em lote',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Verificar cupom específico
+   */
+  async verifyCoupon(req, res) {
+    try {
+      const { id } = req.params;
+
+      const coupon = await Coupon.findById(id);
+      if (!coupon) {
+        return res.status(404).json({
+          success: false,
+          message: 'Cupom não encontrado'
+        });
+      }
+
+      // Verificar via serviço de captura
+      const result = await couponCaptureService.verifyActiveCoupons([id]);
+
+      res.json({
+        success: true,
+        message: 'Verificação concluída',
+        data: result
+      });
+
+    } catch (error) {
+      logger.error(`Erro ao verificar cupom: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao verificar cupom',
         error: error.message
       });
     }

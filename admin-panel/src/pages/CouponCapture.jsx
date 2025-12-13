@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   RefreshCw, Settings, TrendingUp, Clock, AlertCircle,
   CheckCircle, XCircle, Play, Pause, Eye, Download,
-  Zap, ShoppingBag
+  Zap, ShoppingBag, Search, Filter, CheckSquare, Square,
+  FileDown, Trash2, CheckCircle2, Loader2
 } from 'lucide-react';
 import api from '../services/api';
 import { Pagination } from '../components/ui/Pagination';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
 
 export default function CouponCapture() {
   const [stats, setStats] = useState(null);
@@ -30,6 +33,22 @@ export default function CouponCapture() {
     totalPages: 1,
     total: 0
   });
+
+  // Filtros e busca
+  const [filters, setFilters] = useState({
+    search: '',
+    platform: '',
+    verification_status: '',
+    is_active: '',
+    is_general: '',
+    discount_type: '',
+    min_discount: '',
+    max_discount: ''
+  });
+
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCoupons, setSelectedCoupons] = useState([]);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -96,7 +115,20 @@ export default function CouponCapture() {
 
   const loadCoupons = async (page = 1) => {
     try {
-      const response = await api.get(`/coupon-capture/coupons?limit=50&auto_captured=true&page=${page}`);
+      // Construir query string com filtros
+      const params = new URLSearchParams({
+        limit: '50',
+        auto_captured: 'true',
+        page: page.toString()
+      });
+
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value && value !== '') {
+          params.append(key, value);
+        }
+      });
+
+      const response = await api.get(`/coupon-capture/coupons?${params.toString()}`);
       const data = response.data.data;
 
       if (Array.isArray(data)) {
@@ -110,6 +142,9 @@ export default function CouponCapture() {
           total: data.total || 0
         }));
       }
+
+      // Limpar seleção ao mudar de página
+      setSelectedCoupons([]);
 
     } catch (error) {
       console.error('Erro ao carregar cupons:', error);
@@ -197,6 +232,125 @@ export default function CouponCapture() {
       alert('Erro ao expirar cupom');
     }
   };
+
+  const handleVerifyCoupon = async (couponId) => {
+    try {
+      await api.post(`/coupon-capture/coupons/${couponId}/verify`);
+      alert('Verificação concluída!');
+      loadCoupons(couponsPagination.page);
+    } catch (error) {
+      console.error('Erro ao verificar cupom:', error);
+      alert('Erro ao verificar cupom');
+    }
+  };
+
+  const handleBatchAction = async (action) => {
+    if (selectedCoupons.length === 0) {
+      alert('Selecione pelo menos um cupom');
+      return;
+    }
+
+    const actionNames = {
+      expire: 'expirar',
+      activate: 'ativar',
+      delete: 'deletar'
+    };
+
+    if (!confirm(`Tem certeza que deseja ${actionNames[action]} ${selectedCoupons.length} cupom(ns)?`)) {
+      return;
+    }
+
+    try {
+      await api.post('/coupon-capture/coupons/batch', {
+        action,
+        coupon_ids: selectedCoupons
+      });
+      alert(`${selectedCoupons.length} cupom(ns) ${actionNames[action]}(s) com sucesso!`);
+      setSelectedCoupons([]);
+      loadCoupons(couponsPagination.page);
+    } catch (error) {
+      console.error('Erro na ação em lote:', error);
+      alert('Erro ao executar ação em lote');
+    }
+  };
+
+  const handleExport = async (format = 'json') => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams({ format, ...filters });
+      const response = await api.get(`/coupon-capture/coupons/export?${params.toString()}`, {
+        responseType: format === 'csv' ? 'blob' : 'json'
+      });
+
+      if (format === 'csv') {
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `coupons_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        const dataStr = JSON.stringify(response.data.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = window.URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `coupons_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      alert('Exportação concluída!');
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
+      alert('Erro ao exportar cupons');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      platform: '',
+      verification_status: '',
+      is_active: '',
+      is_general: '',
+      discount_type: '',
+      min_discount: '',
+      max_discount: ''
+    });
+  };
+
+  const toggleSelectCoupon = (couponId) => {
+    setSelectedCoupons(prev => 
+      prev.includes(couponId)
+        ? prev.filter(id => id !== couponId)
+        : [...prev, couponId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedCoupons.length === coupons.length) {
+      setSelectedCoupons([]);
+    } else {
+      setSelectedCoupons(coupons.map(c => c.id));
+    }
+  };
+
+  // Recarregar cupons quando filtros mudarem
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadCoupons(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [filters]);
 
   const getPlatformIcon = (platform) => {
     const icons = {
@@ -404,61 +558,279 @@ export default function CouponCapture() {
           {/* Coupons Tab */}
           {activeTab === 'coupons' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              {/* Header com ações */}
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <h3 className="text-xl font-bold text-gray-900">
                   Cupons Capturados ({couponsPagination.total})
                 </h3>
-                <button
-                  onClick={() => loadCoupons(1)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium"
-                >
-                  <RefreshCw size={16} className="inline mr-2" />
-                  Atualizar
-                </button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => loadCoupons(1)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw size={16} className="mr-2" />
+                    Atualizar
+                  </Button>
+                  <Button
+                    onClick={() => handleExport('csv')}
+                    variant="outline"
+                    size="sm"
+                    disabled={isExporting}
+                  >
+                    {isExporting ? (
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                    ) : (
+                      <FileDown size={16} className="mr-2" />
+                    )}
+                    Exportar CSV
+                  </Button>
+                  <Button
+                    onClick={() => handleExport('json')}
+                    variant="outline"
+                    size="sm"
+                    disabled={isExporting}
+                  >
+                    {isExporting ? (
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                    ) : (
+                      <FileDown size={16} className="mr-2" />
+                    )}
+                    Exportar JSON
+                  </Button>
+                </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Busca e Filtros */}
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                    <Input
+                      placeholder="Buscar por código, descrição ou título..."
+                      value={filters.search}
+                      onChange={(e) => handleFilterChange('search', e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => setShowFilters(!showFilters)}
+                    variant="outline"
+                  >
+                    <Filter size={16} className="mr-2" />
+                    Filtros
+                  </Button>
+                  {Object.values(filters).some(v => v !== '') && (
+                    <Button
+                      onClick={clearFilters}
+                      variant="outline"
+                    >
+                      Limpar
+                    </Button>
+                  )}
+                </div>
+
+                {/* Painel de Filtros */}
+                {showFilters && (
+                  <div className="bg-gray-50 p-4 rounded-lg grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Plataforma</label>
+                      <select
+                        value={filters.platform}
+                        onChange={(e) => handleFilterChange('platform', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="">Todas</option>
+                        <option value="mercadolivre">Mercado Livre</option>
+                        <option value="shopee">Shopee</option>
+                        <option value="amazon">Amazon</option>
+                        <option value="aliexpress">AliExpress</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={filters.verification_status}
+                        onChange={(e) => handleFilterChange('verification_status', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="">Todos</option>
+                        <option value="active">Ativo</option>
+                        <option value="pending">Pendente</option>
+                        <option value="expired">Expirado</option>
+                        <option value="invalid">Inválido</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipo Desconto</label>
+                      <select
+                        value={filters.discount_type}
+                        onChange={(e) => handleFilterChange('discount_type', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="">Todos</option>
+                        <option value="percentage">Percentual</option>
+                        <option value="fixed">Fixo</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Aplicabilidade</label>
+                      <select
+                        value={filters.is_general}
+                        onChange={(e) => handleFilterChange('is_general', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="">Todas</option>
+                        <option value="true">Todos os Produtos</option>
+                        <option value="false">Produtos Selecionados</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ações em lote */}
+                {selectedCoupons.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                    <span className="text-sm font-medium text-blue-900">
+                      {selectedCoupons.length} cupom(ns) selecionado(s)
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleBatchAction('activate')}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <CheckCircle2 size={16} className="mr-2" />
+                        Ativar
+                      </Button>
+                      <Button
+                        onClick={() => handleBatchAction('expire')}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <XCircle size={16} className="mr-2" />
+                        Expirar
+                      </Button>
+                      <Button
+                        onClick={() => handleBatchAction('delete')}
+                        size="sm"
+                        variant="destructive"
+                      >
+                        <Trash2 size={16} className="mr-2" />
+                        Deletar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Tabela */}
+              <div className="overflow-x-auto border rounded-lg">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-4 py-3 text-left">
+                        <button onClick={toggleSelectAll} className="text-gray-600 hover:text-gray-900">
+                          {selectedCoupons.length === coupons.length && coupons.length > 0 ? (
+                            <CheckSquare size={18} />
+                          ) : (
+                            <Square size={18} />
+                          )}
+                        </button>
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plataforma</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Desconto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aplicabilidade</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Validade</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {coupons.map((coupon) => (
-                      <tr key={coupon.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <span className="text-2xl">{getPlatformIcon(coupon.platform)}</span>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm">{coupon.code}</td>
-                        <td className="px-4 py-3">
-                          {coupon.discount_type === 'percentage'
-                            ? `${coupon.discount_value}%`
-                            : `R$ ${coupon.discount_value}`}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {new Date(coupon.valid_until).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getVerificationStatusColor(coupon.verification_status)}`}>
-                            {coupon.verification_status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleExpireCoupon(coupon.id)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
-                          >
-                            Expirar
-                          </button>
+                    {coupons.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                          Nenhum cupom encontrado
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      coupons.map((coupon) => (
+                        <tr key={coupon.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleSelectCoupon(coupon.id)}
+                              className="text-gray-600 hover:text-gray-900"
+                            >
+                              {selectedCoupons.includes(coupon.id) ? (
+                                <CheckSquare size={18} className="text-blue-600" />
+                              ) : (
+                                <Square size={18} />
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-2xl">{getPlatformIcon(coupon.platform)}</span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-sm">{coupon.code}</td>
+                          <td className="px-4 py-3">
+                            {coupon.discount_type === 'percentage'
+                              ? `${coupon.discount_value}%`
+                              : `R$ ${coupon.discount_value}`}
+                            {coupon.min_purchase > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Compra mín: R$ {coupon.min_purchase}
+                              </div>
+                            )}
+                            {coupon.max_discount_value > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Limite: R$ {coupon.max_discount_value}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              coupon.is_general 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-purple-100 text-purple-700'
+                            }`}>
+                              {coupon.is_general ? 'Todos os Produtos' : 'Produtos Selecionados'}
+                            </span>
+                            {!coupon.is_general && coupon.applicable_products && coupon.applicable_products.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {coupon.applicable_products.length} produto(s)
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {new Date(coupon.valid_until).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getVerificationStatusColor(coupon.verification_status)}`}>
+                              {coupon.verification_status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleVerifyCoupon(coupon.id)}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                title="Verificar"
+                              >
+                                <Eye size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleExpireCoupon(coupon.id)}
+                                className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                title="Expirar"
+                              >
+                                <XCircle size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

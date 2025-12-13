@@ -52,6 +52,149 @@ class TelegramService {
   }
 
   /**
+   * Enviar foto para um chat/grupo do Telegram
+   * @param {string} chatId - ID do chat/grupo
+   * @param {string|Buffer} photo - URL da foto ou buffer da imagem
+   * @param {string} caption - Legenda da foto
+   * @param {Object} options - Opções adicionais
+   * @returns {Promise<Object>}
+   */
+  async sendPhoto(chatId, photo, caption = '', options = {}) {
+    try {
+      if (!this.botToken) {
+        throw new Error('Telegram Bot Token não configurado.');
+      }
+
+      if (!chatId) {
+        throw new Error('Chat ID não fornecido');
+      }
+
+      // Validar e limpar caption
+      caption = this.sanitizeMessage(caption);
+      
+      // Se for URL, usar diretamente (Telegram aceita URL no campo photo)
+      if (typeof photo === 'string' && (photo.startsWith('http://') || photo.startsWith('https://'))) {
+        const payload = {
+          chat_id: chatId,
+          photo: photo,
+          caption: caption,
+          parse_mode: options.parse_mode || 'Markdown'
+        };
+
+        try {
+          const response = await axios.post(
+            `${this.apiUrl}/sendPhoto`,
+            payload,
+            { timeout: 15000 }
+          );
+
+          logger.info(`✅ Foto Telegram enviada para chat ${chatId}`);
+          return {
+            success: true,
+            messageId: response.data.result.message_id,
+            data: response.data
+          };
+        } catch (urlError) {
+          // Se falhar com URL, tentar baixar e enviar como arquivo
+          logger.warn(`⚠️ Erro ao enviar foto por URL: ${urlError.message}. Tentando baixar e enviar como arquivo...`);
+          
+          try {
+            const imageResponse = await axios.get(photo, { responseType: 'stream', timeout: 10000 });
+            const FormData = (await import('form-data')).default;
+            const form = new FormData();
+            
+            form.append('chat_id', chatId);
+            form.append('caption', caption);
+            form.append('photo', imageResponse.data);
+            
+            const response = await axios.post(
+              `${this.apiUrl}/sendPhoto`,
+              form,
+              {
+                headers: form.getHeaders(),
+                timeout: 15000
+              }
+            );
+
+            logger.info(`✅ Foto Telegram enviada (via download) para chat ${chatId}`);
+            return {
+              success: true,
+              messageId: response.data.result.message_id,
+              data: response.data
+            };
+          } catch (downloadError) {
+            logger.error(`❌ Erro ao baixar e enviar foto: ${downloadError.message}`);
+            throw downloadError;
+          }
+        }
+      } else {
+        // Se for buffer ou arquivo local, usar FormData
+        const FormData = (await import('form-data')).default;
+        const form = new FormData();
+        
+        form.append('chat_id', chatId);
+        form.append('caption', caption);
+        
+        if (typeof photo === 'string') {
+          // Arquivo local
+          const fs = await import('fs');
+          form.append('photo', fs.createReadStream(photo));
+        } else {
+          // Buffer
+          form.append('photo', photo, { filename: 'image.png' });
+        }
+
+        const response = await axios.post(
+          `${this.apiUrl}/sendPhoto`,
+          form,
+          {
+            headers: form.getHeaders(),
+            timeout: 15000
+          }
+        );
+
+        logger.info(`✅ Foto Telegram enviada para chat ${chatId}`);
+        return {
+          success: true,
+          messageId: response.data.result.message_id,
+          data: response.data
+        };
+      }
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar foto Telegram: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Enviar mensagem com foto
+   * @param {string} chatId - ID do chat/grupo
+   * @param {string} imageUrl - URL da imagem
+   * @param {string} message - Mensagem formatada
+   * @param {Object} options - Opções adicionais
+   * @returns {Promise<Object>}
+   */
+  async sendMessageWithPhoto(chatId, imageUrl, message, options = {}) {
+    try {
+      // Enviar foto com caption
+      const result = await this.sendPhoto(chatId, imageUrl, message, options);
+      
+      // Se a mensagem for muito longa, enviar também como mensagem separada
+      if (message.length > 1024) {
+        const shortMessage = message.substring(0, 1000) + '...';
+        await this.sendPhoto(chatId, imageUrl, shortMessage, options);
+        await this.sendMessage(chatId, message);
+      }
+
+      return result;
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar mensagem com foto: ${error.message}`);
+      // Fallback: enviar apenas mensagem
+      return await this.sendMessage(chatId, message, options);
+    }
+  }
+
+  /**
    * Enviar mensagem para um chat/grupo do Telegram
    * @param {string} chatId - ID do chat/grupo
    * @param {string} message - Mensagem formatada

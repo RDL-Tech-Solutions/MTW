@@ -184,6 +184,212 @@ class NotificationDispatcher {
   }
 
   /**
+   * Enviar mensagem com imagem para Telegram
+   */
+  async sendToTelegramWithImage(message, imagePath, eventType = 'general') {
+    try {
+      const channels = await BotChannel.findActiveByPlatform('telegram');
+      
+      if (!channels || channels.length === 0) {
+        logger.debug('Nenhum canal Telegram ativo encontrado');
+        return { success: false, sent: 0, total: 0 };
+      }
+
+      let sent = 0;
+      const results = [];
+
+      for (const channel of channels) {
+        try {
+          const result = await telegramService.sendMessageWithPhoto(
+            channel.identifier,
+            imagePath,
+            message
+          );
+
+          // Criar log
+          const log = await NotificationLog.create({
+            event_type: eventType,
+            platform: 'telegram',
+            channel_id: channel.id,
+            payload: { message, imagePath },
+            status: 'sent'
+          });
+
+          if (log && log.id) {
+            await NotificationLog.markAsSent(log.id);
+          }
+
+          sent++;
+          results.push({
+            channelId: channel.id,
+            chatId: channel.identifier,
+            success: true,
+            logId: log?.id || null
+          });
+
+          logger.info(`✅ Mensagem com imagem Telegram enviada para canal ${channel.id} (chat: ${channel.identifier})`);
+
+          // Delay entre envios
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error) {
+          logger.error(`❌ Erro ao enviar para Telegram canal ${channel.id} (chat: ${channel.identifier}): ${error.message}`);
+          
+          // Criar log de erro
+          const log = await NotificationLog.create({
+            event_type: eventType,
+            platform: 'telegram',
+            channel_id: channel.id,
+            payload: { message, imagePath, error: error.message },
+            status: 'failed'
+          });
+
+          if (log && log.id) {
+            await NotificationLog.markAsFailed(log.id, error.message);
+          }
+
+          results.push({
+            channelId: channel.id,
+            chatId: channel.identifier,
+            success: false,
+            error: error.message,
+            logId: log?.id || null
+          });
+        }
+      }
+
+      return {
+        success: sent > 0,
+        sent,
+        total: channels.length,
+        results
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar mensagem com imagem para Telegram: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Enviar mensagem com imagem para WhatsApp
+   */
+  async sendToWhatsAppWithImage(message, imagePath, eventType = 'general') {
+    try {
+      const channels = await BotChannel.findActiveByPlatform('whatsapp');
+      
+      if (!channels || channels.length === 0) {
+        logger.debug('Nenhum canal WhatsApp ativo encontrado');
+        return { success: false, sent: 0, total: 0 };
+      }
+
+      let sent = 0;
+      const results = [];
+
+      for (const channel of channels) {
+        try {
+          // Para WhatsApp, precisamos fazer upload da imagem primeiro ou usar URL
+          // Por enquanto, vamos tentar enviar como URL se for um caminho local
+          let imageUrl = imagePath;
+          
+          // Se for caminho local, precisaríamos fazer upload para um serviço de hospedagem
+          // Por enquanto, vamos tentar enviar a mensagem sem imagem se for arquivo local
+          if (!imagePath.startsWith('http://') && !imagePath.startsWith('https://')) {
+            logger.warn(`Imagem local não suportada diretamente no WhatsApp: ${imagePath}`);
+            // Fallback: enviar apenas mensagem
+            const result = await whatsappService.sendMessage(channel.identifier, message);
+            
+            const log = await NotificationLog.create({
+              event_type: eventType,
+              platform: 'whatsapp',
+              channel_id: channel.id,
+              payload: { message },
+              status: 'sent'
+            });
+
+            if (log && log.id) {
+              await NotificationLog.markAsSent(log.id);
+            }
+
+            sent++;
+            results.push({
+              channelId: channel.id,
+              groupId: channel.identifier,
+              success: true,
+              logId: log?.id || null,
+              note: 'Imagem não enviada (arquivo local)'
+            });
+            continue;
+          }
+
+          const result = await whatsappService.sendMessageWithImage(
+            channel.identifier,
+            imageUrl,
+            message
+          );
+
+          // Criar log
+          const log = await NotificationLog.create({
+            event_type: eventType,
+            platform: 'whatsapp',
+            channel_id: channel.id,
+            payload: { message, imageUrl },
+            status: 'sent'
+          });
+
+          if (log && log.id) {
+            await NotificationLog.markAsSent(log.id);
+          }
+
+          sent++;
+          results.push({
+            channelId: channel.id,
+            groupId: channel.identifier,
+            success: true,
+            logId: log?.id || null
+          });
+
+          logger.info(`✅ Mensagem com imagem WhatsApp enviada para canal ${channel.id} (grupo: ${channel.identifier})`);
+
+          // Delay entre envios
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error) {
+          logger.error(`❌ Erro ao enviar para WhatsApp canal ${channel.id} (grupo: ${channel.identifier}): ${error.message}`);
+          
+          // Criar log de erro
+          const log = await NotificationLog.create({
+            event_type: eventType,
+            platform: 'whatsapp',
+            channel_id: channel.id,
+            payload: { message, imagePath, error: error.message },
+            status: 'failed'
+          });
+
+          if (log && log.id) {
+            await NotificationLog.markAsFailed(log.id, error.message);
+          }
+
+          results.push({
+            channelId: channel.id,
+            groupId: channel.identifier,
+            success: false,
+            error: error.message,
+            logId: log?.id || null
+          });
+        }
+      }
+
+      return {
+        success: sent > 0,
+        sent,
+        total: channels.length,
+        results
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar mensagem com imagem para WhatsApp: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Enviar mensagem para todos os canais Telegram ativos
    * @param {string} message - Mensagem formatada
    * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento

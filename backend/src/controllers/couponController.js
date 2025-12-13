@@ -5,6 +5,7 @@ import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
+import couponApiService from '../services/coupons/couponApiService.js';
 
 class CouponController {
   // Listar cupons ativos
@@ -45,6 +46,57 @@ class CouponController {
       if (!coupon) {
         return res.status(404).json(
           errorResponse(ERROR_MESSAGES.NOT_FOUND, ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      res.json(successResponse(coupon));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Buscar cupom por código (para auto-preenchimento)
+  static async getByCode(req, res, next) {
+    try {
+      const { code } = req.params;
+      const { platform } = req.query; // Plataforma opcional para buscar via API
+      
+      if (!code || code.trim() === '') {
+        return res.status(400).json(
+          errorResponse('Código do cupom é obrigatório', ERROR_CODES.VALIDATION_ERROR)
+        );
+      }
+
+      const upperCode = code.toUpperCase().trim();
+      let coupon = null;
+
+      // 1. Tentar buscar via API da plataforma se fornecida
+      if (platform && ['mercadolivre', 'shopee', 'amazon', 'aliexpress'].includes(platform.toLowerCase())) {
+        try {
+          logger.debug(`🔍 Buscando cupom ${upperCode} via API da plataforma ${platform}`);
+          const apiCoupon = await couponApiService.getCouponFromPlatform(upperCode, platform);
+          
+          if (apiCoupon) {
+            logger.info(`✅ Cupom ${upperCode} encontrado via API da plataforma ${platform}`);
+            return res.json(successResponse(apiCoupon));
+          } else {
+            logger.debug(`ℹ️ Cupom ${upperCode} não encontrado na API da plataforma ${platform}, buscando no banco local...`);
+          }
+        } catch (apiError) {
+          // 404 não é um erro - apenas significa que o cupom não existe na API
+          if (apiError.response?.status !== 404) {
+            logger.debug(`⚠️ Erro ao buscar cupom via API: ${apiError.message}`);
+          }
+          // Continuar para buscar no banco local
+        }
+      }
+
+      // 2. Buscar no banco de dados local
+      coupon = await Coupon.findByCode(upperCode);
+
+      if (!coupon) {
+        return res.status(404).json(
+          errorResponse('Cupom não encontrado', ERROR_CODES.NOT_FOUND)
         );
       }
 

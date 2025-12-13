@@ -5,6 +5,7 @@ import HomeScreen from '../screens/home/HomeScreen';
 import CategoriesScreen from '../screens/categories/CategoriesScreen';
 import FavoritesScreen from '../screens/favorites/FavoritesScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import CouponsScreen from '../screens/coupons/CouponsScreen';
 import { SCREEN_NAMES } from '../utils/constants';
 import colors from '../theme/colors';
 
@@ -24,6 +25,8 @@ export default function TabNavigator() {
             iconName = focused ? 'grid' : 'grid-outline';
           } else if (route.name === SCREEN_NAMES.FAVORITES) {
             iconName = focused ? 'heart' : 'heart-outline';
+          } else if (route.name === SCREEN_NAMES.COUPONS) {
+            iconName = focused ? 'ticket' : 'ticket-outline';
           } else if (route.name === SCREEN_NAMES.PROFILE) {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -60,6 +63,11 @@ export default function TabNavigator() {
         name={SCREEN_NAMES.FAVORITES} 
         component={FavoritesScreen}
         options={{ tabBarLabel: 'Favoritos' }}
+      />
+      <Tab.Screen 
+        name={SCREEN_NAMES.COUPONS} 
+        component={CouponsScreen}
+        options={{ tabBarLabel: 'Cupons' }}
       />
       <Tab.Screen 
         name={SCREEN_NAMES.PROFILE} 

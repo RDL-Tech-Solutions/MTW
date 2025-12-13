@@ -9,6 +9,79 @@ class WhatsAppService {
   }
 
   /**
+   * Enviar imagem para um grupo do WhatsApp
+   * @param {string} groupId - ID do grupo
+   * @param {string} imageUrl - URL da imagem
+   * @param {string} caption - Legenda da imagem
+   * @returns {Promise<Object>}
+   */
+  async sendImage(groupId, imageUrl, caption = '') {
+    try {
+      if (!this.apiUrl || !this.apiToken) {
+        throw new Error('WhatsApp API não configurada.');
+      }
+
+      // Primeiro, fazer upload da imagem para obter media_id
+      // Ou usar diretamente a URL se a API suportar
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: groupId,
+          type: 'image',
+          image: {
+            link: imageUrl
+          },
+          caption: caption.substring(0, 1024) // WhatsApp limita caption a 1024 caracteres
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+
+      logger.info(`✅ Imagem WhatsApp enviada para grupo ${groupId}`);
+      return {
+        success: true,
+        messageId: response.data.messages?.[0]?.id,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar imagem WhatsApp: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Enviar mensagem com imagem
+   * @param {string} groupId - ID do grupo
+   * @param {string} imageUrl - URL da imagem
+   * @param {string} message - Mensagem formatada
+   * @returns {Promise<Object>}
+   */
+  async sendMessageWithImage(groupId, imageUrl, message) {
+    try {
+      // Enviar imagem com caption
+      const result = await this.sendImage(groupId, imageUrl, message);
+      
+      // Se a mensagem for muito longa, enviar também como mensagem separada
+      if (message.length > 1024) {
+        await this.sendImage(groupId, imageUrl, message.substring(0, 1000));
+        await this.sendMessage(groupId, message);
+      }
+
+      return result;
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar mensagem com imagem: ${error.message}`);
+      // Fallback: enviar apenas mensagem
+      return await this.sendMessage(groupId, message);
+    }
+  }
+
+  /**
    * Enviar mensagem para um grupo do WhatsApp
    * @param {string} groupId - ID do grupo
    * @param {string} message - Mensagem formatada

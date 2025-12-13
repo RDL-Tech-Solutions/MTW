@@ -1,6 +1,8 @@
 import logger from '../../config/logger.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
 import templateRenderer from '../bots/templateRenderer.js';
+import telegramService from '../bots/telegramService.js';
+import whatsappService from '../bots/whatsappService.js';
 
 class PublishService {
   /**
@@ -41,43 +43,91 @@ class PublishService {
   }
 
   /**
-   * Enviar para Telegram Bot
+   * Enviar para Telegram Bot (com imagem se disponível)
    */
   async notifyTelegramBot(product) {
     try {
       const message = await this.formatBotMessage(product, 'telegram');
-      const result = await notificationDispatcher.sendToTelegram(message, product);
       
-      if (result.success && result.sent > 0) {
-        logger.info(`📨 Telegram notificado: ${product.name} (${result.sent} canal(is))`);
+      // Se tiver imagem válida, enviar com foto
+      if (product.image_url && 
+          product.image_url.startsWith('http') && 
+          !product.image_url.includes('placeholder')) {
+        try {
+          const result = await notificationDispatcher.sendToTelegramWithImage(
+            message,
+            product.image_url,
+            'promotion_new'
+          );
+          
+          if (result && result.success && result.sent > 0) {
+            logger.info(`✅ Notificação Telegram com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
+            return true;
+          } else {
+            logger.warn(`⚠️ Telegram com imagem: nenhuma mensagem enviada. Tentando sem imagem...`);
+          }
+        } catch (imageError) {
+          logger.warn(`⚠️ Erro ao enviar imagem Telegram: ${imageError.message}. Tentando sem imagem...`);
+        }
+      }
+      
+      // Fallback: enviar apenas mensagem
+      const result = await notificationDispatcher.sendToTelegram(message, 'promotion_new');
+      
+      if (result && result.success && result.sent > 0) {
+        logger.info(`✅ Notificação Telegram enviada para produto: ${product.name} (${result.sent} canal(is))`);
         return true;
       } else {
-        logger.warn(`⚠️ Telegram: nenhuma mensagem enviada para ${product.name}. Canais: ${result.total || 0}, Enviados: ${result.sent || 0}`);
+        logger.warn(`⚠️ Telegram: nenhuma mensagem enviada para ${product.name}. Canais: ${result?.total || 0}, Enviados: ${result?.sent || 0}`);
         return false;
       }
     } catch (error) {
-      logger.error(`❌ Erro ao enviar para Telegram: ${error.message}`);
+      logger.error(`❌ Erro ao notificar Telegram: ${error.message}`);
       return false;
     }
   }
 
   /**
-   * Enviar para WhatsApp Bot
+   * Enviar para WhatsApp Bot (com imagem se disponível)
    */
   async notifyWhatsAppBot(product) {
     try {
       const message = await this.formatBotMessage(product, 'whatsapp');
-      const result = await notificationDispatcher.sendToWhatsApp(message, product);
       
-      if (result.success && result.sent > 0) {
-        logger.info(`📨 WhatsApp notificado: ${product.name} (${result.sent} canal(is))`);
+      // Se tiver imagem válida, enviar com foto
+      if (product.image_url && 
+          product.image_url.startsWith('http') && 
+          !product.image_url.includes('placeholder')) {
+        try {
+          const result = await notificationDispatcher.sendToWhatsAppWithImage(
+            message,
+            product.image_url,
+            'promotion_new'
+          );
+          
+          if (result && result.success && result.sent > 0) {
+            logger.info(`✅ Notificação WhatsApp com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
+            return true;
+          } else {
+            logger.warn(`⚠️ WhatsApp com imagem: nenhuma mensagem enviada. Tentando sem imagem...`);
+          }
+        } catch (imageError) {
+          logger.warn(`⚠️ Erro ao enviar imagem WhatsApp: ${imageError.message}. Tentando sem imagem...`);
+        }
+      }
+      
+      // Fallback: enviar apenas mensagem
+      const result = await notificationDispatcher.sendToWhatsApp(message, 'promotion_new');
+      
+      if (result && result.success && result.sent > 0) {
+        logger.info(`✅ Notificação WhatsApp enviada para produto: ${product.name} (${result.sent} canal(is))`);
         return true;
       } else {
-        logger.warn(`⚠️ WhatsApp: nenhuma mensagem enviada para ${product.name}. Canais: ${result.total || 0}, Enviados: ${result.sent || 0}`);
+        logger.warn(`⚠️ WhatsApp: nenhuma mensagem enviada para ${product.name}. Canais: ${result?.total || 0}, Enviados: ${result?.sent || 0}`);
         return false;
       }
     } catch (error) {
-      logger.error(`❌ Erro ao enviar para WhatsApp: ${error.message}`);
+      logger.error(`❌ Erro ao notificar WhatsApp: ${error.message}`);
       return false;
     }
   }
@@ -137,7 +187,7 @@ class PublishService {
    * @param {Object} product - Dados do produto
    * @returns {string}
    */
-  formatBotMessageFallback(product) {
+  async formatBotMessageFallback(product) {
     const priceFormatted = new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
@@ -149,18 +199,56 @@ class PublishService {
     }).format(product.old_price) : null;
 
     const productName = this.escapeMarkdown(product.name);
-    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 'Shopee';
+    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 
+                        product.platform === 'shopee' ? 'Shopee' :
+                        product.platform === 'amazon' ? 'Amazon' :
+                        product.platform === 'aliexpress' ? 'AliExpress' : 'Geral';
     
-    let message = `🔥 *NOVA PROMOÇÃO AUTOMÁTICA*\n\n`;
-    message += `📦 ${productName}\n\n`;
-    message += `💰 *${priceFormatted}*`;
+    let message = `🔥 *NOVA PROMOÇÃO!*\n\n`;
+    message += `🛍 *${productName}*\n\n`;
     if (oldPriceFormatted) {
-      message += ` ~${oldPriceFormatted}~`;
+      message += `~${oldPriceFormatted}~ `;
     }
-    message += `\n`;
-    message += `🏷️ *${product.discount_percentage || 0}% OFF*\n\n`;
-    message += `🛒 Plataforma: ${platformName}\n\n`;
-    message += `🔗 ${product.affiliate_link || 'Link não disponível'}`;
+    message += `💰 *Por: ${priceFormatted}* ${product.discount_percentage || 0}% OFF\n\n`;
+    message += `🛒 *Loja:* ${platformName}\n`;
+
+    // Adicionar informações de cupom se houver
+    if (product.coupon_id) {
+      try {
+        const Coupon = (await import('../../models/Coupon.js')).default;
+        const coupon = await Coupon.findById(product.coupon_id);
+        if (coupon && coupon.is_active) {
+          const discountText = coupon.discount_type === 'percentage'
+            ? `${coupon.discount_value}%`
+            : `R$ ${coupon.discount_value.toFixed(2)}`;
+          
+          message += `\n🎟️ *CUPOM DISPONÍVEL*\n\n`;
+          message += `💬 *Código:* \`${coupon.code}\`\n`;
+          message += `💰 *Desconto:* ${discountText} OFF\n`;
+          
+          if (coupon.min_purchase > 0) {
+            message += `💳 *Compra mínima:* R$ ${coupon.min_purchase.toFixed(2)}\n`;
+          }
+          
+          // Aplicabilidade
+          if (coupon.is_general) {
+            message += `✅ *Válido para todos os produtos*\n`;
+          } else {
+            const productCount = coupon.applicable_products?.length || 0;
+            if (productCount > 0) {
+              message += `📦 *Em produtos selecionados* (${productCount} produto${productCount > 1 ? 's' : ''})\n`;
+            } else {
+              message += `📦 *Em produtos selecionados*\n`;
+            }
+          }
+        }
+      } catch (error) {
+        logger.warn(`Erro ao buscar cupom no fallback: ${error.message}`);
+      }
+    }
+
+    message += `\n🔗 *Link:* ${product.affiliate_link || 'Link não disponível'}\n\n`;
+    message += `⚡ Aproveite antes que acabe!`;
 
     return message;
   }

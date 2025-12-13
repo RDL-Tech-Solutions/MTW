@@ -1,8 +1,10 @@
 import logger from '../../config/logger.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
 import templateRenderer from '../bots/templateRenderer.js';
+import imageGenerator from '../bots/imageGenerator.js';
 import Notification from '../../models/Notification.js';
 import supabase from '../../config/database.js';
+import fs from 'fs/promises';
 
 class CouponNotificationService {
   /**
@@ -76,7 +78,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
   }
 
   /**
-   * Notificar novo cupom
+   * Notificar novo cupom (com imagem)
    */
   async notifyNewCoupon(coupon) {
     try {
@@ -89,20 +91,57 @@ ${coupon.affiliate_link || 'Link não disponível'}
       const whatsappMessage = await templateRenderer.render('new_coupon', 'whatsapp', variables);
       const telegramMessage = await templateRenderer.render('new_coupon', 'telegram', variables);
 
-      // Enviar para WhatsApp
+      // Gerar imagem do cupom
+      let couponImagePath = null;
       try {
-        await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_update');
-        logger.info('✅ Notificação WhatsApp enviada');
+        couponImagePath = await imageGenerator.generateCouponImage(coupon);
+        logger.info(`✅ Imagem do cupom gerada: ${couponImagePath}`);
+      } catch (imageError) {
+        logger.warn(`⚠️ Erro ao gerar imagem do cupom: ${imageError.message}. Enviando apenas mensagem.`);
+      }
+
+      // Enviar para WhatsApp (com imagem se disponível)
+      try {
+        if (couponImagePath) {
+          await notificationDispatcher.sendToWhatsAppWithImage(
+            whatsappMessage,
+            couponImagePath,
+            'coupon_update'
+          );
+          logger.info('✅ Notificação WhatsApp com imagem enviada');
+        } else {
+          await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_update');
+          logger.info('✅ Notificação WhatsApp enviada');
+        }
       } catch (error) {
         logger.error(`Erro ao enviar WhatsApp: ${error.message}`);
       }
 
-      // Enviar para Telegram
+      // Enviar para Telegram (com imagem se disponível)
       try {
-        await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_update');
-        logger.info('✅ Notificação Telegram enviada');
+        if (couponImagePath) {
+          await notificationDispatcher.sendToTelegramWithImage(
+            telegramMessage,
+            couponImagePath,
+            'coupon_update'
+          );
+          logger.info('✅ Notificação Telegram com imagem enviada');
+        } else {
+          await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_update');
+          logger.info('✅ Notificação Telegram enviada');
+        }
       } catch (error) {
         logger.error(`Erro ao enviar Telegram: ${error.message}`);
+      }
+
+      // Limpar imagem temporária após envio
+      if (couponImagePath) {
+        try {
+          await fs.unlink(couponImagePath);
+          logger.debug(`Imagem temporária removida: ${couponImagePath}`);
+        } catch (cleanupError) {
+          logger.warn(`Erro ao remover imagem temporária: ${cleanupError.message}`);
+        }
       }
 
       // Criar notificações push para usuários

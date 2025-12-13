@@ -71,31 +71,56 @@ export const updateProductSchema = Joi.object({
 // Coupons
 export const createCouponSchema = Joi.object({
   code: Joi.string().min(3).max(100).required(),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'general').required(),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general').required(),
   discount_type: Joi.string().valid('percentage', 'fixed').required(),
   discount_value: Joi.number().positive().required(),
-  min_purchase: Joi.number().positive().default(0),
-  valid_from: Joi.date().iso().required(),
-  valid_until: Joi.date().iso().greater(Joi.ref('valid_from')).required(),
+  min_purchase: Joi.number().min(0).allow(null, '').default(0),
+  max_discount_value: Joi.number().min(0).allow(null, '').optional(),
+  valid_from: Joi.alternatives().try(
+    Joi.date().iso(),
+    Joi.string().isoDate(),
+    Joi.string().allow('', null)
+  ).optional(),
+  valid_until: Joi.alternatives().try(
+    Joi.date().iso(),
+    Joi.string().isoDate()
+  ).required(),
   is_general: Joi.boolean().default(true),
   applicable_products: Joi.array().items(Joi.string().uuid()).default([]),
   restrictions: Joi.string().allow('').default(''),
-  max_uses: Joi.number().integer().positive().allow(null),
+  description: Joi.string().allow('', null).optional(),
+  title: Joi.string().allow('', null).optional(),
+  max_uses: Joi.number().integer().positive().allow(null, '').optional(),
+  current_uses: Joi.number().integer().min(0).default(0),
   is_vip: Joi.boolean().default(false)
-});
+}).custom((value, helpers) => {
+  // Se valid_until foi fornecido, validar que é maior que valid_from (se fornecido)
+  if (value.valid_until && value.valid_from) {
+    const until = new Date(value.valid_until);
+    const from = new Date(value.valid_from);
+    if (until <= from) {
+      return helpers.error('any.invalid');
+    }
+  }
+  return value;
+}, 'date validation');
 
 export const updateCouponSchema = Joi.object({
   code: Joi.string().min(3).max(100),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'general'),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'),
   discount_type: Joi.string().valid('percentage', 'fixed'),
   discount_value: Joi.number().positive(),
-  min_purchase: Joi.number().positive(),
-  valid_from: Joi.date().iso(),
-  valid_until: Joi.date().iso(),
+  min_purchase: Joi.number().min(0).allow(null, ''),
+  max_discount_value: Joi.number().min(0).allow(null, ''),
+  valid_from: Joi.date().iso().allow(null, ''),
+  valid_until: Joi.date().iso().allow(null, ''),
   is_general: Joi.boolean(),
   applicable_products: Joi.array().items(Joi.string().uuid()),
   restrictions: Joi.string().allow(''),
-  max_uses: Joi.number().integer().positive().allow(null),
+  description: Joi.string().allow('', null),
+  title: Joi.string().allow('', null),
+  max_uses: Joi.number().integer().positive().allow(null, ''),
+  current_uses: Joi.number().integer().min(0),
   is_vip: Joi.boolean()
 }).min(1);
 

@@ -26,12 +26,23 @@ export default function Coupons() {
 
   const [formData, setFormData] = useState({
     code: '',
+    platform: 'general',
     description: '',
     discount_type: 'percentage',
     discount_value: '',
+    min_purchase: '',
+    max_discount_value: '',
+    is_general: true,
+    applicable_products: [],
     max_uses: '',
-    expires_at: ''
+    current_uses: 0,
+    valid_from: '',
+    valid_until: ''
   });
+
+  const [errors, setErrors] = useState({});
+  const [isLoadingCoupon, setIsLoadingCoupon] = useState(false);
+  const [codeSearchTimeout, setCodeSearchTimeout] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -40,6 +51,115 @@ export default function Coupons() {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Função para buscar cupom por código e auto-preencher
+  const handleCodeChange = (code) => {
+    const upperCode = code.toUpperCase().trim();
+    setFormData({ ...formData, code: upperCode });
+
+    // Limpar timeout anterior
+    if (codeSearchTimeout) {
+      clearTimeout(codeSearchTimeout);
+    }
+
+    // Se o código tiver pelo menos 4 caracteres e não estiver editando, buscar após delay
+    if (upperCode.length >= 4 && !editingCoupon) {
+      const timeout = setTimeout(async () => {
+        setIsLoadingCoupon(true);
+        let couponFound = false;
+        
+        try {
+          // Primeiro tentar buscar via API da plataforma selecionada
+          const platform = formData.platform;
+          
+          if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress'].includes(platform)) {
+            try {
+              const apiResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}?platform=${platform}`, {
+                validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
+              });
+              
+              if (apiResponse.status === 200 && apiResponse.data.success && apiResponse.data.data) {
+                const coupon = apiResponse.data.data;
+                couponFound = true;
+                
+                // Preencher formulário com os dados do cupom encontrado
+                setFormData({
+                  code: coupon.code || upperCode,
+                  platform: coupon.platform || platform || 'general',
+                  description: coupon.description || coupon.title || '',
+                  discount_type: coupon.discount_type || 'percentage',
+                  discount_value: coupon.discount_value || '',
+                  min_purchase: coupon.min_purchase || '',
+                  max_discount_value: coupon.max_discount_value || '',
+                  is_general: coupon.is_general !== undefined ? coupon.is_general : true,
+                  applicable_products: coupon.applicable_products || [],
+                  max_uses: coupon.max_uses || '',
+                  current_uses: coupon.current_uses || 0,
+                  valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
+                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : ''
+                });
+              }
+            } catch (apiError) {
+              // validateStatus já previne erro para 404, mas se ainda houver erro, ignorar silenciosamente
+              // Não fazer nada - cupom não encontrado é esperado
+            }
+          }
+          
+          // Se não encontrou via API, buscar no banco local
+          if (!couponFound) {
+            try {
+              const localResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}`, {
+                validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
+              });
+              
+              if (localResponse.status === 200 && localResponse.data.success && localResponse.data.data) {
+                const coupon = localResponse.data.data;
+                couponFound = true;
+                
+                // Preencher formulário com os dados do cupom encontrado
+                setFormData({
+                  code: coupon.code || upperCode,
+                  platform: coupon.platform || formData.platform || 'general',
+                  description: coupon.description || coupon.title || '',
+                  discount_type: coupon.discount_type || 'percentage',
+                  discount_value: coupon.discount_value || '',
+                  min_purchase: coupon.min_purchase || '',
+                  max_discount_value: coupon.max_discount_value || '',
+                  is_general: coupon.is_general !== undefined ? coupon.is_general : true,
+                  applicable_products: coupon.applicable_products || [],
+                  max_uses: coupon.max_uses || '',
+                  current_uses: coupon.current_uses || 0,
+                  valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
+                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : ''
+                });
+              }
+            } catch (localError) {
+              // validateStatus já previne erro para 404, mas se ainda houver erro, ignorar silenciosamente
+              // Não fazer nada - cupom não encontrado é esperado
+            }
+          }
+        } catch (error) {
+          // validateStatus já previne erro para 404
+          // Se ainda houver erro, ignorar silenciosamente
+        } finally {
+          setIsLoadingCoupon(false);
+        }
+      }, 800); // Delay de 800ms após parar de digitar
+      
+      setCodeSearchTimeout(timeout);
+    } else {
+      setIsLoadingCoupon(false);
+    }
+  };
+
+  // Limpar timeout ao desmontar
+  useEffect(() => {
+    return () => {
+      if (codeSearchTimeout) {
+        clearTimeout(codeSearchTimeout);
+      }
+    };
+  }, [codeSearchTimeout]);
 
   const fetchCoupons = async (page = 1) => {
     try {
@@ -83,36 +203,123 @@ export default function Coupons() {
     setEditingCoupon(coupon);
     setFormData({
       code: coupon.code,
+      platform: coupon.platform || 'general',
       description: coupon.description || '',
       discount_type: coupon.discount_type,
       discount_value: coupon.discount_value,
+      min_purchase: coupon.min_purchase || '',
+      max_discount_value: coupon.max_discount_value || '',
+      is_general: coupon.is_general !== undefined ? coupon.is_general : true,
+      applicable_products: coupon.applicable_products || [],
       max_uses: coupon.max_uses || '',
-      expires_at: coupon.expires_at ? format(new Date(coupon.expires_at), 'yyyy-MM-dd') : ''
+      current_uses: coupon.current_uses || 0,
+      valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
+      valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : ''
     });
     setIsDialogOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validação básica no frontend
+    if (!formData.code || formData.code.trim() === '') {
+      setErrors({ code: 'Código é obrigatório' });
+      return;
+    }
+
+    if (!formData.discount_value || parseFloat(formData.discount_value) <= 0) {
+      setErrors({ discount_value: 'Valor do desconto deve ser maior que zero' });
+      return;
+    }
+
+    if (!formData.valid_until || formData.valid_until.trim() === '') {
+      setErrors({ valid_until: 'Data de expiração é obrigatória' });
+      return;
+    }
+
     try {
+      // Preparar dados para envio
+      const submitData = {
+        code: formData.code.trim().toUpperCase(),
+        platform: formData.platform,
+        discount_type: formData.discount_type,
+        discount_value: parseFloat(formData.discount_value),
+        min_purchase: formData.min_purchase && formData.min_purchase !== '' 
+          ? parseFloat(formData.min_purchase) 
+          : 0,
+        max_discount_value: formData.max_discount_value && formData.max_discount_value !== ''
+          ? parseFloat(formData.max_discount_value)
+          : null,
+        is_general: formData.is_general,
+        applicable_products: formData.applicable_products || [],
+        valid_until: new Date(formData.valid_until + 'T23:59:59').toISOString(),
+      };
+
+      // Adicionar current_uses apenas na edição
       if (editingCoupon) {
-        await api.put(`/coupons/${editingCoupon.id}`, formData);
+        submitData.current_uses = parseInt(formData.current_uses) || 0;
+      }
+
+      // Adicionar valid_from se fornecido
+      if (formData.valid_from && formData.valid_from.trim() !== '') {
+        submitData.valid_from = new Date(formData.valid_from + 'T00:00:00').toISOString();
+      }
+
+      // Adicionar description e title se fornecido
+      if (formData.description && formData.description.trim() !== '') {
+        submitData.description = formData.description.trim();
+        submitData.title = formData.description.trim();
+      }
+
+      // Adicionar max_uses se fornecido
+      if (formData.max_uses && formData.max_uses !== '') {
+        const maxUses = parseInt(formData.max_uses);
+        if (!isNaN(maxUses) && maxUses > 0) {
+          submitData.max_uses = maxUses;
+        }
+      }
+
+      if (editingCoupon) {
+        await api.put(`/coupons/${editingCoupon.id}`, submitData);
       } else {
-        await api.post('/coupons', formData);
+        await api.post('/coupons', submitData);
       }
       setIsDialogOpen(false);
       setEditingCoupon(null);
+      setErrors({});
       setFormData({
         code: '',
+        platform: 'general',
         description: '',
         discount_type: 'percentage',
         discount_value: '',
+        min_purchase: '',
+        max_discount_value: '',
+        is_general: true,
+        applicable_products: [],
         max_uses: '',
-        expires_at: ''
+        current_uses: 0,
+        valid_from: '',
+        valid_until: ''
       });
       fetchCoupons(1);
     } catch (error) {
-      alert('Erro ao salvar cupom');
+      console.error('Erro ao salvar cupom:', error);
+      const errorMessage = error.response?.data?.details 
+        ? error.response.data.details.map(d => `${d.field}: ${d.message}`).join('\n')
+        : error.response?.data?.error || 'Erro ao salvar cupom';
+      alert(errorMessage);
+      
+      // Mostrar erros de validação específicos
+      if (error.response?.data?.details) {
+        const validationErrors = {};
+        error.response.data.details.forEach(detail => {
+          validationErrors[detail.field] = detail.message;
+        });
+        setErrors(validationErrors);
+      }
     }
   };
 
@@ -180,12 +387,21 @@ export default function Coupons() {
                 setEditingCoupon(null);
                 setFormData({
                   code: '',
+                  platform: 'general',
                   description: '',
                   discount_type: 'percentage',
                   discount_value: '',
+                  min_purchase: '',
+                  max_discount_value: '',
+                  is_general: true,
+                  applicable_products: [],
                   max_uses: '',
-                  expires_at: ''
+                  current_uses: 0,
+                  valid_from: '',
+                  valid_until: ''
                 });
+                setErrors({});
+                setIsLoadingCoupon(false);
               }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Cupom
@@ -203,15 +419,64 @@ export default function Coupons() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="code">Código *</Label>
-                    <Input
-                      id="code"
-                      value={formData.code}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                      placeholder="Ex: PROMO10"
+                    <Label htmlFor="platform">Plataforma *</Label>
+                    <select
+                      id="platform"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.platform}
+                      onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
                       required
-                    />
+                    >
+                      <option value="general">Geral</option>
+                      <option value="mercadolivre">Mercado Livre</option>
+                      <option value="shopee">Shopee</option>
+                      <option value="amazon">Amazon</option>
+                      <option value="aliexpress">AliExpress</option>
+                    </select>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Código *</Label>
+                    <div className="relative">
+                      <Input
+                        id="code"
+                        value={formData.code || ''}
+                        onChange={(e) => handleCodeChange(e.target.value)}
+                        onBlur={(e) => {
+                          // Buscar novamente ao perder o foco se tiver código
+                          if (e.target.value.trim().length >= 4 && !editingCoupon) {
+                            handleCodeChange(e.target.value);
+                          }
+                        }}
+                        placeholder="Ex: PROMO10"
+                        required
+                        disabled={isLoadingCoupon}
+                      />
+                      {isLoadingCoupon && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+                        </div>
+                      )}
+                    </div>
+                    {errors.code && <p className="text-sm text-red-500">{errors.code}</p>}
+                    {!editingCoupon && (
+                      <p className="text-xs text-muted-foreground">
+                        💡 Digite o código do cupom para auto-preenchimento (mínimo 4 caracteres)
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Título/Descrição</Label>
+                  <Input
+                    id="description"
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder={formData.platform === 'mercadolivre' ? 'Ex: R$ 100 OFF Móveis+Colchões' : 'Descrição do cupom'}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="discount_type">Tipo de Desconto *</Label>
                     <select
@@ -220,23 +485,10 @@ export default function Coupons() {
                       value={formData.discount_type}
                       onChange={(e) => setFormData({ ...formData, discount_type: e.target.value })}
                     >
-                      <option value="percentage">Porcentagem</option>
-                      <option value="fixed">Valor Fixo</option>
+                      <option value="percentage">Porcentagem (%)</option>
+                      <option value="fixed">Valor Fixo (R$)</option>
                     </select>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Descrição</Label>
-                  <Input
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Descrição do cupom"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="discount_value">
                       Valor do Desconto * {formData.discount_type === 'percentage' ? '(%)' : '(R$)'}
@@ -245,31 +497,117 @@ export default function Coupons() {
                       id="discount_value"
                       type="number"
                       step="0.01"
-                      value={formData.discount_value}
+                      value={formData.discount_value || ''}
                       onChange={(e) => setFormData({ ...formData, discount_value: e.target.value })}
                       required
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="max_uses">Máximo de Usos</Label>
-                    <Input
-                      id="max_uses"
-                      type="number"
-                      value={formData.max_uses}
-                      onChange={(e) => setFormData({ ...formData, max_uses: e.target.value })}
-                      placeholder="Ilimitado"
-                    />
+                    {errors.discount_value && <p className="text-sm text-red-500">{errors.discount_value}</p>}
                   </div>
                 </div>
 
+                {(formData.platform === 'mercadolivre' || formData.platform === 'shopee') && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="min_purchase">Compra Mínima (R$)</Label>
+                      <Input
+                        id="min_purchase"
+                        type="number"
+                        step="0.01"
+                        value={formData.min_purchase || ''}
+                        onChange={(e) => setFormData({ ...formData, min_purchase: e.target.value })}
+                        placeholder="Ex: 259.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max_discount_value">Limite Máximo de Desconto (R$)</Label>
+                      <Input
+                        id="max_discount_value"
+                        type="number"
+                        step="0.01"
+                        value={formData.max_discount_value || ''}
+                        onChange={(e) => setFormData({ ...formData, max_discount_value: e.target.value })}
+                        placeholder="Ex: 60.00 (máximo R$ 60 de desconto)"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Valor máximo de desconto que pode ser aplicado (ex: R$ 60 máximo)
+                      </p>
+                    </div>
+                  </>
+                )}
+
                 <div className="space-y-2">
-                  <Label htmlFor="expires_at">Data de Expiração</Label>
-                  <Input
-                    id="expires_at"
-                    type="date"
-                    value={formData.expires_at}
-                    onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
-                  />
+                  <Label htmlFor="is_general">Aplicabilidade</Label>
+                  <select
+                    id="is_general"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={formData.is_general ? 'true' : 'false'}
+                    onChange={(e) => setFormData({ ...formData, is_general: e.target.value === 'true' })}
+                  >
+                    <option value="true">Todos os Produtos</option>
+                    <option value="false">Produtos Selecionados</option>
+                  </select>
+                  {!formData.is_general && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      ⚠️ Para produtos selecionados, você precisará associar os produtos após criar o cupom.
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="valid_from">Data de Início</Label>
+                    <Input
+                      id="valid_from"
+                      type="date"
+                      value={formData.valid_from}
+                      onChange={(e) => setFormData({ ...formData, valid_from: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="valid_until">Data de Expiração *</Label>
+                    <Input
+                      id="valid_until"
+                      type="date"
+                      value={formData.valid_until || ''}
+                      onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
+                      required
+                    />
+                    {errors.valid_until && <p className="text-sm text-red-500">{errors.valid_until}</p>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="max_uses">Limite de Usos</Label>
+                    <Input
+                      id="max_uses"
+                      type="number"
+                      value={formData.max_uses || ''}
+                      onChange={(e) => setFormData({ ...formData, max_uses: e.target.value })}
+                      placeholder="Ex: 200 (ilimitado se vazio)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Número máximo de vezes que o cupom pode ser usado
+                    </p>
+                  </div>
+                  {editingCoupon && (
+                    <div className="space-y-2">
+                      <Label htmlFor="current_uses">Usos Atuais</Label>
+                      <Input
+                        id="current_uses"
+                        type="number"
+                        min="0"
+                        value={formData.current_uses || 0}
+                        onChange={(e) => setFormData({ ...formData, current_uses: parseInt(e.target.value) || 0 })}
+                        placeholder="0"
+                      />
+                      {formData.max_uses && (
+                        <p className="text-xs text-muted-foreground">
+                          {formData.current_uses || 0} / {formData.max_uses} usos
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <DialogFooter>

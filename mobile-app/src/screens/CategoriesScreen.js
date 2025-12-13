@@ -1,11 +1,30 @@
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CategoriesScreen() {
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 px-4 py-6">
-      <Text className="text-2xl font-bold text-gray-900 mb-4">Categorias</Text>
-      <Text className="text-gray-600">Em desenvolvimento...</Text>
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.title}>Categorias</Text>
+      <Text style={styles.subtitle}>Em desenvolvimento...</Text>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+});

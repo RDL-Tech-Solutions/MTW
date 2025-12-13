@@ -2,6 +2,7 @@ import axios from 'axios';
 import logger from '../../config/logger.js';
 import CouponSettings from '../../models/CouponSettings.js';
 import meliSync from '../autoSync/meliSync.js';
+import CouponValidator from '../../utils/couponValidator.js';
 
 class MeliCouponCapture {
   constructor() {
@@ -27,10 +28,17 @@ class MeliCouponCapture {
       const response = await axios.get(url, config);
       return response.data;
     } catch (error) {
+      // Não logar 404 como erro - é esperado quando recurso não existe
+      if (error.response?.status === 404) {
+        throw error; // Re-lançar para ser tratado pelo chamador
+      }
+      
       if (error.response?.status === 401) {
         logger.error('❌ Token do Mercado Livre expirado ou inválido');
+      } else if (error.response?.status !== 404) {
+        // Só logar erros que não são 404
+        logger.error(`Erro na requisição MELI ${endpoint}: ${error.message}`);
       }
-      logger.error(`Erro na requisição MELI: ${error.message}`);
       throw error;
     }
   }
@@ -197,6 +205,13 @@ class MeliCouponCapture {
         verification_status: 'active'
       };
 
+      // Validar cupom antes de retornar
+      const validation = CouponValidator.validateCoupon(coupon);
+      if (!validation.valid) {
+        logger.warn(`⚠️ Deal rejeitado: ${coupon.code} - ${validation.reason}`);
+        return null;
+      }
+
       return coupon;
     } catch (error) {
       logger.error(`Erro ao processar deal: ${error.message}`);
@@ -209,6 +224,9 @@ class MeliCouponCapture {
    */
   async processCampaign(campaign) {
     try {
+      // Determinar se campanha é geral ou para produtos/categorias específicas
+      const isGeneral = !campaign.item_ids || campaign.item_ids.length === 0;
+      
       const coupon = {
         platform: 'mercadolivre',
         code: campaign.coupon_code || `CAMP-${campaign.id}`,
@@ -225,9 +243,17 @@ class MeliCouponCapture {
         affiliate_link: this.generateAffiliateLink(campaign.landing_url),
         source_url: campaign.landing_url || '',
         auto_captured: true,
-        is_general: true,
+        is_general: isGeneral,
+        applicable_products: campaign.item_ids || [],
         verification_status: 'active'
       };
+
+      // Validar cupom antes de retornar
+      const validation = CouponValidator.validateCoupon(coupon);
+      if (!validation.valid) {
+        logger.warn(`⚠️ Campanha rejeitada: ${coupon.code} - ${validation.reason}`);
+        return null;
+      }
 
       return coupon;
     } catch (error) {
@@ -260,6 +286,13 @@ class MeliCouponCapture {
         max_uses: promo.max_uses || null,
         verification_status: 'active'
       };
+
+      // Validar cupom antes de retornar
+      const validation = CouponValidator.validateCoupon(coupon);
+      if (!validation.valid) {
+        logger.warn(`⚠️ Promoção rejeitada: ${coupon.code} - ${validation.reason}`);
+        return null;
+      }
 
       return coupon;
     } catch (error) {
@@ -307,10 +340,22 @@ class MeliCouponCapture {
         data: response
       };
     } catch (error) {
-      logger.error(`Erro ao verificar cupom: ${error.message}`);
+      // 404 é esperado quando o cupom não existe na API
+      if (error.response?.status === 404) {
+        logger.debug(`Cupom ${couponCode} não encontrado na API do Mercado Livre (404)`);
+        return {
+          valid: false,
+          message: 'Cupom não encontrado na API',
+          data: null
+        };
+      }
+      
+      // Outros erros devem ser logados
+      logger.warn(`Erro ao verificar cupom ${couponCode}: ${error.message}`);
       return {
         valid: false,
-        message: error.message
+        message: error.message,
+        data: null
       };
     }
   }
@@ -337,26 +382,47 @@ class MeliCouponCapture {
           const code = product.coupon.code || `PROD-${product.id}`;
           if (processedCodes.has(code)) continue;
 
+          // Validar código antes de processar
+          const codeValidation = CouponValidator.validateCode(code);
+          if (!codeValidation.valid) {
+            logger.warn(`⚠️ Código de cupom inválido ignorado: ${code} - ${codeValidation.reason}`);
+            continue;
+          }
+
           processedCodes.add(code);
 
-          coupons.push({
+          // Determinar se é cupom geral ou para produtos selecionados
+          // Se o cupom tem categoria específica ou "produtos selecionados" no título, é específico
+          const isGeneral = !product.coupon.applicable_products || 
+                           product.coupon.applicable_products.length === 0 ||
+                           (product.title && !product.title.toLowerCase().includes('produtos selecionados') && 
+                            !product.title.toLowerCase().includes('categoria'));
+
+          const coupon = {
             platform: 'mercadolivre',
             code: code,
-            title: `Cupom: ${product.title.substring(0, 50)}...`,
-            description: `Cupom encontrado no produto ${product.title}`,
+            title: product.coupon.title || `Cupom: ${product.title.substring(0, 50)}...`,
+            description: product.coupon.description || `Cupom encontrado no produto ${product.title}`,
             discount_type: product.coupon.discount_type || 'fixed',
             discount_value: parseFloat(product.coupon.discount_value || 0),
-            min_purchase: 0, // Incerteza via scraping
-            valid_from: new Date().toISOString(),
-            // Assumir 7 dias se não soubermos
-            valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            affiliate_link: product.permalink, // Link do produto como "landing"
+            min_purchase: parseFloat(product.coupon.min_purchase || 0),
+            valid_from: product.coupon.valid_from || new Date().toISOString(),
+            valid_until: product.coupon.valid_until || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            affiliate_link: product.permalink,
             source_url: product.permalink,
             auto_captured: true,
-            is_general: false, // Geralmente atrelado ao produto
-            applicable_products: [product.id],
+            is_general: isGeneral,
+            applicable_products: product.coupon.applicable_products || (isGeneral ? [] : [product.id]),
             verification_status: 'active'
-          });
+          };
+
+          // Validar cupom completo antes de adicionar
+          const validation = CouponValidator.validateCoupon(coupon);
+          if (validation.valid) {
+            coupons.push(coupon);
+          } else {
+            logger.warn(`⚠️ Cupom de produto rejeitado: ${code} - ${validation.reason}`);
+          }
         }
       }
 

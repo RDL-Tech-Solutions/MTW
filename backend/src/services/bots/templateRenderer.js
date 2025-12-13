@@ -74,13 +74,35 @@ class TemplateRenderer {
           
           couponSection = `\n🎟️ *CUPOM DISPONÍVEL*\n\n`;
           couponSection += `💬 *Código:* \`${coupon.code}\`\n`;
-          couponSection += `💰 Desconto: ${discountText} OFF\n`;
+          couponSection += `💰 *Desconto:* ${discountText} OFF\n`;
           
           if (coupon.min_purchase > 0) {
-            couponSection += `💳 Compra mínima: R$ ${coupon.min_purchase.toFixed(2)}\n`;
+            couponSection += `💳 *Compra mínima:* R$ ${coupon.min_purchase.toFixed(2)}\n`;
           }
           
-          couponSection += `📅 Válido até: ${this.formatDate(coupon.valid_until)}\n`;
+          // Limite máximo de desconto
+          if (coupon.max_discount_value > 0) {
+            couponSection += `💰 *Limite de desconto:* R$ ${coupon.max_discount_value.toFixed(2)}\n`;
+          }
+          
+          // Limite de usos
+          if (coupon.max_uses) {
+            couponSection += `📊 *Limite de usos:* ${coupon.current_uses || 0} / ${coupon.max_uses}\n`;
+          }
+          
+          // Aplicabilidade
+          if (coupon.is_general) {
+            couponSection += `✅ *Válido para todos os produtos*\n`;
+          } else {
+            const productCount = coupon.applicable_products?.length || 0;
+            if (productCount > 0) {
+              couponSection += `📦 *Em produtos selecionados* (${productCount} produto${productCount > 1 ? 's' : ''})\n`;
+            } else {
+              couponSection += `📦 *Em produtos selecionados*\n`;
+            }
+          }
+          
+          couponSection += `📅 *Válido até:* ${this.formatDate(coupon.valid_until)}\n`;
         }
       } catch (error) {
         logger.warn(`Erro ao buscar cupom ${product.coupon_id}: ${error.message}`);
@@ -109,9 +131,34 @@ class TemplateRenderer {
       : `R$ ${coupon.discount_value.toFixed(2)}`;
 
     const platformName = this.getPlatformName(coupon.platform);
+    
+    // Compra mínima
     const minPurchase = coupon.min_purchase > 0
-      ? `💳 Compra mínima: R$ ${coupon.min_purchase.toFixed(2)}\n`
+      ? `💳 *Compra mínima:* R$ ${coupon.min_purchase.toFixed(2)}\n`
       : '';
+
+    // Limite máximo de desconto
+    const maxDiscount = coupon.max_discount_value > 0
+      ? `💰 *Limite de desconto:* R$ ${coupon.max_discount_value.toFixed(2)}\n`
+      : '';
+
+    // Limite de usos
+    const usageLimit = coupon.max_uses
+      ? `📊 *Limite de usos:* ${coupon.current_uses || 0} / ${coupon.max_uses}\n`
+      : '';
+
+    // Aplicabilidade (todos os produtos ou produtos selecionados)
+    let applicability = '';
+    if (coupon.is_general) {
+      applicability = '✅ *Válido para todos os produtos*';
+    } else {
+      const productCount = coupon.applicable_products?.length || 0;
+      if (productCount > 0) {
+        applicability = `📦 *Em produtos selecionados* (${productCount} produto${productCount > 1 ? 's' : ''})`;
+      } else {
+        applicability = '📦 *Em produtos selecionados*';
+      }
+    }
 
     return {
       platform_name: platformName,
@@ -119,8 +166,11 @@ class TemplateRenderer {
       discount_value: discountText,
       valid_until: this.formatDate(coupon.valid_until),
       min_purchase: minPurchase,
-      coupon_title: coupon.title || '',
-      coupon_description: coupon.description ? `\n${coupon.description}\n` : '',
+      max_discount: maxDiscount,
+      usage_limit: usageLimit,
+      applicability: applicability,
+      coupon_title: coupon.title || coupon.description || 'Cupom de Desconto',
+      coupon_description: coupon.description ? `\n${this.escapeMarkdown(coupon.description)}\n` : '',
       affiliate_link: coupon.affiliate_link || 'Link não disponível'
     };
   }
@@ -213,7 +263,7 @@ class TemplateRenderer {
         return `🔥 *NOVA PROMOÇÃO AUTOMÁTICA*\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 *${variables.current_price || 'R$ 0,00'}*${variables.old_price || ''}\n🏷️ *${variables.discount_percentage || 0}% OFF*\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n${variables.coupon_section || ''}\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Aproveite antes que acabe!`;
       
       case 'new_coupon':
-        return `🎟️ *NOVO CUPOM DISPONÍVEL*\n\n🏪 Plataforma: ${variables.platform_name || 'N/A'}\n💬 *Código:* \`${variables.coupon_code || 'N/A'}\`\n\n💰 Desconto: ${variables.discount_value || 'N/A'} OFF\n📅 Válido até: ${variables.valid_until || 'N/A'}\n${variables.min_purchase || ''}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Use agora e economize!`;
+        return `🎟️ *NOVO CUPOM DISPONÍVEL!*\n\n🏪 *Plataforma:* ${variables.platform_name || 'N/A'}\n💬 *Código:* \`${variables.coupon_code || 'N/A'}\`\n💰 *Desconto:* ${variables.discount_value || 'N/A'} OFF\n${variables.min_purchase || ''}${variables.applicability ? `\n${variables.applicability}\n` : ''}\n📝 *${variables.coupon_title || 'Cupom de Desconto'}*\n${variables.coupon_description || ''}\n📅 *Válido até:* ${variables.valid_until || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Use agora e economize!`;
       
       case 'expired_coupon':
         return `⚠️ *CUPOM EXPIROU*\n\n🏪 Plataforma: ${variables.platform_name || 'N/A'}\n💬 Código: \`${variables.coupon_code || 'N/A'}\`\n📅 Expirado em: ${variables.expired_date || 'N/A'}\n\n😔 Infelizmente este cupom não está mais disponível.\n🔔 Fique atento às próximas promoções!`;

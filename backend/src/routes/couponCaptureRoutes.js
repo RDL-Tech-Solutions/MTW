@@ -115,4 +115,25 @@ router.put('/coupons/:id/expire', couponCaptureController.expireCoupon);
  */
 router.put('/coupons/:id/reactivate', couponCaptureController.reactivateCoupon);
 
+/**
+ * @route   GET /api/coupon-capture/coupons/export
+ * @desc    Exportar cupons (CSV/JSON)
+ * @access  Admin
+ */
+router.get('/coupons/export', couponCaptureController.exportCoupons);
+
+/**
+ * @route   POST /api/coupon-capture/coupons/batch
+ * @desc    Ações em lote nos cupons
+ * @access  Admin
+ */
+router.post('/coupons/batch', couponCaptureController.batchAction);
+
+/**
+ * @route   POST /api/coupon-capture/coupons/:id/verify
+ * @desc    Verificar cupom específico
+ * @access  Admin
+ */
+router.post('/coupons/:id/verify', couponCaptureController.verifyCoupon);
+
 export default router;

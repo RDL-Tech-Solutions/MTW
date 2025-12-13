@@ -7,6 +7,7 @@ import meliCouponCapture from './meliCouponCapture.js';
 import amazonCouponCapture from './amazonCouponCapture.js';
 import aliExpressCouponCapture from './aliExpressCouponCapture.js';
 import couponNotificationService from './couponNotificationService.js';
+import CouponValidator from '../../utils/couponValidator.js';
 
 class CouponCaptureService {
   /**
@@ -105,11 +106,15 @@ class CouponCaptureService {
 
       logger.info(`📦 ${platform}: ${coupons.length} cupons encontrados`);
 
+      // Filtrar cupons inválidos antes de processar
+      const validCoupons = CouponValidator.filterValidCoupons(coupons);
+      logger.info(`✅ ${platform}: ${validCoupons.length} cupons válidos após filtragem (${coupons.length - validCoupons.length} inválidos removidos)`);
+
       // Processar e salvar cupons
       let created = 0;
       let errors = 0;
 
-      for (const coupon of coupons) {
+      for (const coupon of validCoupons) {
         try {
           const saved = await this.saveCoupon(coupon);
           if (saved.isNew) {
@@ -162,6 +167,13 @@ class CouponCaptureService {
    */
   async saveCoupon(couponData) {
     try {
+      // Validar cupom antes de salvar
+      const validation = CouponValidator.validateCoupon(couponData);
+      if (!validation.valid) {
+        logger.warn(`⚠️ Cupom rejeitado antes de salvar: ${couponData.code} - ${validation.reason}`);
+        throw new Error(`Cupom inválido: ${validation.reason}`);
+      }
+
       // Verificar se cupom já existe (por código e plataforma)
       const existing = await Coupon.findByCode(couponData.code);
 
@@ -278,11 +290,26 @@ class CouponCaptureService {
   /**
    * Verificar validade de cupons ativos
    */
-  async verifyActiveCoupons() {
+  async verifyActiveCoupons(couponIds = null) {
     logger.info('🔍 Verificando validade de cupons ativos...');
 
     try {
-      const activeCoupons = await Coupon.findActive({ limit: 100 });
+      let activeCoupons;
+      if (couponIds && Array.isArray(couponIds) && couponIds.length > 0) {
+        // Buscar cupons específicos
+        activeCoupons = { coupons: [] };
+        for (const id of couponIds) {
+          try {
+            const coupon = await Coupon.findById(id);
+            if (coupon) activeCoupons.coupons.push(coupon);
+          } catch (error) {
+            logger.warn(`Cupom ${id} não encontrado`);
+          }
+        }
+      } else {
+        activeCoupons = await Coupon.findActive({ limit: 100 });
+      }
+      
       let verified = 0;
       let invalid = 0;
 

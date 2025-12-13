@@ -4,10 +4,8 @@
     "slug": "mtw-promo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#DC2626"
     },
@@ -20,7 +18,6 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#DC2626"
       },
       "package": "com.mtwpromo.app",
@@ -29,22 +26,22 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro"
     },
     "plugins": [
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
           "color": "#DC2626"
         }
       ]
     ],
     "extra": {
+      "apiUrl": "http://192.168.7.7:3000/api",
       "eas": {
-        "projectId": "your-project-id"
-      },
-      "apiUrl": "http://192.168.7.7:3000/api"
-    }
+        "projectId": "967ccc1a-3521-4c83-91a4-851bed949c45"
+      }
+    },
+    "owner": "rdltech"
   }
 }
