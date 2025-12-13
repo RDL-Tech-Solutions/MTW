@@ -45,6 +45,7 @@ export default function CategoriesScreen({ navigation }) {
 
   const renderCategory = ({ item }) => {
     const iconName = CATEGORY_ICONS[item.name] || 'pricetag-outline';
+    const hasEmojiIcon = item.icon && item.icon.length <= 2; // Emoji geralmente tem 1-2 caracteres
     
     return (
       <TouchableOpacity 
@@ -53,9 +54,18 @@ export default function CategoriesScreen({ navigation }) {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <Ionicons name={iconName} size={32} color={colors.primary} />
+          {hasEmojiIcon ? (
+            <Text style={styles.emojiIcon}>{item.icon}</Text>
+          ) : (
+            <Ionicons name={iconName} size={32} color={colors.primary} />
+          )}
         </View>
         <Text style={styles.categoryName}>{item.name}</Text>
+        {item.description && (
+          <Text style={styles.categoryDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
         <Text style={styles.productCount}>
           {item.product_count || 0} produtos
         </Text>
@@ -150,12 +160,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
+  emojiIcon: {
+    fontSize: 32,
+  },
   categoryName: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 4,
     textAlign: 'center',
+  },
+  categoryDescription: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 4,
   },
   productCount: {
     fontSize: 12,

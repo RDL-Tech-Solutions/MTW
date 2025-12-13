@@ -15,6 +15,8 @@ class SyncConfig {
       return {
         shopee_enabled: false,
         mercadolivre_enabled: false,
+        amazon_enabled: false,
+        aliexpress_enabled: false,
         keywords: '',
         min_discount_percentage: 10,
         categories: [],
@@ -31,6 +33,8 @@ class SyncConfig {
     const {
       shopee_enabled,
       mercadolivre_enabled,
+      amazon_enabled,
+      aliexpress_enabled,
       keywords,
       min_discount_percentage,
       categories,
@@ -48,6 +52,8 @@ class SyncConfig {
         .update({
           shopee_enabled,
           mercadolivre_enabled,
+          amazon_enabled: amazon_enabled || false,
+          aliexpress_enabled: aliexpress_enabled || false,
           keywords,
           min_discount_percentage,
           categories,
@@ -68,6 +74,8 @@ class SyncConfig {
         .insert([{
           shopee_enabled,
           mercadolivre_enabled,
+          amazon_enabled: amazon_enabled || false,
+          aliexpress_enabled: aliexpress_enabled || false,
           keywords,
           min_discount_percentage,
           categories,

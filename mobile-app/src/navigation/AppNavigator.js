@@ -5,6 +5,8 @@ import { useAuthStore } from '../stores/authStore';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
 import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
+import CouponDetailsScreen from '../screens/coupon/CouponDetailsScreen';
+import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import { SCREEN_NAMES } from '../utils/constants';
 import { ActivityIndicator, View } from 'react-native';
 import colors from '../theme/colors';
@@ -40,6 +42,30 @@ export default function AppNavigator() {
               options={{
                 headerShown: true,
                 headerTitle: 'Detalhes do Produto',
+                headerStyle: {
+                  backgroundColor: colors.white,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name="CouponDetails" 
+              component={CouponDetailsScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Detalhes do Cupom',
+                headerStyle: {
+                  backgroundColor: colors.white,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name="EditProfile" 
+              component={EditProfileScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Editar Perfil',
                 headerStyle: {
                   backgroundColor: colors.white,
                 },

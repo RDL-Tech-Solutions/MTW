@@ -1,17 +1,30 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Search, Shield, Crown, User as UserIcon, Mail, Calendar } from 'lucide-react';
+import { Search, Shield, Crown, User as UserIcon, Mail, Calendar, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
 import { format } from 'date-fns';
 
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'user',
+    is_vip: false
+  });
   const [stats, setStats] = useState({
     total: 0,
     admins: 0,
@@ -21,22 +34,15 @@ export default function Users() {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+    fetchStats();
+  }, [page]);
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/users');
-      const usersData = response.data.data || [];
-      setUsers(usersData);
-      
-      // Calcular estatísticas
-      const stats = {
-        total: usersData.length,
-        admins: usersData.filter(u => u.role === 'admin').length,
-        vips: usersData.filter(u => u.is_vip).length,
-        regular: usersData.filter(u => u.role === 'user' && !u.is_vip).length
-      };
-      setStats(stats);
+      const response = await api.get(`/users?page=${page}&limit=20&search=${searchTerm}`);
+      const data = response.data.data || {};
+      setUsers(data.users || []);
+      setTotalPages(data.totalPages || 1);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     } finally {
@@ -44,10 +50,25 @@ export default function Users() {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      const response = await api.get('/users/stats');
+      setStats(response.data.data || {
+        total: 0,
+        admins: 0,
+        vips: 0,
+        regular: 0
+      });
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error);
+    }
+  };
+
   const toggleVIP = async (userId, currentStatus) => {
     try {
       await api.patch(`/users/${userId}/vip`, { is_vip: !currentStatus });
       fetchUsers();
+      fetchStats();
     } catch (error) {
       alert('Erro ao atualizar status VIP');
     }
@@ -58,15 +79,77 @@ export default function Users() {
       const newRole = currentRole === 'admin' ? 'user' : 'admin';
       await api.patch(`/users/${userId}/role`, { role: newRole });
       fetchUsers();
+      fetchStats();
     } catch (error) {
       alert('Erro ao atualizar role do usuário');
     }
   };
 
-  const filteredUsers = users.filter(user =>
-    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleDelete = async (userId) => {
+    if (!confirm('Deseja realmente deletar este usuário?')) return;
+    
+    try {
+      await api.delete(`/users/${userId}`);
+      fetchUsers();
+      fetchStats();
+    } catch (error) {
+      alert('Erro ao deletar usuário');
+    }
+  };
+
+  const handleEdit = (user) => {
+    setEditingUser(user);
+    setFormData({
+      name: user.name || '',
+      email: user.email || '',
+      password: '',
+      role: user.role || 'user',
+      is_vip: user.is_vip || false
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingUser) {
+        const updateData = { ...formData };
+        if (!updateData.password) {
+          delete updateData.password;
+        }
+        await api.put(`/users/${editingUser.id}`, updateData);
+      } else {
+        await api.post('/users', formData);
+      }
+      setIsDialogOpen(false);
+      setEditingUser(null);
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        role: 'user',
+        is_vip: false
+      });
+      fetchUsers();
+      fetchStats();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Erro ao salvar usuário');
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (page === 1) {
+        fetchUsers();
+      } else {
+        setPage(1);
+      }
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  // Filtro é feito no backend agora
+  const filteredUsers = users;
 
   if (loading) {
     return (
@@ -78,11 +161,107 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Usuários</h1>
-        <p className="text-muted-foreground mt-1">
-          Gerencie os usuários do sistema
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Usuários</h1>
+          <p className="text-muted-foreground mt-1">
+            Gerencie os usuários do sistema
+          </p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => {
+              setEditingUser(null);
+              setFormData({
+                name: '',
+                email: '',
+                password: '',
+                role: 'user',
+                is_vip: false
+              });
+            }}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Usuário
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
+              </DialogTitle>
+              <DialogDescription>
+                Preencha os dados do usuário abaixo
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  placeholder="Nome completo"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  placeholder="email@exemplo.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">
+                  Senha {editingUser ? '(deixe em branco para não alterar)' : '*'}
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  placeholder="Senha"
+                  required={!editingUser}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Role *</Label>
+                <select
+                  id="role"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.role}
+                  onChange={(e) => setFormData({...formData, role: e.target.value})}
+                  required
+                >
+                  <option value="user">Usuário</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is_vip"
+                  checked={formData.is_vip}
+                  onChange={(e) => setFormData({...formData, is_vip: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="is_vip">Usuário VIP</Label>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit">
+                  {editingUser ? 'Salvar' : 'Criar'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Cards de Estatísticas */}
@@ -237,10 +416,17 @@ export default function Users() {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => handleEdit(user)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => toggleVIP(user.id, user.is_vip)}
                         >
                           <Crown className="mr-1 h-3 w-3" />
-                          {user.is_vip ? 'Remover VIP' : 'Tornar VIP'}
+                          {user.is_vip ? 'Remover VIP' : 'VIP'}
                         </Button>
                         <Button
                           variant="outline"
@@ -248,7 +434,14 @@ export default function Users() {
                           onClick={() => toggleAdmin(user.id, user.role)}
                         >
                           <Shield className="mr-1 h-3 w-3" />
-                          {user.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
+                          {user.role === 'admin' ? 'Remover Admin' : 'Admin'}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(user.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </TableCell>
@@ -258,6 +451,31 @@ export default function Users() {
             </TableBody>
           </Table>
         </CardContent>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -3,11 +3,28 @@ import supabase from '../config/database.js';
 class Category {
   // Criar nova categoria
   static async create(categoryData) {
-    const { name, slug, icon } = categoryData;
+    const { name, slug, icon, description, is_active = true } = categoryData;
+
+    // Gerar slug se não fornecido
+    let finalSlug = slug;
+    if (!finalSlug && name) {
+      finalSlug = name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+    }
 
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name, slug, icon }])
+      .insert([{ 
+        name, 
+        slug: finalSlug, 
+        icon: icon || '📦',
+        description: description || null,
+        is_active: is_active !== false
+      }])
       .select()
       .single();
 

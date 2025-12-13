@@ -2,18 +2,24 @@ export const PLATFORMS = {
   SHOPEE: 'shopee',
   MERCADOLIVRE: 'mercadolivre',
   AMAZON: 'amazon',
+  ALIEXPRESS: 'aliexpress',
+  GENERAL: 'general',
 };
 
 export const PLATFORM_LABELS = {
   [PLATFORMS.SHOPEE]: 'Shopee',
   [PLATFORMS.MERCADOLIVRE]: 'Mercado Livre',
   [PLATFORMS.AMAZON]: 'Amazon',
+  [PLATFORMS.ALIEXPRESS]: 'AliExpress',
+  [PLATFORMS.GENERAL]: 'Geral',
 };
 
 export const PLATFORM_COLORS = {
   [PLATFORMS.SHOPEE]: '#EE4D2D',
   [PLATFORMS.MERCADOLIVRE]: '#FFE600',
   [PLATFORMS.AMAZON]: '#FF9900',
+  [PLATFORMS.ALIEXPRESS]: '#FF4747',
+  [PLATFORMS.GENERAL]: '#6B7280',
 };
 
 export const USER_ROLES = {

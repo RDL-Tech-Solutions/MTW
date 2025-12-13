@@ -18,6 +18,7 @@ export default function Products() {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [platformFilter, setPlatformFilter] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [analyzingLink, setAnalyzingLink] = useState(false);
@@ -61,6 +62,9 @@ export default function Products() {
       if (searchTerm) {
         params.search = searchTerm;
       }
+      if (platformFilter && platformFilter !== 'all') {
+        params.platform = platformFilter;
+      }
 
       const response = await api.get('/products', { params });
 
@@ -86,16 +90,14 @@ export default function Products() {
     }
   };
 
-  // Debounce search
+  // Debounce search e filtro de plataforma
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (searchTerm !== '') {
-        fetchProducts(1);
-      }
+      fetchProducts(1);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, platformFilter]);
 
   const fetchCategories = async () => {
     try {
@@ -481,6 +483,8 @@ export default function Products() {
                       <option value="shopee">Shopee</option>
                       <option value="mercadolivre">Mercado Livre</option>
                       <option value="amazon">Amazon</option>
+                      <option value="aliexpress">AliExpress</option>
+                      <option value="general">Geral</option>
                     </select>
                   </div>
                 </div>
@@ -565,14 +569,28 @@ export default function Products() {
                 Exibindo página {pagination.page} de {pagination.totalPages}
               </CardDescription>
             </div>
-            <div className="relative w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar produtos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
+            <div className="flex gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar produtos..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <select
+                value={platformFilter}
+                onChange={(e) => setPlatformFilter(e.target.value)}
+                className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Todas as Plataformas</option>
+                <option value="mercadolivre">Mercado Livre</option>
+                <option value="shopee">Shopee</option>
+                <option value="amazon">Amazon</option>
+                <option value="aliexpress">AliExpress</option>
+                <option value="general">Geral</option>
+              </select>
             </div>
           </div>
         </CardHeader>
@@ -639,8 +657,21 @@ export default function Products() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {product.platform}
+                          <Badge 
+                            variant="outline" 
+                            className={`capitalize ${
+                              product.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                              product.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                              product.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                              product.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
+                              'bg-gray-100 text-gray-800 border-gray-300'
+                            }`}
+                          >
+                            {product.platform === 'mercadolivre' ? 'Mercado Livre' :
+                             product.platform === 'shopee' ? 'Shopee' :
+                             product.platform === 'amazon' ? 'Amazon' :
+                             product.platform === 'aliexpress' ? 'AliExpress' :
+                             product.platform}
                           </Badge>
                         </TableCell>
                         <TableCell>

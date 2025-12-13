@@ -16,9 +16,12 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
     >
       <View style={styles.imageContainer}>
         <Image 
-          source={{ uri: product.image_url }} 
+          source={{ uri: product.image_url || 'https://via.placeholder.com/300' }} 
           style={styles.image}
           resizeMode="cover"
+          onError={(error) => {
+            console.log('Erro ao carregar imagem:', error);
+          }}
         />
         {discountPercentage > 0 && (
           <View style={styles.discountBadge}>

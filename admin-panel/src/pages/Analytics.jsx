@@ -22,6 +22,8 @@ export default function Analytics() {
       setAnalytics(response.data.data);
     } catch (error) {
       console.error('Erro ao carregar analytics:', error);
+      // Se o endpoint não existir, usar dados mockados
+      setAnalytics(null);
     } finally {
       setLoading(false);
     }
@@ -35,8 +37,8 @@ export default function Analytics() {
     );
   }
 
-  // Dados mockados para demonstração (substituir com dados reais da API)
-  const clicksData = [
+  // Dados reais ou mockados
+  const clicksData = analytics?.charts?.clicks_vs_views || [
     { name: 'Seg', clicks: 120, views: 400 },
     { name: 'Ter', clicks: 150, views: 450 },
     { name: 'Qua', clicks: 180, views: 500 },
@@ -46,7 +48,7 @@ export default function Analytics() {
     { name: 'Dom', clicks: 280, views: 650 },
   ];
 
-  const categoryData = [
+  const categoryData = analytics?.charts?.categories || [
     { name: 'Eletrônicos', value: 400 },
     { name: 'Moda', value: 300 },
     { name: 'Casa', value: 200 },
@@ -54,7 +56,7 @@ export default function Analytics() {
     { name: 'Livros', value: 100 },
   ];
 
-  const conversionData = [
+  const conversionData = analytics?.charts?.conversions || [
     { name: 'Jan', conversoes: 45 },
     { name: 'Fev', conversoes: 52 },
     { name: 'Mar', conversoes: 61 },
@@ -62,6 +64,19 @@ export default function Analytics() {
     { name: 'Mai', conversoes: 70 },
     { name: 'Jun', conversoes: 85 },
   ];
+
+  const overview = analytics?.overview || {
+    total_views: 3850,
+    total_clicks: 1480,
+    conversion_rate: 38.4,
+    active_users: 892,
+    clicks_growth: 8.2,
+    views_growth: 12.5,
+    conversion_growth: -2.1,
+    users_growth: 15.3
+  };
+
+  const topProducts = analytics?.top_products || [];
 
   return (
     <div className="space-y-6">
@@ -114,10 +129,14 @@ export default function Analytics() {
             <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3,850</div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="mr-1 h-3 w-3" />
-              +12.5% vs período anterior
+            <div className="text-2xl font-bold">{overview.total_views.toLocaleString()}</div>
+            <div className={`flex items-center text-xs mt-1 ${overview.views_growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {overview.views_growth >= 0 ? (
+                <TrendingUp className="mr-1 h-3 w-3" />
+              ) : (
+                <TrendingDown className="mr-1 h-3 w-3" />
+              )}
+              {overview.views_growth >= 0 ? '+' : ''}{overview.views_growth}% vs período anterior
             </div>
           </CardContent>
         </Card>
@@ -128,10 +147,14 @@ export default function Analytics() {
             <MousePointerClick className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,480</div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="mr-1 h-3 w-3" />
-              +8.2% vs período anterior
+            <div className="text-2xl font-bold">{overview.total_clicks.toLocaleString()}</div>
+            <div className={`flex items-center text-xs mt-1 ${overview.clicks_growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {overview.clicks_growth >= 0 ? (
+                <TrendingUp className="mr-1 h-3 w-3" />
+              ) : (
+                <TrendingDown className="mr-1 h-3 w-3" />
+              )}
+              {overview.clicks_growth >= 0 ? '+' : ''}{overview.clicks_growth}% vs período anterior
             </div>
           </CardContent>
         </Card>
@@ -142,10 +165,14 @@ export default function Analytics() {
             <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">38.4%</div>
-            <div className="flex items-center text-xs text-red-600 mt-1">
-              <TrendingDown className="mr-1 h-3 w-3" />
-              -2.1% vs período anterior
+            <div className="text-2xl font-bold">{overview.conversion_rate}%</div>
+            <div className={`flex items-center text-xs mt-1 ${overview.conversion_growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {overview.conversion_growth >= 0 ? (
+                <TrendingUp className="mr-1 h-3 w-3" />
+              ) : (
+                <TrendingDown className="mr-1 h-3 w-3" />
+              )}
+              {overview.conversion_growth >= 0 ? '+' : ''}{overview.conversion_growth}% vs período anterior
             </div>
           </CardContent>
         </Card>
@@ -156,10 +183,14 @@ export default function Analytics() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">892</div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="mr-1 h-3 w-3" />
-              +15.3% vs período anterior
+            <div className="text-2xl font-bold">{overview.active_users.toLocaleString()}</div>
+            <div className={`flex items-center text-xs mt-1 ${overview.users_growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {overview.users_growth >= 0 ? (
+                <TrendingUp className="mr-1 h-3 w-3" />
+              ) : (
+                <TrendingDown className="mr-1 h-3 w-3" />
+              )}
+              {overview.users_growth >= 0 ? '+' : ''}{overview.users_growth}% vs período anterior
             </div>
           </CardContent>
         </Card>
@@ -251,25 +282,31 @@ export default function Analytics() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold text-sm">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className="font-medium">Produto Exemplo {item}</p>
-                    <p className="text-sm text-muted-foreground">Categoria: Eletrônicos</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">{(Math.random() * 500 + 100).toFixed(0)} cliques</p>
-                  <Badge variant="secondary" className="mt-1">
-                    {(Math.random() * 50 + 20).toFixed(1)}% CTR
-                  </Badge>
-                </div>
+            {topProducts.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                Nenhum produto encontrado
               </div>
-            ))}
+            ) : (
+              topProducts.map((product, index) => (
+                <div key={product.id || index} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold text-sm">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="font-medium">{product.name || `Produto ${index + 1}`}</p>
+                      <p className="text-sm text-muted-foreground">Categoria: {product.category || 'Sem categoria'}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{product.clicks || 0} cliques</p>
+                    <Badge variant="secondary" className="mt-1">
+                      {product.ctr || 0}% CTR
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

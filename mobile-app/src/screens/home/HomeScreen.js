@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../stores/productStore';
@@ -20,6 +21,7 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [platformFilter, setPlatformFilter] = useState('all');
 
   useEffect(() => {
     loadProducts();
@@ -50,11 +52,11 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate(SCREEN_NAMES.PRODUCT_DETAILS, { product });
   };
 
-  const filteredProducts = searchQuery
-    ? products.filter(p => 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : products;
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesPlatform = platformFilter === 'all' || p.platform === platformFilter;
+    return matchesSearch && matchesPlatform;
+  });
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -79,6 +81,52 @@ export default function HomeScreen({ navigation }) {
             <Ionicons name="close-circle" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Filtro por Plataforma */}
+      <View style={styles.platformFilterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <TouchableOpacity
+            style={[styles.platformFilter, platformFilter === 'all' && styles.platformFilterActive]}
+            onPress={() => setPlatformFilter('all')}
+          >
+            <Text style={[styles.platformFilterText, platformFilter === 'all' && styles.platformFilterTextActive]}>
+              Todas
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.platformFilter, platformFilter === 'mercadolivre' && styles.platformFilterActive]}
+            onPress={() => setPlatformFilter('mercadolivre')}
+          >
+            <Text style={[styles.platformFilterText, platformFilter === 'mercadolivre' && styles.platformFilterTextActive]}>
+              Mercado Livre
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.platformFilter, platformFilter === 'shopee' && styles.platformFilterActive]}
+            onPress={() => setPlatformFilter('shopee')}
+          >
+            <Text style={[styles.platformFilterText, platformFilter === 'shopee' && styles.platformFilterTextActive]}>
+              Shopee
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.platformFilter, platformFilter === 'amazon' && styles.platformFilterActive]}
+            onPress={() => setPlatformFilter('amazon')}
+          >
+            <Text style={[styles.platformFilterText, platformFilter === 'amazon' && styles.platformFilterTextActive]}>
+              Amazon
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.platformFilter, platformFilter === 'aliexpress' && styles.platformFilterActive]}
+            onPress={() => setPlatformFilter('aliexpress')}
+          >
+            <Text style={[styles.platformFilterText, platformFilter === 'aliexpress' && styles.platformFilterTextActive]}>
+              AliExpress
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       <View style={styles.statsContainer}>
@@ -230,6 +278,32 @@ const styles = StyleSheet.create({
   emptyIcon: {
     fontSize: 64,
     marginBottom: 16,
+  },
+  platformFilterContainer: {
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  platformFilter: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  platformFilterActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  platformFilterText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  platformFilterTextActive: {
+    color: colors.white,
+    fontWeight: '600',
   },
   emptyTitle: {
     fontSize: 18,

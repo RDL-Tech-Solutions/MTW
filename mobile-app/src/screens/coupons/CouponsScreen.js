@@ -59,14 +59,7 @@ export default function CouponsScreen({ navigation }) {
   };
 
   const handleCouponPress = (coupon) => {
-    // Navegar para detalhes do cupom ou abrir link de afiliado
-    if (coupon.affiliate_link) {
-      // Aqui você pode usar Linking para abrir o link
-      // Linking.openURL(coupon.affiliate_link);
-      navigation.navigate('CouponDetails', { coupon });
-    } else {
-      navigation.navigate('CouponDetails', { coupon });
-    }
+    navigation.navigate('CouponDetails', { coupon });
   };
 
   const renderCoupon = ({ item }) => (

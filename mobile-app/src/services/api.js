@@ -39,8 +39,21 @@ api.interceptors.response.use(
       // Token inválido ou expirado
       await AsyncStorage.removeItem('@mtw_token');
       await AsyncStorage.removeItem('@mtw_user');
+      await AsyncStorage.removeItem('@mtw_refresh_token');
       // Aqui você pode redirecionar para login
     }
+    
+    // Melhorar mensagem de erro
+    if (error.response) {
+      error.userMessage = error.response.data?.error || 
+                         error.response.data?.message || 
+                         `Erro ${error.response.status}: ${error.response.statusText}`;
+    } else if (error.request) {
+      error.userMessage = 'Erro de conexão. Verifique sua internet.';
+    } else {
+      error.userMessage = error.message || 'Erro desconhecido';
+    }
+    
     return Promise.reject(error);
   }
 );

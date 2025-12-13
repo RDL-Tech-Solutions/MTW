@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import colors from '../../theme/colors';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuthStore();
 
   const handleLogout = () => {
@@ -84,7 +84,7 @@ export default function ProfileScreen() {
           icon="person-outline"
           title="Editar Perfil"
           subtitle="Nome, email e senha"
-          onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
+          onPress={() => navigation.navigate('EditProfile')}
         />
         
         {!user?.is_vip && (

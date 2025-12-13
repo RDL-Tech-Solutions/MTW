@@ -16,8 +16,10 @@ export default function Categories() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
     description: '',
-    icon: '📦'
+    icon: '📦',
+    is_active: true
   });
 
   useEffect(() => {
@@ -50,8 +52,10 @@ export default function Categories() {
     setEditingCategory(category);
     setFormData({
       name: category.name,
+      slug: category.slug || '',
       description: category.description || '',
-      icon: category.icon || '📦'
+      icon: category.icon || '📦',
+      is_active: category.is_active !== false
     });
     setIsDialogOpen(true);
   };
@@ -68,8 +72,10 @@ export default function Categories() {
       setEditingCategory(null);
       setFormData({
         name: '',
+        slug: '',
         description: '',
-        icon: '📦'
+        icon: '📦',
+        is_active: true
       });
       fetchCategories();
     } catch (error) {
@@ -105,8 +111,10 @@ export default function Categories() {
               setEditingCategory(null);
               setFormData({
                 name: '',
+                slug: '',
                 description: '',
-                icon: '📦'
+                icon: '📦',
+                is_active: true
               });
             }}>
               <Plus className="mr-2 h-4 w-4" />
@@ -135,6 +143,16 @@ export default function Categories() {
               </div>
               
               <div className="space-y-2">
+                <Label htmlFor="slug">Slug (deixe em branco para gerar automaticamente)</Label>
+                <Input
+                  id="slug"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({...formData, slug: e.target.value})}
+                  placeholder="eletronicos"
+                />
+              </div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="description">Descrição</Label>
                 <Input
                   id="description"
@@ -153,6 +171,17 @@ export default function Categories() {
                   placeholder="📦"
                   maxLength={2}
                 />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="is_active">Categoria ativa</Label>
               </div>
 
               <DialogFooter>

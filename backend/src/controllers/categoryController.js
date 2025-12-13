@@ -46,7 +46,31 @@ class CategoryController {
   // Criar categoria (admin)
   static async create(req, res, next) {
     try {
-      const category = await Category.create(req.body);
+      const { name, slug, icon, description, is_active } = req.body;
+
+      if (!name) {
+        return res.status(400).json(
+          errorResponse('Nome da categoria é obrigatório', 'VALIDATION_ERROR')
+        );
+      }
+
+      // Verificar se slug já existe (se fornecido)
+      if (slug) {
+        const existing = await Category.findBySlug(slug);
+        if (existing) {
+          return res.status(400).json(
+            errorResponse('Slug já existe. Use outro slug ou deixe em branco para gerar automaticamente.', 'SLUG_EXISTS')
+          );
+        }
+      }
+
+      const category = await Category.create({
+        name,
+        slug,
+        icon,
+        description,
+        is_active
+      });
       await cacheDel('categories:*');
 
       logger.info(`Categoria criada: ${category.name}`);

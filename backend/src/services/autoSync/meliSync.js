@@ -483,28 +483,75 @@ class MeliSync {
 
   /**
    * Gerar link de afiliado do Mercado Livre
-   * Tenta obter o link trackeado via API se autenticado
+   * Prioridade:
+   * 1. Se tiver MELI_AFFILIATE_CODE configurado, usar formato de afiliado
+   * 2. Se tiver autenticação, tentar obter link trackeado via API
+   * 3. Caso contrário, retornar link original
    */
   async generateMeliAffiliateLink(product) {
     try {
-      // Se não tiver autenticação, devolve o original
-      if (!meliAuth.isConfigured()) return product.affiliate_link;
+      const affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
+      const originalLink = product.affiliate_link || '';
 
-      // Extrair ID (ex: mercadolivre-MLB123 -> MLB123)
-      const meliId = product.external_id.replace('mercadolivre-', '');
-
-      // Buscar detalhes do item via API Autenticada
-      // Se a conta for de afiliado/parceiro, o permalink retornado pode ser trackeado
-      const itemData = await meliAuth.authenticatedRequest(`https://api.mercadolibre.com/items/${meliId}`);
-
-      if (itemData && itemData.permalink) {
-        return itemData.permalink;
+      // Se tiver código de afiliado configurado, gerar link de afiliado
+      if (affiliateCode && originalLink) {
+        try {
+          // Formato do link de afiliado ML:
+          // https://mercadolivre.com/jm/mlb?&meuid={CODIGO}&redirect={URL_ENCODED}
+          const encodedUrl = encodeURIComponent(originalLink);
+          const affiliateLink = `https://mercadolivre.com/jm/mlb?&meuid=${affiliateCode}&redirect=${encodedUrl}`;
+          
+          logger.info(`✅ Link de afiliado gerado para ${product.external_id || product.name}`);
+          return affiliateLink;
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao gerar link de afiliado com código: ${error.message}`);
+        }
       }
 
-      return product.affiliate_link;
+      // Se não tiver código de afiliado, tentar via API autenticada (se configurado)
+      if (meliAuth.isConfigured() && product.external_id) {
+        try {
+          // Extrair ID (ex: mercadolivre-MLB123 -> MLB123)
+          const meliId = product.external_id.replace('mercadolivre-', '');
+
+          // Buscar detalhes do item via API Autenticada
+          // Se a conta for de afiliado/parceiro, o permalink retornado pode ser trackeado
+          const itemData = await meliAuth.authenticatedRequest(`https://api.mercadolibre.com/items/${meliId}`);
+
+          if (itemData && itemData.permalink) {
+            logger.info(`✅ Link obtido via API autenticada para ${product.external_id}`);
+            return itemData.permalink;
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Falha ao obter link via API autenticada: ${error.message}`);
+        }
+      }
+
+      // Fallback: retornar link original
+      if (originalLink) {
+        logger.info(`ℹ️ Usando link original (sem código de afiliado) para ${product.external_id || product.name}`);
+        return originalLink;
+      }
+
+      // Se não tiver link original, tentar construir a partir do external_id
+      if (product.external_id) {
+        const meliId = product.external_id.replace('mercadolivre-', '');
+        const constructedLink = `https://produto.mercadolivre.com.br/MLB-${meliId}`;
+        
+        // Se tiver código de afiliado, aplicar mesmo no link construído
+        if (affiliateCode) {
+          const encodedUrl = encodeURIComponent(constructedLink);
+          return `https://mercadolivre.com/jm/mlb?&meuid=${affiliateCode}&redirect=${encodedUrl}`;
+        }
+        
+        return constructedLink;
+      }
+
+      logger.warn(`⚠️ Não foi possível gerar link de afiliado para produto: ${product.name || 'desconhecido'}`);
+      return originalLink || '';
     } catch (error) {
-      logger.warn(`⚠️ Falha ao gerar link afiliado ML para ${product.external_id}: ${error.message}`);
-      return product.affiliate_link;
+      logger.error(`❌ Erro ao gerar link afiliado ML: ${error.message}`);
+      return product.affiliate_link || '';
     }
   }
 

@@ -96,6 +96,8 @@ class SyncLog {
       new_products: data.filter(l => l.is_new_product).length,
       shopee: data.filter(l => l.platform === 'shopee').length,
       mercadolivre: data.filter(l => l.platform === 'mercadolivre').length,
+      amazon: data.filter(l => l.platform === 'amazon').length,
+      aliexpress: data.filter(l => l.platform === 'aliexpress').length,
       sent_to_bots: data.filter(l => l.sent_to_bots).length,
       errors: data.filter(l => l.error_message).length
     };

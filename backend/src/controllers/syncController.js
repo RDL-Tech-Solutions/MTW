@@ -3,6 +3,8 @@ import SyncLog from '../models/SyncLog.js';
 import Product from '../models/Product.js';
 import meliSync from '../services/autoSync/meliSync.js';
 import shopeeSync from '../services/autoSync/shopeeSync.js';
+import amazonSync from '../services/autoSync/amazonSync.js';
+import aliExpressSync from '../services/autoSync/aliExpressSync.js';
 import publishService from '../services/autoSync/publishService.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
@@ -47,7 +49,7 @@ class SyncController {
 
       const config = await SyncConfig.get();
 
-      if (!config.shopee_enabled && !config.mercadolivre_enabled) {
+      if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled) {
         return res.status(400).json(errorResponse(
           'Nenhuma plataforma habilitada para sincronização',
           'SYNC_DISABLED'
@@ -56,7 +58,9 @@ class SyncController {
 
       const results = {
         mercadolivre: { total: 0, new: 0, errors: 0 },
-        shopee: { total: 0, new: 0, errors: 0 }
+        shopee: { total: 0, new: 0, errors: 0 },
+        amazon: { total: 0, new: 0, errors: 0 },
+        aliexpress: { total: 0, new: 0, errors: 0 }
       };
 
       // Sincronizar Mercado Livre
@@ -78,6 +82,28 @@ class SyncController {
         } catch (error) {
           logger.error(`❌ Erro na sincronização Shopee: ${error.message}`);
           results.shopee.errors++;
+        }
+      }
+
+      // Sincronizar Amazon
+      if (config.amazon_enabled) {
+        try {
+          const amazonResults = await SyncController.syncAmazon(config);
+          results.amazon = amazonResults;
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização Amazon: ${error.message}`);
+          results.amazon.errors++;
+        }
+      }
+
+      // Sincronizar AliExpress
+      if (config.aliexpress_enabled) {
+        try {
+          const aliExpressResults = await SyncController.syncAliExpress(config);
+          results.aliexpress = aliExpressResults;
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização AliExpress: ${error.message}`);
+          results.aliexpress.errors++;
         }
       }
 
@@ -197,6 +223,132 @@ class SyncController {
   /**
    * Sincronizar produtos da Shopee
    */
+  /**
+   * Sincronizar produtos da Amazon
+   */
+  static async syncAmazon(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // 1. Buscar produtos
+      const products = await amazonSync.fetchAmazonProducts(config.keywords, 50);
+
+      // 2. Filtrar promoções
+      const promotions = amazonSync.filterAmazonPromotions(
+        products,
+        config.min_discount_percentage
+      );
+
+      results.total = promotions.length;
+
+      // 3. Salvar e publicar cada promoção
+      for (const promo of promotions) {
+        try {
+          // Salvar no banco
+          const { product, isNew } = await amazonSync.saveAmazonToDatabase(promo, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Publicar no app e enviar para bots
+            const publishResult = await publishService.publishAll(product);
+
+            // Registrar log
+            await SyncLog.create({
+              platform: 'amazon',
+              product_name: product.name,
+              product_id: product.id,
+              discount_percentage: product.discount_percentage,
+              is_new_product: true,
+              sent_to_bots: publishResult.success
+            });
+          } else {
+            // Produto já existia
+            await SyncLog.create({
+              platform: 'amazon',
+              product_name: product.name,
+              product_id: product.id,
+              discount_percentage: product.discount_percentage,
+              is_new_product: false,
+              sent_to_bots: false
+            });
+          }
+        } catch (error) {
+          results.errors++;
+          logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      results.errors++;
+      throw error;
+    }
+
+    return results;
+  }
+
+  /**
+   * Sincronizar produtos do AliExpress
+   */
+  static async syncAliExpress(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // 1. Buscar produtos
+      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50);
+
+      // 2. Filtrar promoções
+      const promotions = aliExpressSync.filterAliExpressPromotions(
+        products,
+        config.min_discount_percentage
+      );
+
+      results.total = promotions.length;
+
+      // 3. Salvar e publicar cada promoção
+      for (const promo of promotions) {
+        try {
+          // Salvar no banco
+          const { product, isNew } = await aliExpressSync.saveAliExpressToDatabase(promo, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Publicar no app e enviar para bots
+            const publishResult = await publishService.publishAll(product);
+
+            // Registrar log
+            await SyncLog.create({
+              platform: 'aliexpress',
+              product_name: product.name,
+              product_id: product.id,
+              discount_percentage: product.discount_percentage,
+              is_new_product: true,
+              sent_to_bots: publishResult.success
+            });
+          } else {
+            // Produto já existia
+            await SyncLog.create({
+              platform: 'aliexpress',
+              product_name: product.name,
+              product_id: product.id,
+              discount_percentage: product.discount_percentage,
+              is_new_product: false,
+              sent_to_bots: false
+            });
+          }
+        } catch (error) {
+          results.errors++;
+          logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      results.errors++;
+      throw error;
+    }
+
+    return results;
+  }
+
   static async syncShopee(config) {
     const results = { total: 0, new: 0, errors: 0 };
 

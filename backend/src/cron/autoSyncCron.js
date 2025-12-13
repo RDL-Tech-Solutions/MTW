@@ -4,6 +4,8 @@ import SyncLog from '../models/SyncLog.js';
 import Product from '../models/Product.js';
 import meliSync from '../services/autoSync/meliSync.js';
 import shopeeSync from '../services/autoSync/shopeeSync.js';
+import amazonSync from '../services/autoSync/amazonSync.js';
+import aliExpressSync from '../services/autoSync/aliExpressSync.js';
 import publishService from '../services/autoSync/publishService.js';
 import logger from '../config/logger.js';
 
@@ -90,7 +92,9 @@ class AutoSyncCron {
 
       const results = {
         mercadolivre: { total: 0, new: 0, errors: 0 },
-        shopee: { total: 0, new: 0, errors: 0 }
+        shopee: { total: 0, new: 0, errors: 0 },
+        amazon: { total: 0, new: 0, errors: 0 },
+        aliexpress: { total: 0, new: 0, errors: 0 }
       };
 
       // Sincronizar Mercado Livre
@@ -115,13 +119,37 @@ class AutoSyncCron {
         }
       }
 
+      // Sincronizar Amazon
+      if (config.amazon_enabled) {
+        logger.info('📦 Sincronizando Amazon...');
+        try {
+          results.amazon = await this.syncAmazon(config);
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização Amazon: ${error.message}`);
+          results.amazon.errors++;
+        }
+      }
+
+      // Sincronizar AliExpress
+      if (config.aliexpress_enabled) {
+        logger.info('🌐 Sincronizando AliExpress...');
+        try {
+          results.aliexpress = await this.syncAliExpress(config);
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização AliExpress: ${error.message}`);
+          results.aliexpress.errors++;
+        }
+      }
+
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      const totalNew = results.mercadolivre.new + results.shopee.new;
+      const totalNew = results.mercadolivre.new + results.shopee.new + results.amazon.new + results.aliexpress.new;
 
       logger.info('✅ ========== SINCRONIZAÇÃO CONCLUÍDA ==========');
       logger.info(`⏱️ Duração: ${duration}s`);
       logger.info(`📊 Mercado Livre: ${results.mercadolivre.new} novos de ${results.mercadolivre.total}`);
       logger.info(`📊 Shopee: ${results.shopee.new} novos de ${results.shopee.total}`);
+      logger.info(`📊 Amazon: ${results.amazon.new} novos de ${results.amazon.total}`);
+      logger.info(`📊 AliExpress: ${results.aliexpress.new} novos de ${results.aliexpress.total}`);
       logger.info(`🎉 Total de produtos novos: ${totalNew}`);
 
     } catch (error) {
@@ -225,6 +253,122 @@ class AutoSyncCron {
             // Log
             await SyncLog.create({
               platform: 'shopee',
+              product_name: fullProduct.name,
+              product_id: fullProduct.id,
+              discount_percentage: fullProduct.discount_percentage,
+              is_new_product: true,
+              sent_to_bots: publishResult.success
+            });
+
+            logger.info(`✨ Novo produto publicado: ${fullProduct.name} (${fullProduct.discount_percentage}% OFF)`);
+          }
+        } catch (error) {
+          results.errors++;
+          logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      results.errors++;
+      throw error;
+    }
+
+    return results;
+  }
+
+  /**
+   * Sincronizar Amazon
+   */
+  async syncAmazon(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // 1. Buscar produtos
+      const products = await amazonSync.fetchAmazonProducts(config.keywords, 50);
+
+      // 2. Filtrar promoções
+      const promotions = amazonSync.filterAmazonPromotions(
+        products,
+        config.min_discount_percentage
+      );
+
+      results.total = promotions.length;
+
+      // 3. Processar cada promoção
+      for (const promo of promotions) {
+        try {
+          // Salvar no banco
+          const { product, isNew } = await amazonSync.saveAmazonToDatabase(promo, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Buscar produto completo com todos os dados (incluindo cupom se houver)
+            const fullProduct = await Product.findById(product.id);
+            
+            // Publicar e notificar
+            const publishResult = await publishService.publishAll(fullProduct);
+
+            // Log
+            await SyncLog.create({
+              platform: 'amazon',
+              product_name: fullProduct.name,
+              product_id: fullProduct.id,
+              discount_percentage: fullProduct.discount_percentage,
+              is_new_product: true,
+              sent_to_bots: publishResult.success
+            });
+
+            logger.info(`✨ Novo produto publicado: ${fullProduct.name} (${fullProduct.discount_percentage}% OFF)`);
+          }
+        } catch (error) {
+          results.errors++;
+          logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      results.errors++;
+      throw error;
+    }
+
+    return results;
+  }
+
+  /**
+   * Sincronizar AliExpress
+   */
+  async syncAliExpress(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // 1. Buscar produtos
+      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50);
+
+      // 2. Filtrar promoções
+      const promotions = aliExpressSync.filterAliExpressPromotions(
+        products,
+        config.min_discount_percentage
+      );
+
+      results.total = promotions.length;
+
+      // 3. Processar cada promoção
+      for (const promo of promotions) {
+        try {
+          // Salvar no banco
+          const { product, isNew } = await aliExpressSync.saveAliExpressToDatabase(promo, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Buscar produto completo com todos os dados (incluindo cupom se houver)
+            const fullProduct = await Product.findById(product.id);
+            
+            // Publicar e notificar
+            const publishResult = await publishService.publishAll(fullProduct);
+
+            // Log
+            await SyncLog.create({
+              platform: 'aliexpress',
               product_name: fullProduct.name,
               product_id: fullProduct.id,
               discount_percentage: fullProduct.discount_percentage,

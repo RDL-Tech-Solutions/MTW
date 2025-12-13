@@ -2,6 +2,8 @@
 export const PLATFORMS = {
   SHOPEE: 'shopee',
   MERCADOLIVRE: 'mercadolivre',
+  AMAZON: 'amazon',
+  ALIEXPRESS: 'aliexpress',
   GENERAL: 'general'
 };
 
@@ -115,6 +117,8 @@ export const JWT_CONFIG = {
 export const EXTERNAL_APIS = {
   SHOPEE: process.env.SHOPEE_API_URL || 'https://partner.shopeemobile.com/api/v2',
   MERCADOLIVRE: process.env.MELI_API_URL || 'https://api.mercadolibre.com',
+  AMAZON: process.env.AMAZON_API_URL || 'https://webservices.amazon.com.br/paapi5',
+  ALIEXPRESS: process.env.ALIEXPRESS_API_URL || 'https://api-sg.aliexpress.com/rest',
   EXPO_PUSH: 'https://exp.host/--/api/v2/push/send'
 };
 

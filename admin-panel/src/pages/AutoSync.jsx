@@ -17,6 +17,8 @@ export default function AutoSync() {
   const [config, setConfig] = useState({
     shopee_enabled: false,
     mercadolivre_enabled: false,
+    amazon_enabled: false,
+    aliexpress_enabled: false,
     keywords: '',
     min_discount_percentage: 10,
     categories: [],
@@ -43,6 +45,8 @@ export default function AutoSync() {
       setConfig({
         shopee_enabled: data.shopee_enabled || false,
         mercadolivre_enabled: data.mercadolivre_enabled || false,
+        amazon_enabled: data.amazon_enabled || false,
+        aliexpress_enabled: data.aliexpress_enabled || false,
         keywords: data.keywords || '',
         min_discount_percentage: data.min_discount_percentage || 10,
         categories: data.categories || [],
@@ -106,7 +110,7 @@ export default function AutoSync() {
 
   const handleRunNow = async () => {
     // Validação básica
-    if (!config.shopee_enabled && !config.mercadolivre_enabled) {
+    if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled) {
       toast({
         title: "Atenção",
         description: "Selecione pelo menos uma plataforma para sincronizar.",
@@ -139,8 +143,8 @@ export default function AutoSync() {
       const response = await api.post('/sync/run-now');
       const results = response.data.data;
 
-      const totalNew = results.mercadolivre.new + results.shopee.new;
-      const totalFound = results.mercadolivre.total + results.shopee.total;
+      const totalNew = (results.mercadolivre?.new || 0) + (results.shopee?.new || 0) + (results.amazon?.new || 0) + (results.aliexpress?.new || 0);
+      const totalFound = (results.mercadolivre?.total || 0) + (results.shopee?.total || 0) + (results.amazon?.total || 0) + (results.aliexpress?.total || 0);
 
       toast({
         title: "Sincronização concluída!",
@@ -172,7 +176,7 @@ export default function AutoSync() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Automação de Produtos</h1>
         <p className="text-muted-foreground mt-2">
-          Capture automaticamente promoções da Shopee e Mercado Livre
+          Capture automaticamente promoções de múltiplas plataformas (Mercado Livre, Shopee, Amazon, AliExpress)
         </p>
       </div>
 
@@ -218,7 +222,34 @@ export default function AutoSync() {
               <Package className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.shopee}</div>
+              <div className="text-2xl font-bold">{stats.shopee || 0}</div>
+              <p className="text-xs text-muted-foreground">Produtos capturados</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Estatísticas por Plataforma (Expandido) */}
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Amazon</CardTitle>
+              <Package className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.amazon || 0}</div>
+              <p className="text-xs text-muted-foreground">Produtos capturados</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">AliExpress</CardTitle>
+              <Package className="h-4 w-4 text-red-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.aliexpress || 0}</div>
               <p className="text-xs text-muted-foreground">Produtos capturados</p>
             </CardContent>
           </Card>
@@ -268,6 +299,24 @@ export default function AutoSync() {
                 id="mercadolivre"
               />
               <Label htmlFor="mercadolivre" className="font-normal">Mercado Livre</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={config.amazon_enabled}
+                onCheckedChange={(checked) => setConfig({ ...config, amazon_enabled: checked })}
+                id="amazon"
+              />
+              <Label htmlFor="amazon" className="font-normal">Amazon</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={config.aliexpress_enabled}
+                onCheckedChange={(checked) => setConfig({ ...config, aliexpress_enabled: checked })}
+                id="aliexpress"
+              />
+              <Label htmlFor="aliexpress" className="font-normal">AliExpress</Label>
             </div>
           </div>
 
