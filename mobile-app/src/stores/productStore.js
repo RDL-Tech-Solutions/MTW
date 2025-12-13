@@ -77,7 +77,7 @@ export const useProductStore = create((set, get) => ({
   fetchFavorites: async () => {
     set({ isLoading: true });
     try {
-      const response = await api.get('/users/favorites');
+      const response = await api.get('/favorites');
       const favorites = response.data.data || [];
       
       // Salvar no cache local
@@ -103,7 +103,7 @@ export const useProductStore = create((set, get) => ({
   // Adicionar favorito
   addFavorite: async (productId) => {
     try {
-      await api.post(`/users/favorites/${productId}`);
+      await api.post(`/favorites/${productId}`);
       
       // Buscar produto completo se não estiver na lista
       let product = get().products.find(p => p.id === productId);
@@ -138,7 +138,7 @@ export const useProductStore = create((set, get) => ({
   // Remover favorito
   removeFavorite: async (productId) => {
     try {
-      await api.delete(`/users/favorites/${productId}`);
+      await api.delete(`/favorites/${productId}`);
       
       // Atualizar lista local
       const favorites = get().favorites.filter(f => f.id !== productId);

@@ -1,6 +1,6 @@
 import express from 'express';
 import NotificationController from '../controllers/notificationController.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 import { validate, registerPushTokenSchema } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -9,6 +9,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 router.get('/', NotificationController.list);
+router.get('/stats', requireAdmin, NotificationController.stats);
 router.get('/unread/count', NotificationController.countUnread);
 router.put('/:id/read', NotificationController.markAsRead);
 router.put('/read-all', NotificationController.markAllAsRead);

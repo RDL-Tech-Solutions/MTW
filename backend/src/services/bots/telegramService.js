@@ -1,5 +1,6 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
+import Category from '../../models/Category.js';
 
 class TelegramService {
   constructor() {
@@ -405,9 +406,9 @@ class TelegramService {
   /**
    * Formatar mensagem de nova promoção
    * @param {Object} promotion - Dados da promoção
-   * @returns {string}
+   * @returns {Promise<string>}
    */
-  formatPromotionMessage(promotion) {
+  async formatPromotionMessage(promotion) {
     const discount = promotion.discount_percentage 
       ? `${promotion.discount_percentage}% OFF` 
       : '';
@@ -416,6 +417,19 @@ class TelegramService {
       ? `~~R$ ${promotion.old_price.toFixed(2)}~~ ` 
       : '';
 
+    // Buscar categoria se não estiver no objeto
+    let categoryName = promotion.category_name || 'Geral';
+    if (!categoryName && promotion.category_id) {
+      try {
+        const category = await Category.findById(promotion.category_id);
+        if (category) {
+          categoryName = category.name;
+        }
+      } catch (error) {
+        // Ignorar erro
+      }
+    }
+
     return `🔥 *Nova Promoção!*
 
 🛍 *${promotion.name}*
@@ -423,7 +437,7 @@ class TelegramService {
 ${oldPrice}💰 *R$ ${promotion.current_price.toFixed(2)}* ${discount}
 
 🏪 Loja: ${this.getPlatformName(promotion.platform)}
-📦 Categoria: ${promotion.category_name || 'Geral'}
+📦 Categoria: ${categoryName}
 
 [🔗 Ver Oferta](${promotion.affiliate_link})
 

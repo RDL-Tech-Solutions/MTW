@@ -44,13 +44,15 @@ HOST=0.0.0.0                  # Aceita conexões de qualquer IP
 
 ```env
 SUPABASE_URL=https://rsulwtpvvjkysqqsbtlq.supabase.co
-SUPABASE_ANON_KEY=eyJhbGci...
-SUPABASE_SERVICE_KEY=eyJhbGci...
+SUPABASE_ANON_KEY=eyJhbGci...  # Para OAuth social (Google/Facebook)
+SUPABASE_SERVICE_KEY=eyJhbGci...  # Para operações admin
 ```
 
 **Status**: ✅ Configurado e funcionando  
-**Ação**: Nenhuma necessária  
+**Ação**: ⚠️ **SUPABASE_ANON_KEY necessário para OAuth social**  
 **Onde obter**: https://supabase.com/dashboard/project/_/settings/api
+
+**Nota**: A `SUPABASE_ANON_KEY` é usada apenas no backend para OAuth. O mobile app não precisa dela diretamente.
 
 ---
 

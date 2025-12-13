@@ -1,10 +1,14 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useThemeStore } from '../../theme/theme';
+import { getPlatformIcon, getPlatformColor, getPlatformName } from '../../utils/platformIcons';
 
 /**
  * Componente de card de cupom baseado no design do Mercado Livre e Shopee
  */
 export default function CouponCard({ coupon, onPress }) {
+  const { colors } = useThemeStore();
   const getPlatformStyle = () => {
     switch (coupon.platform) {
       case 'mercadolivre':
@@ -20,20 +24,8 @@ export default function CouponCard({ coupon, onPress }) {
     }
   };
 
-  const getPlatformIcon = () => {
-    switch (coupon.platform) {
-      case 'mercadolivre':
-        return '🛒';
-      case 'shopee':
-        return '🛍️';
-      case 'amazon':
-        return '📦';
-      case 'aliexpress':
-        return '🌐';
-      default:
-        return '🎁';
-    }
-  };
+  // Usar ícone oficial da plataforma
+  const PlatformIconComponent = getPlatformIcon(coupon.platform, 24);
 
   const formatDiscount = () => {
     if (coupon.discount_type === 'percentage') {
@@ -85,26 +77,50 @@ export default function CouponCard({ coupon, onPress }) {
     return `Em produtos selecionados${coupon.applicable_products?.length ? ` (${coupon.applicable_products.length})` : ''}`;
   };
 
+  const cardStyles = StyleSheet.create({
+    card: {
+      backgroundColor: coupon.is_exclusive ? '#FFF9E6' : colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginVertical: 8,
+      marginHorizontal: 16,
+      borderWidth: coupon.is_exclusive ? 2 : 0,
+      borderColor: coupon.is_exclusive ? '#FFD700' : 'transparent',
+      ...(Platform.OS === 'web' ? {
+        boxShadow: coupon.is_exclusive 
+          ? '0 4px 12px rgba(255, 215, 0, 0.3)' 
+          : '0 2px 4px rgba(0, 0, 0, 0.1)',
+      } : {
+        elevation: coupon.is_exclusive ? 6 : 3,
+      }),
+    },
+  });
+
   return (
     <TouchableOpacity
-      style={[styles.card, getPlatformStyle()]}
+      style={[cardStyles.card, getPlatformStyle()]}
       onPress={onPress}
       activeOpacity={0.8}
     >
+      {/* Badge de Exclusivo */}
+      {coupon.is_exclusive && (
+        <View style={styles.exclusiveBadge}>
+          <Ionicons name="star" size={16} color="#FFD700" />
+          <Text style={styles.exclusiveText}>EXCLUSIVO</Text>
+        </View>
+      )}
+
       {/* Header com ícone e plataforma */}
       <View style={styles.header}>
         <View style={styles.iconContainer}>
-          <Text style={styles.icon}>{getPlatformIcon()}</Text>
+          {PlatformIconComponent}
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.platformName}>
-            {coupon.platform === 'mercadolivre' ? 'MERCADO LIVRE' : 
-             coupon.platform === 'shopee' ? 'SHOPEE' :
-             coupon.platform === 'amazon' ? 'AMAZON' :
-             coupon.platform === 'aliexpress' ? 'ALIEXPRESS' : 'CUPOM'}
+          <Text style={[styles.platformName, { color: colors.textMuted }]}>
+            {getPlatformName(coupon.platform).toUpperCase()}
           </Text>
           {coupon.title && (
-            <Text style={styles.couponTitle} numberOfLines={2}>
+            <Text style={[styles.couponTitle, { color: colors.text }]} numberOfLines={2}>
               {coupon.title}
             </Text>
           )}
@@ -113,28 +129,28 @@ export default function CouponCard({ coupon, onPress }) {
 
       {/* Valor do desconto */}
       <View style={styles.discountContainer}>
-        <Text style={styles.discountValue}>{formatDiscount()}</Text>
+        <Text style={[styles.discountValue, { color: colors.text }]}>{formatDiscount()}</Text>
       </View>
 
       {/* Condições */}
       <View style={styles.conditionsContainer}>
         {formatMinPurchase() && (
-          <Text style={styles.conditionText}>{formatMinPurchase()}</Text>
+          <Text style={[styles.conditionText, { color: colors.textMuted }]}>{formatMinPurchase()}</Text>
         )}
         {formatMaxDiscount() && (
-          <Text style={styles.conditionText}>{formatMaxDiscount()}</Text>
+          <Text style={[styles.conditionText, { color: colors.textMuted }]}>{formatMaxDiscount()}</Text>
         )}
-        <Text style={styles.applicabilityText}>{getApplicabilityText()}</Text>
+        <Text style={[styles.applicabilityText, { color: colors.textLight }]}>{getApplicabilityText()}</Text>
       </View>
 
       {/* Divisor */}
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: colors.border, borderColor: colors.borderDark }]} />
 
       {/* Footer */}
       <View style={styles.footer}>
         <View style={styles.expiryContainer}>
           <Text style={styles.clockIcon}>🕐</Text>
-          <Text style={styles.expiryText}>{formatExpiry() || 'Sem data de expiração'}</Text>
+          <Text style={[styles.expiryText, { color: colors.textMuted }]}>{formatExpiry() || 'Sem data de expiração'}</Text>
         </View>
         <TouchableOpacity style={styles.actionButton}>
           <Text style={styles.actionButtonText}>
@@ -147,17 +163,22 @@ export default function CouponCard({ coupon, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
+  exclusiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
-    padding: 16,
-    marginVertical: 8,
-    marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 8,
+    gap: 4,
+  },
+  exclusiveText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
+    letterSpacing: 0.5,
   },
   meliCard: {
     borderLeftWidth: 4,
@@ -202,7 +223,6 @@ const styles = StyleSheet.create({
   platformName: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#6B7280',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -210,7 +230,6 @@ const styles = StyleSheet.create({
   couponTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
   },
   discountContainer: {
     marginBottom: 12,
@@ -218,19 +237,16 @@ const styles = StyleSheet.create({
   discountValue: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#111827',
   },
   conditionsContainer: {
     marginBottom: 12,
   },
   conditionText: {
     fontSize: 14,
-    color: '#6B7280',
     marginBottom: 4,
   },
   applicabilityText: {
     fontSize: 13,
-    color: '#9CA3AF',
     marginBottom: 8,
   },
   limitBadge: {
@@ -247,11 +263,9 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
     marginVertical: 12,
     borderStyle: 'dashed',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
   },
   footer: {
     flexDirection: 'row',
@@ -269,7 +283,6 @@ const styles = StyleSheet.create({
   },
   expiryText: {
     fontSize: 12,
-    color: '#6B7280',
   },
   actionButton: {
     backgroundColor: '#EE4D2D', // Cor padrão (Shopee/Mercado Livre)

@@ -68,9 +68,13 @@ export const SCREEN_NAMES = {
   
   // Stack
   PRODUCT_DETAILS: 'ProductDetails',
+  COUPON_DETAILS: 'CouponDetails',
+  EDIT_PROFILE: 'EditProfile',
   PRODUCT_LIST: 'ProductList',
   COUPON_LIST: 'CouponList',
   SETTINGS: 'Settings',
+  NOTIFICATION_SETTINGS: 'NotificationSettings',
+  HOME_FILTERS: 'HomeFilters',
   VIP_UPGRADE: 'VIPUpgrade',
   ABOUT: 'About',
 };
@@ -94,9 +98,9 @@ export const API_ENDPOINTS = {
   
   // User
   USER_ME: '/users/me',
-  USER_FAVORITES: '/users/favorites',
-  ADD_FAVORITE: (id) => `/users/favorites/${id}`,
-  REMOVE_FAVORITE: (id) => `/users/favorites/${id}`,
+  USER_FAVORITES: '/favorites',
+  ADD_FAVORITE: (id) => `/favorites/${id}`,
+  REMOVE_FAVORITE: (id) => `/favorites/${id}`,
   PUSH_TOKEN: '/users/push-token',
 };
 

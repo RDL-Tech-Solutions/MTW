@@ -1,29 +1,62 @@
 import supabase from '../config/database.js';
 import { hashPassword } from '../utils/helpers.js';
+import crypto from 'crypto';
 
 class User {
   // Criar novo usuário
   static async create(userData) {
-    const { name, email, password, role = 'user', is_vip = false } = userData;
+    const { 
+      name, 
+      email, 
+      password, 
+      role = 'user', 
+      is_vip = false,
+      provider,
+      provider_id,
+      avatar_url
+    } = userData;
     
-    const hashedPassword = await hashPassword(password);
+    // Se não tem senha (login social), usar um hash padrão temporário
+    // O banco exige password_hash NOT NULL, mas usuários sociais não têm senha
+    let hashedPassword = null;
+    if (password) {
+      hashedPassword = await hashPassword(password);
+    } else {
+      // Para login social, gerar um hash aleatório que nunca será usado
+      // Isso satisfaz a constraint NOT NULL do banco
+      const randomString = crypto.randomBytes(32).toString('hex');
+      hashedPassword = await hashPassword(randomString);
+    }
+    
+    const insertData = {
+      name,
+      email,
+      password_hash: hashedPassword, // Sempre preencher password_hash
+      role,
+      is_vip,
+    }
+
+    // Adicionar dados de autenticação social se fornecidos
+    if (provider) {
+      insertData.provider = provider;
+      insertData.provider_id = provider_id;
+    }
+
+    if (avatar_url) {
+      insertData.avatar_url = avatar_url;
+    }
     
     const { data, error } = await supabase
       .from('users')
-      .insert([{
-        name,
-        email,
-        password: hashedPassword,
-        role,
-        is_vip
-      }])
+      .insert([insertData])
       .select()
       .single();
     
     if (error) throw error;
     
-    // Remover senha do retorno
+    // Remover senhas do retorno
     delete data.password;
+    delete data.password_hash;
     return data;
   }
 
@@ -62,7 +95,9 @@ class User {
     
     if (error) throw error;
     
+    // Remover senhas do retorno
     delete data.password;
+    delete data.password_hash;
     return data;
   }
 

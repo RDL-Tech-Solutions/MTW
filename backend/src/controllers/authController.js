@@ -246,6 +246,213 @@ class AuthController {
       next(error);
     }
   }
+
+  // Obter URL de autenticação OAuth
+  static async getOAuthUrl(req, res, next) {
+    try {
+      const { provider, redirect_url } = req.body;
+
+      if (!provider || !['google', 'facebook'].includes(provider)) {
+        return res.status(400).json(
+          errorResponse('Provider inválido. Use "google" ou "facebook"', 'INVALID_PROVIDER')
+        );
+      }
+
+      const { getOAuthUrl } = await import('../services/supabaseAuth.js');
+      const oauthUrl = await getOAuthUrl(provider, redirect_url || req.headers.origin);
+
+      res.json(
+        successResponse({ url: oauthUrl }, 'URL de autenticação gerada')
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Trocar código por sessão e autenticar
+  static async socialAuthCallback(req, res, next) {
+    try {
+      // Aceitar tanto GET (web redirect) quanto POST (mobile)
+      const code = req.query.code || req.body.code;
+      const provider = req.query.provider || req.body.provider;
+      const redirectUrl = req.body.redirect_url || req.headers.origin || 'http://localhost:8081';
+
+      if (!code) {
+        return res.status(400).json(
+          errorResponse('Código de autorização não fornecido', 'MISSING_CODE')
+        );
+      }
+
+      // Trocar código por sessão Supabase
+      const { exchangeCodeForSession } = await import('../services/supabaseAuth.js');
+      const sessionData = await exchangeCodeForSession(code);
+
+      if (!sessionData.session || !sessionData.user) {
+        return res.status(400).json(
+          errorResponse('Falha ao obter sessão do Supabase', 'SESSION_ERROR')
+        );
+      }
+
+      const { user: supabaseUser } = sessionData.session;
+
+      // Extrair dados do usuário
+      const authProvider = provider || supabaseUser.app_metadata?.provider || 'unknown';
+      const providerId = supabaseUser.id;
+      const email = supabaseUser.email;
+      const userMetadata = supabaseUser.user_metadata || {};
+      const name = userMetadata.full_name || userMetadata.name || userMetadata.display_name || email?.split('@')[0] || 'Usuário';
+      const avatarUrl = userMetadata.avatar_url || userMetadata.picture || userMetadata.photo_url;
+
+      if (!email) {
+        return res.status(400).json(
+          errorResponse('Email não encontrado na sessão', 'MISSING_EMAIL')
+        );
+      }
+
+      // Buscar ou criar usuário
+      let user = await User.findByProviderId(authProvider, providerId);
+
+      if (!user) {
+        user = await User.findByEmail(email);
+      }
+
+      if (user) {
+        // Usuário existe - atualizar dados
+        const updates = {};
+        if (!user.provider || user.provider !== authProvider) {
+          updates.provider = authProvider;
+          updates.provider_id = providerId;
+        }
+        if (avatarUrl && user.avatar_url !== avatarUrl) {
+          updates.avatar_url = avatarUrl;
+        }
+        if (name && user.name !== name) {
+          updates.name = name;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await User.update(user.id, updates);
+          user = await User.findById(user.id);
+        }
+      } else {
+        // Criar novo usuário
+        user = await User.create({
+          name,
+          email,
+          provider: authProvider,
+          provider_id: providerId,
+          avatar_url: avatarUrl,
+          password: null, // Login social não precisa de senha
+        });
+      }
+
+      // Remover senhas do retorno
+      delete user.password;
+      delete user.password_hash;
+
+      // Gerar tokens JWT
+      const token = generateToken({ id: user.id, email: user.email, role: user.role });
+      const refreshToken = generateRefreshToken({ id: user.id });
+
+      logger.info(`Login social realizado: ${email} via ${authProvider}`);
+
+      // Se for GET (web), redirecionar. Se for POST (mobile), retornar JSON
+      if (req.method === 'GET') {
+        const finalRedirectUrl = `${redirectUrl}?token=${token}&refreshToken=${refreshToken}`;
+        res.redirect(finalRedirectUrl);
+      } else {
+        res.json(
+          successResponse(
+            {
+              user,
+              token,
+              refreshToken
+            },
+            `Login com ${authProvider} realizado com sucesso`
+          )
+        );
+      }
+    } catch (error) {
+      logger.error(`Erro no callback OAuth: ${error.message}`);
+      next(error);
+    }
+  }
+
+  // Login/Registro com autenticação social (dados diretos - para mobile)
+  static async socialAuth(req, res, next) {
+    try {
+      const { provider, provider_id, email, name, avatar_url, supabase_token } = req.body;
+
+      if (!provider || !provider_id || !email) {
+        return res.status(400).json(
+          errorResponse('Dados de autenticação social incompletos', 'INVALID_SOCIAL_DATA')
+        );
+      }
+
+      // Primeiro, tentar buscar por provider_id
+      let user = await User.findByProviderId(provider, provider_id);
+
+      // Se não encontrou, buscar por email
+      if (!user) {
+        user = await User.findByEmail(email);
+      }
+
+      if (user) {
+        // Usuário existe - fazer login
+        // Atualizar dados se necessário
+        const updates = {};
+        if (!user.provider || user.provider !== provider) {
+          updates.provider = provider;
+          updates.provider_id = provider_id;
+        }
+        if (avatar_url && user.avatar_url !== avatar_url) {
+          updates.avatar_url = avatar_url;
+        }
+        if (name && user.name !== name) {
+          updates.name = name;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await User.update(user.id, updates);
+          user = await User.findById(user.id);
+        }
+      } else {
+        // Criar novo usuário
+        user = await User.create({
+          name: name || email.split('@')[0],
+          email,
+          provider,
+          provider_id,
+          avatar_url,
+          // Não precisa de senha para login social
+          password: null,
+        });
+      }
+
+      // Remover senhas do retorno
+      delete user.password;
+      delete user.password_hash;
+
+      // Gerar tokens JWT
+      const token = generateToken({ id: user.id, email: user.email, role: user.role });
+      const refreshToken = generateRefreshToken({ id: user.id });
+
+      logger.info(`Login social realizado: ${email} via ${provider}`);
+
+      res.json(
+        successResponse(
+          {
+            user,
+            token,
+            refreshToken
+          },
+          `Login com ${provider} realizado com sucesso`
+        )
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default AuthController;

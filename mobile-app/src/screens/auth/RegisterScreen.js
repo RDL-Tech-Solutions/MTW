@@ -9,6 +9,7 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -22,8 +23,9 @@ export default function RegisterScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState({ google: false, facebook: false });
   
-  const { register } = useAuthStore();
+  const { register, loginWithGoogle, loginWithFacebook } = useAuthStore();
 
   const validate = () => {
     const newErrors = {};
@@ -63,6 +65,26 @@ export default function RegisterScreen({ navigation }) {
 
     if (!result.success) {
       Alert.alert('Erro', result.error || 'Erro ao criar conta');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setSocialLoading({ ...socialLoading, google: true });
+    const result = await loginWithGoogle();
+    setSocialLoading({ ...socialLoading, google: false });
+
+    if (!result.success) {
+      Alert.alert('Erro', result.error || 'Erro ao fazer login com Google');
+    }
+  };
+
+  const handleFacebookLogin = async () => {
+    setSocialLoading({ ...socialLoading, facebook: true });
+    const result = await loginWithFacebook();
+    setSocialLoading({ ...socialLoading, facebook: false });
+
+    if (!result.success) {
+      Alert.alert('Erro', result.error || 'Erro ao fazer login com Facebook');
     }
   };
 
@@ -128,6 +150,45 @@ export default function RegisterScreen({ navigation }) {
             style={styles.registerButton}
           />
 
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>ou</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Botões de Registro Social */}
+          <View style={styles.socialContainer}>
+            <TouchableOpacity
+              style={[styles.socialButton, styles.googleButton]}
+              onPress={handleGoogleLogin}
+              disabled={socialLoading.google || loading}
+            >
+              {socialLoading.google ? (
+                <Text style={styles.socialButtonText}>Carregando...</Text>
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color={colors.white} />
+                  <Text style={styles.socialButtonText}>Continuar com Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.socialButton, styles.facebookButton]}
+              onPress={handleFacebookLogin}
+              disabled={socialLoading.facebook || loading}
+            >
+              {socialLoading.facebook ? (
+                <Text style={styles.socialButtonText}>Carregando...</Text>
+              ) : (
+                <>
+                  <Ionicons name="logo-facebook" size={20} color={colors.white} />
+                  <Text style={styles.socialButtonText}>Continuar com Facebook</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity 
             style={styles.loginLink}
             onPress={() => navigation.goBack()}
@@ -181,6 +242,45 @@ const styles = StyleSheet.create({
   },
   loginLinkBold: {
     color: colors.primary,
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  socialContainer: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    gap: 12,
+  },
+  googleButton: {
+    backgroundColor: '#4285F4',
+  },
+  facebookButton: {
+    backgroundColor: '#1877F2',
+  },
+  socialButtonText: {
+    color: colors.white,
+    fontSize: 16,
     fontWeight: '600',
   },
 });

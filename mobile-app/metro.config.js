@@ -5,6 +5,10 @@ const config = getDefaultConfig(__dirname);
 // Adicionar extensões suportadas
 config.resolver.sourceExts.push('cjs');
 
+// DESABILITAR package.exports para evitar erro import.meta
+// Isso resolve o erro "Cannot use 'import.meta' outside a module"
+config.resolver.unstable_enablePackageExports = false;
+
 // Configuração para evitar problemas com import.meta
 config.transformer = {
   ...config.transformer,

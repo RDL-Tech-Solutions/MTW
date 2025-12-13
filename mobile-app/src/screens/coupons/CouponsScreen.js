@@ -7,11 +7,16 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import CouponCard from '../../components/coupons/CouponCard';
+import EmptyState from '../../components/common/EmptyState';
+import { useThemeStore } from '../../theme/theme';
 import api from '../../services/api';
+import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
 
 export default function CouponsScreen({ navigation }) {
+  const { colors } = useThemeStore();
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,20 +35,29 @@ export default function CouponsScreen({ navigation }) {
         is_active: true,
       };
 
-      if (filter !== 'all') {
+      if (filter && filter !== 'all') {
         params.platform = filter;
       }
 
       const response = await api.get('/coupons', { params });
       const data = response.data.data;
 
+      let couponsList = [];
       if (Array.isArray(data)) {
-        setCoupons(data);
+        couponsList = data;
       } else if (data.coupons) {
-        setCoupons(data.coupons);
-      } else {
-        setCoupons([]);
+        couponsList = data.coupons;
       }
+
+      // Ordenar: cupons exclusivos primeiro, depois os demais
+      couponsList.sort((a, b) => {
+        if (a.is_exclusive && !b.is_exclusive) return -1;
+        if (!a.is_exclusive && b.is_exclusive) return 1;
+        // Se ambos são exclusivos ou ambos não são, manter ordem original
+        return 0;
+      });
+
+      setCoupons(couponsList);
     } catch (error) {
       console.error('Erro ao carregar cupons:', error);
       setCoupons([]);
@@ -59,7 +73,7 @@ export default function CouponsScreen({ navigation }) {
   };
 
   const handleCouponPress = (coupon) => {
-    navigation.navigate('CouponDetails', { coupon });
+    navigation.navigate(SCREEN_NAMES.COUPON_DETAILS, { coupon });
   };
 
   const renderCoupon = ({ item }) => (
@@ -67,24 +81,27 @@ export default function CouponsScreen({ navigation }) {
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>🎁</Text>
-      <Text style={styles.emptyText}>Nenhum cupom disponível</Text>
-      <Text style={styles.emptySubtext}>
-        Novos cupons serão exibidos aqui quando disponíveis
-      </Text>
-    </View>
+    <EmptyState
+      icon="ticket-outline"
+      title="Nenhum cupom disponível"
+      message="Novos cupons serão exibidos aqui quando disponíveis"
+      iconColor={colors.primary}
+    />
   );
 
   const renderHeader = () => (
-    <View style={styles.header}>
-      <Text style={styles.title}>Cupons Ativos</Text>
+    <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Cupons Ativos</Text>
       <View style={styles.filterContainer}>
-        {['all', 'mercadolivre', 'shopee', 'amazon', 'aliexpress'].map((platform) => (
+        {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => (
           <TouchableOpacity
             key={platform}
             style={[
               styles.filterButton,
+              { 
+                backgroundColor: filter === platform ? colors.primary : colors.card,
+                borderColor: filter === platform ? colors.primary : colors.border,
+              },
               filter === platform && styles.filterButtonActive,
             ]}
             onPress={() => setFilter(platform)}
@@ -92,14 +109,11 @@ export default function CouponsScreen({ navigation }) {
             <Text
               style={[
                 styles.filterText,
+                { color: filter === platform ? colors.white : colors.textMuted },
                 filter === platform && styles.filterTextActive,
               ]}
             >
-              {platform === 'all' ? 'Todos' :
-               platform === 'mercadolivre' ? 'Mercado Livre' :
-               platform === 'shopee' ? 'Shopee' :
-               platform === 'amazon' ? 'Amazon' :
-               'AliExpress'}
+              {platform === 'all' ? 'Todos' : PLATFORM_LABELS[platform] || platform}
             </Text>
           </TouchableOpacity>
         ))}
@@ -109,15 +123,15 @@ export default function CouponsScreen({ navigation }) {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#EE4D2D" />
-        <Text style={styles.loadingText}>Carregando cupons...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textMuted }]}>Carregando cupons...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={coupons}
         renderItem={renderCoupon}
@@ -128,7 +142,8 @@ export default function CouponsScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#EE4D2D']}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
         contentContainerStyle={styles.listContent}
@@ -140,32 +155,26 @@ export default function CouponsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6B7280',
   },
   listContent: {
     paddingVertical: 8,
   },
   header: {
     padding: 16,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111827',
     marginBottom: 16,
   },
   filterContainer: {
@@ -177,43 +186,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    } : {
+      elevation: 1,
+    }),
   },
   filterButtonActive: {
-    backgroundColor: '#EE4D2D',
-    borderColor: '#EE4D2D',
+    // Estilos adicionais se necessário
   },
   filterText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
   },
   filterTextActive: {
-    color: '#FFFFFF',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    minHeight: 400,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
   },
 });
-

@@ -22,11 +22,74 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1); // Confiar no primeiro proxy
 
 // Middlewares de segurança
-app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || '*',
-  credentials: true
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
+
+// Configurar CORS
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:19006',
+  'http://localhost:8081', // Expo Web
+  'http://localhost:3000',
+];
+
+// Se CORS_ORIGIN estiver definido, usar ele + adicionar localhost:8081 se não estiver presente
+let allowedOrigins = defaultOrigins;
+if (process.env.CORS_ORIGIN) {
+  const envOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim()).filter(o => o);
+  allowedOrigins = [...new Set([...envOrigins, ...defaultOrigins])]; // Merge e remove duplicatas
+}
+
+// Log de origens permitidas no startup
+logger.info(`🌐 CORS: Origens permitidas: ${allowedOrigins.join(', ')}`);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Permitir requisições sem origin (mobile apps nativos, Postman, etc)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Verificar se origin está na lista
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Em desenvolvimento, logar para debug
+      if (process.env.NODE_ENV === 'development') {
+        logger.warn(`⚠️  CORS: Origin bloqueada: ${origin}`);
+        logger.info(`📋 CORS: Origens permitidas: ${allowedOrigins.join(', ')}`);
+      }
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400, // 24 horas
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitamente (antes das rotas)
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400');
+    res.sendStatus(204);
+  } else {
+    res.sendStatus(403);
+  }
+});
 
 // Middlewares gerais
 app.use(compression());

@@ -20,22 +20,92 @@ class PublishService {
   }
 
   /**
-   * Enviar notificação push (se implementado)
+   * Enviar notificação push usando preferências do usuário
    */
   async notifyPush(product) {
     try {
-      // TODO: Implementar push notifications
-      // Exemplo com Firebase Cloud Messaging:
-      // await admin.messaging().send({
-      //   notification: {
-      //     title: '🔥 Nova Promoção!',
-      //     body: `${product.name} - ${product.discount_percentage}% OFF`
-      //   },
-      //   topic: 'new-promotions'
-      // });
+      const Notification = (await import('../../models/Notification.js')).default;
+      const NotificationPreference = (await import('../../models/NotificationPreference.js')).default;
+      const User = (await import('../../models/User.js')).default;
+      const pushNotificationService = (await import('../pushNotification.js')).default;
 
-      logger.info(`🔔 Push notification: ${product.name}`);
-      return true;
+      // Buscar usuários que devem receber notificação
+      const usersToNotify = [];
+
+      // 1. Usuários que têm a categoria nas preferências
+      if (product.category_id) {
+        const usersByCategory = await NotificationPreference.findUsersByCategory(product.category_id);
+        usersToNotify.push(...usersByCategory.map(u => u.user_id));
+      }
+
+      // 2. Usuários que têm palavra-chave nas preferências
+      const productNameLower = product.name.toLowerCase();
+      const words = productNameLower.split(/\s+/);
+      for (const word of words) {
+        if (word.length > 3) { // Ignorar palavras muito curtas
+          const usersByKeyword = await NotificationPreference.findUsersByKeyword(word);
+          usersToNotify.push(...usersByKeyword.map(u => u.user_id));
+        }
+      }
+
+      // 3. Usuários que têm o nome do produto nas preferências
+      const usersByProductName = await NotificationPreference.findUsersByProductName(product.name);
+      usersToNotify.push(...usersByProductName.map(u => u.user_id));
+
+      // Remover duplicatas
+      const uniqueUserIds = [...new Set(usersToNotify)];
+
+      if (uniqueUserIds.length === 0) {
+        logger.info(`🔔 Nenhum usuário para notificar sobre: ${product.name}`);
+        return true;
+      }
+
+      // Criar notificações para cada usuário
+      const notifications = [];
+      for (const userId of uniqueUserIds) {
+        try {
+          const user = await User.findById(userId);
+          if (user && user.push_token) {
+            notifications.push({
+              user_id: userId,
+              title: '🔥 Nova Promoção!',
+              message: `${product.name} - ${product.discount_percentage || 0}% OFF`,
+              type: 'new_product',
+              related_product_id: product.id,
+            });
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar usuário ${userId}: ${error.message}`);
+        }
+      }
+
+      if (notifications.length === 0) {
+        logger.info(`🔔 Nenhuma notificação criada para: ${product.name}`);
+        return true;
+      }
+
+      // Criar notificações no banco
+      const createdNotifications = await Notification.createBulk(notifications);
+
+      // Enviar push notifications
+      let sentCount = 0;
+      for (const createdNotification of createdNotifications) {
+        try {
+          const user = await User.findById(createdNotification.user_id);
+          if (user && user.push_token) {
+            const sent = await pushNotificationService.sendToUser(user.push_token, createdNotification);
+            if (sent) {
+              await Notification.markAsSent(createdNotification.id);
+              sentCount++;
+            }
+          }
+        } catch (error) {
+          logger.error(`Erro ao enviar push para usuário ${createdNotification.user_id}: ${error.message}`);
+        }
+      }
+
+      logger.info(`🔔 Push notifications: ${sentCount}/${notifications.length} enviadas para: ${product.name}`);
+      return sentCount > 0;
     } catch (error) {
       logger.error(`❌ Erro ao enviar push: ${error.message}`);
       return false;
@@ -252,6 +322,19 @@ class PublishService {
     }
     message += `💰 *Por: ${priceFormatted}* ${product.discount_percentage || 0}% OFF\n\n`;
     message += `🛒 *Loja:* ${platformName}\n`;
+    
+    // Adicionar categoria se disponível
+    if (product.category_id) {
+      try {
+        const Category = (await import('../../models/Category.js')).default;
+        const category = await Category.findById(product.category_id);
+        if (category) {
+          message += `📦 *Categoria:* ${category.name}\n`;
+        }
+      } catch (error) {
+        logger.warn(`Erro ao buscar categoria no fallback: ${error.message}`);
+      }
+    }
 
     // Adicionar informações de cupom se houver
     if (product.coupon_id) {

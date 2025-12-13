@@ -5,19 +5,24 @@ import {
   FlatList, 
   StyleSheet, 
   RefreshControl,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../stores/productStore';
+import { useNotificationStore } from '../../stores/notificationStore';
+import { useThemeStore } from '../../theme/theme';
 import ProductCard from '../../components/common/ProductCard';
-import { SCREEN_NAMES } from '../../utils/constants';
-import colors from '../../theme/colors';
+import SearchBar from '../../components/common/SearchBar';
+import EmptyState from '../../components/common/EmptyState';
+import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
 
 export default function HomeScreen({ navigation }) {
   const { products, fetchProducts, addFavorite, removeFavorite, isFavorite, registerClick } = useProductStore();
+  const { preferences } = useNotificationStore();
+  const { colors } = useThemeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,39 +58,66 @@ export default function HomeScreen({ navigation }) {
   };
 
   const filteredProducts = products.filter(p => {
+    // Filtro de busca
     const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Filtro de plataforma (seleção manual)
     const matchesPlatform = platformFilter === 'all' || p.platform === platformFilter;
-    return matchesSearch && matchesPlatform;
+    
+    // Filtros das preferências do usuário
+    const homeFilters = preferences?.home_filters || {};
+    
+    // Filtro de plataformas (preferências)
+    const matchesPlatformFilter = !homeFilters.platforms || homeFilters.platforms.length === 0 || 
+      homeFilters.platforms.includes(p.platform);
+    
+    // Filtro de categorias
+    const matchesCategory = !homeFilters.categories || homeFilters.categories.length === 0 || 
+      (p.category_id && homeFilters.categories.includes(p.category_id));
+    
+    // Filtro de desconto mínimo
+    const discount = p.discount_percentage || 
+      Math.round(((p.old_price - p.current_price) / p.old_price) * 100);
+    const matchesMinDiscount = !homeFilters.min_discount || discount >= homeFilters.min_discount;
+    
+    // Filtro de preço máximo
+    const matchesMaxPrice = !homeFilters.max_price || p.current_price <= homeFilters.max_price;
+    
+    // Filtro de apenas com cupom
+    const matchesCoupon = !homeFilters.only_with_coupon || !!p.coupon_id;
+    
+    return matchesSearch && matchesPlatform && matchesPlatformFilter && 
+           matchesCategory && matchesMinDiscount && matchesMaxPrice && matchesCoupon;
   });
+
+  const styles = dynamicStyles(colors);
 
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.headerTop}>
-        <View>
+        <View style={styles.greetingContainer}>
           <Text style={styles.greeting}>Olá! 👋</Text>
           <Text style={styles.subtitle}>Encontre as melhores ofertas</Text>
         </View>
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
+        >
+          <Ionicons name="notifications-outline" size={24} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar produtos..."
-          placeholderTextColor={colors.textMuted}
+        <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
+          placeholder="Buscar produtos..."
         />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Filtro por Plataforma */}
       <View style={styles.platformFilterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.platformFilterScroll}>
           <TouchableOpacity
             style={[styles.platformFilter, platformFilter === 'all' && styles.platformFilterActive]}
             onPress={() => setPlatformFilter('all')}
@@ -94,62 +126,52 @@ export default function HomeScreen({ navigation }) {
               Todas
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.platformFilter, platformFilter === 'mercadolivre' && styles.platformFilterActive]}
-            onPress={() => setPlatformFilter('mercadolivre')}
-          >
-            <Text style={[styles.platformFilterText, platformFilter === 'mercadolivre' && styles.platformFilterTextActive]}>
-              Mercado Livre
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.platformFilter, platformFilter === 'shopee' && styles.platformFilterActive]}
-            onPress={() => setPlatformFilter('shopee')}
-          >
-            <Text style={[styles.platformFilterText, platformFilter === 'shopee' && styles.platformFilterTextActive]}>
-              Shopee
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.platformFilter, platformFilter === 'amazon' && styles.platformFilterActive]}
-            onPress={() => setPlatformFilter('amazon')}
-          >
-            <Text style={[styles.platformFilterText, platformFilter === 'amazon' && styles.platformFilterTextActive]}>
-              Amazon
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.platformFilter, platformFilter === 'aliexpress' && styles.platformFilterActive]}
-            onPress={() => setPlatformFilter('aliexpress')}
-          >
-            <Text style={[styles.platformFilterText, platformFilter === 'aliexpress' && styles.platformFilterTextActive]}>
-              AliExpress
-            </Text>
-          </TouchableOpacity>
+          {[PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => (
+            <TouchableOpacity
+              key={platform}
+              style={[styles.platformFilter, platformFilter === platform && styles.platformFilterActive]}
+              onPress={() => setPlatformFilter(platform)}
+            >
+              <Text style={[styles.platformFilterText, platformFilter === platform && styles.platformFilterTextActive]}>
+                {PLATFORM_LABELS[platform]}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
+          <View style={styles.statIconContainer}>
+            <Ionicons name="cube-outline" size={24} color={colors.primary} />
+          </View>
           <Text style={styles.statNumber}>{products.length}</Text>
           <Text style={styles.statLabel}>Produtos</Text>
         </View>
         <View style={styles.statCard}>
+          <View style={styles.statIconContainer}>
+            <Ionicons name="flame" size={24} color={colors.error} />
+          </View>
           <Text style={styles.statNumber}>🔥</Text>
           <Text style={styles.statLabel}>Em Destaque</Text>
+        </View>
+        <View style={styles.statCard}>
+          <View style={styles.statIconContainer}>
+            <Ionicons name="ticket-outline" size={24} color={colors.success} />
+          </View>
+          <Text style={styles.statNumber}>+50</Text>
+          <Text style={styles.statLabel}>Cupons</Text>
         </View>
       </View>
     </View>
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>📦</Text>
-      <Text style={styles.emptyTitle}>Nenhum produto encontrado</Text>
-      <Text style={styles.emptyText}>
-        {searchQuery ? 'Tente buscar por outro termo' : 'Aguarde novos produtos'}
-      </Text>
-    </View>
+    <EmptyState
+      icon="search-outline"
+      title="Nenhum produto encontrado"
+      message={searchQuery ? 'Tente buscar por outro termo' : 'Aguarde novos produtos'}
+    />
   );
 
   if (loading) {
@@ -186,56 +208,91 @@ export default function HomeScreen({ navigation }) {
           />
         }
         showsVerticalScrollIndicator={false}
+        numColumns={1}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const dynamicStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
   list: {
     padding: 16,
+    paddingBottom: 24,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+  },
+  greetingContainer: {
+    flex: 1,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textMuted,
-    marginTop: 4,
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    } : {
+      elevation: 2,
+    }),
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     marginBottom: 16,
-    borderWidth: 1,
+  },
+  platformFilterContainer: {
+    marginBottom: 20,
+  },
+  platformFilterScroll: {
+    paddingHorizontal: 4,
+  },
+  platformFilter: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    backgroundColor: colors.card,
+    marginRight: 10,
+    borderWidth: 1.5,
     borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    } : {
+      elevation: 1,
+    }),
   },
-  searchIcon: {
-    marginRight: 8,
+  platformFilterActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
+  platformFilterText: {
+    fontSize: 14,
     color: colors.text,
+    fontWeight: '600',
+  },
+  platformFilterTextActive: {
+    color: colors.white,
+    fontWeight: '700',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -243,15 +300,23 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+    } : {
+      elevation: 2,
+    }),
+  },
+  statIconContainer: {
+    marginBottom: 8,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.primary,
     marginBottom: 4,
@@ -259,6 +324,7 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: colors.textMuted,
+    fontWeight: '500',
   },
   loadingContainer: {
     flex: 1,
@@ -270,50 +336,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: colors.textMuted,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  platformFilterContainer: {
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  platformFilter: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.white,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  platformFilterActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  platformFilterText: {
-    fontSize: 14,
-    color: colors.text,
     fontWeight: '500',
-  },
-  platformFilterTextActive: {
-    color: colors.white,
-    fontWeight: '600',
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
   },
 });

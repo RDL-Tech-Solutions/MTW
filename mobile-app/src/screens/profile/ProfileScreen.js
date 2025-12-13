@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import colors from '../../theme/colors';
+import { SCREEN_NAMES } from '../../utils/constants';
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuthStore();
@@ -84,7 +85,13 @@ export default function ProfileScreen({ navigation }) {
           icon="person-outline"
           title="Editar Perfil"
           subtitle="Nome, email e senha"
-          onPress={() => navigation.navigate('EditProfile')}
+          onPress={() => navigation.navigate(SCREEN_NAMES.EDIT_PROFILE)}
+        />
+        <MenuItem
+          icon="settings-outline"
+          title="Configurações"
+          subtitle="Notificações e preferências"
+          onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
         />
         
         {!user?.is_vip && (
@@ -92,7 +99,7 @@ export default function ProfileScreen({ navigation }) {
             icon="star-outline"
             title="Seja VIP"
             subtitle="Acesso a ofertas exclusivas"
-            onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
+            onPress={() => navigation.navigate(SCREEN_NAMES.VIP_UPGRADE)}
           />
         )}
       </View>
@@ -101,17 +108,10 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.sectionTitle}>Preferências</Text>
         
         <MenuItem
-          icon="notifications-outline"
-          title="Notificações"
-          subtitle="Gerencie suas notificações"
-          onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
-        />
-        
-        <MenuItem
-          icon="language-outline"
-          title="Idioma"
-          subtitle="Português (Brasil)"
-          onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
+          icon="settings-outline"
+          title="Configurações"
+          subtitle="Notificações e preferências"
+          onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
         />
       </View>
 
@@ -119,29 +119,10 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.sectionTitle}>Sobre</Text>
         
         <MenuItem
-          icon="help-circle-outline"
-          title="Ajuda"
-          subtitle="Central de ajuda e FAQ"
-          onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
-        />
-        
-        <MenuItem
-          icon="document-text-outline"
-          title="Termos de Uso"
-          onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
-        />
-        
-        <MenuItem
-          icon="shield-checkmark-outline"
-          title="Política de Privacidade"
-          onPress={() => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento')}
-        />
-        
-        <MenuItem
           icon="information-circle-outline"
           title="Sobre o App"
           subtitle="Versão 1.0.0"
-          onPress={() => Alert.alert('MTW Promo', 'Versão 1.0.0\n\nAs melhores ofertas em um só lugar!')}
+          onPress={() => navigation.navigate(SCREEN_NAMES.ABOUT)}
         />
       </View>
 

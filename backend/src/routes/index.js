@@ -11,6 +11,7 @@ import linkAnalyzerRoutes from './linkAnalyzerRoutes.js';
 import syncRoutes from './syncRoutes.js';
 import couponCaptureRoutes from './couponCaptureRoutes.js';
 import userRoutes from './userRoutes.js';
+import notificationPreferenceRoutes from './notificationPreferenceRoutes.js';
 
 const router = express.Router();
 
@@ -36,5 +37,6 @@ router.use('/link-analyzer', linkAnalyzerRoutes);
 router.use('/sync', syncRoutes);
 router.use('/coupon-capture', couponCaptureRoutes);
 router.use('/users', userRoutes);
+router.use('/notification-preferences', notificationPreferenceRoutes);
 
 export default router;

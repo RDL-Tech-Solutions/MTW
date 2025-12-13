@@ -6,6 +6,7 @@ import {
   StyleSheet, 
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../stores/productStore';
@@ -145,11 +146,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    // Web: usar boxShadow, Mobile: usar elevation
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    } : {
+      elevation: 2,
+    }),
   },
   iconContainer: {
     width: 64,

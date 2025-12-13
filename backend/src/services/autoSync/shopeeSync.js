@@ -2,6 +2,7 @@ import axios from 'axios';
 import logger from '../../config/logger.js';
 import shopeeService from '../shopee/shopeeService.js';
 import Coupon from '../../models/Coupon.js';
+import categoryDetector from '../categoryDetector.js';
 
 class ShopeeSync {
   /**
@@ -176,6 +177,19 @@ class ShopeeSync {
         logger.warn(`⚠️ Produto ${product.name} sem imagem válida`);
         // Usar placeholder se não tiver imagem
         product.image_url = product.image_url || 'https://via.placeholder.com/300x300?text=Sem+Imagem';
+      }
+
+      // Detectar categoria automaticamente se não tiver
+      if (!product.category_id) {
+        try {
+          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          if (detectedCategory) {
+            product.category_id = detectedCategory.id;
+            logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao detectar categoria: ${error.message}`);
+        }
       }
 
       // Gerar link de afiliado (async)

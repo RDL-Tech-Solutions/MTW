@@ -7,14 +7,20 @@ import TabNavigator from './TabNavigator';
 import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
 import CouponDetailsScreen from '../screens/coupon/CouponDetailsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
+import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import HomeFiltersScreen from '../screens/settings/HomeFiltersScreen';
+import VIPUpgradeScreen from '../screens/vip/VIPUpgradeScreen';
+import AboutScreen from '../screens/about/AboutScreen';
 import { SCREEN_NAMES } from '../utils/constants';
 import { ActivityIndicator, View } from 'react-native';
-import colors from '../theme/colors';
+import { useThemeStore } from '../theme/theme';
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
   const { isAuthenticated, isLoading, initialize } = useAuthStore();
+  const { colors } = useThemeStore();
 
   useEffect(() => {
     initialize();
@@ -49,7 +55,7 @@ export default function AppNavigator() {
               }}
             />
             <Stack.Screen 
-              name="CouponDetails" 
+              name={SCREEN_NAMES.COUPON_DETAILS} 
               component={CouponDetailsScreen}
               options={{
                 headerShown: true,
@@ -61,13 +67,73 @@ export default function AppNavigator() {
               }}
             />
             <Stack.Screen 
-              name="EditProfile" 
+              name={SCREEN_NAMES.EDIT_PROFILE} 
               component={EditProfileScreen}
               options={{
                 headerShown: true,
                 headerTitle: 'Editar Perfil',
                 headerStyle: {
                   backgroundColor: colors.white,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name={SCREEN_NAMES.SETTINGS} 
+              component={SettingsScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Configurações',
+                headerStyle: {
+                  backgroundColor: colors.card,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name={SCREEN_NAMES.NOTIFICATION_SETTINGS} 
+              component={NotificationSettingsScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Notificações',
+                headerStyle: {
+                  backgroundColor: colors.card,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name={SCREEN_NAMES.HOME_FILTERS} 
+              component={HomeFiltersScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Filtros da Tela Inicial',
+                headerStyle: {
+                  backgroundColor: colors.card,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name={SCREEN_NAMES.VIP_UPGRADE} 
+              component={VIPUpgradeScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Tornar-se VIP',
+                headerStyle: {
+                  backgroundColor: colors.card,
+                },
+                headerTintColor: colors.text,
+              }}
+            />
+            <Stack.Screen 
+              name={SCREEN_NAMES.ABOUT} 
+              component={AboutScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Sobre',
+                headerStyle: {
+                  backgroundColor: colors.card,
                 },
                 headerTintColor: colors.text,
               }}

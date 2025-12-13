@@ -1,9 +1,9 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import { getApiUrl } from '../config/api.js';
 
-// URL da API - ajuste conforme necessário
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+// URL da API - usando configuração centralizada
+const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: API_URL,

@@ -4,6 +4,7 @@ import logger from '../../config/logger.js';
 import meliAuth from './meliAuth.js';
 import linkAnalyzer from '../linkAnalyzer.js'; // Reaproveitar helper de parsePrice
 import Coupon from '../../models/Coupon.js';
+import categoryDetector from '../categoryDetector.js';
 
 class MeliSync {
   /**
@@ -652,6 +653,19 @@ class MeliSync {
         } catch (couponError) {
           logger.error(`   ❌ Erro ao criar cupom: ${couponError.message}`);
           // Segue sem cupom
+        }
+      }
+
+      // Detectar categoria automaticamente se não tiver
+      if (!product.category_id) {
+        try {
+          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          if (detectedCategory) {
+            product.category_id = detectedCategory.id;
+            logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao detectar categoria: ${error.message}`);
         }
       }
 

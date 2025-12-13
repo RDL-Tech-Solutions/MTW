@@ -20,7 +20,8 @@ class Coupon {
       title = null,
       max_uses = null,
       current_uses = 0,
-      is_vip = false
+      is_vip = false,
+      is_exclusive = false
     } = couponData;
 
     // Preparar dados para inserção
@@ -38,7 +39,8 @@ class Coupon {
       restrictions: restrictions || '',
       max_uses,
       current_uses: current_uses || 0,
-      is_vip
+      is_vip,
+      is_exclusive: is_exclusive || false
     };
 
     // Adicionar campos opcionais se fornecidos

@@ -205,6 +205,44 @@ class Notification {
     if (error) throw error;
     return users;
   }
+
+  // Obter estatísticas de notificações
+  static async getStats() {
+    try {
+      // Total
+      const { count: total } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true });
+
+      // Enviadas
+      const { count: sent } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_sent', true);
+
+      // Pendentes
+      const { count: pending } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_sent', false);
+
+      // Falhas (notificações antigas não enviadas)
+      const { count: failed } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_sent', false)
+        .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()); // Mais de 24h
+
+      return {
+        total: total || 0,
+        sent: sent || 0,
+        pending: pending || 0,
+        failed: failed || 0,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export default Notification;

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
+import Category from '../../models/Category.js';
 
 class WhatsAppService {
   constructor() {
@@ -144,9 +145,9 @@ class WhatsAppService {
   /**
    * Formatar mensagem de nova promoção
    * @param {Object} promotion - Dados da promoção
-   * @returns {string}
+   * @returns {Promise<string>}
    */
-  formatPromotionMessage(promotion) {
+  async formatPromotionMessage(promotion) {
     const discount = promotion.discount_percentage 
       ? `${promotion.discount_percentage}% OFF` 
       : '';
@@ -155,6 +156,19 @@ class WhatsAppService {
       ? `De: R$ ${promotion.old_price.toFixed(2)}\n` 
       : '';
 
+    // Buscar categoria se não estiver no objeto
+    let categoryName = promotion.category_name || 'Geral';
+    if (!categoryName && promotion.category_id) {
+      try {
+        const category = await Category.findById(promotion.category_id);
+        if (category) {
+          categoryName = category.name;
+        }
+      } catch (error) {
+        // Ignorar erro
+      }
+    }
+
     return `🔥 *Nova Promoção!*
 
 🛍 ${promotion.name}
@@ -162,7 +176,7 @@ class WhatsAppService {
 ${oldPrice}💰 *Por: R$ ${promotion.current_price.toFixed(2)}* ${discount}
 
 🏪 Loja: ${this.getPlatformName(promotion.platform)}
-📦 Categoria: ${promotion.category_name || 'Geral'}
+📦 Categoria: ${categoryName}
 
 🔗 Link: ${promotion.affiliate_link}
 

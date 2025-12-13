@@ -5,6 +5,8 @@ const KEYS = {
   REFRESH_TOKEN: '@mtw_refresh_token',
   USER: '@mtw_user',
   FAVORITES: '@mtw_favorites',
+  THEME: '@mtw_theme',
+  NOTIFICATION_PREFERENCES: '@mtw_notification_preferences',
 };
 
 class StorageService {
@@ -98,6 +100,43 @@ class StorageService {
     }
   }
 
+  // Theme
+  async setTheme(theme) {
+    try {
+      await AsyncStorage.setItem(KEYS.THEME, theme);
+    } catch (error) {
+      console.error('Erro ao salvar tema:', error);
+    }
+  }
+
+  async getTheme() {
+    try {
+      return await AsyncStorage.getItem(KEYS.THEME) || 'light';
+    } catch (error) {
+      console.error('Erro ao buscar tema:', error);
+      return 'light';
+    }
+  }
+
+  // Notification Preferences (cache local)
+  async setNotificationPreferences(preferences) {
+    try {
+      await AsyncStorage.setItem(KEYS.NOTIFICATION_PREFERENCES, JSON.stringify(preferences));
+    } catch (error) {
+      console.error('Erro ao salvar preferências:', error);
+    }
+  }
+
+  async getNotificationPreferences() {
+    try {
+      const prefs = await AsyncStorage.getItem(KEYS.NOTIFICATION_PREFERENCES);
+      return prefs ? JSON.parse(prefs) : null;
+    } catch (error) {
+      console.error('Erro ao buscar preferências:', error);
+      return null;
+    }
+  }
+
   // Clear all
   async clearAll() {
     try {
@@ -106,6 +145,7 @@ class StorageService {
         KEYS.REFRESH_TOKEN,
         KEYS.USER,
         KEYS.FAVORITES,
+        KEYS.NOTIFICATION_PREFERENCES,
       ]);
     } catch (error) {
       console.error('Erro ao limpar storage:', error);

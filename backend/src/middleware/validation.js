@@ -92,7 +92,8 @@ export const createCouponSchema = Joi.object({
   title: Joi.string().allow('', null).optional(),
   max_uses: Joi.number().integer().positive().allow(null, '').optional(),
   current_uses: Joi.number().integer().min(0).default(0),
-  is_vip: Joi.boolean().default(false)
+  is_vip: Joi.boolean().default(false),
+  is_exclusive: Joi.boolean().default(false)
 }).custom((value, helpers) => {
   // Se valid_until foi fornecido, validar que é maior que valid_from (se fornecido)
   if (value.valid_until && value.valid_from) {
@@ -121,7 +122,8 @@ export const updateCouponSchema = Joi.object({
   title: Joi.string().allow('', null),
   max_uses: Joi.number().integer().positive().allow(null, ''),
   current_uses: Joi.number().integer().min(0),
-  is_vip: Joi.boolean()
+  is_vip: Joi.boolean(),
+  is_exclusive: Joi.boolean()
 }).min(1);
 
 // Categories

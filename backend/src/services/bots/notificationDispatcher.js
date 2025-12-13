@@ -83,7 +83,7 @@ class NotificationDispatcher {
 
     try {
       // Formatar mensagem baseado no tipo de evento
-      const message = this.formatMessage(channel.platform, eventType, data);
+      const message = await this.formatMessage(channel.platform, eventType, data);
 
       // Enviar mensagem
       let result;
@@ -138,12 +138,12 @@ class NotificationDispatcher {
    * @param {Object} data - Dados do evento
    * @returns {string}
    */
-  formatMessage(platform, eventType, data) {
+  async formatMessage(platform, eventType, data) {
     const service = platform === 'whatsapp' ? whatsappService : telegramService;
 
     switch (eventType) {
       case 'promotion_new':
-        return service.formatPromotionMessage(data);
+        return await service.formatPromotionMessage(data);
       
       case 'coupon_new':
         return service.formatCouponMessage(data);

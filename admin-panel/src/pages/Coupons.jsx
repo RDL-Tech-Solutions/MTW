@@ -37,7 +37,8 @@ export default function Coupons() {
     max_uses: '',
     current_uses: 0,
     valid_from: '',
-    valid_until: ''
+    valid_until: '',
+    is_exclusive: false
   });
 
   const [errors, setErrors] = useState({});
@@ -96,7 +97,8 @@ export default function Coupons() {
                   max_uses: coupon.max_uses || '',
                   current_uses: coupon.current_uses || 0,
                   valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
-                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : ''
+                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
+                  is_exclusive: coupon.is_exclusive || false
                 });
               }
             } catch (apiError) {
@@ -130,7 +132,8 @@ export default function Coupons() {
                   max_uses: coupon.max_uses || '',
                   current_uses: coupon.current_uses || 0,
                   valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
-                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : ''
+                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
+                  is_exclusive: coupon.is_exclusive || false
                 });
               }
             } catch (localError) {
@@ -214,7 +217,8 @@ export default function Coupons() {
       max_uses: coupon.max_uses || '',
       current_uses: coupon.current_uses || 0,
       valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
-      valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : ''
+      valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
+      is_exclusive: coupon.is_exclusive || false
     });
     setIsDialogOpen(true);
   };
@@ -281,6 +285,9 @@ export default function Coupons() {
         }
       }
 
+      // Adicionar is_exclusive
+      submitData.is_exclusive = formData.is_exclusive || false;
+
       if (editingCoupon) {
         await api.put(`/coupons/${editingCoupon.id}`, submitData);
       } else {
@@ -302,7 +309,8 @@ export default function Coupons() {
         max_uses: '',
         current_uses: 0,
         valid_from: '',
-        valid_until: ''
+        valid_until: '',
+        is_exclusive: false
       });
       fetchCoupons(1);
     } catch (error) {
@@ -398,7 +406,8 @@ export default function Coupons() {
                   max_uses: '',
                   current_uses: 0,
                   valid_from: '',
-                  valid_until: ''
+                  valid_until: '',
+                  is_exclusive: false
                 });
                 setErrors({});
                 setIsLoadingCoupon(false);
@@ -610,6 +619,24 @@ export default function Coupons() {
                   )}
                 </div>
 
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="is_exclusive"
+                      checked={formData.is_exclusive || false}
+                      onChange={(e) => setFormData({ ...formData, is_exclusive: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <Label htmlFor="is_exclusive" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      ⭐ Cupom Exclusivo
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground ml-6">
+                    Cupons exclusivos aparecem primeiro e destacados no app mobile
+                  </p>
+                </div>
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
@@ -663,6 +690,7 @@ export default function Coupons() {
                       />
                     </TableHead>
                     <TableHead>Código</TableHead>
+                    <TableHead>Plataforma</TableHead>
                     <TableHead>Desconto</TableHead>
                     <TableHead>Usos</TableHead>
                     <TableHead>Validade</TableHead>
@@ -673,7 +701,7 @@ export default function Coupons() {
                 <TableBody>
                   {coupons.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
                         Nenhum cupom encontrado
                       </TableCell>
                     </TableRow>
@@ -689,10 +717,15 @@ export default function Coupons() {
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <code className="font-mono font-semibold bg-muted px-2 py-1 rounded">
                               {coupon.code}
                             </code>
+                            {coupon.is_exclusive && (
+                              <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-white">
+                                ⭐ Exclusivo
+                              </Badge>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -707,6 +740,24 @@ export default function Coupons() {
                               {coupon.description}
                             </div>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline"
+                            className={
+                              coupon.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                              coupon.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                              coupon.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                              coupon.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
+                              'bg-gray-100 text-gray-800 border-gray-300'
+                            }
+                          >
+                            {coupon.platform === 'mercadolivre' ? 'Mercado Livre' :
+                             coupon.platform === 'shopee' ? 'Shopee' :
+                             coupon.platform === 'amazon' ? 'Amazon' :
+                             coupon.platform === 'aliexpress' ? 'AliExpress' :
+                             'Geral'}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">

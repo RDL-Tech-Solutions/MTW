@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useProductStore } from '../../stores/productStore';
 import ProductCard from '../../components/common/ProductCard';
+import EmptyState from '../../components/common/EmptyState';
 import { SCREEN_NAMES } from '../../utils/constants';
 import colors from '../../theme/colors';
 
@@ -52,13 +53,12 @@ export default function FavoritesScreen({ navigation }) {
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>❤️</Text>
-      <Text style={styles.emptyTitle}>Nenhum favorito ainda</Text>
-      <Text style={styles.emptyText}>
-        Adicione produtos aos favoritos para vê-los aqui
-      </Text>
-    </View>
+    <EmptyState
+      icon="heart-outline"
+      title="Nenhum favorito ainda"
+      message="Adicione produtos aos favoritos para vê-los aqui"
+      iconColor={colors.error}
+    />
   );
 
   if (loading) {
@@ -131,25 +131,5 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: colors.textMuted,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    paddingHorizontal: 32,
   },
 });

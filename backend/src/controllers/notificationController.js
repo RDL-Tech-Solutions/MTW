@@ -62,6 +62,16 @@ class NotificationController {
       next(error);
     }
   }
+
+  // Estatísticas (admin)
+  static async stats(req, res, next) {
+    try {
+      const stats = await Notification.getStats();
+      res.json(successResponse(stats));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default NotificationController;

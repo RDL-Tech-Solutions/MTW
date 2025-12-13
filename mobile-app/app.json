@@ -37,11 +37,12 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://192.168.7.7:3000/api",
+      "apiUrl": "http://localhost:3000/api",
       "eas": {
         "projectId": "967ccc1a-3521-4c83-91a4-851bed949c45"
       }
     },
+    "scheme": "mtwpromo",
     "owner": "rdltech"
   }
 }

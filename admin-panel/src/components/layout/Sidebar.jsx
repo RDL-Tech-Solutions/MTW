@@ -8,7 +8,8 @@ import {
   BarChart3,
   RefreshCw,
   Zap,
-  Bot
+  Bot,
+  Bell
 } from 'lucide-react';
 
 const navigation = [
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Categorias', href: '/categories', icon: FolderTree },
   { name: 'Usuários', href: '/users', icon: Users },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Notificações', href: '/notifications', icon: Bell },
   { name: 'Automação', href: '/auto-sync', icon: RefreshCw },
   { name: 'Bots', href: '/bots', icon: Bot },
 ];

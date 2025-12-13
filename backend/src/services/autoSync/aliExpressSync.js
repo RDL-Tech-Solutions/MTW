@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import logger from '../../config/logger.js';
 import CouponSettings from '../../models/CouponSettings.js';
 import Coupon from '../../models/Coupon.js';
+import categoryDetector from '../categoryDetector.js';
 
 class AliExpressSync {
   constructor() {
@@ -275,6 +276,19 @@ class AliExpressSync {
           !product.image_url.startsWith('http')) {
         logger.warn(`⚠️ Produto ${product.name} sem imagem válida`);
         product.image_url = product.image_url || 'https://via.placeholder.com/300x300?text=Sem+Imagem';
+      }
+
+      // Detectar categoria automaticamente se não tiver
+      if (!product.category_id) {
+        try {
+          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          if (detectedCategory) {
+            product.category_id = detectedCategory.id;
+            logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao detectar categoria: ${error.message}`);
+        }
       }
 
       // Gerar link de afiliado (async)

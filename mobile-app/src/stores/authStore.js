@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../services/api';
 import storage from '../services/storage';
+import { loginWithGoogle, loginWithFacebook } from '../services/authSocial';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -63,6 +64,48 @@ export const useAuthStore = create((set, get) => ({
       return {
         success: false,
         error: error.response?.data?.error || 'Erro ao criar conta',
+      };
+    }
+  },
+
+  // Login com Google
+  loginWithGoogle: async () => {
+    try {
+      const result = await loginWithGoogle();
+      if (result.success) {
+        set({ 
+          user: result.user, 
+          token: result.token, 
+          isAuthenticated: true 
+        });
+      }
+      return result;
+    } catch (error) {
+      console.error('Erro no login Google:', error);
+      return {
+        success: false,
+        error: error.message || 'Erro ao fazer login com Google',
+      };
+    }
+  },
+
+  // Login com Facebook
+  loginWithFacebook: async () => {
+    try {
+      const result = await loginWithFacebook();
+      if (result.success) {
+        set({ 
+          user: result.user, 
+          token: result.token, 
+          isAuthenticated: true 
+        });
+      }
+      return result;
+    } catch (error) {
+      console.error('Erro no login Facebook:', error);
+      return {
+        success: false,
+        error: error.message || 'Erro ao fazer login com Facebook',
       };
     }
   },

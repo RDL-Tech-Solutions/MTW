@@ -17,13 +17,13 @@ import colors from '../../theme/colors';
 import { PLATFORM_LABELS, PLATFORM_COLORS } from '../../utils/constants';
 
 export default function CouponDetailsScreen({ route, navigation }) {
-  const { coupon: initialCoupon } = route.params;
+  const { coupon: initialCoupon } = route.params || {};
   const { fetchCouponById } = useProductStore();
   const [coupon, setCoupon] = useState(initialCoupon);
   const [loading, setLoading] = useState(!initialCoupon);
 
   useEffect(() => {
-    if (!initialCoupon && initialCoupon?.id) {
+    if (!initialCoupon || !initialCoupon?.id) {
       loadCoupon();
     }
   }, []);
@@ -43,10 +43,12 @@ export default function CouponDetailsScreen({ route, navigation }) {
   };
 
   const formatDiscount = () => {
+    if (!coupon) return '0% OFF';
     if (coupon.discount_type === 'percentage') {
-      return `${coupon.discount_value}% OFF`;
+      return `${coupon.discount_value || 0}% OFF`;
     }
-    return `R$ ${coupon.discount_value.toFixed(2)} OFF`;
+    const value = coupon.discount_value || 0;
+    return `R$ ${typeof value === 'number' ? value.toFixed(2) : parseFloat(value).toFixed(2)} OFF`;
   };
 
   const formatExpiry = () => {

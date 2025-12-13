@@ -57,7 +57,24 @@ class TemplateRenderer {
         }).format(product.old_price)
       : null;
 
-    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 'Shopee';
+    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 
+                        product.platform === 'shopee' ? 'Shopee' :
+                        product.platform === 'amazon' ? 'Amazon' :
+                        product.platform === 'aliexpress' ? 'AliExpress' : 'Geral';
+    
+    // Buscar categoria se tiver category_id
+    let categoryName = 'Geral';
+    if (product.category_id) {
+      try {
+        const Category = (await import('../../models/Category.js')).default;
+        const category = await Category.findById(product.category_id);
+        if (category) {
+          categoryName = category.name;
+        }
+      } catch (error) {
+        logger.warn(`Erro ao buscar categoria: ${error.message}`);
+      }
+    }
     
     // Escapar nome do produto para Markdown
     const productName = this.escapeMarkdown(product.name || 'Produto sem nome');
@@ -115,6 +132,7 @@ class TemplateRenderer {
       old_price: oldPriceFormatted ? ` ~${oldPriceFormatted}~` : '',
       discount_percentage: product.discount_percentage || 0,
       platform_name: platformName,
+      category_name: categoryName,
       affiliate_link: product.affiliate_link || 'Link não disponível',
       coupon_section: couponSection
     };
