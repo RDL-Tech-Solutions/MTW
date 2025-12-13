@@ -1,6 +1,8 @@
 import linkAnalyzer from '../services/linkAnalyzer.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
+import { cacheGet, cacheSet } from '../config/redis.js';
+import { CACHE_TTL } from '../config/constants.js';
 
 class LinkAnalyzerController {
   // Analisar link de afiliado
@@ -15,24 +17,61 @@ class LinkAnalyzerController {
       }
 
       // Validar URL
+      let validUrl;
       try {
-        new URL(url);
+        validUrl = new URL(url);
       } catch (error) {
         return res.status(400).json(
           errorResponse('URL inválida', 'INVALID_URL')
         );
       }
 
+      // Verificar cache
+      const cacheKey = `link_analysis:${validUrl.href}`;
+      const cached = await cacheGet(cacheKey);
+      
+      if (cached) {
+        logger.info(`Link analisado (cache): ${url}`);
+        return res.json(
+          successResponse(cached, 'Link analisado com sucesso (cache)')
+        );
+      }
+
       logger.info(`Analisando link: ${url}`);
 
-      // Analisar link
-      const productInfo = await linkAnalyzer.analyzeLink(url);
+      // Analisar link com retry
+      let productInfo;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        try {
+          productInfo = await linkAnalyzer.analyzeLink(url);
+          break; // Sucesso, sair do loop
+        } catch (error) {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            logger.error(`Erro ao analisar link após ${maxAttempts} tentativas: ${error.message}`);
+            return res.status(500).json(
+              errorResponse(
+                `Erro ao analisar link: ${error.message}`,
+                'ANALYSIS_ERROR'
+              )
+            );
+          }
+          // Aguardar antes de tentar novamente (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        }
+      }
 
       if (productInfo.error) {
         return res.status(400).json(
           errorResponse(productInfo.error, 'ANALYSIS_ERROR')
         );
       }
+
+      // Salvar no cache
+      await cacheSet(cacheKey, productInfo, CACHE_TTL.LINK_ANALYSIS || 3600);
 
       logger.info(`Link analisado com sucesso: ${productInfo.platform}`);
 
@@ -43,9 +82,92 @@ class LinkAnalyzerController {
         )
       );
     } catch (error) {
+      logger.error(`Erro no controller de análise: ${error.message}`);
+      next(error);
+    }
+  }
+
+  // Analisar múltiplos links (batch)
+  static async analyzeBatch(req, res, next) {
+    try {
+      const { urls } = req.body;
+
+      if (!urls || !Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json(
+          errorResponse('Lista de URLs é obrigatória e deve ser um array', 'MISSING_URLS')
+        );
+      }
+
+      if (urls.length > 10) {
+        return res.status(400).json(
+          errorResponse('Máximo de 10 URLs por requisição', 'TOO_MANY_URLS')
+        );
+      }
+
+      logger.info(`Analisando ${urls.length} links em lote`);
+
+      const results = await Promise.allSettled(
+        urls.map(async (url, index) => {
+          try {
+            const productInfo = await linkAnalyzer.analyzeLink(url);
+            return {
+              index,
+              url,
+              success: true,
+              data: productInfo
+            };
+          } catch (error) {
+            return {
+              index,
+              url,
+              success: false,
+              error: error.message
+            };
+          }
+        })
+      );
+
+      const successful = results.filter(r => r.value?.success).length;
+      const failed = results.length - successful;
+
+      logger.info(`Análise em lote concluída: ${successful} sucesso, ${failed} falhas`);
+
+      res.json(
+        successResponse({
+          total: urls.length,
+          successful,
+          failed,
+          results: results.map(r => r.value || r.reason)
+        }, `Análise concluída: ${successful} sucesso, ${failed} falhas`)
+      );
+    } catch (error) {
+      logger.error(`Erro na análise em lote: ${error.message}`);
+      next(error);
+    }
+  }
+
+  // Obter estatísticas de análise
+  static async getStats(req, res, next) {
+    try {
+      // Estatísticas básicas (pode ser expandido com dados do banco)
+      const stats = {
+        total_analyses: 0, // Seria obtido do banco de dados
+        success_rate: 0,
+        platforms: {
+          shopee: 0,
+          mercadolivre: 0,
+          amazon: 0,
+          unknown: 0
+        },
+        last_24h: 0
+      };
+
+      res.json(successResponse(stats, 'Estatísticas de análise'));
+    } catch (error) {
       next(error);
     }
   }
 }
 
 export default LinkAnalyzerController;
+

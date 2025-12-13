@@ -2,6 +2,7 @@ import Coupon from '../../models/Coupon.js';
 import Notification from '../../models/Notification.js';
 import logger from '../../config/logger.js';
 import { daysUntilExpiration } from '../../utils/helpers.js';
+import supabase from '../../config/database.js';
 
 export const checkExpiredCoupons = async () => {
   try {

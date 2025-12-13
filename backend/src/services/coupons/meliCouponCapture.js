@@ -28,18 +28,26 @@ class MeliCouponCapture {
       const response = await axios.get(url, config);
       return response.data;
     } catch (error) {
-      // Não logar 404 como erro - é esperado quando recurso não existe
-      if (error.response?.status === 404) {
-        throw error; // Re-lançar para ser tratado pelo chamador
-      }
+      const status = error.response?.status;
       
-      if (error.response?.status === 401) {
-        logger.error('❌ Token do Mercado Livre expirado ou inválido');
-      } else if (error.response?.status !== 404) {
-        // Só logar erros que não são 404
-        logger.error(`Erro na requisição MELI ${endpoint}: ${error.message}`);
+      // Tratar erros esperados sem logar como erro crítico
+      if (status === 404) {
+        // 404 é esperado quando recurso não existe
+        logger.debug(`⚠️ Recurso não encontrado: ${endpoint} (404)`);
+        throw error;
+      } else if (status === 401) {
+        // 401 indica token expirado/inválido - aviso, não erro crítico
+        logger.warn(`⚠️ Token do Mercado Livre expirado ou inválido (401)`);
+        throw error;
+      } else if (status === 403) {
+        // 403 indica falta de permissão - aviso, não erro crítico
+        logger.warn(`⚠️ Acesso negado ao endpoint ${endpoint} (403 Forbidden)`);
+        throw error;
+      } else {
+        // Outros erros são críticos
+        logger.error(`❌ Erro na requisição MELI ${endpoint}: ${error.message}`);
+        throw error;
       }
-      throw error;
     }
   }
 
@@ -113,7 +121,12 @@ class MeliCouponCapture {
       return coupons;
 
     } catch (error) {
-      logger.error(`Erro ao capturar deals: ${error.message}`);
+      // Não logar 404/403 como erro crítico - são esperados quando API não tem acesso
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        logger.debug(`⚠️ Deals não disponíveis via API (${error.response?.status})`);
+      } else {
+        logger.error(`Erro ao capturar deals: ${error.message}`);
+      }
       return [];
     }
   }
@@ -143,7 +156,12 @@ class MeliCouponCapture {
       return coupons;
 
     } catch (error) {
-      logger.error(`Erro ao capturar campanhas: ${error.message}`);
+      // Não logar 404/403 como erro crítico - são esperados quando API não tem acesso
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        logger.debug(`⚠️ Campanhas não disponíveis via API (${error.response?.status})`);
+      } else {
+        logger.error(`Erro ao capturar campanhas: ${error.message}`);
+      }
       return [];
     }
   }
@@ -175,7 +193,12 @@ class MeliCouponCapture {
       return coupons;
 
     } catch (error) {
-      logger.error(`Erro ao capturar promoções de sellers: ${error.message}`);
+      // Não logar 404/403 como erro crítico - são esperados quando API não tem acesso
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        logger.debug(`⚠️ Promoções de sellers não disponíveis via API (${error.response?.status})`);
+      } else {
+        logger.error(`Erro ao capturar promoções de sellers: ${error.message}`);
+      }
       return [];
     }
   }

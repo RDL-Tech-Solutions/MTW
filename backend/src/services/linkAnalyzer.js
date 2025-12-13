@@ -1114,29 +1114,67 @@ class LinkAnalyzer {
   // Analisar link e extrair informações
   async analyzeLink(url) {
     try {
+      // Validar URL
+      if (!url || typeof url !== 'string') {
+        return {
+          error: 'URL inválida ou não fornecida.',
+          affiliateLink: url || ''
+        };
+      }
+
       // Seguir redirecionamentos primeiro (para links encurtados)
       console.log('🔗 URL original:', url);
-      const finalUrl = await this.followRedirects(url);
-      console.log('🔗 URL final:', finalUrl);
+      let finalUrl;
+      try {
+        finalUrl = await this.followRedirects(url);
+        console.log('🔗 URL final:', finalUrl);
+      } catch (redirectError) {
+        console.warn('⚠️ Erro ao seguir redirecionamentos:', redirectError.message);
+        finalUrl = url; // Usar URL original se falhar
+      }
 
       const platform = this.detectPlatform(finalUrl);
       console.log('🏷️ Plataforma detectada:', platform);
 
       if (platform === 'shopee') {
-        return await this.extractShopeeInfo(finalUrl);
+        try {
+          return await this.extractShopeeInfo(finalUrl);
+        } catch (shopeeError) {
+          console.error('❌ Erro ao extrair info Shopee:', shopeeError.message);
+          return {
+            error: `Erro ao extrair informações da Shopee: ${shopeeError.message}`,
+            platform: 'shopee',
+            affiliateLink: finalUrl
+          };
+        }
       } else if (platform === 'mercadolivre') {
-        return await this.extractMeliInfo(finalUrl);
+        try {
+          return await this.extractMeliInfo(finalUrl);
+        } catch (meliError) {
+          console.error('❌ Erro ao extrair info Mercado Livre:', meliError.message);
+          return {
+            error: `Erro ao extrair informações do Mercado Livre: ${meliError.message}`,
+            platform: 'mercadolivre',
+            affiliateLink: finalUrl
+          };
+        }
+      } else if (platform === 'amazon') {
+        return {
+          platform: 'amazon',
+          affiliateLink: finalUrl,
+          error: 'Suporte para Amazon em desenvolvimento. Use links da Shopee ou Mercado Livre.'
+        };
       } else {
         return {
           platform: 'unknown',
-          affiliateLink: url,
+          affiliateLink: finalUrl,
           error: 'Plataforma não suportada. Use links da Shopee ou Mercado Livre.'
         };
       }
     } catch (error) {
-      console.error('Erro ao analisar link:', error);
+      console.error('❌ Erro geral ao analisar link:', error);
       return {
-        error: 'Erro ao analisar o link. Verifique se o link está correto.',
+        error: `Erro ao analisar o link: ${error.message || 'Erro desconhecido'}. Verifique se o link está correto e tente novamente.`,
         affiliateLink: url
       };
     }

@@ -49,40 +49,64 @@ class PublishService {
     try {
       const message = await this.formatBotMessage(product, 'telegram');
       
+      // Log detalhado sobre a imagem
+      logger.info(`📸 Verificando imagem do produto: ${product.name}`);
+      logger.info(`   image_url: ${product.image_url || 'NÃO DEFINIDA'}`);
+      logger.info(`   image_url type: ${typeof product.image_url}`);
+      logger.info(`   image_url length: ${product.image_url?.length || 0}`);
+      
       // Se tiver imagem válida, enviar com foto
-      if (product.image_url && 
-          product.image_url.startsWith('http') && 
-          !product.image_url.includes('placeholder')) {
+      const hasValidImage = product.image_url && 
+          typeof product.image_url === 'string' &&
+          product.image_url.trim().length > 0 &&
+          (product.image_url.startsWith('http://') || product.image_url.startsWith('https://')) && 
+          !product.image_url.includes('placeholder') &&
+          !product.image_url.includes('data:image');
+      
+      logger.info(`   Imagem válida: ${hasValidImage ? 'SIM' : 'NÃO'}`);
+      if (!hasValidImage) {
+        logger.warn(`   Motivo: ${!product.image_url ? 'image_url não existe' : 
+                              !product.image_url.startsWith('http') ? 'não começa com http' :
+                              product.image_url.includes('placeholder') ? 'contém placeholder' :
+                              product.image_url.includes('data:image') ? 'é data URI' : 'desconhecido'}`);
+      }
+      
+      if (hasValidImage) {
         try {
+          logger.info(`📤 Enviando imagem para Telegram: ${product.image_url.substring(0, 100)}...`);
           const result = await notificationDispatcher.sendToTelegramWithImage(
             message,
             product.image_url,
             'promotion_new'
           );
           
+          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
+          
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação Telegram com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
             return true;
           } else {
-            logger.warn(`⚠️ Telegram com imagem: nenhuma mensagem enviada. Tentando sem imagem...`);
+            logger.error(`❌ Telegram com imagem: falha no envio. Result: ${JSON.stringify(result)}`);
+            // NÃO fazer fallback - se a imagem falhou, não enviar apenas mensagem
+            return false;
           }
         } catch (imageError) {
-          logger.warn(`⚠️ Erro ao enviar imagem Telegram: ${imageError.message}. Tentando sem imagem...`);
+          logger.error(`❌ Erro ao enviar imagem Telegram: ${imageError.message}`);
+          logger.error(`   Stack: ${imageError.stack}`);
+          // NÃO fazer fallback - se a imagem falhou, não enviar apenas mensagem
+          return false;
         }
-      }
-      
-      // Fallback: enviar apenas mensagem
-      const result = await notificationDispatcher.sendToTelegram(message, 'promotion_new');
-      
-      if (result && result.success && result.sent > 0) {
-        logger.info(`✅ Notificação Telegram enviada para produto: ${product.name} (${result.sent} canal(is))`);
-        return true;
       } else {
-        logger.warn(`⚠️ Telegram: nenhuma mensagem enviada para ${product.name}. Canais: ${result?.total || 0}, Enviados: ${result?.sent || 0}`);
+        logger.error(`❌ Produto sem imagem válida. Produto: ${product.name}`);
+        logger.error(`   image_url recebida: ${JSON.stringify(product.image_url)}`);
+        logger.error(`   Tipo: ${typeof product.image_url}`);
+        logger.error(`   Produto completo: ${JSON.stringify({ id: product.id, name: product.name, image_url: product.image_url })}`);
+        // NÃO enviar mensagem sem imagem - a imagem é obrigatória
         return false;
       }
     } catch (error) {
       logger.error(`❌ Erro ao notificar Telegram: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
       return false;
     }
   }
@@ -94,16 +118,27 @@ class PublishService {
     try {
       const message = await this.formatBotMessage(product, 'whatsapp');
       
+      // Log detalhado sobre a imagem
+      logger.info(`📸 Verificando imagem do produto (WhatsApp): ${product.name}`);
+      logger.info(`   image_url: ${product.image_url || 'NÃO DEFINIDA'}`);
+      
       // Se tiver imagem válida, enviar com foto
-      if (product.image_url && 
+      const hasValidImage = product.image_url && 
           product.image_url.startsWith('http') && 
-          !product.image_url.includes('placeholder')) {
+          !product.image_url.includes('placeholder');
+      
+      logger.info(`   Imagem válida: ${hasValidImage ? 'SIM' : 'NÃO'}`);
+      
+      if (hasValidImage) {
         try {
+          logger.info(`📤 Enviando imagem para WhatsApp: ${product.image_url.substring(0, 80)}...`);
           const result = await notificationDispatcher.sendToWhatsAppWithImage(
             message,
             product.image_url,
             'promotion_new'
           );
+          
+          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
           
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação WhatsApp com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
@@ -112,11 +147,16 @@ class PublishService {
             logger.warn(`⚠️ WhatsApp com imagem: nenhuma mensagem enviada. Tentando sem imagem...`);
           }
         } catch (imageError) {
-          logger.warn(`⚠️ Erro ao enviar imagem WhatsApp: ${imageError.message}. Tentando sem imagem...`);
+          logger.error(`❌ Erro ao enviar imagem WhatsApp: ${imageError.message}`);
+          logger.error(`   Stack: ${imageError.stack}`);
+          logger.warn(`⚠️ Tentando enviar apenas mensagem sem imagem...`);
         }
+      } else {
+        logger.warn(`⚠️ Produto sem imagem válida, enviando apenas mensagem`);
       }
       
       // Fallback: enviar apenas mensagem
+      logger.info(`📤 Enviando mensagem para WhatsApp (sem imagem)`);
       const result = await notificationDispatcher.sendToWhatsApp(message, 'promotion_new');
       
       if (result && result.success && result.sent > 0) {
@@ -128,6 +168,7 @@ class PublishService {
       }
     } catch (error) {
       logger.error(`❌ Erro ao notificar WhatsApp: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
       return false;
     }
   }

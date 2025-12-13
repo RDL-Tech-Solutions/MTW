@@ -60,7 +60,8 @@ export const CACHE_TTL = {
   PRODUCTS: 900, // 15 minutos
   COUPONS: 600, // 10 minutos
   CATEGORIES: 3600, // 1 hora
-  ANALYTICS: 300 // 5 minutos
+  ANALYTICS: 300, // 5 minutos
+  LINK_ANALYSIS: 3600 // 1 hora
 };
 
 // Intervalos de cron jobs (em minutos)

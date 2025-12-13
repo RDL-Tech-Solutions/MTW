@@ -165,6 +165,18 @@ export default function Products() {
       return;
     }
 
+    // Validar URL básica
+    try {
+      new URL(formData.affiliate_url);
+    } catch {
+      toast({
+        title: "URL Inválida",
+        description: "Por favor, insira uma URL válida.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setAnalyzingLink(true);
     try {
       const response = await api.post('/link-analyzer/analyze', {
@@ -212,13 +224,18 @@ export default function Products() {
 
       toast({
         title: "Sucesso!",
-        description: "Informações extraídas do link com sucesso!",
+        description: `Informações extraídas do link com sucesso! Plataforma: ${productInfo.platform || 'Desconhecida'}`,
         variant: "success",
       });
     } catch (error) {
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          "Erro ao analisar link. Verifique se o link está correto e tente novamente.";
+      
       toast({
-        title: "Erro!",
-        description: error.response?.data?.error || "Erro ao analisar link. Verifique se o link está correto.",
+        title: "Erro na Análise",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -246,8 +263,8 @@ export default function Products() {
         platform: formData.platform,
         current_price: parsePrice(formData.discount_price) || parsePrice(formData.price),
         old_price: formData.discount_price ? parsePrice(formData.price) : null,
-        category_id: formData.category_id || null,
-        coupon_id: formData.coupon_id || null,
+        category_id: formData.category_id && formData.category_id.trim() !== '' ? formData.category_id : null,
+        coupon_id: formData.coupon_id && formData.coupon_id.trim() !== '' ? formData.coupon_id : null,
         affiliate_link: formData.affiliate_url,
         stock_available: true
       };
@@ -438,7 +455,17 @@ export default function Products() {
                       variant="secondary"
                       className="whitespace-nowrap"
                     >
-                      {analyzingLink ? 'Analisando...' : 'Auto-Preencher'}
+                      {analyzingLink ? (
+                        <>
+                          <Sparkles className="mr-2 h-4 w-4 animate-spin" />
+                          Analisando...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          Auto-Preencher
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -477,6 +504,25 @@ export default function Products() {
                 <div className="space-y-2">
                   <Label htmlFor="image_url">URL da Imagem</Label>
                   <Input id="image_url" type="url" value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} />
+                  {formData.image_url && (
+                    <div className="mt-2">
+                      <div className="text-sm text-muted-foreground mb-2">Preview:</div>
+                      <div className="border rounded-lg p-2 bg-gray-50 dark:bg-gray-900">
+                        <img 
+                          src={formData.image_url} 
+                          alt="Preview" 
+                          className="max-w-full h-32 object-contain rounded"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'block';
+                          }}
+                        />
+                        <div className="text-sm text-muted-foreground text-center py-4" style={{display: 'none'}}>
+                          Imagem não encontrada ou URL inválida
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

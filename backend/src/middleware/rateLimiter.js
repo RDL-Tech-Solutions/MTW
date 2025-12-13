@@ -15,6 +15,46 @@ const isAuthenticatedAdmin = (req) => {
   return false;
 };
 
+// Função helper para obter IP do request com fallback
+const getIp = (req) => {
+  return req.ip || 
+         req.connection?.remoteAddress || 
+         req.socket?.remoteAddress ||
+         (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+         'unknown';
+};
+
+// Função para criar rate limiters customizados
+export const createLimiter = (options = {}) => {
+  const config = {
+    windowMs: options.windowMs || 60 * 1000,
+    max: options.max || 10,
+    message: options.message || {
+      success: false,
+      error: 'Muitas requisições. Tente novamente mais tarde.',
+      code: 'RATE_LIMIT_EXCEEDED'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      // Usar IP com fallback
+      return getIp(req);
+    }
+  };
+
+  // Adicionar skip apenas se for uma função
+  if (typeof options.skip === 'function') {
+    config.skip = options.skip;
+  }
+
+  // Adicionar outras opções válidas
+  if (options.skipSuccessfulRequests !== undefined) {
+    config.skipSuccessfulRequests = options.skipSuccessfulRequests;
+  }
+
+  return rateLimit(config);
+};
+
 // Rate limiter geral - mais permissivo para admins
 export const generalLimiter = rateLimit({
   windowMs: RATE_LIMITS.WINDOW_MS,
@@ -26,6 +66,7 @@ export const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => getIp(req),
   skip: (req) => isAuthenticatedAdmin(req), // Pular para admins autenticados
 });
 
@@ -40,11 +81,12 @@ export const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => getIp(req),
   skipSuccessfulRequests: true, // Não conta requisições bem-sucedidas
 });
 
 // Rate limiter para rotas de criação (admin)
-export const createLimiter = rateLimit({
+export const createLimiterDefault = rateLimit({
   windowMs: 60 * 1000, // 1 minuto
   max: 30, // 30 criações por minuto
   message: {
@@ -54,6 +96,7 @@ export const createLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => getIp(req),
 });
 
 // Rate limiter para APIs externas
@@ -67,11 +110,13 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => getIp(req),
 });
 
 export default {
   generalLimiter,
   authLimiter,
   createLimiter,
+  createLimiterDefault,
   apiLimiter
 };

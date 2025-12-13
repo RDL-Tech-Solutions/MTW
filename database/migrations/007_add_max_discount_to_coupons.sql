@@ -14,3 +14,4 @@ COMMENT ON COLUMN coupons.max_discount_value IS 'Valor máximo de desconto que p
 -- Verificar se a migration foi aplicada
 SELECT 'Migration 007 aplicada com sucesso! Campo max_discount_value adicionado.' as status;
 
+

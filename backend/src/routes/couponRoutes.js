@@ -2,7 +2,7 @@ import express from 'express';
 import CouponController from '../controllers/couponController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 import { validate, createCouponSchema, updateCouponSchema } from '../middleware/validation.js';
-import { createLimiter } from '../middleware/rateLimiter.js';
+import { createLimiterDefault } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -78,7 +78,7 @@ router.post('/:id/use', authenticateToken, CouponController.use);
 
 // Rotas admin
 router.get('/admin/all', authenticateToken, requireAdmin, CouponController.listAll);
-router.post('/', authenticateToken, requireAdmin, createLimiter, preprocessCouponData, validate(createCouponSchema), CouponController.create);
+router.post('/', authenticateToken, requireAdmin, createLimiterDefault, preprocessCouponData, validate(createCouponSchema), CouponController.create);
 router.put('/:id', authenticateToken, requireAdmin, preprocessCouponData, validate(updateCouponSchema), CouponController.update);
 router.delete('/:id', authenticateToken, requireAdmin, CouponController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, CouponController.batchDelete);

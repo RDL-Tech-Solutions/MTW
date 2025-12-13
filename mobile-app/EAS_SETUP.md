@@ -89,3 +89,4 @@ Após configurar o EAS, você pode:
 - Fazer builds de preview: `eas build --profile preview`
 - Fazer builds de produção: `eas build --profile production`
 
+

@@ -24,7 +24,13 @@ class MercadoLivreService {
 
       return response.data;
     } catch (error) {
-      logger.error(`Erro na API Mercado Livre: ${error.message}`);
+      const status = error.response?.status;
+      // Não logar 401/403/404 como erro crítico - são esperados quando API não tem acesso
+      if (status === 401 || status === 403 || status === 404) {
+        logger.warn(`⚠️ Erro na API Mercado Livre (${status}): ${error.message}`);
+      } else {
+        logger.error(`Erro na API Mercado Livre: ${error.message}`);
+      }
       throw error;
     }
   }

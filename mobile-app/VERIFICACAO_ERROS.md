@@ -90,3 +90,4 @@ Para desenvolvimento, você pode criar um arquivo `.env` ou ajustar diretamente 
 4. Testar listagem de cupons
 5. Verificar se os cupons estão sendo exibidos corretamente
 
+

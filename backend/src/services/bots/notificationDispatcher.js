@@ -162,7 +162,19 @@ class NotificationDispatcher {
    * @returns {Promise<Object>}
    */
   async notifyNewPromotion(promotion) {
-    return await this.dispatch('promotion_new', promotion);
+    // Usar publishService para enviar com imagem e suporte a cupom vinculado
+    try {
+      const publishService = (await import('../autoSync/publishService.js')).default;
+      const result = await publishService.publishAll(promotion);
+      return {
+        success: result.success,
+        results: result.results
+      };
+    } catch (error) {
+      logger.error(`Erro ao notificar nova promoção via publishService: ${error.message}`);
+      // Fallback para método antigo
+      return await this.dispatch('promotion_new', promotion);
+    }
   }
 
   /**
@@ -188,23 +200,36 @@ class NotificationDispatcher {
    */
   async sendToTelegramWithImage(message, imagePath, eventType = 'general') {
     try {
-      const channels = await BotChannel.findActiveByPlatform('telegram');
+      logger.info(`📤 [NotificationDispatcher] Enviando imagem para Telegram`);
+      logger.info(`   imagePath: ${imagePath}`);
+      logger.info(`   message length: ${message?.length || 0}`);
+      logger.info(`   eventType: ${eventType}`);
+      
+      const channels = await BotChannel.findActive('telegram');
       
       if (!channels || channels.length === 0) {
-        logger.debug('Nenhum canal Telegram ativo encontrado');
+        logger.warn('⚠️ Nenhum canal Telegram ativo encontrado');
         return { success: false, sent: 0, total: 0 };
       }
+
+      logger.info(`   Canais encontrados: ${channels.length}`);
 
       let sent = 0;
       const results = [];
 
       for (const channel of channels) {
         try {
+          logger.info(`   Enviando para canal ${channel.id} (chat: ${channel.identifier})`);
           const result = await telegramService.sendMessageWithPhoto(
             channel.identifier,
             imagePath,
             message
           );
+          
+          logger.info(`   Resultado do telegramService: ${JSON.stringify({ 
+            success: result?.success, 
+            photoMessageId: result?.photoMessageId
+          })}`);
 
           // Criar log
           const log = await NotificationLog.create({
@@ -274,7 +299,7 @@ class NotificationDispatcher {
    */
   async sendToWhatsAppWithImage(message, imagePath, eventType = 'general') {
     try {
-      const channels = await BotChannel.findActiveByPlatform('whatsapp');
+      const channels = await BotChannel.findActive('whatsapp');
       
       if (!channels || channels.length === 0) {
         logger.debug('Nenhum canal WhatsApp ativo encontrado');

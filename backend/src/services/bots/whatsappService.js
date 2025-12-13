@@ -21,19 +21,24 @@ class WhatsAppService {
         throw new Error('WhatsApp API não configurada.');
       }
 
-      // Primeiro, fazer upload da imagem para obter media_id
-      // Ou usar diretamente a URL se a API suportar
+      // Preparar payload da imagem
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: groupId,
+        type: 'image',
+        image: {
+          link: imageUrl
+        }
+      };
+
+      // Adicionar caption apenas se não estiver vazio
+      if (caption && caption.trim().length > 0) {
+        payload.caption = caption.substring(0, 1024); // WhatsApp limita caption a 1024 caracteres
+      }
+
       const response = await axios.post(
         `${this.apiUrl}/${this.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: groupId,
-          type: 'image',
-          image: {
-            link: imageUrl
-          },
-          caption: caption.substring(0, 1024) // WhatsApp limita caption a 1024 caracteres
-        },
+        payload,
         {
           headers: {
             'Authorization': `Bearer ${this.apiToken}`,
@@ -56,7 +61,7 @@ class WhatsAppService {
   }
 
   /**
-   * Enviar mensagem com imagem
+   * Enviar mensagem com imagem (imagem primeiro, depois mensagem)
    * @param {string} groupId - ID do grupo
    * @param {string} imageUrl - URL da imagem
    * @param {string} message - Mensagem formatada
@@ -64,20 +69,32 @@ class WhatsAppService {
    */
   async sendMessageWithImage(groupId, imageUrl, message) {
     try {
-      // Enviar imagem com caption
-      const result = await this.sendImage(groupId, imageUrl, message);
+      // Remover links da mensagem para evitar preview automático
+      const messageWithoutPreview = message.replace(
+        /(https?:\/\/[^\s]+)/g, 
+        () => '🔗 [Link disponível - consulte a descrição]'
+      );
       
-      // Se a mensagem for muito longa, enviar também como mensagem separada
-      if (message.length > 1024) {
-        await this.sendImage(groupId, imageUrl, message.substring(0, 1000));
-        await this.sendMessage(groupId, message);
-      }
+      // Enviar imagem COM a mensagem como caption (juntos)
+      logger.info(`📸 Enviando imagem com mensagem como caption para grupo ${groupId}`);
+      logger.info(`   Caption length: ${messageWithoutPreview.length}`);
+      const imageResult = await this.sendImage(groupId, imageUrl, messageWithoutPreview);
 
-      return result;
+      logger.info(`✅ Imagem com mensagem enviada com sucesso para grupo ${groupId}`);
+      return {
+        success: true,
+        imageMessageId: imageResult.messageId,
+        data: imageResult.data
+      };
     } catch (error) {
       logger.error(`❌ Erro ao enviar mensagem com imagem: ${error.message}`);
-      // Fallback: enviar apenas mensagem
-      return await this.sendMessage(groupId, message);
+      // Fallback: tentar enviar apenas mensagem
+      try {
+        return await this.sendMessage(groupId, message);
+      } catch (fallbackError) {
+        logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
+        throw error;
+      }
     }
   }
 

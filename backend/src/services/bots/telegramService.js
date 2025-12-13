@@ -61,6 +61,12 @@ class TelegramService {
    */
   async sendPhoto(chatId, photo, caption = '', options = {}) {
     try {
+      logger.info(`📷 [sendPhoto] Iniciando envio de foto`);
+      logger.info(`   chatId: ${chatId}`);
+      logger.info(`   photo type: ${typeof photo}`);
+      logger.info(`   photo: ${typeof photo === 'string' ? photo.substring(0, 100) : 'Buffer/File'}`);
+      logger.info(`   caption: ${caption || '(vazio)'}`);
+      
       if (!this.botToken) {
         throw new Error('Telegram Bot Token não configurado.');
       }
@@ -72,59 +78,83 @@ class TelegramService {
       // Validar e limpar caption
       caption = this.sanitizeMessage(caption);
       
-      // Se for URL, usar diretamente (Telegram aceita URL no campo photo)
+      // Se for URL, SEMPRE baixar e enviar como arquivo (mais confiável e evita link preview)
       if (typeof photo === 'string' && (photo.startsWith('http://') || photo.startsWith('https://'))) {
-        const payload = {
-          chat_id: chatId,
-          photo: photo,
-          caption: caption,
-          parse_mode: options.parse_mode || 'Markdown'
-        };
-
         try {
+          logger.info(`📥 [1/3] Baixando imagem de ${photo.substring(0, 80)}...`);
+          const imageResponse = await axios.get(photo, { 
+            responseType: 'stream', 
+            timeout: 15000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'image/*'
+            }
+          });
+          
+          logger.info(`✅ [2/3] Imagem baixada com sucesso. Status: ${imageResponse.status}`);
+          
+          const FormData = (await import('form-data')).default;
+          const form = new FormData();
+          
+          form.append('chat_id', chatId);
+          if (caption && caption.trim().length > 0) {
+            form.append('caption', caption);
+            // Adicionar parse_mode se especificado nas options
+            if (options.parse_mode) {
+              form.append('parse_mode', options.parse_mode);
+            }
+          }
+          form.append('photo', imageResponse.data, { filename: 'product.jpg' });
+          
+          logger.info(`📤 [3/3] Enviando foto para Telegram API...`);
           const response = await axios.post(
             `${this.apiUrl}/sendPhoto`,
-            payload,
-            { timeout: 15000 }
+            form,
+            {
+              headers: form.getHeaders(),
+              timeout: 20000
+            }
           );
 
-          logger.info(`✅ Foto Telegram enviada para chat ${chatId}`);
+          logger.info(`✅ Foto Telegram enviada (via download) para chat ${chatId}. Message ID: ${response.data.result?.message_id}`);
           return {
             success: true,
             messageId: response.data.result.message_id,
             data: response.data
           };
-        } catch (urlError) {
-          // Se falhar com URL, tentar baixar e enviar como arquivo
-          logger.warn(`⚠️ Erro ao enviar foto por URL: ${urlError.message}. Tentando baixar e enviar como arquivo...`);
+        } catch (downloadError) {
+          logger.error(`❌ Erro ao baixar e enviar foto: ${downloadError.message}`);
+          logger.error(`   Status: ${downloadError.response?.status}`);
+          logger.error(`   Response: ${JSON.stringify(downloadError.response?.data)}`);
           
+          // Tentar fallback com URL direta
+          logger.warn(`⚠️ Tentando enviar foto por URL direta como fallback...`);
           try {
-            const imageResponse = await axios.get(photo, { responseType: 'stream', timeout: 10000 });
-            const FormData = (await import('form-data')).default;
-            const form = new FormData();
-            
-            form.append('chat_id', chatId);
-            form.append('caption', caption);
-            form.append('photo', imageResponse.data);
-            
+            const payload = {
+              chat_id: chatId,
+              photo: photo
+            };
+            if (caption && caption.trim().length > 0) {
+              payload.caption = caption;
+              payload.parse_mode = options.parse_mode || 'Markdown';
+            }
+            logger.info(`📤 Tentando enviar por URL direta...`);
             const response = await axios.post(
               `${this.apiUrl}/sendPhoto`,
-              form,
-              {
-                headers: form.getHeaders(),
-                timeout: 15000
-              }
+              payload,
+              { timeout: 15000 }
             );
-
-            logger.info(`✅ Foto Telegram enviada (via download) para chat ${chatId}`);
+            logger.info(`✅ Foto Telegram enviada (via URL) para chat ${chatId}. Message ID: ${response.data.result?.message_id}`);
             return {
               success: true,
               messageId: response.data.result.message_id,
               data: response.data
             };
-          } catch (downloadError) {
-            logger.error(`❌ Erro ao baixar e enviar foto: ${downloadError.message}`);
-            throw downloadError;
+          } catch (urlError) {
+            logger.error(`❌ Erro ao enviar foto por URL: ${urlError.message}`);
+            logger.error(`   Status: ${urlError.response?.status}`);
+            logger.error(`   Response: ${JSON.stringify(urlError.response?.data)}`);
+            throw downloadError; // Lançar o erro original
           }
         }
       } else {
@@ -133,7 +163,9 @@ class TelegramService {
         const form = new FormData();
         
         form.append('chat_id', chatId);
-        form.append('caption', caption);
+        if (caption && caption.trim().length > 0) {
+          form.append('caption', caption);
+        }
         
         if (typeof photo === 'string') {
           // Arquivo local
@@ -167,7 +199,7 @@ class TelegramService {
   }
 
   /**
-   * Enviar mensagem com foto
+   * Enviar mensagem com foto (imagem primeiro, depois mensagem)
    * @param {string} chatId - ID do chat/grupo
    * @param {string} imageUrl - URL da imagem
    * @param {string} message - Mensagem formatada
@@ -176,21 +208,88 @@ class TelegramService {
    */
   async sendMessageWithPhoto(chatId, imageUrl, message, options = {}) {
     try {
-      // Enviar foto com caption
-      const result = await this.sendPhoto(chatId, imageUrl, message, options);
+      logger.info(`📸 [TelegramService] sendMessageWithPhoto chamado`);
+      logger.info(`   chatId: ${chatId}`);
+      logger.info(`   imageUrl: ${imageUrl || 'NÃO FORNECIDA'}`);
+      logger.info(`   message length: ${message?.length || 0}`);
       
-      // Se a mensagem for muito longa, enviar também como mensagem separada
-      if (message.length > 1024) {
-        const shortMessage = message.substring(0, 1000) + '...';
-        await this.sendPhoto(chatId, imageUrl, shortMessage, options);
-        await this.sendMessage(chatId, message);
+      // Validar se imageUrl foi fornecida
+      if (!imageUrl || !imageUrl.trim()) {
+        throw new Error('URL da imagem não fornecida');
       }
-
-      return result;
+      
+      // Validar se é uma URL válida
+      if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+        throw new Error(`URL da imagem inválida: ${imageUrl}`);
+      }
+      
+      // Remover completamente links da mensagem para evitar preview automático
+      // Substituir por texto simples que não seja detectado como link
+      const messageWithoutPreview = message.replace(
+        /(https?:\/\/[^\s]+)/g, 
+        () => '🔗 [Link disponível - consulte a descrição]'
+      );
+      
+      // Enviar imagem COM a mensagem como caption (juntos)
+      logger.info(`📸 Enviando imagem com mensagem como caption para chat ${chatId}`);
+      logger.info(`   URL completa: ${imageUrl}`);
+      logger.info(`   Caption length: ${messageWithoutPreview.length}`);
+      
+      const photoOptions = {
+        ...options,
+        parse_mode: 'HTML' // Usar HTML para melhor controle da formatação
+      };
+      
+      // Tentar enviar com HTML primeiro
+      let photoResult;
+      try {
+        photoResult = await this.sendPhoto(chatId, imageUrl, messageWithoutPreview, photoOptions);
+      } catch (htmlError) {
+        logger.warn(`⚠️ Erro com HTML, tentando sem parse_mode: ${htmlError.message}`);
+        // Tentar sem parse_mode
+        photoResult = await this.sendPhoto(chatId, imageUrl, messageWithoutPreview, {
+          ...options,
+          parse_mode: undefined
+        });
+      }
+      
+      logger.info(`   photoResult: ${JSON.stringify({ 
+        success: photoResult?.success, 
+        messageId: photoResult?.messageId 
+      })}`);
+      
+      if (!photoResult || !photoResult.success) {
+        const errorMsg = `Falha ao enviar imagem com caption: ${JSON.stringify(photoResult)}`;
+        logger.error(`❌ ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+      
+      logger.info(`✅ Imagem com mensagem enviada com sucesso. Message ID: ${photoResult.messageId}`);
+      
+      return {
+        success: true,
+        photoMessageId: photoResult.messageId,
+        data: photoResult.data
+      };
     } catch (error) {
       logger.error(`❌ Erro ao enviar mensagem com foto: ${error.message}`);
-      // Fallback: enviar apenas mensagem
-      return await this.sendMessage(chatId, message, options);
+      logger.error(`   Stack: ${error.stack}`);
+      // Fallback: tentar enviar apenas mensagem
+      try {
+        logger.warn(`⚠️ Tentando fallback: enviar apenas mensagem sem imagem`);
+        // Remover links da mensagem para evitar preview automático
+        const messageWithoutPreview = message.replace(
+          /(https?:\/\/[^\s]+)/g, 
+          (url) => `\`${url}\``
+        );
+        return await this.sendMessage(chatId, messageWithoutPreview, { 
+          ...options, 
+          disable_web_page_preview: true 
+        });
+      } catch (fallbackError) {
+        logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
+        throw error;
+      }
     }
   }
 
@@ -214,17 +313,21 @@ class TelegramService {
       // Validar e limpar mensagem
       message = this.sanitizeMessage(message);
 
-      // Tentar enviar com Markdown primeiro
-      let parseMode = options.parse_mode || 'Markdown';
+      // Preparar payload base
       let payload = {
         chat_id: chatId,
         text: message,
-        parse_mode: parseMode,
         disable_web_page_preview: options.disable_web_page_preview !== undefined 
           ? options.disable_web_page_preview 
-          : false
+          : true // Por padrão, desabilitar preview
       };
-
+      
+      // Adicionar parse_mode apenas se especificado e não for undefined
+      if (options.parse_mode !== undefined && options.parse_mode !== null) {
+        payload.parse_mode = options.parse_mode;
+      }
+      
+      // Tentar enviar
       try {
         const response = await axios.post(
           `${this.apiUrl}/sendMessage`,
@@ -241,8 +344,8 @@ class TelegramService {
           data: response.data
         };
       } catch (markdownError) {
-        // Se falhar com Markdown, tentar sem parse_mode (texto puro)
-        if (parseMode === 'Markdown' && markdownError.response?.status === 400) {
+        // Se falhar e tiver parse_mode, tentar sem parse_mode (texto puro)
+        if (payload.parse_mode && markdownError.response?.status === 400) {
           logger.warn(`⚠️ Erro com Markdown, tentando sem formatação: ${markdownError.response?.data?.description || markdownError.message}`);
           
           payload = {

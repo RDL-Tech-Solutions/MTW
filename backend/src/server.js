@@ -18,6 +18,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configurar trust proxy para obter IP correto
+app.set('trust proxy', 1); // Confiar no primeiro proxy
+
 // Middlewares de segurança
 app.use(helmet());
 app.use(cors({

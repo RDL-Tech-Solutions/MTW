@@ -158,20 +158,23 @@ class AutoSyncCron {
           if (isNew) {
             results.new++;
 
+            // Buscar produto completo com todos os dados (incluindo cupom se houver)
+            const fullProduct = await Product.findById(product.id);
+            
             // Publicar e notificar
-            const publishResult = await publishService.publishAll(product);
+            const publishResult = await publishService.publishAll(fullProduct);
 
             // Log
             await SyncLog.create({
               platform: 'mercadolivre',
-              product_name: product.name,
-              product_id: product.id,
-              discount_percentage: product.discount_percentage,
+              product_name: fullProduct.name,
+              product_id: fullProduct.id,
+              discount_percentage: fullProduct.discount_percentage,
               is_new_product: true,
               sent_to_bots: publishResult.success
             });
 
-            logger.info(`✨ Novo produto publicado: ${product.name} (${product.discount_percentage}% OFF)`);
+            logger.info(`✨ Novo produto publicado: ${fullProduct.name} (${fullProduct.discount_percentage}% OFF)`);
           }
         } catch (error) {
           results.errors++;
@@ -213,20 +216,23 @@ class AutoSyncCron {
           if (isNew) {
             results.new++;
 
+            // Buscar produto completo com todos os dados (incluindo cupom se houver)
+            const fullProduct = await Product.findById(product.id);
+            
             // Publicar e notificar
-            const publishResult = await publishService.publishAll(product);
+            const publishResult = await publishService.publishAll(fullProduct);
 
             // Log
             await SyncLog.create({
               platform: 'shopee',
-              product_name: product.name,
-              product_id: product.id,
-              discount_percentage: product.discount_percentage,
+              product_name: fullProduct.name,
+              product_id: fullProduct.id,
+              discount_percentage: fullProduct.discount_percentage,
               is_new_product: true,
               sent_to_bots: publishResult.success
             });
 
-            logger.info(`✨ Novo produto publicado: ${product.name} (${product.discount_percentage}% OFF)`);
+            logger.info(`✨ Novo produto publicado: ${fullProduct.name} (${fullProduct.discount_percentage}% OFF)`);
           }
         } catch (error) {
           results.errors++;

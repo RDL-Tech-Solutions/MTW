@@ -2,7 +2,7 @@ import express from 'express';
 import ProductController from '../controllers/productController.js';
 import { authenticateToken, requireAdmin, optionalAuth } from '../middleware/auth.js';
 import { validate, createProductSchema, updateProductSchema } from '../middleware/validation.js';
-import { createLimiter } from '../middleware/rateLimiter.js';
+import { createLimiterDefault } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.get('/:id/related', ProductController.related);
 router.post('/:id/click', authenticateToken, ProductController.trackClick);
 
 // Rotas admin
-router.post('/', authenticateToken, requireAdmin, createLimiter, validate(createProductSchema), ProductController.create);
+router.post('/', authenticateToken, requireAdmin, createLimiterDefault, validate(createProductSchema), ProductController.create);
 router.put('/:id', authenticateToken, requireAdmin, validate(updateProductSchema), ProductController.update);
 router.delete('/:id', authenticateToken, requireAdmin, ProductController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, ProductController.batchDelete);
