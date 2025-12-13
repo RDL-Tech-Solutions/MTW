@@ -1,5 +1,6 @@
 import logger from '../../config/logger.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
+import templateRenderer from '../bots/templateRenderer.js';
 
 class PublishService {
   /**
@@ -44,10 +45,16 @@ class PublishService {
    */
   async notifyTelegramBot(product) {
     try {
-      const message = this.formatBotMessage(product);
-      await notificationDispatcher.sendToTelegram(message, product);
-      logger.info(`📨 Telegram notificado: ${product.name}`);
-      return true;
+      const message = await this.formatBotMessage(product, 'telegram');
+      const result = await notificationDispatcher.sendToTelegram(message, product);
+      
+      if (result.success && result.sent > 0) {
+        logger.info(`📨 Telegram notificado: ${product.name} (${result.sent} canal(is))`);
+        return true;
+      } else {
+        logger.warn(`⚠️ Telegram: nenhuma mensagem enviada para ${product.name}. Canais: ${result.total || 0}, Enviados: ${result.sent || 0}`);
+        return false;
+      }
     } catch (error) {
       logger.error(`❌ Erro ao enviar para Telegram: ${error.message}`);
       return false;
@@ -59,10 +66,16 @@ class PublishService {
    */
   async notifyWhatsAppBot(product) {
     try {
-      const message = this.formatBotMessage(product);
-      await notificationDispatcher.sendToWhatsApp(message, product);
-      logger.info(`📨 WhatsApp notificado: ${product.name}`);
-      return true;
+      const message = await this.formatBotMessage(product, 'whatsapp');
+      const result = await notificationDispatcher.sendToWhatsApp(message, product);
+      
+      if (result.success && result.sent > 0) {
+        logger.info(`📨 WhatsApp notificado: ${product.name} (${result.sent} canal(is))`);
+        return true;
+      } else {
+        logger.warn(`⚠️ WhatsApp: nenhuma mensagem enviada para ${product.name}. Canais: ${result.total || 0}, Enviados: ${result.sent || 0}`);
+        return false;
+      }
     } catch (error) {
       logger.error(`❌ Erro ao enviar para WhatsApp: ${error.message}`);
       return false;
@@ -70,9 +83,61 @@ class PublishService {
   }
 
   /**
-   * Formatar mensagem para bots
+   * Escapar caracteres especiais do Markdown
+   * @param {string} text - Texto para escapar
+   * @returns {string}
    */
-  formatBotMessage(product) {
+  escapeMarkdown(text) {
+    if (!text) return '';
+    return String(text)
+      .replace(/\*/g, '\\*')
+      .replace(/_/g, '\\_')
+      .replace(/\[/g, '\\[')
+      .replace(/\]/g, '\\]')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)')
+      .replace(/~/g, '\\~')
+      .replace(/`/g, '\\`')
+      .replace(/>/g, '\\>')
+      .replace(/#/g, '\\#')
+      .replace(/\+/g, '\\+')
+      .replace(/-/g, '\\-')
+      .replace(/=/g, '\\=')
+      .replace(/\|/g, '\\|')
+      .replace(/\{/g, '\\{')
+      .replace(/\}/g, '\\}')
+      .replace(/\./g, '\\.')
+      .replace(/!/g, '\\!');
+  }
+
+  /**
+   * Formatar mensagem para bots usando templates
+   * @param {Object} product - Dados do produto
+   * @param {string} platform - Plataforma (telegram, whatsapp)
+   * @returns {Promise<string>}
+   */
+  async formatBotMessage(product, platform = 'telegram') {
+    try {
+      // Preparar variáveis do template
+      const variables = await templateRenderer.preparePromotionVariables(product);
+      
+      // Renderizar template
+      const message = await templateRenderer.render('new_promotion', platform, variables);
+      
+      return message;
+    } catch (error) {
+      logger.error(`Erro ao formatar mensagem com template: ${error.message}`);
+      // Fallback para formato antigo
+      return this.formatBotMessageFallback(product);
+    }
+  }
+
+  /**
+   * Formato de fallback caso template falhe
+   * @param {Object} product - Dados do produto
+   * @returns {string}
+   */
+  formatBotMessageFallback(product) {
     const priceFormatted = new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
@@ -83,12 +148,21 @@ class PublishService {
       currency: 'BRL'
     }).format(product.old_price) : null;
 
-    return `🔥 *NOVA PROMOÇÃO AUTOMÁTICA*\n\n` +
-      `📦 ${product.name}\n\n` +
-      `💰 *${priceFormatted}*${oldPriceFormatted ? ` ~${oldPriceFormatted}~` : ''}\n` +
-      `🏷️ *${product.discount_percentage}% OFF*\n\n` +
-      `🛒 Plataforma: ${product.platform === 'mercadolivre' ? 'Mercado Livre' : 'Shopee'}\n\n` +
-      `🔗 ${product.affiliate_link}`;
+    const productName = this.escapeMarkdown(product.name);
+    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 'Shopee';
+    
+    let message = `🔥 *NOVA PROMOÇÃO AUTOMÁTICA*\n\n`;
+    message += `📦 ${productName}\n\n`;
+    message += `💰 *${priceFormatted}*`;
+    if (oldPriceFormatted) {
+      message += ` ~${oldPriceFormatted}~`;
+    }
+    message += `\n`;
+    message += `🏷️ *${product.discount_percentage || 0}% OFF*\n\n`;
+    message += `🛒 Plataforma: ${platformName}\n\n`;
+    message += `🔗 ${product.affiliate_link || 'Link não disponível'}`;
+
+    return message;
   }
 
   /**

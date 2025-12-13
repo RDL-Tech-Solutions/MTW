@@ -394,14 +394,24 @@ class LinkAnalyzer {
             const extractedPrice = Math.max(...parsedPrices);
             console.log('   🎯 Maior preço (produto):', extractedPrice);
 
-            // Se o preço no título for menor que o price da API, é um desconto
-            if (extractedPrice > 0 && extractedPrice < currentPrice) {
-              oldPrice = currentPrice;
-              currentPrice = extractedPrice;
+            // Lógica corrigida:
+            // - Se o preço extraído for MAIOR que o da API, o extraído é o original e a API tem desconto
+            // - Se o preço extraído for MENOR que o da API, pode ser um valor de cupom ou erro, não usar
+            // - Se o preço extraído for MUITO próximo do da API (diferença < 5%), considerar igual
+            const priceDiff = Math.abs(extractedPrice - currentPrice);
+            const priceDiffPercent = (priceDiff / currentPrice) * 100;
+
+            if (extractedPrice > currentPrice && priceDiffPercent > 5) {
+              // Preço extraído é maior = é o preço original, API tem desconto
+              oldPrice = extractedPrice;
+              // currentPrice já está correto (preço com desconto da API)
               console.log('   ✅ Desconto detectado no título!');
               console.log('   📊 Preço Original:', oldPrice, '| Preço com Desconto:', currentPrice);
+            } else if (extractedPrice < currentPrice && priceDiffPercent > 5) {
+              // Preço extraído é menor = pode ser valor de cupom ou erro, não usar como desconto
+              console.log('   ⚠️ Preço no título é menor que o da API (possível cupom ou erro):', extractedPrice, 'vs', currentPrice);
             } else {
-              console.log('   ⚠️ Preço no título não é menor que o da API:', extractedPrice, 'vs', currentPrice);
+              console.log('   ℹ️ Preços muito próximos ou iguais, sem desconto detectado:', extractedPrice, 'vs', currentPrice);
             }
           }
         }
@@ -458,10 +468,14 @@ class LinkAnalyzer {
           if (apiData.oldPrice === 0) {
             console.log('⚠️ API não retornou desconto, tentando scraping...');
             const scrapedData = await this.scrapeMeliPrices(url);
-            if (scrapedData.oldPrice > 0) {
+            if (scrapedData.oldPrice > 0 && scrapedData.oldPrice > apiData.currentPrice) {
               console.log('✅ Desconto encontrado via scraping!');
               apiData.oldPrice = scrapedData.oldPrice;
-              apiData.currentPrice = scrapedData.currentPrice;
+              // Manter currentPrice da API (mais confiável), a menos que o scraping encontre um valor diferente e válido
+              if (scrapedData.currentPrice > 0 && scrapedData.currentPrice < apiData.currentPrice) {
+                // Se o scraping encontrou um preço menor, usar ele (pode ser mais atualizado)
+                apiData.currentPrice = scrapedData.currentPrice;
+              }
             }
             if (scrapedData.coupon) {
               console.log('✅ Cupom encontrado via scraping!');
@@ -572,8 +586,17 @@ class LinkAnalyzer {
         result.coupon = priceData.coupon;
       }
       // Sobrescrever preços se scrapeMeliPrices achou algo melhor
-      if (priceData.currentPrice > 0) result.currentPrice = priceData.currentPrice;
-      if (priceData.oldPrice > 0) result.oldPrice = priceData.oldPrice;
+      // Só usar oldPrice do scraping se for maior que o currentPrice
+      if (priceData.oldPrice > 0 && priceData.oldPrice > result.currentPrice) {
+        result.oldPrice = priceData.oldPrice;
+      }
+      // Só usar currentPrice do scraping se for válido e diferente do atual
+      if (priceData.currentPrice > 0 && priceData.currentPrice !== result.currentPrice) {
+        // Se o scraping encontrou um preço menor, pode ser mais atualizado
+        if (priceData.currentPrice < result.currentPrice || result.currentPrice === 0) {
+          result.currentPrice = priceData.currentPrice;
+        }
+      }
 
       console.log('📦 Dados extraídos do Mercado Livre:');
       console.log('   Nome:', result.name.substring(0, 50) + '...');

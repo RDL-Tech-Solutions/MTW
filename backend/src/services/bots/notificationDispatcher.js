@@ -95,25 +95,37 @@ class NotificationDispatcher {
         throw new Error(`Plataforma não suportada: ${channel.platform}`);
       }
 
-      // Atualizar log como enviado
-      await NotificationLog.markAsSent(log.id);
+      // Atualizar log como enviado apenas se foi criado com sucesso
+      if (log && log.id) {
+        try {
+          await NotificationLog.markAsSent(log.id);
+        } catch (logError) {
+          logger.warn(`Erro ao marcar log como enviado: ${logError.message}`);
+        }
+      }
 
       return {
         channelId: channel.id,
         platform: channel.platform,
         success: true,
-        logId: log.id,
+        logId: log?.id || null,
         result
       };
     } catch (error) {
-      // Atualizar log como falho
-      await NotificationLog.markAsFailed(log.id, error.message);
+      // Atualizar log como falho apenas se foi criado com sucesso
+      if (log && log.id) {
+        try {
+          await NotificationLog.markAsFailed(log.id, error.message);
+        } catch (logError) {
+          logger.error(`Erro ao atualizar log: ${logError.message}`);
+        }
+      }
 
       return {
         channelId: channel.id,
         platform: channel.platform,
         success: false,
-        logId: log.id,
+        logId: log?.id || null,
         error: error.message
       };
     }
@@ -169,6 +181,238 @@ class NotificationDispatcher {
    */
   async notifyCouponExpired(coupon) {
     return await this.dispatch('coupon_expired', coupon);
+  }
+
+  /**
+   * Enviar mensagem para todos os canais Telegram ativos
+   * @param {string} message - Mensagem formatada
+   * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento
+   * @returns {Promise<Object>}
+   */
+  async sendToTelegram(message, eventTypeOrData) {
+    try {
+      logger.info('📤 Enviando mensagem para canais Telegram');
+
+      // Buscar canais Telegram ativos
+      const allChannels = await BotChannel.findActive();
+      logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
+      
+      const telegramChannels = allChannels?.filter(ch => ch.platform === 'telegram') || [];
+      logger.info(`📋 Canais Telegram encontrados: ${telegramChannels.length}`);
+
+      if (!telegramChannels || telegramChannels.length === 0) {
+        logger.warn('⚠️ Nenhum canal Telegram ativo encontrado');
+        return { success: false, message: 'Nenhum canal Telegram ativo', total: 0, sent: 0, failed: 0, details: [] };
+      }
+
+      const results = {
+        total: telegramChannels.length,
+        sent: 0,
+        failed: 0,
+        details: []
+      };
+
+      // Determinar eventType
+      const eventType = typeof eventTypeOrData === 'string' ? eventTypeOrData : 'custom_message';
+
+      // Enviar para cada canal Telegram
+      for (const channel of telegramChannels) {
+        let log = null;
+        try {
+          const logData = {
+            event_type: eventType,
+            platform: 'telegram',
+            channel_id: channel.id,
+            payload: typeof eventTypeOrData === 'object' ? eventTypeOrData : { message },
+            status: 'pending'
+          };
+
+          log = await NotificationLog.create(logData);
+
+          const result = await telegramService.sendMessage(channel.identifier, message);
+          
+          // Atualizar log apenas se foi criado com sucesso
+          if (log && log.id) {
+            try {
+              await NotificationLog.markAsSent(log.id);
+            } catch (logError) {
+              logger.warn(`Erro ao marcar log como enviado: ${logError.message}`);
+            }
+          }
+
+          results.sent++;
+          results.details.push({
+            channelId: channel.id,
+            platform: 'telegram',
+            success: true,
+            logId: log?.id || null,
+            result
+          });
+
+          logger.info(`✅ Mensagem enviada para Telegram canal ${channel.id} (chat: ${channel.identifier})`);
+        } catch (error) {
+          // Capturar detalhes do erro
+          const errorDetails = {
+            message: error.message,
+            chatId: channel.identifier,
+            channelId: channel.id
+          };
+
+          // Adicionar detalhes da API do Telegram se disponível
+          if (error.response) {
+            errorDetails.status = error.response.status;
+            errorDetails.apiError = error.response.data?.description || error.response.data?.error_code || 'Unknown error';
+            errorDetails.apiResponse = error.response.data;
+          }
+
+          // Atualizar log como falho se foi criado com sucesso
+          if (log && log.id) {
+            try {
+              await NotificationLog.markAsFailed(log.id, JSON.stringify(errorDetails));
+            } catch (logError) {
+              logger.error(`Erro ao atualizar log: ${logError.message}`);
+            }
+          }
+
+          logger.error(`❌ Erro ao enviar para Telegram canal ${channel.id} (chat: ${channel.identifier}): ${JSON.stringify(errorDetails, null, 2)}`);
+          results.failed++;
+          results.details.push({
+            channelId: channel.id,
+            platform: 'telegram',
+            success: false,
+            error: errorDetails.apiError || error.message,
+            details: errorDetails
+          });
+        }
+      }
+
+      logger.info(`✅ Telegram: ${results.sent} sucesso, ${results.failed} falhas`);
+      
+      // Retornar com success baseado em se pelo menos uma mensagem foi enviada
+      return {
+        ...results,
+        success: results.sent > 0
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar para Telegram: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Enviar mensagem para todos os canais WhatsApp ativos
+   * @param {string} message - Mensagem formatada
+   * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento
+   * @returns {Promise<Object>}
+   */
+  async sendToWhatsApp(message, eventTypeOrData) {
+    try {
+      logger.info('📤 Enviando mensagem para canais WhatsApp');
+
+      // Buscar canais WhatsApp ativos
+      const allChannels = await BotChannel.findActive();
+      logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
+      
+      const whatsappChannels = allChannels?.filter(ch => ch.platform === 'whatsapp') || [];
+      logger.info(`📋 Canais WhatsApp encontrados: ${whatsappChannels.length}`);
+
+      if (!whatsappChannels || whatsappChannels.length === 0) {
+        logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
+        return { success: false, message: 'Nenhum canal WhatsApp ativo', total: 0, sent: 0, failed: 0, details: [] };
+      }
+
+      const results = {
+        total: whatsappChannels.length,
+        sent: 0,
+        failed: 0,
+        details: []
+      };
+
+      // Determinar eventType
+      const eventType = typeof eventTypeOrData === 'string' ? eventTypeOrData : 'custom_message';
+
+      // Enviar para cada canal WhatsApp
+      for (const channel of whatsappChannels) {
+        let log = null;
+        try {
+          const logData = {
+            event_type: eventType,
+            platform: 'whatsapp',
+            channel_id: channel.id,
+            payload: typeof eventTypeOrData === 'object' ? eventTypeOrData : { message },
+            status: 'pending'
+          };
+
+          log = await NotificationLog.create(logData);
+
+          const result = await whatsappService.sendMessage(channel.identifier, message);
+          
+          // Atualizar log apenas se foi criado com sucesso
+          if (log && log.id) {
+            try {
+              await NotificationLog.markAsSent(log.id);
+            } catch (logError) {
+              logger.warn(`Erro ao marcar log como enviado: ${logError.message}`);
+            }
+          }
+
+          results.sent++;
+          results.details.push({
+            channelId: channel.id,
+            platform: 'whatsapp',
+            success: true,
+            logId: log?.id || null,
+            result
+          });
+
+          logger.info(`✅ Mensagem enviada para WhatsApp canal ${channel.id} (grupo: ${channel.identifier})`);
+        } catch (error) {
+          // Capturar detalhes do erro
+          const errorDetails = {
+            message: error.message,
+            groupId: channel.identifier,
+            channelId: channel.id
+          };
+
+          // Adicionar detalhes da API do WhatsApp se disponível
+          if (error.response) {
+            errorDetails.status = error.response.status;
+            errorDetails.apiError = error.response.data?.error?.message || error.response.data?.error || 'Unknown error';
+            errorDetails.apiResponse = error.response.data;
+          }
+
+          // Atualizar log como falho se foi criado com sucesso
+          if (log && log.id) {
+            try {
+              await NotificationLog.markAsFailed(log.id, JSON.stringify(errorDetails));
+            } catch (logError) {
+              logger.error(`Erro ao atualizar log: ${logError.message}`);
+            }
+          }
+
+          logger.error(`❌ Erro ao enviar para WhatsApp canal ${channel.id} (grupo: ${channel.identifier}): ${JSON.stringify(errorDetails, null, 2)}`);
+          results.failed++;
+          results.details.push({
+            channelId: channel.id,
+            platform: 'whatsapp',
+            success: false,
+            error: errorDetails.apiError || error.message,
+            details: errorDetails
+          });
+        }
+      }
+
+      logger.info(`✅ WhatsApp: ${results.sent} sucesso, ${results.failed} falhas`);
+      
+      // Retornar com success baseado em se pelo menos uma mensagem foi enviada
+      return {
+        ...results,
+        success: results.sent > 0
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar para WhatsApp: ${error.message}`);
+      throw error;
+    }
   }
 
   /**

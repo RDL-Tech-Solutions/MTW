@@ -174,18 +174,29 @@ export default function Products() {
       const productInfo = response.data.data;
 
       // Verificar se há desconto real
-      const hasDiscount = productInfo.oldPrice && productInfo.oldPrice > productInfo.currentPrice;
+      // oldPrice deve ser maior que currentPrice para haver desconto
+      const hasDiscount = productInfo.oldPrice && 
+                          productInfo.oldPrice > 0 && 
+                          productInfo.currentPrice > 0 &&
+                          productInfo.oldPrice > productInfo.currentPrice;
 
       // Detectar categoria automaticamente baseado no nome do produto
       const detectedCategory = detectCategory(productInfo.name);
 
       // Definir preços corretamente
-      let priceOriginal = productInfo.currentPrice; // Preço padrão
+      // price = preço original (sem desconto)
+      // discount_price = preço com desconto (se houver)
+      let priceOriginal = productInfo.currentPrice || 0; // Preço padrão (pode ser com ou sem desconto)
       let priceDiscount = ''; // Vazio por padrão
 
       if (hasDiscount) {
+        // Se há desconto: oldPrice é o original, currentPrice é o com desconto
         priceOriginal = productInfo.oldPrice; // Preço original (antes do desconto)
         priceDiscount = productInfo.currentPrice; // Preço com desconto
+      } else {
+        // Se não há desconto: currentPrice é o preço normal (sem desconto)
+        priceOriginal = productInfo.currentPrice || 0;
+        priceDiscount = ''; // Sem desconto
       }
 
       setFormData({

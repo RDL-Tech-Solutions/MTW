@@ -1,5 +1,6 @@
 import express from 'express';
 import botController from '../controllers/botController.js';
+import botTemplateController from '../controllers/botTemplateController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -36,5 +37,15 @@ router.get('/stats', botController.getStats);
 // STATUS
 // ============================================
 router.get('/status', botController.checkStatus);
+
+// ============================================
+// TEMPLATES DE MENSAGENS
+// ============================================
+router.get('/templates', botTemplateController.list);
+router.get('/templates/variables/:template_type', botTemplateController.getVariables);
+router.get('/templates/:id', botTemplateController.getById);
+router.post('/templates', botTemplateController.create);
+router.put('/templates/:id', botTemplateController.update);
+router.delete('/templates/:id', botTemplateController.delete);
 
 export default router;

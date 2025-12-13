@@ -3,8 +3,9 @@ import api from '../services/api';
 import { 
   Plus, Edit, Trash2, MessageSquare, Send, Activity, 
   Settings, Bot, CheckCircle, XCircle, Eye, EyeOff,
-  Wifi, WifiOff, RefreshCw, Save, AlertCircle
+  Wifi, WifiOff, RefreshCw, Save, AlertCircle, FileText
 } from 'lucide-react';
+import BotTemplates from '../components/BotTemplates';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -412,7 +413,7 @@ export default function Bots() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">
-        {['config', 'channels', 'logs'].map((tab) => (
+        {['config', 'channels', 'templates', 'logs'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -424,6 +425,7 @@ export default function Bots() {
           >
             {tab === 'config' && <><Settings className="inline mr-2 h-4 w-4" />Configurações</>}
             {tab === 'channels' && <><MessageSquare className="inline mr-2 h-4 w-4" />Canais</>}
+            {tab === 'templates' && <><FileText className="inline mr-2 h-4 w-4" />Templates</>}
             {tab === 'logs' && <><Activity className="inline mr-2 h-4 w-4" />Logs</>}
           </button>
         ))}
@@ -882,6 +884,11 @@ export default function Bots() {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {/* Tab: Templates */}
+      {activeTab === 'templates' && (
+        <BotTemplates />
       )}
 
       {/* Tab: Logs */}

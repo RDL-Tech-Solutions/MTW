@@ -1,5 +1,6 @@
 import logger from '../../config/logger.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
+import templateRenderer from '../bots/templateRenderer.js';
 import Notification from '../../models/Notification.js';
 import supabase from '../../config/database.js';
 
@@ -81,11 +82,16 @@ ${coupon.affiliate_link || 'Link não disponível'}
     try {
       logger.info(`📢 Enviando notificação de novo cupom: ${coupon.code}`);
 
-      const message = this.formatNewCouponMessage(coupon);
+      // Preparar variáveis do template
+      const variables = templateRenderer.prepareCouponVariables(coupon);
+
+      // Renderizar templates para cada plataforma
+      const whatsappMessage = await templateRenderer.render('new_coupon', 'whatsapp', variables);
+      const telegramMessage = await templateRenderer.render('new_coupon', 'telegram', variables);
 
       // Enviar para WhatsApp
       try {
-        await notificationDispatcher.sendToWhatsApp(message, 'coupon_update');
+        await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_update');
         logger.info('✅ Notificação WhatsApp enviada');
       } catch (error) {
         logger.error(`Erro ao enviar WhatsApp: ${error.message}`);
@@ -93,7 +99,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
 
       // Enviar para Telegram
       try {
-        await notificationDispatcher.sendToTelegram(message, 'coupon_update');
+        await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_update');
         logger.info('✅ Notificação Telegram enviada');
       } catch (error) {
         logger.error(`Erro ao enviar Telegram: ${error.message}`);
@@ -120,11 +126,16 @@ ${coupon.affiliate_link || 'Link não disponível'}
     try {
       logger.info(`📢 Enviando notificação de cupom expirado: ${coupon.code}`);
 
-      const message = this.formatExpiredCouponMessage(coupon);
+      // Preparar variáveis do template
+      const variables = templateRenderer.prepareExpiredCouponVariables(coupon);
+
+      // Renderizar templates para cada plataforma
+      const whatsappMessage = await templateRenderer.render('expired_coupon', 'whatsapp', variables);
+      const telegramMessage = await templateRenderer.render('expired_coupon', 'telegram', variables);
 
       // Enviar para WhatsApp
       try {
-        await notificationDispatcher.sendToWhatsApp(message, 'coupon_expired');
+        await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_expired');
         logger.info('✅ Notificação WhatsApp enviada');
       } catch (error) {
         logger.error(`Erro ao enviar WhatsApp: ${error.message}`);
@@ -132,7 +143,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
 
       // Enviar para Telegram
       try {
-        await notificationDispatcher.sendToTelegram(message, 'coupon_expired');
+        await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_expired');
         logger.info('✅ Notificação Telegram enviada');
       } catch (error) {
         logger.error(`Erro ao enviar Telegram: ${error.message}`);

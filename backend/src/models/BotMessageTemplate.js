@@ -1,0 +1,158 @@
+import supabase from '../config/database.js';
+
+class BotMessageTemplate {
+  /**
+   * Buscar template por tipo e plataforma
+   * @param {string} templateType - Tipo do template (new_promotion, new_coupon, expired_coupon)
+   * @param {string} platform - Plataforma (telegram, whatsapp, all)
+   * @returns {Promise<Object|null>}
+   */
+  static async findByType(templateType, platform = 'all') {
+    try {
+      // Primeiro tentar buscar template específico da plataforma
+      let { data, error } = await supabase
+        .from('bot_message_templates')
+        .select('*')
+        .eq('template_type', templateType)
+        .eq('platform', platform)
+        .eq('is_active', true)
+        .single();
+
+      // Se não encontrar, buscar template genérico (all)
+      if (error && error.code === 'PGRST116') {
+        ({ data, error } = await supabase
+          .from('bot_message_templates')
+          .select('*')
+          .eq('template_type', templateType)
+          .eq('platform', 'all')
+          .eq('is_active', true)
+          .single());
+      }
+
+      if (error && error.code !== 'PGRST116') throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao buscar template:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Buscar todos os templates
+   * @param {Object} filters - Filtros opcionais
+   * @returns {Promise<Array>}
+   */
+  static async findAll(filters = {}) {
+    try {
+      let query = supabase
+        .from('bot_message_templates')
+        .select('*')
+        .order('template_type', { ascending: true })
+        .order('platform', { ascending: true });
+
+      if (filters.template_type) {
+        query = query.eq('template_type', filters.template_type);
+      }
+
+      if (filters.platform) {
+        query = query.eq('platform', filters.platform);
+      }
+
+      if (filters.is_active !== undefined) {
+        query = query.eq('is_active', filters.is_active);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao buscar templates:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Criar novo template
+   * @param {Object} templateData - Dados do template
+   * @returns {Promise<Object>}
+   */
+  static async create(templateData) {
+    const {
+      template_type,
+      platform = 'all',
+      template,
+      description,
+      available_variables = [],
+      is_active = true
+    } = templateData;
+
+    const { data, error } = await supabase
+      .from('bot_message_templates')
+      .insert([{
+        template_type,
+        platform,
+        template,
+        description,
+        available_variables,
+        is_active
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Atualizar template
+   * @param {string} id - ID do template
+   * @param {Object} updates - Dados para atualizar
+   * @returns {Promise<Object>}
+   */
+  static async update(id, updates) {
+    const { data, error } = await supabase
+      .from('bot_message_templates')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Deletar template
+   * @param {string} id - ID do template
+   * @returns {Promise<boolean>}
+   */
+  static async delete(id) {
+    const { error } = await supabase
+      .from('bot_message_templates')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  }
+
+  /**
+   * Buscar template por ID
+   * @param {string} id - ID do template
+   * @returns {Promise<Object|null>}
+   */
+  static async findById(id) {
+    const { data, error } = await supabase
+      .from('bot_message_templates')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+}
+
+export default BotMessageTemplate;
+
