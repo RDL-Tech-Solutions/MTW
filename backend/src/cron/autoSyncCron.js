@@ -188,7 +188,7 @@ class AutoSyncCron {
 
             // Buscar produto completo com todos os dados (incluindo cupom se houver)
             const fullProduct = await Product.findById(product.id);
-            
+
             // Publicar e notificar
             const publishResult = await publishService.publishAll(fullProduct);
 
@@ -246,7 +246,7 @@ class AutoSyncCron {
 
             // Buscar produto completo com todos os dados (incluindo cupom se houver)
             const fullProduct = await Product.findById(product.id);
-            
+
             // Publicar e notificar
             const publishResult = await publishService.publishAll(fullProduct);
 
