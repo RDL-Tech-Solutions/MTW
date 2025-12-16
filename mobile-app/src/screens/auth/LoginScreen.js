@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
+import Logo from '../../components/common/Logo';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import colors from '../../theme/colors';
@@ -86,8 +87,8 @@ export default function LoginScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.logo}>🔥</Text>
-          <Text style={styles.title}>MTW Promo</Text>
+          <Logo width={64} height={64} style={styles.logo} />
+          <Text style={styles.title}>PreçoCerto</Text>
           <Text style={styles.subtitle}>As melhores ofertas em um só lugar</Text>
         </View>
 
@@ -192,7 +193,6 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   logo: {
-    fontSize: 64,
     marginBottom: 16,
   },
   title: {

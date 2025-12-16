@@ -1,33 +1,112 @@
-# 🔌 Integrações - MTW Promo
+# 🔌 Integrações
 
-Documentação de todas as integrações externas do sistema.
+Documentação completa das integrações externas do MTW Promo.
 
-## 📚 Integrações Disponíveis
+## 📋 Integrações Disponíveis
 
-### 🤖 Bots (WhatsApp & Telegram)
-**[bots/](./bots/)**  
-Sistema completo de notificações automáticas via WhatsApp e Telegram.
+### Plataformas de Afiliados
+- **[Mercado Livre](./mercadolivre/README.md)** ✅ - 100% funcional
+- **[Shopee](./shopee/README.md)** ✅ - 90% funcional
+- **[Amazon](./amazon/README.md)** ⚠️ - 30% (em desenvolvimento)
+- **[AliExpress](./aliexpress/README.md)** ⚠️ - 30% (em desenvolvimento)
 
-- ⭐ **[Guia Passo a Passo Completo](./bots/GUIA_PASSO_A_PASSO.md)** - Configuração detalhada do zero
-- [Guia de Configuração WhatsApp](./bots/GUIA_CONFIGURACAO_WHATSAPP.md) - Configuração específica
-- [Quick Start](./bots/BOTS_QUICK_START.md) - Setup rápido
-- [Documentação Técnica](./bots/BOTS_DOCUMENTATION.md) - Referência completa
-- Configuração de bots
-- Templates de mensagens
-- Gerenciamento de canais
+### Bots e Notificações
+- **[Bots (WhatsApp & Telegram)](./bots/README.md)** ✅ - 100% funcional
+- **[Telegram Collector](./telegram-collector/README.md)** ✅ - 100% funcional
+
+## 🛒 Mercado Livre
+
+### Status: ✅ 100% Funcional
+
+**Funcionalidades:**
+- Busca de produtos
+- Captura de cupons
+- Links de afiliados
+- Sincronização automática
+
+**Documentação**: [Guia Completo](./mercadolivre/README.md)
+
+## 🛍️ Shopee
+
+### Status: ✅ 90% Funcional
+
+**Funcionalidades:**
+- Busca de produtos
+- Captura de cupons
+- Links de afiliados
+- Sincronização automática
+
+**Documentação**: [Guia Completo](./shopee/README.md)
+
+## 🛒 Amazon
+
+### Status: ⚠️ 30% (Em Desenvolvimento)
+
+**Funcionalidades:**
+- Estrutura criada
+- Em desenvolvimento
+
+**Documentação**: [Guia Completo](./amazon/README.md)
+
+## 🛍️ AliExpress
+
+### Status: ⚠️ 30% (Em Desenvolvimento)
+
+**Funcionalidades:**
+- Estrutura criada
+- Em desenvolvimento
+
+**Documentação**: [Guia Completo](./aliexpress/README.md)
+
+## 🤖 Bots
+
+### Status: ✅ 100% Funcional
+
+**Plataformas:**
+- WhatsApp Cloud API
+- Telegram Bot API
+
+**Funcionalidades:**
+- Envio automático de notificações
+- Templates de mensagem
+- Múltiplos canais
 - Logs e estatísticas
 
-### 🛒 Mercado Livre
-**[mercadolivre/](./mercadolivre/)**  
-Integração com a API do Mercado Livre para captura de produtos e cupons.
+**Documentação**: [Guia Completo](./bots/README.md)
 
-- Obtenção de tokens
-- Configuração da API
-- Troubleshooting
+## 📡 Telegram Collector
 
-## 🗺️ Navegação
+### Status: ✅ 100% Funcional
 
-- **Voltar**: [Início Rápido](../01-getting-started/)
-- **Módulos**: [docs/03-modules/](../03-modules/)
-- **Troubleshooting**: [docs/05-troubleshooting/](../05-troubleshooting/)
+**Funcionalidades:**
+- Monitoramento de canais públicos
+- Captura automática de cupons
+- Autenticação via MTProto (Node.js)
+- Anti-duplicação
 
+**Documentação**: [Guia Completo](./telegram-collector/README.md)
+
+## 🔧 Configuração
+
+A maioria das integrações pode ser configurada via **Painel Admin** em `/settings`.
+
+### Via Admin Panel (Recomendado)
+1. Acesse `/settings`
+2. Configure as credenciais
+3. Salve
+
+### Via .env (Fallback)
+Configure no arquivo `.env` do backend.
+
+## 📚 Documentação por Integração
+
+- [Mercado Livre](./mercadolivre/README.md)
+- [Shopee](./shopee/README.md)
+- [Amazon](./amazon/README.md)
+- [AliExpress](./aliexpress/README.md)
+- [Bots](./bots/README.md)
+- [Telegram Collector](./telegram-collector/README.md)
+
+---
+
+**Próximo**: [API Reference](../05-api-reference/README.md)

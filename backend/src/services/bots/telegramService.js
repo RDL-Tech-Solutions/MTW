@@ -1,11 +1,44 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
 import Category from '../../models/Category.js';
+import BotConfig from '../../models/BotConfig.js';
 
 class TelegramService {
   constructor() {
-    this.botToken = process.env.TELEGRAM_BOT_TOKEN;
-    this.apiUrl = `https://api.telegram.org/bot${this.botToken}`;
+    // Token será buscado dinamicamente do banco de dados
+    this.botToken = null;
+    this.apiUrl = null;
+  }
+
+  /**
+   * Buscar token do banco de dados e atualizar API URL
+   */
+  async loadToken() {
+    try {
+      const config = await BotConfig.get();
+      // Usar APENAS token do banco de dados
+      this.botToken = config.telegram_bot_token;
+      
+      if (!this.botToken) {
+        throw new Error('Telegram Bot Token não configurado no banco de dados. Configure no painel admin.');
+      }
+      
+      this.apiUrl = `https://api.telegram.org/bot${this.botToken}`;
+      logger.info(`✅ Token do Telegram carregado do banco de dados`);
+      return this.botToken;
+    } catch (error) {
+      logger.error(`Erro ao carregar token do Telegram: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Limpar cache do token (forçar recarregar do banco)
+   */
+  clearTokenCache() {
+    this.botToken = null;
+    this.apiUrl = null;
+    logger.info('🔄 Cache do token do Telegram limpo');
   }
 
   /**
@@ -68,8 +101,13 @@ class TelegramService {
       logger.info(`   photo: ${typeof photo === 'string' ? photo.substring(0, 100) : 'Buffer/File'}`);
       logger.info(`   caption: ${caption || '(vazio)'}`);
       
+      // Carregar token do banco de dados se não estiver carregado
       if (!this.botToken) {
-        throw new Error('Telegram Bot Token não configurado.');
+        await this.loadToken();
+      }
+      
+      if (!this.botToken) {
+        throw new Error('Telegram Bot Token não configurado. Configure no painel admin.');
       }
 
       if (!chatId) {
@@ -311,8 +349,13 @@ class TelegramService {
    */
   async sendMessage(chatId, message, options = {}) {
     try {
+      // Carregar token do banco de dados se não estiver carregado
       if (!this.botToken) {
-        throw new Error('Telegram Bot Token não configurado. Verifique as variáveis de ambiente.');
+        await this.loadToken();
+      }
+      
+      if (!this.botToken) {
+        throw new Error('Telegram Bot Token não configurado. Configure no painel admin.');
       }
 
       if (!chatId) {
@@ -384,18 +427,38 @@ class TelegramService {
         throw markdownError;
       }
     } catch (error) {
+      const errorCode = error.response?.data?.error_code;
+      const errorDescription = error.response?.data?.description || error.message;
+      
       const errorDetails = {
         message: error.message,
         chatId: chatId,
-        messageLength: message?.length || 0
+        messageLength: message?.length || 0,
+        error_code: errorCode,
+        error_description: errorDescription
       };
 
       // Adicionar detalhes da resposta da API se disponível
       if (error.response) {
         errorDetails.status = error.response.status;
         errorDetails.statusText = error.response.statusText;
-        errorDetails.apiError = error.response.data?.description || error.response.data?.error_code || 'Unknown error';
+        errorDetails.apiError = errorDescription || errorCode || 'Unknown error';
         errorDetails.apiResponse = error.response.data;
+      }
+      
+      // Log detalhado do erro
+      logger.error(`❌ Erro ao enviar mensagem Telegram:`);
+      logger.error(`   Chat ID: ${chatId}`);
+      logger.error(`   Error Code: ${errorCode || 'N/A'}`);
+      logger.error(`   Error Description: ${errorDescription}`);
+      logger.error(`   Status: ${error.response?.status || 'N/A'}`);
+      
+      // Melhorar mensagem de erro para Unauthorized
+      if (errorCode === 401 || errorDescription.includes('Unauthorized')) {
+        const improvedError = new Error('Token do bot inválido ou bot não autorizado. Verifique: 1) Se o token está correto, 2) Se o bot foi iniciado com @BotFather, 3) Se o bot tem permissões para enviar mensagens.');
+        improvedError.code = 401;
+        improvedError.originalError = error;
+        throw improvedError;
       }
 
       logger.error(`❌ Erro ao enviar mensagem Telegram: ${JSON.stringify(errorDetails, null, 2)}`);
@@ -526,7 +589,7 @@ ${coupon.restrictions ? `⚠️ ${coupon.restrictions}\n` : ''}
     const message = `🤖 *Teste de Bot Telegram*
 
 ✅ Bot configurado e funcionando!
-📱 Sistema MTW Promo
+📱 Sistema PreçoCerto
 ⏰ ${new Date().toLocaleString('pt-BR')}
 
 Você receberá notificações automáticas sobre:
@@ -567,6 +630,15 @@ Você receberá notificações automáticas sobre:
    */
   async getBotInfo() {
     try {
+      // Carregar token do banco de dados se não estiver carregado
+      if (!this.botToken) {
+        await this.loadToken();
+      }
+      
+      if (!this.botToken) {
+        throw new Error('Telegram Bot Token não configurado. Configure no painel admin.');
+      }
+      
       const response = await axios.get(`${this.apiUrl}/getMe`);
       return response.data.result;
     } catch (error) {

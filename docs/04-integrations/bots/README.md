@@ -1,64 +1,59 @@
-# 🤖 Bots - WhatsApp e Telegram
+# 🤖 Bots (WhatsApp & Telegram)
 
-Sistema completo de notificações automáticas via bots do WhatsApp e Telegram.
+Guia completo para configurar e usar os bots de notificações.
 
-## 📚 Documentos Disponíveis
+## 📋 Visão Geral
 
-### 🚀 Guias de Configuração
+O sistema de bots permite enviar notificações automáticas de produtos e cupons via WhatsApp e Telegram.
 
-1. **[GUIA_PASSO_A_PASSO.md](./GUIA_PASSO_A_PASSO.md)** ⭐ **NOVO**  
-   **Guia completo passo a passo** para configurar os bots do zero.  
-   **Use este guia se**: É sua primeira vez configurando os bots ou precisa de instruções detalhadas.
+## ✨ Funcionalidades
 
-2. **[GUIA_CONFIGURACAO_WHATSAPP.md](./GUIA_CONFIGURACAO_WHATSAPP.md)**  
-   Guia específico e detalhado para configurar o bot do WhatsApp.
+- ✅ Envio automático de notificações
+- ✅ Templates de mensagem personalizáveis
+- ✅ Múltiplos canais (grupos)
+- ✅ Logs e estatísticas
+- ✅ Teste de envio
 
-3. **[BOTS_QUICK_START.md](./BOTS_QUICK_START.md)**  
-   Setup rápido em 5 minutos (para usuários experientes).
+## 🚀 Configuração Rápida
 
-### 📖 Documentação Técnica
+### 1. Telegram Bot
 
-4. **[BOTS_DOCUMENTATION.md](./BOTS_DOCUMENTATION.md)**  
-   Documentação técnica completa do sistema de bots.
+1. Crie um bot com [@BotFather](https://t.me/BotFather)
+2. Copie o token
+3. Configure no admin panel em `/bots`
+4. Adicione canais (grupos)
+5. Teste o envio
 
-5. **[BOTS_INDEX.md](./BOTS_INDEX.md)**  
-   Índice navegável de toda a documentação de bots.
+### 2. WhatsApp Bot
 
-### 📋 Checklists e Resumos
+1. Crie um app no [Facebook Developers](https://developers.facebook.com)
+2. Adicione WhatsApp Business API
+3. Obtenha o token e phone number ID
+4. Configure no admin panel em `/bots`
+5. Adicione canais
+6. Teste o envio
 
-6. **[BOTS_CHECKLIST.md](./BOTS_CHECKLIST.md)**  
-   Checklist passo a passo de implementação.
+## 📝 Templates de Mensagem
 
-7. **[BOTS_SUMMARY.md](./BOTS_SUMMARY.md)**  
-   Resumo executivo do sistema de bots.
+Crie templates personalizados no admin panel em `/bots/templates`.
 
-8. **[BOTS_IMPLEMENTATION_COMPLETE.md](./BOTS_IMPLEMENTATION_COMPLETE.md)**  
-   Resumo da implementação completa.
+### Variáveis Disponíveis
 
-9. **[BOTS_README.md](./BOTS_README.md)**  
-   README original do sistema de bots.
+- `{product_name}` - Nome do produto
+- `{current_price}` - Preço atual
+- `{old_price}` - Preço antigo
+- `{discount_percentage}` - Percentual de desconto
+- `{affiliate_link}` - Link de afiliado
+- `{coupon_code}` - Código do cupom
+- `{discount_value}` - Valor do desconto
 
-## 🎯 Por Onde Começar?
+## 📚 Documentação Completa
 
-### Primeira vez configurando?
-👉 **[GUIA_PASSO_A_PASSO.md](./GUIA_PASSO_A_PASSO.md)** - Siga este guia completo!
-
-### Já configurou antes e quer rapidez?
-👉 **[BOTS_QUICK_START.md](./BOTS_QUICK_START.md)** - Setup em 5 minutos
-
-### Quer entender como funciona?
-👉 **[BOTS_DOCUMENTATION.md](./BOTS_DOCUMENTATION.md)** - Documentação técnica
-
-### Quer configurar apenas WhatsApp?
-👉 **[GUIA_CONFIGURACAO_WHATSAPP.md](./GUIA_CONFIGURACAO_WHATSAPP.md)** - Guia específico
-
-## 🗺️ Navegação
-
-- **Voltar**: [Integrações](../README.md)
-- **Troubleshooting**: [docs/05-troubleshooting/](../../05-troubleshooting/)
-- **Referência Técnica**: [docs/06-reference/](../../06-reference/)
+- [Guia Passo a Passo](./step-by-step.md)
+- [Configuração WhatsApp](./whatsapp-setup.md)
+- [Configuração Telegram](./telegram-setup.md)
+- [Templates](./templates.md)
 
 ---
 
-**Última atualização**: 13/12/2024
-
+**Próximo**: [Mercado Livre](../mercadolivre/README.md)

@@ -21,7 +21,7 @@ export default function Header() {
             Bem-vindo, {user?.name || 'Admin'}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Painel Administrativo MTW Promo
+            Painel Administrativo PreçoCerto
           </p>
         </div>
 

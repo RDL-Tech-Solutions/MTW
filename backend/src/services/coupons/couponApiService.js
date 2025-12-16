@@ -4,6 +4,7 @@ import meliCouponCapture from './meliCouponCapture.js';
 import shopeeCouponCapture from './shopeeCouponCapture.js';
 import amazonCouponCapture from './amazonCouponCapture.js';
 import aliExpressCouponCapture from './aliExpressCouponCapture.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class CouponApiService {
   /**
@@ -75,7 +76,9 @@ class CouponApiService {
       if (code.startsWith('MELI-')) {
         const productId = code.replace('MELI-', '');
         try {
+          // MELI_API_URL é uma constante, não está no AppSettings
           const baseUrl = process.env.MELI_API_URL || 'https://api.mercadolibre.com';
+          
           const response = await axios.get(`${baseUrl}/items/${productId}`, {
             timeout: 10000
           });

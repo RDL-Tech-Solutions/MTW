@@ -1,7 +1,7 @@
 {
-  "name": "mtw-promo-admin",
+  "name": "precocerto-admin",
   "version": "1.0.0",
-  "description": "Painel administrativo MTW Promo",
+  "description": "Painel administrativo PreçoCerto",
   "type": "module",
   "scripts": {
     "dev": "vite",

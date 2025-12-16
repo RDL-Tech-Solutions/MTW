@@ -4,6 +4,27 @@
 
 Este guia explica todas as variáveis de ambiente do backend MTW Promo.
 
+## 🎯 IMPORTANTE: Migração para Admin Panel
+
+**Muitas configurações foram migradas para o Painel Admin!**
+
+As seguintes configurações agora podem ser gerenciadas através do Painel Admin em `/settings`:
+- ✅ **Mercado Livre** (Client ID, Secret, Tokens, Códigos de Afiliado)
+- ✅ **Shopee** (Partner ID, Partner Key)
+- ✅ **Amazon** (Access Key, Secret Key, Partner Tag)
+- ✅ **Expo** (Access Token para Push Notifications)
+- ✅ **Telegram Collector** (Rate Limits, Retries, Reconnect)
+- ✅ **Backend** (URL, API Key)
+
+**O que DEVE permanecer no .env:**
+- 🔒 **Segurança**: JWT_SECRET, JWT_REFRESH_SECRET
+- 🗄️ **Infraestrutura**: SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY
+- 💾 **Cache**: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+- ⚙️ **Sistema**: NODE_ENV, PORT, HOST, API_URL
+- 🔐 **Bots** (tokens ainda podem ser configurados via admin, mas .env funciona como fallback)
+
+**Recomendação**: Configure as APIs através do Painel Admin. O `.env` serve como fallback caso o banco não tenha as configurações.
+
 ---
 
 ## ✅ Variáveis Configuradas
@@ -21,6 +42,7 @@ Este guia explica todas as variáveis de ambiente do backend MTW Promo.
 - [ ] **WhatsApp Bot** - Precisa token da Meta
 - [ ] **Shopee API** - Precisa credenciais
 - [ ] **Mercado Livre** - Precisa access token
+- [ ] **Telegram Collector** - Precisa API ID e Hash do Telegram
 
 ---
 
@@ -100,50 +122,63 @@ REDIS_TLS=false
 
 ---
 
-### 5. AFFILIATE APIS ⚠️
+### 5. AFFILIATE APIS ⚠️ (MIGRADO PARA ADMIN PANEL)
+
+> **📌 IMPORTANTE**: Estas configurações agora podem ser gerenciadas no Painel Admin em `/settings`!
 
 #### Shopee API ⚠️
 
 ```env
-SHOPEE_PARTNER_ID=your_shopee_partner_id
-SHOPEE_PARTNER_KEY=your_shopee_partner_key
+SHOPEE_PARTNER_ID=your_shopee_partner_id      # Fallback (use Admin Panel)
+SHOPEE_PARTNER_KEY=your_shopee_partner_key    # Fallback (use Admin Panel)
 SHOPEE_API_URL=https://partner.shopeemobile.com/api/v2
 ```
 
 **Status**: ⚠️ Não configurado  
-**Ação**: Opcional - Configure se quiser integração Shopee  
+**Ação**: ⚡ **Configure no Painel Admin** (`/settings` > Aba "Shopee")  
+**Fallback**: Se não configurado no admin, usa valores do `.env`  
 **Onde obter**: https://open.shopee.com
 
 #### Mercado Livre API ⚠️
 
 ```env
-MELI_CLIENT_ID=6916793910009014
-MELI_CLIENT_SECRET=hyFLmlMAq4V43ZPpivH6VtJCE6bXB7C2
-MELI_ACCESS_TOKEN=your_meli_access_token
-MELI_REFRESH_TOKEN=your_meli_refresh_token
+MELI_CLIENT_ID=6916793910009014              # Fallback (use Admin Panel)
+MELI_CLIENT_SECRET=hyFLmlMAq4V43ZPpivH6VtJCE6bXB7C2  # Fallback (use Admin Panel)
+MELI_ACCESS_TOKEN=your_meli_access_token      # Fallback (atualizado automaticamente)
+MELI_REFRESH_TOKEN=your_meli_refresh_token   # Fallback (use Admin Panel)
+MELI_AFFILIATE_CODE=your_code                # Fallback (use Admin Panel)
+MELI_AFFILIATE_TAG=your_tag                  # Fallback (use Admin Panel)
 ```
 
 **Status**: ⚠️ Parcialmente configurado  
-**Ação**: Precisa gerar access_token  
+**Ação**: ⚡ **Configure no Painel Admin** (`/settings` > Aba "Mercado Livre")  
+**Fallback**: Se não configurado no admin, usa valores do `.env`  
 **Onde obter**: https://developers.mercadolivre.com.br
 
-**Como gerar token**:
-1. Acesse: https://developers.mercadolivre.com.br/pt_br/autenticacao-e-autorizacao
-2. Crie um app
-3. Gere o access token
-4. Atualize no .env
+**📘 Guia Completo**: Veja `backend/GUIA_CONFIGURAR_MELI_ADMIN.md` para passo a passo detalhado
+
+**Resumo rápido**:
+1. Acesse: https://developers.mercadolivre.com.br
+2. Crie uma aplicação
+3. Obtenha Client ID e Client Secret
+4. Gere Access Token e Refresh Token
+5. Configure no Painel Admin (`/settings` > Aba "Mercado Livre")
+6. Salve as configurações
 
 ---
 
-### 6. PUSH NOTIFICATIONS ✅
+### 6. PUSH NOTIFICATIONS ✅ (MIGRADO PARA ADMIN PANEL)
+
+> **📌 IMPORTANTE**: Esta configuração agora pode ser gerenciada no Painel Admin em `/settings`!
 
 ```env
-EXPO_ACCESS_TOKEN=3zBZSZ5Fs7t1T8TKrcZwWOwQMvlmJJJM8hm2UBHp
+EXPO_ACCESS_TOKEN=3zBZSZ5Fs7t1T8TKrcZwWOwQMvlmJJJM8hm2UBHp  # Fallback (use Admin Panel)
 EXPO_PROJECT_ID=your_expo_project_id
 ```
 
 **Status**: ✅ Token configurado  
-**Ação**: Opcional - Configure project_id  
+**Ação**: ⚡ **Configure no Painel Admin** (`/settings` > Aba "Expo / Push")  
+**Fallback**: Se não configurado no admin, usa valores do `.env`  
 **Onde obter**: https://expo.dev/accounts/[account]/settings/access-tokens
 
 ---
@@ -245,6 +280,28 @@ TELEGRAM_BOT_USERNAME=@mtwpromo_bot
 **Status**: ✅ Configurado  
 **Ação**: Nenhuma necessária  
 **Onde obter**: https://t.me/BotFather
+
+---
+
+### 14. TELEGRAM COLLECTOR (MTProto) ⚠️
+
+**Status**: ⚠️ Precisa Configurar  
+**Ação**: 
+1. Acesse https://my.telegram.org/apps
+2. Crie uma aplicação
+3. Copie `api_id` e `api_hash`
+4. **Configure via Painel Admin** em `/telegram-channels`:
+   - Aba "Configuração": Insira API ID, API Hash e Telefone
+   - Aba "Autenticação": Envie código e verifique
+   - Aba "Canais": Adicione canais públicos para monitorar
+   - Aba "Listener": Inicie o listener
+
+**Nota**: 
+- ✅ **100% Node.js**: Não é mais necessário Python
+- ✅ **Interface Completa**: Tudo configurável via painel admin
+- Este é diferente do Telegram Bot. O Collector usa MTProto (gramjs) para monitorar canais públicos.
+
+**Documentação**: Veja `backend/TELEGRAM_NODEJS_MIGRATION.md`
 
 ---
 

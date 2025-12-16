@@ -1,0 +1,1123 @@
+import { useEffect, useState } from 'react';
+import api from '../services/api';
+import { 
+  Plus, Edit, Trash2, MessageSquare, Activity, 
+  Play, Square, RefreshCw, CheckCircle2, XCircle,
+  ExternalLink, Eye, EyeOff, Settings, Key, Power,
+  Send, Shield, AlertCircle, Trash
+} from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { useToast } from '../hooks/use-toast';
+
+export default function TelegramChannels() {
+  const { toast } = useToast();
+  
+  const [channels, setChannels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingChannel, setEditingChannel] = useState(null);
+  const [channelForm, setChannelForm] = useState({
+    name: '',
+    username: '',
+    is_active: true
+  });
+  const [listenerStatus, setListenerStatus] = useState('unknown');
+  const [activeTab, setActiveTab] = useState('channels');
+  
+  // Configuração
+  const [config, setConfig] = useState({
+    api_id: '',
+    api_hash: '',
+    phone: ''
+  });
+  const [configLoading, setConfigLoading] = useState(false);
+  
+  // Autenticação
+  const [authStatus, setAuthStatus] = useState({
+    is_authenticated: false,
+    has_credentials: false,
+    has_session: false
+  });
+  const [authCode, setAuthCode] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [clearingSessions, setClearingSessions] = useState(false);
+  
+  // Listener
+  const [listenerLoading, setListenerLoading] = useState(false);
+
+  useEffect(() => {
+    loadChannels();
+    loadConfig();
+    checkAuthStatus();
+    checkListenerStatus();
+    
+    // Verificar status periodicamente (aumentado para 15 segundos para evitar muitas requisições)
+    const interval = setInterval(() => {
+      checkListenerStatus();
+      checkAuthStatus();
+    }, 15000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadChannels = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/telegram-channels');
+      setChannels(response.data.data || []);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao carregar canais",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadConfig = async () => {
+    try {
+      const response = await api.get('/telegram-collector/config');
+      if (response.data.success) {
+        const data = response.data.data;
+        // Se os valores estão mascarados (contêm "****"), não carregar no input
+        // Isso evita que o usuário salve valores mascarados
+        const apiId = data.api_id && !data.api_id.includes('****') ? data.api_id : '';
+        const apiHash = data.api_hash && !data.api_hash.includes('****') ? data.api_hash : '';
+        
+        setConfig({
+          api_id: apiId,
+          api_hash: apiHash,
+          phone: data.phone || ''
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configuração:', error);
+    }
+  };
+
+  const saveConfig = async () => {
+    setConfigLoading(true);
+    try {
+      if (!config.api_id || !config.api_hash) {
+        toast({
+          title: "Erro",
+          description: "API ID e API Hash são obrigatórios",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Validar formato do API ID (deve ser número)
+      const apiIdNum = parseInt(config.api_id);
+      if (isNaN(apiIdNum) || apiIdNum <= 0) {
+        toast({
+          title: "Erro",
+          description: "API ID deve ser um número válido",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Validar formato do API Hash (deve ter pelo menos 32 caracteres)
+      if (config.api_hash.length < 32) {
+        toast({
+          title: "Erro",
+          description: "API Hash deve ter pelo menos 32 caracteres",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      await api.put('/telegram-collector/config', config);
+      toast({
+        title: "Sucesso",
+        description: "Configuração salva com sucesso",
+        variant: "success"
+      });
+      
+      // Recarregar configuração e verificar status
+      await loadConfig();
+      await checkAuthStatus();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao salvar configuração",
+        variant: "destructive"
+      });
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const checkAuthStatus = async () => {
+    try {
+      const response = await api.get('/telegram-collector/auth/status');
+      if (response.data.success) {
+        setAuthStatus(response.data.data);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar status de autenticação:', error);
+    }
+  };
+
+  // Função para limpar sessões
+  const clearSessions = async () => {
+    if (!confirm('Tem certeza que deseja limpar todas as sessões do Telegram? Isso irá desconectar o cliente e remover todos os arquivos de sessão. Você precisará autenticar novamente.')) {
+      return;
+    }
+
+    setClearingSessions(true);
+    try {
+      const response = await api.delete('/telegram-collector/sessions');
+      
+      if (response.data.success) {
+        toast({
+          title: "Sessões limpas",
+          description: response.data.message || "Sessões removidas com sucesso",
+        });
+        
+        // Recarregar status de autenticação
+        await checkAuthStatus();
+      }
+    } catch (error) {
+      console.error('Erro ao limpar sessões:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao limpar sessões",
+        variant: "destructive",
+      });
+    } finally {
+      setClearingSessions(false);
+    }
+  };
+
+  const sendAuthCode = async () => {
+    setAuthLoading(true);
+    try {
+      if (!config.phone) {
+        toast({
+          title: "Erro",
+          description: "Configure o número de telefone primeiro",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log('📱 Enviando código para:', config.phone);
+      
+      const response = await api.post('/telegram-collector/auth/send-code', {
+        phone: config.phone
+      });
+
+      console.log('📥 Resposta recebida:', response.data);
+
+      if (response.data.success) {
+        setCodeSent(true);
+        const message = response.data.message || 'Código enviado com sucesso. Verifique seu Telegram.';
+        const timeout = response.data.data?.timeout || 120;
+        
+        toast({
+          title: "Código Enviado",
+          description: `${message} Aguarde até ${timeout} segundos. Verifique SMS e chamadas telefônicas.`,
+          variant: "success",
+          duration: 8000
+        });
+      } else {
+        toast({
+          title: "Aviso",
+          description: response.data.message || "Resposta inesperada do servidor",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('❌ Erro ao enviar código:', error);
+      console.error('   Response:', error.response?.data);
+      console.error('   Status:', error.response?.status);
+      
+      const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         error.message || 
+                         "Erro ao enviar código. Verifique os logs do servidor.";
+      
+      toast({
+        title: "Erro ao Enviar Código",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 10000
+      });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const verifyAuthCode = async () => {
+    setAuthLoading(true);
+    try {
+      if (!authCode) {
+        toast({
+          title: "Erro",
+          description: "Digite o código recebido",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const response = await api.post('/telegram-collector/auth/verify-code', {
+        code: authCode,
+        password: authPassword || null
+      });
+
+      if (response.data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Autenticação concluída!",
+          variant: "success"
+        });
+        setCodeSent(false);
+        setAuthCode('');
+        setAuthPassword('');
+        await checkAuthStatus();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao verificar código",
+        variant: "destructive"
+      });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const checkListenerStatus = async () => {
+    try {
+      const response = await api.get('/telegram-collector/listener/status');
+      if (response.data.success) {
+        setListenerStatus(response.data.data.status);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar status do listener:', error);
+      setListenerStatus('error');
+    }
+  };
+
+  const startListener = async () => {
+    setListenerLoading(true);
+    try {
+      const response = await api.post('/telegram-collector/listener/start');
+      if (response.data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Listener iniciado com sucesso",
+          variant: "success"
+        });
+        await checkListenerStatus();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao iniciar listener",
+        variant: "destructive"
+      });
+    } finally {
+      setListenerLoading(false);
+    }
+  };
+
+  const stopListener = async () => {
+    setListenerLoading(true);
+    try {
+      const response = await api.post('/telegram-collector/listener/stop');
+      if (response.data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Listener parado com sucesso",
+          variant: "success"
+        });
+        await checkListenerStatus();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao parar listener",
+        variant: "destructive"
+      });
+    } finally {
+      setListenerLoading(false);
+    }
+  };
+
+  const restartListener = async () => {
+    setListenerLoading(true);
+    try {
+      const response = await api.post('/telegram-collector/listener/restart');
+      if (response.data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Listener reiniciado com sucesso",
+          variant: "success"
+        });
+        await checkListenerStatus();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao reiniciar listener",
+        variant: "destructive"
+      });
+    } finally {
+      setListenerLoading(false);
+    }
+  };
+
+  const handleSaveChannel = async (e) => {
+    e.preventDefault();
+    try {
+      if (!channelForm.name || !channelForm.username) {
+        toast({
+          title: "Erro",
+          description: "Nome e username são obrigatórios",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (editingChannel) {
+        await api.put(`/telegram-channels/${editingChannel.id}`, channelForm);
+        toast({
+          title: "Sucesso",
+          description: "Canal atualizado",
+          variant: "success"
+        });
+      } else {
+        await api.post('/telegram-channels', channelForm);
+        toast({
+          title: "Sucesso",
+          description: "Canal criado",
+          variant: "success"
+        });
+      }
+      
+      setIsDialogOpen(false);
+      setEditingChannel(null);
+      setChannelForm({ name: '', username: '', is_active: true });
+      loadChannels();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao salvar canal",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Tem certeza que deseja deletar este canal?')) return;
+    
+    try {
+      await api.delete(`/telegram-channels/${id}`);
+      toast({
+        title: "Sucesso",
+        description: "Canal deletado",
+        variant: "success"
+      });
+      loadChannels();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao deletar canal",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEdit = (channel) => {
+    setEditingChannel(channel);
+    setChannelForm({
+      name: channel.name,
+      username: channel.username,
+      is_active: channel.is_active
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleToggleActive = async (channel) => {
+    try {
+      await api.put(`/telegram-channels/${channel.id}`, {
+        is_active: !channel.is_active
+      });
+      toast({
+        title: "Sucesso",
+        description: `Canal ${!channel.is_active ? 'ativado' : 'desativado'}`,
+        variant: "success"
+      });
+      loadChannels();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar status",
+        variant: "destructive"
+      });
+    }
+  };
+
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <MessageSquare className="h-8 w-8 text-blue-500" />
+            Canais Telegram
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Configure, autentique e gerencie a captura de cupons via Telegram
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={loadChannels} variant="outline" size="sm">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Atualizar
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => {
+                setEditingChannel(null);
+                setChannelForm({ name: '', username: '', is_active: true });
+              }}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Canal
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
+                <DialogDescription>
+                  Adicione um canal público do Telegram para monitoramento
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSaveChannel} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome do Canal *</Label>
+                  <Input
+                    id="name"
+                    value={channelForm.name}
+                    onChange={(e) => setChannelForm({...channelForm, name: e.target.value})}
+                    placeholder="Ex: Canal de Cupons"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username do Canal *</Label>
+                  <Input
+                    id="username"
+                    value={channelForm.username}
+                    onChange={(e) => setChannelForm({...channelForm, username: e.target.value})}
+                    placeholder="@canaldecupons ou canaldecupons"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Digite o username do canal (com ou sem @)
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_active"
+                    checked={channelForm.is_active}
+                    onChange={(e) => setChannelForm({...channelForm, is_active: e.target.checked})}
+                    className="h-4 w-4 rounded"
+                  />
+                  <Label htmlFor="is_active">Canal ativo</Label>
+                </div>
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">{editingChannel ? 'Salvar' : 'Criar'}</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b">
+        {['channels', 'config', 'auth', 'listener'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === tab
+                ? 'text-primary border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab === 'channels' && <><MessageSquare className="inline mr-2 h-4 w-4" />Canais</>}
+            {tab === 'config' && <><Settings className="inline mr-2 h-4 w-4" />Configuração</>}
+            {tab === 'auth' && <><Key className="inline mr-2 h-4 w-4" />Autenticação</>}
+            {tab === 'listener' && <><Power className="inline mr-2 h-4 w-4" />Listener</>}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab: Configuração */}
+      {activeTab === 'config' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Configuração do Telegram Collector</CardTitle>
+            <CardDescription>
+              Configure as credenciais da API do Telegram. Obtenha em{' '}
+              <a href="https://my.telegram.org/apps" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                https://my.telegram.org/apps
+              </a>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="api_id">API ID *</Label>
+              <Input
+                id="api_id"
+                type="text"
+                value={config.api_id}
+                onChange={(e) => setConfig({...config, api_id: e.target.value})}
+                placeholder="12345678"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="api_hash">API Hash *</Label>
+              <Input
+                id="api_hash"
+                type="text"
+                value={config.api_hash}
+                onChange={(e) => setConfig({...config, api_hash: e.target.value})}
+                placeholder="abcdef1234567890abcdef1234567890"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Número de Telefone *</Label>
+              <Input
+                id="phone"
+                type="text"
+                value={config.phone}
+                onChange={(e) => setConfig({...config, phone: e.target.value})}
+                placeholder="+5511999999999"
+              />
+              <p className="text-xs text-muted-foreground">
+                Formato: +5511999999999 (com código do país)
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Status das Credenciais:</span>
+                <Badge variant={authStatus.has_credentials ? 'success' : 'destructive'}>
+                  {authStatus.has_credentials ? (
+                    <>
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      Configuradas
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="mr-1 h-3 w-3" />
+                      Não Configuradas
+                    </>
+                  )}
+                </Badge>
+              </div>
+            </div>
+
+            <Button onClick={saveConfig} disabled={configLoading} className="w-full">
+              {configLoading ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Salvar Configuração
+                </>
+              )}
+            </Button>
+            
+            {!authStatus.has_credentials && (
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <AlertCircle className="inline mr-1 h-4 w-4" />
+                  Preencha todos os campos (API ID, API Hash e Telefone) e clique em "Salvar Configuração" para configurar as credenciais.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tab: Autenticação */}
+      {activeTab === 'auth' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Status de Autenticação
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span>Credenciais Configuradas</span>
+                  <Badge variant={authStatus.has_credentials ? 'success' : 'destructive'}>
+                    {authStatus.has_credentials ? (
+                      <>
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Sim
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="mr-1 h-3 w-3" />
+                        Não
+                      </>
+                    )}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Autenticado</span>
+                  <Badge variant={authStatus.is_authenticated ? 'success' : 'destructive'}>
+                    {authStatus.is_authenticated ? (
+                      <>
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Sim
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="mr-1 h-3 w-3" />
+                        Não
+                      </>
+                    )}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Sessão Criada</span>
+                  <Badge variant={authStatus.has_session ? 'success' : 'destructive'}>
+                    {authStatus.has_session ? (
+                      <>
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Sim
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="mr-1 h-3 w-3" />
+                        Não
+                      </>
+                    )}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {!authStatus.is_authenticated && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Autenticar Telegram</CardTitle>
+                <CardDescription>
+                  Envie um código de verificação para seu número de telefone
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Limpar Sessões
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        Se estiver tendo problemas de conexão, limpe as sessões para forçar uma nova conexão
+                      </p>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={clearSessions}
+                      disabled={clearingSessions}
+                      className="ml-4"
+                    >
+                      {clearingSessions ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Limpando...
+                        </>
+                      ) : (
+                        <>
+                          <Trash className="mr-2 h-4 w-4" />
+                          Limpar Sessões
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {!codeSent ? (
+                  <>
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        <AlertCircle className="inline mr-2 h-4 w-4" />
+                        Certifique-se de que as credenciais estão configuradas antes de autenticar.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={sendAuthCode} 
+                      disabled={authLoading || !authStatus.has_credentials}
+                      className="w-full"
+                    >
+                      {authLoading ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="mr-2 h-4 w-4" />
+                          Enviar Código de Verificação
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        <CheckCircle2 className="inline mr-2 h-4 w-4" />
+                        Código enviado! Verifique seu Telegram e digite o código recebido abaixo.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="auth_code">Código de Verificação *</Label>
+                      <Input
+                        id="auth_code"
+                        type="text"
+                        value={authCode}
+                        onChange={(e) => setAuthCode(e.target.value)}
+                        placeholder="12345"
+                        maxLength={6}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="auth_password">Senha 2FA (se tiver)</Label>
+                      <Input
+                        id="auth_password"
+                        type="password"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="Deixe em branco se não tiver 2FA"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={verifyAuthCode} 
+                        disabled={authLoading || !authCode}
+                        className="flex-1"
+                      >
+                        {authLoading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Verificando...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Verificar Código
+                          </>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setCodeSent(false);
+                          setAuthCode('');
+                          setAuthPassword('');
+                          setAuthPassword('');
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Listener */}
+      {activeTab === 'listener' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Controle do Listener</span>
+              <Badge variant={listenerStatus === 'running' ? 'success' : listenerStatus === 'error' ? 'destructive' : 'secondary'}>
+                {listenerStatus === 'running' ? (
+                  <>
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    Online
+                  </>
+                ) : listenerStatus === 'error' ? (
+                  <>
+                    <XCircle className="mr-1 h-3 w-3" />
+                    Erro
+                  </>
+                ) : (
+                  <>
+                    <Square className="mr-1 h-3 w-3" />
+                    Offline
+                  </>
+                )}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Inicie, pare ou reinicie o listener que monitora os canais Telegram
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!authStatus.is_authenticated && (
+              <div className="p-4 bg-red-50 dark:bg-red-950 rounded-lg">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  <AlertCircle className="inline mr-2 h-4 w-4" />
+                  Você precisa autenticar o Telegram antes de iniciar o listener.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={startListener} 
+                disabled={listenerLoading || listenerStatus === 'running' || !authStatus.is_authenticated}
+                className="flex-1"
+              >
+                {listenerLoading ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Iniciando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Iniciar Listener
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={stopListener} 
+                disabled={listenerLoading || listenerStatus !== 'running'}
+                variant="destructive"
+                className="flex-1"
+              >
+                {listenerLoading ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Parando...
+                  </>
+                ) : (
+                  <>
+                    <Square className="mr-2 h-4 w-4" />
+                    Parar Listener
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={restartListener} 
+                disabled={listenerLoading || !authStatus.is_authenticated}
+                variant="outline"
+              >
+                {listenerLoading ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Reiniciando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reiniciar
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <Button 
+              onClick={checkListenerStatus} 
+              variant="outline" 
+              className="w-full"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Atualizar Status
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tab: Canais */}
+      {activeTab === 'channels' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Status do Listener</span>
+                <Badge variant={listenerStatus === 'running' ? 'success' : 'destructive'}>
+                  {listenerStatus === 'running' ? (
+                    <>
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      Online
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="mr-1 h-3 w-3" />
+                      Offline
+                    </>
+                  )}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                O listener monitora os canais ativos e captura cupons automaticamente
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Button onClick={checkListenerStatus} variant="outline" size="sm">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Atualizar Status
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Channels Table */}
+          <Card>
+        <CardHeader>
+          <CardTitle>Canais Monitorados</CardTitle>
+          <CardDescription>
+            {channels.length} canal(is) cadastrado(s)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Username</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-center">Cupons Capturados</TableHead>
+                <TableHead>Última Mensagem</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {channels.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    Nenhum canal cadastrado. Clique em "Novo Canal" para adicionar.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                channels.map((channel) => (
+                  <TableRow key={channel.id}>
+                    <TableCell className="font-medium">{channel.name}</TableCell>
+                    <TableCell>
+                      <a
+                        href={`https://t.me/${channel.username}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline flex items-center gap-1"
+                      >
+                        @{channel.username}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={channel.is_active ? 'success' : 'destructive'}>
+                        {channel.is_active ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">
+                        {channel.coupons_captured || 0}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {channel.last_message_at
+                        ? new Date(channel.last_message_at).toLocaleString('pt-BR')
+                        : 'Nunca'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleActive(channel)}
+                        >
+                          {channel.is_active ? (
+                            <>
+                              <Square className="mr-1 h-3 w-3" />
+                              Desativar
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="mr-1 h-3 w-3" />
+                              Ativar
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(channel)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(channel.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+          </CardContent>
+        </Card>
+        </>
+      )}
+    </div>
+  );
+}
+

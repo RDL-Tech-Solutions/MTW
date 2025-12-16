@@ -2,16 +2,39 @@ import axios from 'axios';
 import crypto from 'crypto';
 import logger from '../../config/logger.js';
 import { EXTERNAL_APIS } from '../../config/constants.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class ShopeeService {
   constructor() {
+    // Inicializar com valores do .env (fallback)
     this.partnerId = process.env.SHOPEE_PARTNER_ID;
     this.partnerKey = process.env.SHOPEE_PARTNER_KEY;
     this.apiUrl = EXTERNAL_APIS.SHOPEE;
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getShopeeConfig();
+      this.partnerId = config.partnerId || this.partnerId;
+      this.partnerKey = config.partnerKey || this.partnerKey;
+      this.settingsLoaded = true;
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações da Shopee do banco: ${error.message}`);
+    }
   }
 
   // Gerar assinatura para autenticação
-  generateSign(path, timestamp) {
+  async generateSign(path, timestamp) {
+    // Garantir que as configurações foram carregadas
+    if (!this.settingsLoaded) {
+      await this.loadSettings();
+    }
+    
     const baseString = `${this.partnerId}${path}${timestamp}`;
     return crypto
       .createHmac('sha256', this.partnerKey)
@@ -22,9 +45,14 @@ class ShopeeService {
   // Fazer requisição autenticada
   async makeRequest(endpoint, params = {}) {
     try {
+      // Carregar configurações se ainda não foram carregadas
+      if (!this.settingsLoaded) {
+        await this.loadSettings();
+      }
+
       const timestamp = Math.floor(Date.now() / 1000);
       const path = `/api/v2${endpoint}`;
-      const sign = this.generateSign(path, timestamp);
+      const sign = await this.generateSign(path, timestamp);
 
       const url = `${this.apiUrl}${path}`;
       

@@ -13,6 +13,8 @@ import Bots from './pages/Bots';
 import AutoSync from './pages/AutoSync';
 import CouponCapture from './pages/CouponCapture';
 import Notifications from './pages/Notifications';
+import TelegramChannels from './pages/TelegramChannels';
+import Settings from './pages/Settings';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -37,6 +39,8 @@ function App() {
           <Route path="users" element={<Users />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="bots" element={<Bots />} />
+          <Route path="telegram-channels" element={<TelegramChannels />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="auto-sync" element={<AutoSync />} />
           <Route path="coupon-capture" element={<CouponCapture />} />
           <Route path="notifications" element={<Notifications />} />

@@ -114,7 +114,7 @@ app.use('/api', generalLimiter);
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'MTW Promo API',
+    message: 'PreçoCerto API',
     version: '1.0.0',
     docs: '/api/health'
   });
@@ -163,12 +163,23 @@ const startServer = async () => {
 
 // Tratamento de erros não capturados
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('❌ Unhandled Rejection at:', promise);
+  logger.error('❌ Reason:', reason);
+  if (reason instanceof Error) {
+    logger.error('❌ Stack:', reason.stack);
+  }
+  // Não fazer exit para evitar crash, apenas logar
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  process.exit(1);
+  logger.error('❌ Uncaught Exception:', error);
+  logger.error('❌ Stack:', error.stack);
+  // Fazer exit apenas em erros críticos
+  if (error.code === 'EADDRINUSE' || error.message.includes('port')) {
+    logger.error('❌ Erro crítico: porta já em uso');
+    process.exit(1);
+  }
+  // Para outros erros, apenas logar e continuar
 });
 
 // Graceful shutdown

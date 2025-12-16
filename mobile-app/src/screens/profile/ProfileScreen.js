@@ -136,7 +136,7 @@ export default function ProfileScreen({ navigation }) {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>MTW Promo © 2024</Text>
+        <Text style={styles.footerText}>PreçoCerto © 2024</Text>
       </View>
     </ScrollView>
   );

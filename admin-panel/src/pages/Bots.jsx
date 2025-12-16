@@ -299,14 +299,27 @@ export default function Bots() {
 
   const handleTestChannel = async (id) => {
     try {
-      await api.post(`/bots/channels/${id}/test`);
-      toast({ title: "✅ Enviado!", description: "Mensagem de teste enviada.", variant: "success" });
+      const response = await api.post(`/bots/channels/${id}/test`);
+      toast({ 
+        title: "✅ Enviado!", 
+        description: response.data?.message || "Mensagem de teste enviada com sucesso.", 
+        variant: "success" 
+      });
       fetchLogs();
     } catch (error) {
+      console.error('Erro ao testar canal:', error);
+      console.error('Response:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          "Falha ao enviar teste. Verifique os logs do servidor.";
+      
       toast({
-        title: "❌ Erro!",
-        description: error.response?.data?.message || "Falha ao enviar teste.",
-        variant: "destructive"
+        title: "❌ Erro ao Enviar Teste",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 8000
       });
     }
   };

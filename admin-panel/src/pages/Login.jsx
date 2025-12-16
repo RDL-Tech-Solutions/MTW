@@ -5,8 +5,9 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { ShoppingBag, Lock, Mail } from 'lucide-react';
+import { Lock, Mail } from 'lucide-react';
 import api from '../services/api';
+import Logo from '../components/Logo';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -68,10 +69,10 @@ export default function Login() {
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-primary/10 rounded-full">
-              <ShoppingBag className="h-8 w-8 text-primary" />
+              <Logo className="h-16 w-16" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold">MTW Promo</CardTitle>
+          <CardTitle className="text-3xl font-bold">PreçoCerto</CardTitle>
           <CardDescription>
             Painel Administrativo - Faça login para continuar
           </CardDescription>

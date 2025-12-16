@@ -1,12 +1,51 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
 import Category from '../../models/Category.js';
+import BotConfig from '../../models/BotConfig.js';
 
 class WhatsAppService {
   constructor() {
-    this.apiUrl = process.env.WHATSAPP_API_URL;
-    this.apiToken = process.env.WHATSAPP_API_TOKEN;
-    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    // Configurações serão buscadas dinamicamente do banco de dados
+    this.apiUrl = null;
+    this.apiToken = null;
+    this.phoneNumberId = null;
+  }
+
+  /**
+   * Buscar configurações do banco de dados e atualizar
+   */
+  async loadConfig() {
+    try {
+      const config = await BotConfig.get();
+      // Usar APENAS configurações do banco de dados
+      this.apiUrl = config.whatsapp_api_url;
+      this.apiToken = config.whatsapp_api_token;
+      this.phoneNumberId = config.whatsapp_phone_number_id;
+      
+      if (!this.apiUrl || !this.apiToken) {
+        throw new Error('WhatsApp API não configurada no banco de dados. Configure no painel admin.');
+      }
+      
+      logger.info(`✅ Configurações do WhatsApp carregadas do banco de dados`);
+      return {
+        apiUrl: this.apiUrl,
+        apiToken: this.apiToken,
+        phoneNumberId: this.phoneNumberId
+      };
+    } catch (error) {
+      logger.error(`Erro ao carregar configurações do WhatsApp: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Limpar cache das configurações (forçar recarregar do banco)
+   */
+  clearConfigCache() {
+    this.apiUrl = null;
+    this.apiToken = null;
+    this.phoneNumberId = null;
+    logger.info('🔄 Cache das configurações do WhatsApp limpo');
   }
 
   /**
@@ -18,8 +57,13 @@ class WhatsAppService {
    */
   async sendImage(groupId, imageUrl, caption = '') {
     try {
+      // Carregar configurações do banco de dados se não estiverem carregadas
       if (!this.apiUrl || !this.apiToken) {
-        throw new Error('WhatsApp API não configurada.');
+        await this.loadConfig();
+      }
+      
+      if (!this.apiUrl || !this.apiToken) {
+        throw new Error('WhatsApp API não configurada. Configure no painel admin.');
       }
 
       // Preparar payload da imagem
@@ -107,8 +151,13 @@ class WhatsAppService {
    */
   async sendMessage(groupId, message) {
     try {
+      // Carregar configurações do banco de dados se não estiverem carregadas
       if (!this.apiUrl || !this.apiToken) {
-        throw new Error('WhatsApp API não configurada. Verifique as variáveis de ambiente.');
+        await this.loadConfig();
+      }
+      
+      if (!this.apiUrl || !this.apiToken) {
+        throw new Error('WhatsApp API não configurada. Configure no painel admin.');
       }
 
       const response = await axios.post(
@@ -251,7 +300,7 @@ ${coupon.restrictions ? `⚠️ ${coupon.restrictions}\n` : ''}
     const message = `🤖 *Teste de Bot WhatsApp*
 
 ✅ Bot configurado e funcionando!
-📱 Sistema MTW Promo
+📱 Sistema PreçoCerto
 ⏰ ${new Date().toLocaleString('pt-BR')}
 
 Você receberá notificações automáticas sobre:

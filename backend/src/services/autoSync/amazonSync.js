@@ -3,15 +3,35 @@ import crypto from 'crypto';
 import logger from '../../config/logger.js';
 import Coupon from '../../models/Coupon.js';
 import categoryDetector from '../categoryDetector.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class AmazonSync {
   constructor() {
+    // Inicializar com valores do .env (fallback)
     this.accessKey = process.env.AMAZON_ACCESS_KEY;
     this.secretKey = process.env.AMAZON_SECRET_KEY;
     this.partnerTag = process.env.AMAZON_PARTNER_TAG;
     this.marketplace = process.env.AMAZON_MARKETPLACE || 'www.amazon.com.br';
     this.baseUrl = 'https://webservices.amazon.com.br/paapi5';
     this.region = 'us-east-1';
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getAmazonConfig();
+      this.accessKey = config.accessKey || this.accessKey;
+      this.secretKey = config.secretKey || this.secretKey;
+      this.partnerTag = config.partnerTag || this.partnerTag;
+      this.marketplace = config.marketplace || this.marketplace;
+      this.settingsLoaded = true;
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações da Amazon do banco: ${error.message}`);
+    }
   }
 
   /**

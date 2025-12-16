@@ -31,10 +31,19 @@ class LinkAnalyzerController {
       const cached = await cacheGet(cacheKey);
       
       if (cached) {
-        logger.info(`Link analisado (cache): ${url}`);
-        return res.json(
-          successResponse(cached, 'Link analisado com sucesso (cache)')
-        );
+        // Validar cache antes de usar (não usar cache com dados vazios)
+        const hasValidData = (cached.name && cached.name.trim().length > 0) || 
+                            (cached.currentPrice && cached.currentPrice > 0);
+        
+        if (hasValidData) {
+          logger.info(`Link analisado (cache): ${url}`);
+          return res.json(
+            successResponse(cached, 'Link analisado com sucesso (cache)')
+          );
+        } else {
+          logger.warn(`Cache inválido encontrado, re-analisando: ${url}`);
+          // Não retornar cache inválido, continuar com a análise
+        }
       }
 
       logger.info(`Analisando link: ${url}`);
@@ -70,10 +79,26 @@ class LinkAnalyzerController {
         );
       }
 
-      // Salvar no cache
-      await cacheSet(cacheKey, productInfo, CACHE_TTL.LINK_ANALYSIS || 3600);
+      // Validar se os dados essenciais foram extraídos antes de salvar no cache
+      const hasName = productInfo.name && productInfo.name.trim().length > 0;
+      const hasPrice = productInfo.currentPrice && productInfo.currentPrice > 0;
+      
+      if (!hasName && !hasPrice) {
+        logger.warn(`Extração retornou dados vazios para: ${url}`);
+        return res.status(400).json(
+          errorResponse(
+            'Não foi possível extrair informações do produto. O link pode estar inválido ou o produto pode não estar mais disponível.',
+            'EXTRACTION_FAILED'
+          )
+        );
+      }
 
-      logger.info(`Link analisado com sucesso: ${productInfo.platform}`);
+      // Só salvar no cache se temos dados válidos
+      if (hasName || hasPrice) {
+        await cacheSet(cacheKey, productInfo, CACHE_TTL.LINK_ANALYSIS || 3600);
+      }
+
+      logger.info(`Link analisado com sucesso: ${productInfo.platform} - Nome: ${hasName ? 'Sim' : 'Não'}, Preço: ${hasPrice ? 'Sim' : 'Não'}`);
 
       res.json(
         successResponse(

@@ -3,12 +3,30 @@ import logger from '../../config/logger.js';
 import CouponSettings from '../../models/CouponSettings.js';
 import meliSync from '../autoSync/meliSync.js';
 import CouponValidator from '../../utils/couponValidator.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class MeliCouponCapture {
   constructor() {
+    // Inicializar com valores do .env (fallback)
     this.baseUrl = process.env.MELI_API_URL || 'https://api.mercadolibre.com';
     this.accessToken = process.env.MELI_ACCESS_TOKEN;
     this.affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getMeliConfig();
+      this.accessToken = config.accessToken || this.accessToken;
+      this.affiliateCode = config.affiliateCode || this.affiliateCode;
+      this.settingsLoaded = true;
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações do ML do banco: ${error.message}`);
+    }
   }
 
   /**
@@ -16,6 +34,11 @@ class MeliCouponCapture {
    */
   async makeRequest(endpoint, params = {}) {
     try {
+      // Garantir que as configurações foram carregadas
+      if (!this.settingsLoaded) {
+        await this.loadSettings();
+      }
+      
       const url = `${this.baseUrl}${endpoint}`;
       const config = {
         params,
@@ -220,7 +243,7 @@ class MeliCouponCapture {
         valid_until: new Date(deal.end_date).toISOString(),
         campaign_id: deal.id?.toString(),
         campaign_name: deal.name,
-        affiliate_link: this.generateAffiliateLink(deal.permalink),
+        affiliate_link: await this.generateAffiliateLink(deal.permalink),
         source_url: deal.permalink || '',
         auto_captured: true,
         is_general: !deal.item_ids || deal.item_ids.length === 0,
@@ -263,7 +286,7 @@ class MeliCouponCapture {
         campaign_id: campaign.id?.toString(),
         campaign_name: campaign.name,
         terms_and_conditions: campaign.terms_and_conditions || '',
-        affiliate_link: this.generateAffiliateLink(campaign.landing_url),
+        affiliate_link: await this.generateAffiliateLink(campaign.landing_url),
         source_url: campaign.landing_url || '',
         auto_captured: true,
         is_general: isGeneral,
@@ -302,7 +325,7 @@ class MeliCouponCapture {
         valid_until: new Date(promo.date_to).toISOString(),
         campaign_id: promo.id?.toString(),
         campaign_name: promo.name,
-        affiliate_link: promo.url ? this.generateAffiliateLink(promo.url) : '',
+        affiliate_link: promo.url ? await this.generateAffiliateLink(promo.url) : '',
         source_url: promo.url || '',
         auto_captured: true,
         is_general: true,
@@ -327,9 +350,14 @@ class MeliCouponCapture {
   /**
    * Gerar link de afiliado Mercado Livre
    */
-  generateAffiliateLink(originalUrl) {
+  async generateAffiliateLink(originalUrl) {
     try {
       if (!originalUrl) return '';
+
+      // Garantir que as configurações foram carregadas
+      if (!this.settingsLoaded) {
+        await this.loadSettings();
+      }
 
       // Formato: https://mercadolivre.com/jm/mlb?&meuid=SEU_CODIGO&redirect=URL_DO_PRODUTO
       const encodedUrl = encodeURIComponent(originalUrl);

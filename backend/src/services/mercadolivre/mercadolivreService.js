@@ -1,18 +1,42 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
 import { EXTERNAL_APIS } from '../../config/constants.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class MercadoLivreService {
   constructor() {
+    // Inicializar com valores do .env (fallback)
     this.clientId = process.env.MELI_CLIENT_ID;
     this.clientSecret = process.env.MELI_CLIENT_SECRET;
     this.accessToken = process.env.MELI_ACCESS_TOKEN;
     this.apiUrl = EXTERNAL_APIS.MERCADOLIVRE;
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getMeliConfig();
+      this.clientId = config.clientId || this.clientId;
+      this.clientSecret = config.clientSecret || this.clientSecret;
+      this.accessToken = config.accessToken || this.accessToken;
+      this.settingsLoaded = true;
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações do ML do banco: ${error.message}`);
+    }
   }
 
   // Fazer requisição à API
   async makeRequest(endpoint, params = {}) {
     try {
+      // Garantir que as configurações foram carregadas
+      if (!this.settingsLoaded) {
+        await this.loadSettings();
+      }
+      
       const url = `${this.apiUrl}${endpoint}`;
       
       const response = await axios.get(url, {
@@ -83,9 +107,16 @@ class MercadoLivreService {
   }
 
   // Gerar link de afiliado (se configurado)
-  createAffiliateLink(itemId) {
-    // Adicione sua tag de afiliado aqui
-    const affiliateTag = process.env.MELI_AFFILIATE_TAG || '';
+  async createAffiliateLink(itemId) {
+    // Obter affiliate tag do banco primeiro, depois .env como fallback
+    let affiliateTag = '';
+    try {
+      const config = await AppSettings.getMeliConfig();
+      affiliateTag = config.affiliateTag || '';
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao buscar affiliate tag do banco: ${error.message}`);
+      affiliateTag = process.env.MELI_AFFILIATE_TAG || '';
+    }
     const baseUrl = `https://produto.mercadolivre.com.br/MLB-${itemId}`;
     
     return affiliateTag 
@@ -113,7 +144,7 @@ class MercadoLivreService {
               current_price: item.price,
               old_price: item.original_price,
               image_url: item.thumbnail,
-              affiliate_link: this.createAffiliateLink(item.id)
+              affiliate_link: await this.createAffiliateLink(item.id)
             };
             allProducts.push(product);
           }

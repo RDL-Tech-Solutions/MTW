@@ -162,17 +162,21 @@ class BotConfig {
 
   /**
    * Buscar token do Telegram (para uso interno)
+   * Prioriza banco de dados, usa .env apenas como fallback
    */
   static async getTelegramToken() {
     const config = await this.get();
+    // Priorizar banco de dados, .env apenas como fallback de emergência
     return config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
   }
 
   /**
    * Buscar configurações do WhatsApp (para uso interno)
+   * Prioriza banco de dados, usa .env apenas como fallback
    */
   static async getWhatsAppConfig() {
     const config = await this.get();
+    // Priorizar banco de dados, .env apenas como fallback de emergência
     return {
       apiUrl: config.whatsapp_api_url || process.env.WHATSAPP_API_URL,
       apiToken: config.whatsapp_api_token || process.env.WHATSAPP_API_TOKEN,

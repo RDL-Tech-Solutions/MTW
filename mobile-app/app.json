@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "MTW Promo",
-    "slug": "mtw-promo",
+    "name": "PreçoCerto",
+    "slug": "precocerto",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -14,13 +14,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mtwpromo.app"
+      "bundleIdentifier": "com.precocerto.app"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#DC2626"
       },
-      "package": "com.mtwpromo.app",
+      "package": "com.precocerto.app",
       "permissions": [
         "NOTIFICATIONS"
       ]
@@ -42,7 +42,7 @@
         "projectId": "967ccc1a-3521-4c83-91a4-851bed949c45"
       }
     },
-    "scheme": "mtwpromo",
+    "scheme": "precocerto",
     "owner": "rdltech"
   }
 }

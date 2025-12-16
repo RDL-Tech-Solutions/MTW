@@ -24,7 +24,11 @@ class Coupon {
       is_exclusive = false,
       is_pending_approval = false,
       capture_source = null,
-      source_url = null
+      source_url = null,
+      origem = null,
+      channel_origin = null,
+      message_id = null,
+      message_hash = null
     } = couponData;
 
     // Preparar dados para inserção
@@ -46,7 +50,11 @@ class Coupon {
       is_exclusive: is_exclusive || false,
       is_pending_approval: is_pending_approval !== undefined ? is_pending_approval : false,
       capture_source: capture_source || null,
-      source_url: source_url || null
+      source_url: source_url || null,
+      origem: origem || null,
+      channel_origin: channel_origin || null,
+      message_id: message_id || null,
+      message_hash: message_hash || null
     };
 
     // Adicionar campos opcionais se fornecidos
@@ -81,6 +89,18 @@ class Coupon {
       .from('coupons')
       .select('*')
       .eq('code', code)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  // Buscar cupom por message_hash (anti-duplicação)
+  static async findByMessageHash(messageHash) {
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('message_hash', messageHash)
       .single();
 
     if (error && error.code !== 'PGRST116') throw error;
@@ -147,6 +167,8 @@ class Coupon {
       verification_status,
       is_pending_approval,
       search,
+      origem,
+      channel_origin,
       min_discount,
       max_discount,
       discount_type,
@@ -172,6 +194,8 @@ class Coupon {
     if (is_pending_approval !== undefined) query = query.eq('is_pending_approval', is_pending_approval);
     if (discount_type) query = query.eq('discount_type', discount_type);
     if (is_general !== undefined) query = query.eq('is_general', is_general);
+    if (origem) query = query.eq('origem', origem);
+    if (channel_origin) query = query.eq('channel_origin', channel_origin);
 
     // Filtros de busca
     if (search) {

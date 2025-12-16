@@ -1,7 +1,7 @@
 {
-  "name": "mtw-promo-backend",
+  "name": "precocerto-backend",
   "version": "1.0.0",
-  "description": "Backend API para MTW Promo - Sistema de cupons e promoções",
+  "description": "Backend API para PreçoCerto - Sistema de cupons e promoções",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
@@ -25,12 +25,13 @@
     "promocoes",
     "afiliados"
   ],
-  "author": "MTW Promo",
+  "author": "PreçoCerto",
   "license": "MIT",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
+    "big-integer": "^1.6.52",
     "cheerio": "^1.0.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
@@ -47,6 +48,7 @@
     "open": "^11.0.0",
     "redis": "^4.6.11",
     "sharp": "^0.33.5",
+    "telegram": "^2.26.22",
     "winston": "^3.11.0"
   },
   "devDependencies": {

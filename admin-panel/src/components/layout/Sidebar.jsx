@@ -9,8 +9,11 @@ import {
   RefreshCw,
   Zap,
   Bot,
-  Bell
+  Bell,
+  MessageSquare,
+  Settings
 } from 'lucide-react';
+import Logo from '../Logo';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -23,13 +26,18 @@ const navigation = [
   { name: 'Notificações', href: '/notifications', icon: Bell },
   { name: 'Automação', href: '/auto-sync', icon: RefreshCw },
   { name: 'Bots', href: '/bots', icon: Bot },
+  { name: 'Canais Telegram', href: '/telegram-channels', icon: MessageSquare },
+  { name: 'Configurações', href: '/settings', icon: Settings },
 ];
 
 export default function Sidebar() {
   return (
     <div className="w-64 bg-secondary text-white">
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-primary">MTW Promo</h1>
+        <div className="flex items-center gap-3 mb-2">
+          <Logo className="h-8 w-8" />
+          <h1 className="text-2xl font-bold text-primary">PreçoCerto</h1>
+        </div>
         <p className="text-sm text-gray-400 mt-1">Admin Panel</p>
       </div>
 

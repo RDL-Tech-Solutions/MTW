@@ -5,6 +5,7 @@ import meliAuth from './meliAuth.js';
 import linkAnalyzer from '../linkAnalyzer.js'; // Reaproveitar helper de parsePrice
 import Coupon from '../../models/Coupon.js';
 import categoryDetector from '../categoryDetector.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class MeliSync {
   /**
@@ -491,7 +492,17 @@ class MeliSync {
    */
   async generateMeliAffiliateLink(product) {
     try {
-      const affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
+      // Buscar affiliate code do banco de dados primeiro
+      let affiliateCode = '';
+      try {
+        const AppSettings = (await import('../../models/AppSettings.js')).default;
+        const config = await AppSettings.getMeliConfig();
+        affiliateCode = config.affiliateCode || '';
+      } catch (error) {
+        logger.warn(`⚠️ Erro ao buscar affiliate code do banco: ${error.message}`);
+        affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
+      }
+      
       const originalLink = product.affiliate_link || '';
 
       // Se tiver código de afiliado configurado, gerar link de afiliado

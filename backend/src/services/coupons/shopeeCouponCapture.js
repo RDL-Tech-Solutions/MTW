@@ -2,6 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import logger from '../../config/logger.js';
 import CouponSettings from '../../models/CouponSettings.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class ShopeeCouponCapture {
   constructor() {
@@ -11,8 +12,17 @@ class ShopeeCouponCapture {
   /**
    * Gerar assinatura para API Shopee
    */
-  generateSignature(partnerId, path, timestamp, accessToken, shopId) {
-    const partnerKey = process.env.SHOPEE_PARTNER_KEY;
+  async generateSignature(partnerId, path, timestamp, accessToken, shopId) {
+    // Obter partner key do banco primeiro, depois .env como fallback
+    let partnerKey = '';
+    try {
+      const config = await AppSettings.getShopeeConfig();
+      partnerKey = config.partnerKey || '';
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao buscar partner key do banco: ${error.message}`);
+      partnerKey = process.env.SHOPEE_PARTNER_KEY || '';
+    }
+    
     const baseString = `${partnerId}${path}${timestamp}${accessToken}${shopId}`;
     
     return crypto
@@ -26,18 +36,33 @@ class ShopeeCouponCapture {
    */
   async makeRequest(endpoint, params = {}) {
     try {
-      const settings = await CouponSettings.get();
-      
-      if (!settings.shopee_enabled || !settings.shopee_partner_id || !settings.shopee_partner_key) {
-        throw new Error('Shopee não está configurado corretamente');
+      // Buscar configurações do AppSettings primeiro
+      let partnerId, partnerKey;
+      try {
+        const config = await AppSettings.getShopeeConfig();
+        partnerId = config.partnerId;
+        partnerKey = config.partnerKey;
+      } catch (error) {
+        logger.warn(`⚠️ Erro ao buscar configurações Shopee do banco: ${error.message}`);
+        // Fallback para CouponSettings (legado) ou .env
+        try {
+          const settings = await CouponSettings.get();
+          partnerId = settings.shopee_partner_id || process.env.SHOPEE_PARTNER_ID;
+          partnerKey = settings.shopee_partner_key || process.env.SHOPEE_PARTNER_KEY;
+        } catch (e) {
+          partnerId = process.env.SHOPEE_PARTNER_ID;
+          partnerKey = process.env.SHOPEE_PARTNER_KEY;
+        }
       }
-
-      const partnerId = settings.shopee_partner_id;
+      
+      if (!partnerId || !partnerKey) {
+        throw new Error('Shopee não está configurado corretamente - Partner ID e Partner Key necessários');
+      }
       const timestamp = Math.floor(Date.now() / 1000);
       const path = endpoint;
       
       // Gerar assinatura
-      const sign = this.generateSignature(partnerId, path, timestamp, '', 0);
+      const sign = await this.generateSignature(partnerId, path, timestamp, '', 0);
 
       const url = `${this.baseUrl}${endpoint}`;
       const config = {
@@ -152,8 +177,26 @@ class ShopeeCouponCapture {
    */
   async generateAffiliateLink(deal) {
     try {
-      const settings = await CouponSettings.get();
-      const partnerId = settings.shopee_partner_id;
+      // Buscar partner ID do AppSettings primeiro
+      let partnerId;
+      try {
+        const config = await AppSettings.getShopeeConfig();
+        partnerId = config.partnerId;
+      } catch (error) {
+        logger.warn(`⚠️ Erro ao buscar partner ID do banco: ${error.message}`);
+        // Fallback para CouponSettings (legado) ou .env
+        try {
+          const settings = await CouponSettings.get();
+          partnerId = settings.shopee_partner_id || process.env.SHOPEE_PARTNER_ID;
+        } catch (e) {
+          partnerId = process.env.SHOPEE_PARTNER_ID;
+        }
+      }
+      
+      if (!partnerId) {
+        logger.warn('⚠️ Partner ID não encontrado, usando link original');
+        return deal.deal_url || '';
+      }
 
       // Usar o link do deal ou criar um link de afiliado
       if (deal.deal_url) {

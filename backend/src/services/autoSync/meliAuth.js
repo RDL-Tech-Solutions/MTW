@@ -1,8 +1,10 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class MeliAuth {
   constructor() {
+    // Inicializar com valores do .env (fallback)
     this.clientId = process.env.MELI_CLIENT_ID || process.env.MELI_APP_ID;
     this.clientSecret = process.env.MELI_CLIENT_SECRET || process.env.MELI_SECRET_KEY;
     this.accessToken = process.env.MELI_ACCESS_TOKEN;
@@ -13,10 +15,35 @@ class MeliAuth {
     // então vamos definir para atualizar na próxima chamada se tiver refresh token
     this.tokenExpiresAt = this.accessToken ? Date.now() + 3600000 : null;
 
-    // Debug: verificar se credenciais estão carregadas
-    console.log('🔑 MeliAuth inicializado');
-    console.log('   CLIENT_ID:', this.clientId ? 'CONFIGURADO' : 'NÃO CONFIGURADO');
-    console.log('   REFRESH_TOKEN:', this.refreshToken ? 'CONFIGURADO' : 'NÃO CONFIGURADO');
+    // Carregar configurações do banco (async, será chamado no primeiro uso)
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getMeliConfig();
+      this.clientId = config.clientId || this.clientId;
+      this.clientSecret = config.clientSecret || this.clientSecret;
+      this.accessToken = config.accessToken || this.accessToken;
+      this.refreshToken = config.refreshToken || this.refreshToken;
+      this.redirectUri = config.redirectUri || this.redirectUri;
+      this.settingsLoaded = true;
+
+      // Debug: verificar se credenciais estão carregadas
+      console.log('🔑 MeliAuth inicializado');
+      console.log('   CLIENT_ID:', this.clientId ? 'CONFIGURADO' : 'NÃO CONFIGURADO');
+      console.log('   REFRESH_TOKEN:', this.refreshToken ? 'CONFIGURADO' : 'NÃO CONFIGURADO');
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações do ML do banco: ${error.message}`);
+      // Continuar com valores do .env
+      console.log('🔑 MeliAuth inicializado (usando .env)');
+      console.log('   CLIENT_ID:', this.clientId ? 'CONFIGURADO' : 'NÃO CONFIGURADO');
+      console.log('   REFRESH_TOKEN:', this.refreshToken ? 'CONFIGURADO' : 'NÃO CONFIGURADO');
+    }
   }
 
   /**
@@ -24,6 +51,11 @@ class MeliAuth {
    */
   async getAccessToken() {
     try {
+      // Carregar configurações se ainda não foram carregadas
+      if (!this.settingsLoaded) {
+        await this.loadSettings();
+      }
+
       // Se temos token válido, retornar
       if (this.accessToken && this.tokenExpiresAt && Date.now() < this.tokenExpiresAt) {
         return this.accessToken;
@@ -70,6 +102,17 @@ class MeliAuth {
         this.accessToken = response.data.access_token;
         const expiresIn = response.data.expires_in || 21600;
         this.tokenExpiresAt = Date.now() + (expiresIn * 1000) - 60000;
+        
+        // Salvar token atualizado no banco
+        try {
+          await AppSettings.updateMeliToken(
+            this.accessToken,
+            response.data.refresh_token || this.refreshToken
+          );
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao salvar token no banco: ${error.message}`);
+        }
+        
         return this.accessToken;
       }
 

@@ -11,7 +11,7 @@ if (Platform.OS === 'web') {
 
 // URL de redirect para OAuth
 const redirectTo = AuthSession.makeRedirectUri({
-  scheme: 'mtwpromo',
+  scheme: 'precocerto',
   useProxy: true,
 });
 

@@ -217,7 +217,36 @@ export default function Products() {
         url: formData.affiliate_url
       });
 
-      const productInfo = response.data.data;
+      console.log('📦 Resposta completa da API:', response.data);
+      
+      const productInfo = response.data.data || response.data;
+      
+      console.log('📦 Dados do produto extraídos:', productInfo);
+
+      // Verificar se há erro na resposta
+      if (productInfo.error) {
+        toast({
+          title: "Erro na Análise",
+          description: productInfo.error || "Erro ao extrair informações do link",
+          variant: "destructive",
+        });
+        setAnalyzingLink(false);
+        return;
+      }
+
+      // Verificar se os dados essenciais estão presentes
+      const hasName = productInfo.name && productInfo.name.trim().length > 0;
+      const hasPrice = productInfo.currentPrice && productInfo.currentPrice > 0;
+      
+      if (!hasName && !hasPrice) {
+        toast({
+          title: "Aviso",
+          description: "Não foi possível extrair informações do link. Tente novamente ou preencha manualmente.",
+          variant: "destructive",
+        });
+        setAnalyzingLink(false);
+        return;
+      }
 
       // Verificar se há desconto real
       // oldPrice deve ser maior que currentPrice para haver desconto
@@ -227,7 +256,7 @@ export default function Products() {
                           productInfo.oldPrice > productInfo.currentPrice;
 
       // Detectar categoria automaticamente baseado no nome do produto
-      const detectedCategory = detectCategory(productInfo.name);
+      const detectedCategory = productInfo.name ? detectCategory(productInfo.name) : '';
 
       // Definir preços corretamente
       // price = preço original (sem desconto)
@@ -245,20 +274,35 @@ export default function Products() {
         priceDiscount = ''; // Sem desconto
       }
 
-      setFormData({
+      // Preparar dados atualizados
+      const updatedFormData = {
         ...formData,
-        name: productInfo.name || formData.name,
-        description: productInfo.description || formData.description,
+        name: productInfo.name || formData.name || '',
+        description: productInfo.description || formData.description || '',
         price: priceOriginal,
         discount_price: priceDiscount,
-        image_url: productInfo.imageUrl || formData.image_url,
-        platform: productInfo.platform || formData.platform,
-        category_id: detectedCategory || formData.category_id
-      });
+        image_url: productInfo.imageUrl || formData.image_url || '',
+        platform: productInfo.platform || formData.platform || 'shopee',
+        category_id: detectedCategory || formData.category_id || ''
+      };
+
+      console.log('📝 Dados do formulário atualizados:', updatedFormData);
+
+      setFormData(updatedFormData);
+
+      // Mensagem de sucesso mais informativa
+      const extractedFields = [];
+      if (updatedFormData.name) extractedFields.push('nome');
+      if (updatedFormData.price > 0) extractedFields.push('preço');
+      if (updatedFormData.image_url) extractedFields.push('imagem');
+      
+      const successMessage = extractedFields.length > 0
+        ? `Informações extraídas: ${extractedFields.join(', ')}`
+        : 'Link processado';
 
       toast({
         title: "Sucesso!",
-        description: `Informações extraídas do link com sucesso! Plataforma: ${productInfo.platform || 'Desconhecida'}`,
+        description: `${successMessage}. Plataforma: ${productInfo.platform || 'Shopee'}`,
         variant: "success",
       });
     } catch (error) {

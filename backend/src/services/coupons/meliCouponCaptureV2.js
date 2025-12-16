@@ -1,6 +1,7 @@
 import axios from 'axios';
 import logger from '../../config/logger.js';
 import CouponSettings from '../../models/CouponSettings.js';
+import AppSettings from '../../models/AppSettings.js';
 
 /**
  * Serviço de Captura de Cupons do Mercado Livre - V2
@@ -8,9 +9,26 @@ import CouponSettings from '../../models/CouponSettings.js';
  */
 class MeliCouponCaptureV2 {
   constructor() {
+    // Inicializar com valores do .env (fallback)
     this.baseUrl = process.env.MELI_API_URL || 'https://api.mercadolibre.com';
     this.accessToken = process.env.MELI_ACCESS_TOKEN;
     this.affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getMeliConfig();
+      this.accessToken = config.accessToken || this.accessToken;
+      this.affiliateCode = config.affiliateCode || this.affiliateCode;
+      this.settingsLoaded = true;
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações do ML do banco: ${error.message}`);
+    }
   }
 
   /**
@@ -25,6 +43,11 @@ class MeliCouponCaptureV2 {
       };
 
       // Adicionar autenticação apenas se necessário
+      // Garantir que as configurações foram carregadas
+      if (!this.settingsLoaded) {
+        await this.loadSettings();
+      }
+      
       if (needsAuth && this.accessToken) {
         config.headers = {
           'Authorization': `Bearer ${this.accessToken}`
@@ -259,7 +282,7 @@ class MeliCouponCaptureV2 {
   async createCouponFromProduct(product, discount, source = 'search') {
     try {
       // Gerar link de afiliado
-      const affiliateLink = this.generateAffiliateLink(product.permalink);
+      const affiliateLink = await this.generateAffiliateLink(product.permalink);
 
       return {
         code: `MELI-${product.id}`, // Usar ID do produto como código
@@ -295,7 +318,12 @@ class MeliCouponCaptureV2 {
   /**
    * Gerar link de afiliado do Mercado Livre
    */
-  generateAffiliateLink(productUrl) {
+  async generateAffiliateLink(productUrl) {
+    // Garantir que as configurações foram carregadas
+    if (!this.settingsLoaded) {
+      await this.loadSettings();
+    }
+    
     if (!this.affiliateCode) {
       return productUrl;
     }

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../theme/colors';
+import Logo from '../../components/common/Logo';
 
 export default function AboutScreen() {
   const openLink = (url) => {
@@ -48,9 +49,9 @@ export default function AboutScreen() {
       {/* Logo/Header */}
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <Ionicons name="flash" size={64} color={colors.primary} />
+          <Logo width={64} height={64} color={colors.primary} />
         </View>
-        <Text style={styles.appName}>MTW Promo</Text>
+        <Text style={styles.appName}>PreçoCerto</Text>
         <Text style={styles.tagline}>As melhores ofertas em um só lugar</Text>
       </View>
 
@@ -58,7 +59,7 @@ export default function AboutScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre o App</Text>
         <Text style={styles.description}>
-          MTW Promo é a plataforma completa para encontrar as melhores ofertas e cupons
+          PreçoCerto é a plataforma completa para encontrar as melhores ofertas e cupons
           de desconto das principais lojas online. Economize tempo e dinheiro com
           promoções exclusivas atualizadas diariamente.
         </Text>

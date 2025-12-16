@@ -1,6 +1,6 @@
-# 🚀 MTW Promo Backend API
+# 🚀 PreçoCerto Backend API
 
-Backend completo para o sistema MTW Promo - Plataforma de cupons, promoções e afiliados.
+Backend completo para o sistema PreçoCerto - Plataforma de cupons, promoções e afiliados.
 
 ## 📋 Requisitos
 

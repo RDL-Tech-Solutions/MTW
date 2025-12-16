@@ -453,6 +453,131 @@ class AuthController {
       next(error);
     }
   }
+
+  // Callback do Mercado Livre OAuth (para obter tokens)
+  static async meliCallback(req, res, next) {
+    try {
+      const { code, error: oauthError } = req.query;
+
+      if (oauthError) {
+        return res.status(400).send(`
+          <html>
+            <head>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  max-width: 800px;
+                  margin: 50px auto;
+                  padding: 20px;
+                  background: #f5f5f5;
+                }
+                .error {
+                  background: #f8d7da;
+                  border: 1px solid #f5c6cb;
+                  color: #721c24;
+                  padding: 20px;
+                  border-radius: 5px;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="error">
+                <h1>❌ Erro na Autorização</h1>
+                <p>${oauthError}</p>
+                <p>Feche esta janela e tente novamente.</p>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+
+      if (!code) {
+        return res.status(400).send(`
+          <html>
+            <head>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  max-width: 800px;
+                  margin: 50px auto;
+                  padding: 20px;
+                  background: #f5f5f5;
+                }
+                .error {
+                  background: #f8d7da;
+                  border: 1px solid #f5c6cb;
+                  color: #721c24;
+                  padding: 20px;
+                  border-radius: 5px;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="error">
+                <h1>❌ Erro</h1>
+                <p>Code não recebido. Tente novamente.</p>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+
+      // Retornar código via query string para o script processar
+      // O script vai fazer a troca do code por tokens
+      res.send(`
+        <html>
+          <head>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background: #f5f5f5;
+              }
+              .success {
+                background: #d4edda;
+                border: 1px solid #c3e6cb;
+                color: #155724;
+                padding: 20px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+              }
+              .info {
+                background: #d1ecf1;
+                border: 1px solid #bee5eb;
+                color: #0c5460;
+                padding: 15px;
+                border-radius: 5px;
+                margin-top: 20px;
+              }
+              h1 { color: #155724; }
+            </style>
+          </head>
+          <body>
+            <div class="success">
+              <h1>✅ Código Recebido!</h1>
+              <p>O código de autorização foi recebido com sucesso.</p>
+              <p>Verifique o terminal onde o script está rodando para ver os tokens.</p>
+            </div>
+            <div class="info">
+              <p><strong>Você pode fechar esta janela agora.</strong></p>
+            </div>
+            <script>
+              // Enviar código para o script via evento (se necessário)
+              window.opener?.postMessage({ type: 'meli_code', code: '${code}' }, '*');
+            </script>
+          </body>
+        </html>
+      `);
+
+      // Log para o script capturar
+      logger.info(`✅ MELI_CALLBACK_CODE: ${code}`);
+    } catch (error) {
+      logger.error(`Erro no callback do Mercado Livre: ${error.message}`);
+      next(error);
+    }
+  }
 }
 
 export default AuthController;

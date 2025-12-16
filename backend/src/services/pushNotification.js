@@ -1,11 +1,28 @@
 import axios from 'axios';
 import logger from '../config/logger.js';
 import { EXTERNAL_APIS } from '../config/constants.js';
+import AppSettings from '../models/AppSettings.js';
 
 class PushNotificationService {
   constructor() {
     this.expoApiUrl = EXTERNAL_APIS.EXPO_PUSH;
+    // Inicializar com valores do .env (fallback)
     this.accessToken = process.env.EXPO_ACCESS_TOKEN;
+    this.settingsLoaded = false;
+    this.loadSettings();
+  }
+
+  /**
+   * Carregar configurações do banco de dados
+   */
+  async loadSettings() {
+    try {
+      const config = await AppSettings.getExpoConfig();
+      this.accessToken = config.accessToken || this.accessToken;
+      this.settingsLoaded = true;
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao carregar configurações do Expo do banco: ${error.message}`);
+    }
   }
 
   // Enviar notificação para um usuário

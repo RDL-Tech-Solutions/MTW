@@ -12,6 +12,9 @@ import syncRoutes from './syncRoutes.js';
 import couponCaptureRoutes from './couponCaptureRoutes.js';
 import userRoutes from './userRoutes.js';
 import notificationPreferenceRoutes from './notificationPreferenceRoutes.js';
+import telegramChannelRoutes from './telegramChannelRoutes.js';
+import telegramCollectorRoutes from './telegramCollectorRoutes.js';
+import appSettingsRoutes from './appSettingsRoutes.js';
 
 const router = express.Router();
 
@@ -19,7 +22,7 @@ const router = express.Router();
 router.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'API MTW Promo está funcionando',
+    message: 'API PreçoCerto está funcionando',
     timestamp: new Date().toISOString()
   });
 });
@@ -38,5 +41,8 @@ router.use('/sync', syncRoutes);
 router.use('/coupon-capture', couponCaptureRoutes);
 router.use('/users', userRoutes);
 router.use('/notification-preferences', notificationPreferenceRoutes);
+router.use('/telegram-channels', telegramChannelRoutes);
+router.use('/telegram-collector', telegramCollectorRoutes);
+router.use('/settings', appSettingsRoutes);
 
 export default router;

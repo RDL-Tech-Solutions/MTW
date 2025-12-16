@@ -1,28 +1,69 @@
-# 📦 Módulos do Sistema - MTW Promo
+# 📦 Módulos do Sistema
 
-Documentação detalhada de cada módulo do sistema.
+Documentação completa de todos os módulos do MTW Promo.
 
-## 📚 Módulos Disponíveis
+## 🚀 Backend API
 
-### 📱 Mobile App
-**[mobile-app/](./mobile-app/)**  
-Documentação completa do aplicativo mobile React Native + Expo.
+API REST completa construída com Node.js e Express.
 
-### 🔄 Auto Sync
-**[auto-sync/](./auto-sync/)**  
-Sistema de sincronização automática de produtos com Shopee e Mercado Livre.
+**Documentação**: [Backend API](./backend/README.md)
 
-### ✨ Auto Fill
-**[auto-fill/](./auto-fill/)**  
-Sistema de auto-preenchimento de produtos a partir de links de afiliado.
+**Principais funcionalidades:**
+- Autenticação JWT
+- CRUD de produtos, cupons, categorias
+- Integrações com plataformas
+- Sistema de bots
+- Analytics
+- Cron jobs
 
-### 🎟️ Cupons
-**[coupons/](./coupons/)**  
-Módulo de captura automática e gerenciamento de cupons.
+## 👨‍💼 Painel Administrativo
 
-## 🗺️ Navegação
+Interface administrativa construída com React.
 
-- **Voltar**: [Início Rápido](../01-getting-started/)
-- **Integrações**: [docs/04-integrations/](../04-integrations/)
-- **Troubleshooting**: [docs/05-troubleshooting/](../05-troubleshooting/)
+**Documentação**: [Admin Panel](./admin-panel/README.md)
 
+**Principais funcionalidades:**
+- Dashboard com analytics
+- Gerenciamento de produtos e cupons
+- Configuração de integrações
+- Gerenciamento de bots
+- Configurações do sistema
+
+## 📱 App Mobile
+
+Aplicativo mobile construído com React Native e Expo.
+
+**Documentação**: [Mobile App](./mobile-app/README.md)
+
+**Principais funcionalidades:**
+- Visualização de produtos
+- Sistema de favoritos
+- Notificações push
+- Histórico de preços
+
+## 🎟️ Sistema de Cupons
+
+Sistema de captura e gerenciamento de cupons.
+
+**Documentação**: [Sistema de Cupons](./coupons/README.md)
+
+**Principais funcionalidades:**
+- Captura automática
+- Aprovação manual
+- Múltiplas fontes
+- Anti-duplicação
+
+## 🔄 Auto Sync
+
+Sistema de sincronização automática de produtos.
+
+**Documentação**: [Auto Sync](./auto-sync/README.md)
+
+**Principais funcionalidades:**
+- Sincronização automática
+- Múltiplas plataformas
+- Logs e histórico
+
+---
+
+**Próximo**: [Integrações](../04-integrations/README.md)

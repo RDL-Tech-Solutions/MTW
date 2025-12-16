@@ -1,40 +1,140 @@
-# ⚙️ Setup e Instalação - MTW Promo
+# ⚙️ Instalação e Configuração
 
-Documentação completa para instalar e configurar o sistema MTW Promo.
+Guia completo para instalar e configurar o MTW Promo do zero.
 
-## 📚 Documentos Disponíveis
+## 📋 Pré-requisitos
 
-### 🚀 Guias de Instalação
-1. **[GUIA_INSTALACAO.md](./GUIA_INSTALACAO.md)**  
-   Passo a passo completo de instalação do backend, admin panel e mobile app.
+### Software Necessário
+- **Node.js** 18+ ([Download](https://nodejs.org/))
+- **npm** ou **yarn** (vem com Node.js)
+- **Git** ([Download](https://git-scm.com/))
+- **Redis** ([Download](https://redis.io/download)) - Opcional para desenvolvimento local
+- **PostgreSQL** ou conta **Supabase** ([Criar conta](https://supabase.com))
 
-2. **[CHECKLIST_SETUP.md](./CHECKLIST_SETUP.md)**  
-   Checklist para garantir que tudo está configurado corretamente.
+### Contas Necessárias
+- **Supabase** - Banco de dados
+- **Mercado Livre** - API de afiliados (opcional)
+- **Shopee** - API de afiliados (opcional)
+- **WhatsApp Business** - Para bots (opcional)
+- **Telegram** - Para bots e coletor (opcional)
 
-3. **[GUIA_TESTE_RAPIDO.md](./GUIA_TESTE_RAPIDO.md)**  
-   Teste rápido em 15 minutos para validar que tudo funciona.
+## 🚀 Instalação Rápida
 
-### 🛠️ Ferramentas e Comandos
-4. **[COMANDOS_RAPIDOS.md](./COMANDOS_RAPIDOS.md)**  
-   Comandos úteis para desenvolvimento e manutenção.
+### 1. Clonar o Repositório
 
-5. **[EXECUTAR_MIGRATIONS.md](./EXECUTAR_MIGRATIONS.md)**  
-   Como executar migrations do banco de dados.
+```bash
+git clone <repository-url>
+cd MTW
+```
 
-## 🎯 Ordem Recomendada
+### 2. Instalar Dependências
 
-1. **Primeira instalação?**
-   - Comece com [GUIA_INSTALACAO.md](./GUIA_INSTALACAO.md)
-   - Depois use [CHECKLIST_SETUP.md](./CHECKLIST_SETUP.md) para verificar
-   - Finalize com [GUIA_TESTE_RAPIDO.md](./GUIA_TESTE_RAPIDO.md)
+```bash
+# Backend
+cd backend
+npm install
 
-2. **Já instalou e quer testar?**
-   - Use [GUIA_TESTE_RAPIDO.md](./GUIA_TESTE_RAPIDO.md)
+# Admin Panel
+cd ../admin-panel
+npm install
 
-3. **Precisa executar migrations?**
-   - Veja [EXECUTAR_MIGRATIONS.md](./EXECUTAR_MIGRATIONS.md)
+# Mobile App
+cd ../mobile-app
+npm install
+```
+
+### 3. Configurar Banco de Dados
+
+1. Crie um projeto no [Supabase](https://supabase.com)
+2. Execute o script `database/schema.sql` no SQL Editor
+3. Execute as migrations em `database/migrations/` na ordem numérica
+
+### 4. Configurar Variáveis de Ambiente
+
+Copie os arquivos `.env.example` e configure:
+
+```bash
+# Backend
+cd backend
+cp .env.example .env
+# Edite o .env com suas credenciais
+
+# Admin Panel (geralmente não precisa de .env)
+cd ../admin-panel
+
+# Mobile App
+cd ../mobile-app
+cp .env.example .env
+# Configure se necessário
+```
+
+### 5. Iniciar os Serviços
+
+```bash
+# Terminal 1 - Backend
+cd backend
+npm run dev
+
+# Terminal 2 - Admin Panel
+cd admin-panel
+npm run dev
+
+# Terminal 3 - Mobile App
+cd mobile-app
+npm start
+```
+
+## 📝 Configuração Detalhada
+
+### Backend
+
+Veja o guia completo: [Configuração do Backend](./backend-setup.md)
+
+**Principais variáveis:**
+- `SUPABASE_URL` - URL do seu projeto Supabase
+- `SUPABASE_SERVICE_KEY` - Chave de serviço do Supabase
+- `JWT_SECRET` - Chave secreta para JWT
+- `REDIS_HOST` - Host do Redis (opcional)
+
+### Admin Panel
+
+O admin panel se conecta automaticamente ao backend. Configure apenas:
+- URL do backend (padrão: `http://localhost:3000`)
+
+### Mobile App
+
+Configure no `app.json`:
+- `expo.extra.apiUrl` - URL do backend
+- `expo.extra.supabaseUrl` - URL do Supabase
+- `expo.extra.supabaseAnonKey` - Chave anônima do Supabase
+
+## ✅ Checklist de Instalação
+
+- [ ] Node.js 18+ instalado
+- [ ] Dependências instaladas (backend, admin, mobile)
+- [ ] Projeto Supabase criado
+- [ ] Schema do banco executado
+- [ ] Migrations executadas
+- [ ] Variáveis de ambiente configuradas
+- [ ] Backend rodando (porta 3000)
+- [ ] Admin panel rodando (porta 5173)
+- [ ] Mobile app iniciado
+
+## 🧪 Teste Rápido
+
+Após a instalação, execute o [Teste Rápido](./quick-test.md) para validar.
+
+## 📚 Próximos Passos
+
+1. [Configurar Integrações](../04-integrations/README.md)
+2. [Configurar Bots](../04-integrations/bots/README.md)
+3. [Configurar Mercado Livre](../04-integrations/mercadolivre/README.md)
+4. [Explorar API](../05-api-reference/README.md)
+
+## 🆘 Problemas?
+
+Consulte o [Guia de Troubleshooting](../06-troubleshooting/README.md)
 
 ---
 
-**Voltar**: [Início Rápido](../01-getting-started/) | **Próximo**: [Módulos](../03-modules/) →
-
+**Próximo**: [Configuração do Banco de Dados](./database.md)

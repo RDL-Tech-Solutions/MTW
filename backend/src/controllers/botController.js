@@ -288,12 +288,18 @@ class BotController {
       // Verificar se Telegram está funcionando
       if (status.telegram.configured) {
         try {
-          const token = config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
-          const response = await axios.get(`https://api.telegram.org/bot${token}/getMe`, {
-            timeout: 5000
-          });
-          status.telegram.bot_info = response.data.result;
-          status.telegram.working = true;
+          // Usar apenas token do banco de dados
+          const token = config.telegram_bot_token;
+          if (!token) {
+            status.telegram.working = false;
+            status.telegram.error = 'Token não configurado no banco de dados';
+          } else {
+            const response = await axios.get(`https://api.telegram.org/bot${token}/getMe`, {
+              timeout: 5000
+            });
+            status.telegram.bot_info = response.data.result;
+            status.telegram.working = true;
+          }
         } catch (error) {
           status.telegram.working = false;
           status.telegram.error = error.message;
@@ -397,6 +403,20 @@ class BotController {
 
       const config = await BotConfig.upsert(filteredData);
       
+      // Limpar cache das configurações se foram atualizadas
+      if (filteredData.telegram_bot_token !== undefined) {
+        telegramService.clearTokenCache();
+        logger.info('🔄 Cache do token do Telegram limpo (novo token será carregado na próxima requisição)');
+      }
+      
+      // Limpar cache do WhatsApp se foi atualizado
+      if (filteredData.whatsapp_api_url !== undefined || 
+          filteredData.whatsapp_api_token !== undefined || 
+          filteredData.whatsapp_phone_number_id !== undefined) {
+        whatsappService.clearConfigCache();
+        logger.info('🔄 Cache das configurações do WhatsApp limpo (novas configurações serão carregadas na próxima requisição)');
+      }
+      
       logger.info('⚙️ Configurações de bots atualizadas');
 
       res.json({
@@ -425,13 +445,14 @@ class BotController {
       // Se token não fornecido ou é mascarado, buscar do banco
       if (!botToken || botToken.includes('...')) {
         const config = await BotConfig.get();
-        botToken = config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+        // Usar apenas token do banco de dados
+        botToken = config.telegram_bot_token;
       }
 
       if (!botToken) {
         return res.status(400).json({
           success: false,
-          message: 'Token do Telegram não configurado. Cole o token do @BotFather e salve as configurações primeiro.'
+          message: 'Token do Telegram não configurado no banco de dados. Vá em Configurações e salve o token primeiro.'
         });
       }
 
@@ -495,10 +516,11 @@ class BotController {
       
       if (!api_url || !api_token) {
         const savedConfig = await BotConfig.get();
+        // Usar apenas configurações do banco de dados
         config = {
-          api_url: api_url || savedConfig.whatsapp_api_url || process.env.WHATSAPP_API_URL,
-          api_token: api_token || savedConfig.whatsapp_api_token || process.env.WHATSAPP_API_TOKEN,
-          phone_number_id: phone_number_id || savedConfig.whatsapp_phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID
+          api_url: api_url || savedConfig.whatsapp_api_url,
+          api_token: api_token || savedConfig.whatsapp_api_token,
+          phone_number_id: phone_number_id || savedConfig.whatsapp_phone_number_id
         };
       }
 
@@ -566,20 +588,23 @@ class BotController {
       let result;
 
       if (channel.platform === 'telegram') {
-        const token = config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+        // Usar apenas token do banco de dados
+        const token = config.telegram_bot_token;
         if (!token) {
           return res.status(400).json({
             success: false,
-            message: 'Token do Telegram não configurado. Vá em Configurações e salve o token primeiro.'
+            message: 'Token do Telegram não configurado no banco de dados. Vá em Configurações e salve o token primeiro.'
           });
         }
+        
+        logger.info(`📱 Usando token do banco de dados`);
 
         logger.info(`📤 Enviando teste para Telegram: ${channelId}`);
 
         const message = `🤖 *Teste de Bot Telegram*
 
 ✅ Bot configurado e funcionando!
-📱 Sistema MTW Promo
+📱 Sistema PreçoCerto
 ⏰ ${new Date().toLocaleString('pt-BR')}
 🆔 Canal: ${channelName}
 
@@ -607,36 +632,59 @@ Você receberá notificações automáticas sobre:
           logger.info(`✅ Mensagem enviada com sucesso para ${channelId}`);
         } catch (telegramError) {
           // Tratar erros específicos do Telegram
+          const errorCode = telegramError.response?.data?.error_code;
           const errorDescription = telegramError.response?.data?.description || telegramError.message;
+          const errorMessage = telegramError.response?.data?.description || telegramError.message;
+          
           logger.error(`❌ Erro Telegram: ${errorDescription}`);
+          logger.error(`   Error Code: ${errorCode}`);
+          logger.error(`   Chat ID usado: ${channelId}`);
+          logger.error(`   Token usado: ${token ? token.substring(0, 10) + '...' : 'não configurado'}`);
           
           let userMessage = 'Erro ao enviar mensagem';
           
-          if (errorDescription.includes('chat not found')) {
-            userMessage = 'Chat não encontrado. Verifique se o Chat ID está correto e se o bot foi adicionado ao grupo.';
-          } else if (errorDescription.includes('bot was blocked')) {
-            userMessage = 'O bot foi bloqueado pelo usuário.';
-          } else if (errorDescription.includes('bot is not a member')) {
-            userMessage = 'O bot não é membro do grupo. Adicione o bot ao grupo primeiro.';
-          } else if (errorDescription.includes('PEER_ID_INVALID')) {
-            userMessage = 'ID do chat inválido. Para grupos, use o formato -100XXXXXXXXXX';
-          } else if (errorDescription.includes('group chat was upgraded')) {
-            userMessage = 'O grupo foi convertido em supergrupo. O Chat ID mudou, obtenha o novo ID.';
-          } else {
-            userMessage = `Erro do Telegram: ${errorDescription}`;
+          // Erro 401 - Unauthorized (token inválido ou bot não autorizado)
+          if (errorCode === 401 || errorDescription.includes('Unauthorized') || errorMessage.includes('Unauthorized')) {
+            userMessage = 'Token do bot inválido ou bot não autorizado. Verifique: 1) Se o token está correto nas configurações, 2) Se o bot foi iniciado com @BotFather, 3) Se o bot tem permissões para enviar mensagens.';
+          }
+          // Erro 400 - Bad Request
+          else if (errorCode === 400) {
+            if (errorDescription.includes('chat not found') || errorDescription.includes('Chat not found')) {
+              userMessage = 'Chat não encontrado. Verifique: 1) Se o Chat ID está correto, 2) Se o bot foi adicionado ao grupo/canal, 3) Se o bot tem permissões de administrador (para canais).';
+            } else if (errorDescription.includes('bot was blocked')) {
+              userMessage = 'O bot foi bloqueado pelo usuário. Desbloqueie o bot para continuar.';
+            } else if (errorDescription.includes('bot is not a member') || errorDescription.includes('not enough rights')) {
+              userMessage = 'O bot não é membro do grupo ou não tem permissões. Adicione o bot ao grupo/canal e dê permissões de administrador (para canais).';
+            } else if (errorDescription.includes('PEER_ID_INVALID')) {
+              userMessage = 'ID do chat inválido. Para grupos, use o formato -100XXXXXXXXXX. Para canais, use o formato -100XXXXXXXXXX ou @username.';
+            } else if (errorDescription.includes('group chat was upgraded')) {
+              userMessage = 'O grupo foi convertido em supergrupo. O Chat ID mudou, obtenha o novo ID.';
+            } else {
+              userMessage = `Erro do Telegram (400): ${errorDescription}`;
+            }
+          }
+          // Erro 403 - Forbidden
+          else if (errorCode === 403) {
+            userMessage = 'Acesso negado. O bot não tem permissões para enviar mensagens neste chat. Verifique se o bot é administrador (para canais) ou se tem permissões de envio de mensagens.';
+          }
+          // Outros erros
+          else {
+            userMessage = `Erro do Telegram (${errorCode || 'desconhecido'}): ${errorDescription}`;
           }
           
           return res.status(400).json({
             success: false,
             message: userMessage,
-            error: errorDescription
+            error: errorDescription,
+            error_code: errorCode
           });
         }
       } else if (channel.platform === 'whatsapp') {
+        // Usar apenas configurações do banco de dados
         const whatsappConfig = {
-          apiUrl: config.whatsapp_api_url || process.env.WHATSAPP_API_URL,
-          apiToken: config.whatsapp_api_token || process.env.WHATSAPP_API_TOKEN,
-          phoneNumberId: config.whatsapp_phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID
+          apiUrl: config.whatsapp_api_url,
+          apiToken: config.whatsapp_api_token,
+          phoneNumberId: config.whatsapp_phone_number_id
         };
 
         if (!whatsappConfig.apiUrl || !whatsappConfig.apiToken) {
@@ -649,7 +697,7 @@ Você receberá notificações automáticas sobre:
         const message = `🤖 *Teste de Bot WhatsApp*
 
 ✅ Bot configurado e funcionando!
-📱 Sistema MTW Promo
+📱 Sistema PreçoCerto
 ⏰ ${new Date().toLocaleString('pt-BR')}
 🆔 Canal: ${channelName}`;
 

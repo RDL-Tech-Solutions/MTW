@@ -3,6 +3,7 @@ import logger from '../../config/logger.js';
 import shopeeService from '../shopee/shopeeService.js';
 import Coupon from '../../models/Coupon.js';
 import categoryDetector from '../categoryDetector.js';
+import AppSettings from '../../models/AppSettings.js';
 
 class ShopeeSync {
   /**
@@ -11,9 +12,20 @@ class ShopeeSync {
    */
   async fetchShopeeProducts(keywords, limit = 50) {
     try {
-      // Verificar se Shopee está configurado
-      if (!process.env.SHOPEE_PARTNER_ID || !process.env.SHOPEE_PARTNER_KEY) {
-        logger.warn('⚠️ Shopee não configurado - SHOPEE_PARTNER_ID e SHOPEE_PARTNER_KEY necessários');
+      // Verificar se Shopee está configurado (buscar do banco primeiro)
+      let partnerId, partnerKey;
+      try {
+        const config = await AppSettings.getShopeeConfig();
+        partnerId = config.partnerId;
+        partnerKey = config.partnerKey;
+      } catch (error) {
+        logger.warn(`⚠️ Erro ao buscar configurações Shopee do banco: ${error.message}`);
+        partnerId = process.env.SHOPEE_PARTNER_ID;
+        partnerKey = process.env.SHOPEE_PARTNER_KEY;
+      }
+      
+      if (!partnerId || !partnerKey) {
+        logger.warn('⚠️ Shopee não configurado - Partner ID e Partner Key necessários');
         return [];
       }
 
@@ -119,8 +131,19 @@ class ShopeeSync {
    */
   async generateShopeeAffiliateLink(productUrl) {
     try {
-      // Verificar se Shopee está configurado
-      if (!process.env.SHOPEE_PARTNER_ID || !process.env.SHOPEE_PARTNER_KEY) {
+      // Verificar se Shopee está configurado (buscar do banco primeiro)
+      let partnerId, partnerKey;
+      try {
+        const config = await AppSettings.getShopeeConfig();
+        partnerId = config.partnerId;
+        partnerKey = config.partnerKey;
+      } catch (error) {
+        logger.warn(`⚠️ Erro ao buscar configurações Shopee do banco: ${error.message}`);
+        partnerId = process.env.SHOPEE_PARTNER_ID;
+        partnerKey = process.env.SHOPEE_PARTNER_KEY;
+      }
+      
+      if (!partnerId || !partnerKey) {
         logger.warn('⚠️ Shopee não configurado - retornando link original');
         return productUrl;
       }
@@ -134,7 +157,6 @@ class ShopeeSync {
       }
 
       // Se não conseguir gerar via API, adicionar partner_id manualmente
-      const partnerId = process.env.SHOPEE_PARTNER_ID;
       try {
         const url = new URL(productUrl);
         url.searchParams.set('affiliate_id', partnerId);
