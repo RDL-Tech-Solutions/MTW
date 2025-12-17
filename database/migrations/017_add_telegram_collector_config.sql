@@ -36,3 +36,5 @@ COMMENT ON COLUMN telegram_collector_config.listener_pid IS 'PID do processo do 
 
 
 
+
+

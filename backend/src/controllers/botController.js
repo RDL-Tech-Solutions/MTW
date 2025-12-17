@@ -156,7 +156,7 @@ class BotController {
   // Enviar mensagem de teste
   async sendTest(req, res) {
     try {
-      const { channelId } = req.body;
+      const { channelId, message } = req.body;
 
       if (channelId) {
         // Testar canal específico
@@ -170,10 +170,26 @@ class BotController {
         }
 
         let result;
+        const testMessage = message || `🤖 *Teste de Bot*\n\n✅ Bot configurado e funcionando!\n⏰ ${new Date().toLocaleString('pt-BR')}`;
+        
         if (channel.platform === 'whatsapp') {
-          result = await whatsappService.sendTestMessage(channel.identifier);
+          // Converter formatação para WhatsApp
+          const templateRenderer = (await import('../services/bots/templateRenderer.js')).default;
+          const convertedMessage = templateRenderer.convertBoldFormatting(testMessage, 'whatsapp');
+          result = await whatsappService.sendMessage(channel.identifier, convertedMessage);
         } else if (channel.platform === 'telegram') {
-          result = await telegramService.sendTestMessage(channel.identifier);
+          // Buscar parse_mode e converter formatação
+          const BotConfig = (await import('../models/BotConfig.js')).default;
+          const botConfig = await BotConfig.get();
+          const parseMode = botConfig.telegram_parse_mode || 'HTML';
+          const finalParseMode = (parseMode === 'Markdown' || parseMode === 'MarkdownV2') ? 'HTML' : parseMode;
+          
+          const templateRenderer = (await import('../services/bots/templateRenderer.js')).default;
+          const convertedMessage = templateRenderer.convertBoldFormatting(testMessage, 'telegram', finalParseMode);
+          
+          result = await telegramService.sendMessage(channel.identifier, convertedMessage, {
+            parse_mode: finalParseMode
+          });
         }
 
         res.json({
@@ -183,13 +199,25 @@ class BotController {
         });
       } else {
         // Testar todos os canais ativos
-        const result = await notificationDispatcher.sendTestToAllChannels();
-
-        res.json({
-          success: true,
-          message: 'Mensagens de teste enviadas para todos os canais',
-          data: result
-        });
+        const testMessage = message || `🤖 *Teste de Bot*\n\n✅ Bot configurado e funcionando!\n⏰ ${new Date().toLocaleString('pt-BR')}`;
+        
+        if (message) {
+          // Se há mensagem customizada, enviar para todos os canais
+          const result = await notificationDispatcher.sendCustomMessageToAllChannels(testMessage);
+          res.json({
+            success: true,
+            message: 'Mensagens de teste enviadas para todos os canais',
+            data: result
+          });
+        } else {
+          // Usar método padrão
+          const result = await notificationDispatcher.sendTestToAllChannels();
+          res.json({
+            success: true,
+            message: 'Mensagens de teste enviadas para todos os canais',
+            data: result
+          });
+        }
       }
     } catch (error) {
       logger.error(`Erro ao enviar teste: ${error.message}`);

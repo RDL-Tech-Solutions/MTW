@@ -9,3 +9,5 @@ ADD COLUMN IF NOT EXISTS last_code_sent_at TIMESTAMP;
 COMMENT ON COLUMN telegram_collector_config.last_code_sent_at IS 'Timestamp da última tentativa de envio de código de verificação (para evitar rate limiting)';
 
 
+
+

@@ -431,7 +431,7 @@ class MeliSync {
   /**
    * Filtrar produtos que realmente são promoções
    */
-  filterMeliPromotions(products, minDiscountPercentage = 10) {
+  async filterMeliPromotions(products, minDiscountPercentage = 10) {
     const promotions = [];
 
     for (const product of products) {
@@ -463,6 +463,38 @@ class MeliSync {
       }
 
       if (discount >= minDiscountPercentage || hasCoupon) {
+        // Processar link para garantir formato correto
+        let processedLink = '';
+        try {
+          // Extrair ID MLB- do permalink
+          const productId = this.extractMeliProductId(product.permalink);
+          if (productId) {
+            // Buscar código de afiliado
+            let affiliateCode = '';
+            try {
+              const AppSettings = (await import('../../models/AppSettings.js')).default;
+              const config = await AppSettings.getMeliConfig();
+              affiliateCode = config.affiliateCode || '';
+            } catch (error) {
+              affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
+            }
+
+            // Gerar link limpo no formato correto
+            const cleanLink = `https://produto.mercadolivre.com.br/${productId}`;
+            if (affiliateCode && affiliateCode.trim()) {
+              processedLink = `${cleanLink}?matt_word=${encodeURIComponent(affiliateCode.trim())}`;
+            } else {
+              processedLink = cleanLink;
+            }
+          } else {
+            // Se não conseguir extrair ID, usar link original (será processado depois)
+            processedLink = product.permalink || '';
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao processar link, usando original: ${error.message}`);
+          processedLink = product.permalink || '';
+        }
+
         promotions.push({
           external_id: `mercadolivre-${product.id}`,
           name: product.title,
@@ -471,7 +503,7 @@ class MeliSync {
           current_price: currentPrice,
           old_price: originalPrice || 0, // Garantir 0 se null
           discount_percentage: Math.round(discount),
-          affiliate_link: product.permalink,
+          affiliate_link: processedLink,
           stock_available: product.available_quantity > 0,
           coupon: product.coupon,
           raw_data: product
@@ -484,11 +516,68 @@ class MeliSync {
   }
 
   /**
-   * Gerar link de afiliado do Mercado Livre
-   * Prioridade:
-   * 1. Se tiver MELI_AFFILIATE_CODE configurado, usar formato de afiliado
-   * 2. Se tiver autenticação, tentar obter link trackeado via API
-   * 3. Caso contrário, retornar link original
+   * Extrair ID MLB- de um link do Mercado Livre
+   * Ignora links com parâmetros de rastreamento proibidos
+   * @param {string} link - Link do Mercado Livre
+   * @returns {string|null} - ID no formato MLB-XXXXXXXXXX ou null se não encontrar
+   */
+  extractMeliProductId(link) {
+    if (!link || typeof link !== 'string') return null;
+
+    // Ignorar links com parâmetros proibidos
+    const forbiddenPatterns = [
+      /\/jm\/mlb/i,
+      /meuid=/i,
+      /redirect=/i,
+      /tracking_id=/i,
+      /reco_/i,
+      /[?&]c_id/i,
+      /[?&]c_uid/i,
+      /[?&]sid/i,
+      /[?&]wid/i
+    ];
+
+    for (const pattern of forbiddenPatterns) {
+      if (pattern.test(link)) {
+        logger.debug(`⚠️ Link ignorado por conter parâmetro proibido: ${link.substring(0, 100)}`);
+        return null;
+      }
+    }
+
+    // Extrair ID MLB- do link
+    // Padrões aceitos:
+    // - MLB-1234567890
+    // - /MLB-1234567890
+    // - produto.mercadolivre.com.br/MLB-1234567890
+    // - /MLB1234567890 (sem hífen)
+    const idPatterns = [
+      /MLB-(\d+)/i,           // MLB-1234567890
+      /\/MLB-(\d+)/i,         // /MLB-1234567890
+      /MLB(\d{8,})/i          // MLB1234567890 (sem hífen, mínimo 8 dígitos)
+    ];
+
+    for (const pattern of idPatterns) {
+      const match = link.match(pattern);
+      if (match) {
+        const id = match[1] || match[0].replace(/MLB-?/i, '');
+        if (id && id.length >= 8) {
+          return `MLB-${id}`;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Gerar link de afiliado limpo do Mercado Livre
+   * Formato: https://produto.mercadolivre.com.br/MLB-XXXXXXXXXX?matt_word=IDAFILIADO
+   * 
+   * Regras:
+   * - Ignora links com parâmetros de rastreamento (/jm/mlb, meuid=, redirect=, etc)
+   * - Extrai apenas o ID MLB- do produto
+   * - Gera sempre um link limpo com matt_word
+   * - Se não encontrar ID MLB-, descarta o link
    */
   async generateMeliAffiliateLink(product) {
     try {
@@ -502,68 +591,56 @@ class MeliSync {
         logger.warn(`⚠️ Erro ao buscar affiliate code do banco: ${error.message}`);
         affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
       }
-      
-      const originalLink = product.affiliate_link || '';
 
-      // Se tiver código de afiliado configurado, gerar link de afiliado
-      if (affiliateCode && originalLink) {
-        try {
-          // Formato do link de afiliado ML:
-          // https://mercadolivre.com/jm/mlb?&meuid={CODIGO}&redirect={URL_ENCODED}
-          const encodedUrl = encodeURIComponent(originalLink);
-          const affiliateLink = `https://mercadolivre.com/jm/mlb?&meuid=${affiliateCode}&redirect=${encodedUrl}`;
-          
-          logger.info(`✅ Link de afiliado gerado para ${product.external_id || product.name}`);
-          return affiliateLink;
-        } catch (error) {
-          logger.warn(`⚠️ Erro ao gerar link de afiliado com código: ${error.message}`);
-        }
-      }
+      let productId = null;
 
-      // Se não tiver código de afiliado, tentar via API autenticada (se configurado)
-      if (meliAuth.isConfigured() && product.external_id) {
-        try {
-          // Extrair ID (ex: mercadolivre-MLB123 -> MLB123)
-          const meliId = product.external_id.replace('mercadolivre-', '');
-
-          // Buscar detalhes do item via API Autenticada
-          // Se a conta for de afiliado/parceiro, o permalink retornado pode ser trackeado
-          const itemData = await meliAuth.authenticatedRequest(`https://api.mercadolibre.com/items/${meliId}`);
-
-          if (itemData && itemData.permalink) {
-            logger.info(`✅ Link obtido via API autenticada para ${product.external_id}`);
-            return itemData.permalink;
-          }
-        } catch (error) {
-          logger.warn(`⚠️ Falha ao obter link via API autenticada: ${error.message}`);
-        }
-      }
-
-      // Fallback: retornar link original
+      // Tentar extrair ID do link original
+      const originalLink = product.affiliate_link || product.link || '';
       if (originalLink) {
-        logger.info(`ℹ️ Usando link original (sem código de afiliado) para ${product.external_id || product.name}`);
-        return originalLink;
-      }
-
-      // Se não tiver link original, tentar construir a partir do external_id
-      if (product.external_id) {
-        const meliId = product.external_id.replace('mercadolivre-', '');
-        const constructedLink = `https://produto.mercadolivre.com.br/MLB-${meliId}`;
-        
-        // Se tiver código de afiliado, aplicar mesmo no link construído
-        if (affiliateCode) {
-          const encodedUrl = encodeURIComponent(constructedLink);
-          return `https://mercadolivre.com/jm/mlb?&meuid=${affiliateCode}&redirect=${encodedUrl}`;
+        productId = this.extractMeliProductId(originalLink);
+        if (productId) {
+          logger.debug(`✅ ID extraído do link: ${productId}`);
         }
-        
-        return constructedLink;
       }
 
-      logger.warn(`⚠️ Não foi possível gerar link de afiliado para produto: ${product.name || 'desconhecido'}`);
-      return originalLink || '';
+      // Se não encontrou no link, tentar do external_id
+      if (!productId && product.external_id) {
+        const externalId = product.external_id.toString();
+        // Formato: mercadolivre-MLB1234567890 ou MLB1234567890
+        const match = externalId.match(/MLB-?(\d+)/i) || externalId.match(/(\d{8,})/);
+        if (match) {
+          const id = match[1] || match[0];
+          if (id && id.length >= 8) {
+            productId = `MLB-${id}`;
+            logger.debug(`✅ ID extraído do external_id: ${productId}`);
+          }
+        }
+      }
+
+      // Se ainda não encontrou, descartar
+      if (!productId) {
+        logger.warn(`⚠️ Não foi possível extrair ID MLB- do produto: ${product.name || 'desconhecido'}`);
+        return '';
+      }
+
+      // Gerar link limpo no formato oficial
+      // Sempre usar o formato: https://produto.mercadolivre.com.br/MLB-XXXXXXXXXX?matt_word=IDAFILIADO
+      const cleanLink = `https://produto.mercadolivre.com.br/${productId}`;
+
+      // Se tiver código de afiliado, adicionar matt_word
+      if (affiliateCode && affiliateCode.trim()) {
+        const affiliateLink = `${cleanLink}?matt_word=${encodeURIComponent(affiliateCode.trim())}`;
+        logger.info(`✅ Link de afiliado limpo gerado: ${affiliateLink} para ${product.name || 'produto'}`);
+        return affiliateLink;
+      }
+
+      // Sem código de afiliado, retornar link limpo sem parâmetros
+      // Mas ainda no formato correto: https://produto.mercadolivre.com.br/MLB-XXXXXXXXXX
+      logger.info(`ℹ️ Link limpo gerado (sem código de afiliado): ${cleanLink}`);
+      return cleanLink;
     } catch (error) {
       logger.error(`❌ Erro ao gerar link afiliado ML: ${error.message}`);
-      return product.affiliate_link || '';
+      return '';
     }
   }
 
@@ -604,6 +681,13 @@ class MeliSync {
       const existing = await Product.findByExternalId(product.external_id);
 
       if (existing) {
+        // Sempre atualizar o link para garantir formato correto
+        const newAffiliateLink = await this.generateMeliAffiliateLink(product);
+        if (newAffiliateLink && newAffiliateLink !== existing.affiliate_link) {
+          await Product.update(existing.id, { affiliate_link: newAffiliateLink });
+          logger.info(`🔄 Link atualizado para formato correto: ${product.name}`);
+        }
+
         // Se o preço mudou, atualizar
         if (existing.current_price !== product.current_price) {
           await Product.updatePrice(existing.id, product.current_price);

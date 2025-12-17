@@ -45,6 +45,8 @@ router.get('/templates', botTemplateController.list);
 router.get('/templates/variables/:template_type', botTemplateController.getVariables);
 router.get('/templates/:id', botTemplateController.getById);
 router.post('/templates', botTemplateController.create);
+router.post('/templates/create-defaults', botTemplateController.createDefaults);
+router.post('/templates/:id/duplicate', botTemplateController.duplicate);
 router.put('/templates/:id', botTemplateController.update);
 router.delete('/templates/:id', botTemplateController.delete);
 

@@ -46,3 +46,4 @@ COMMENT ON COLUMN telegram_channels.channel_id IS 'ID do canal no Telegram (ex: 
 COMMENT ON COLUMN telegram_channels.last_message_id IS 'ID da última mensagem processada deste canal';
 COMMENT ON COLUMN telegram_channels.last_sync_at IS 'Timestamp da última sincronização/processamento de mensagens';
 
+

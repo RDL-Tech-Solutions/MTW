@@ -211,13 +211,16 @@ export default function Products() {
       return;
     }
 
+    console.log('🔗 Iniciando análise do link:', formData.affiliate_url);
     setAnalyzingLink(true);
     try {
+      console.log('📤 Enviando requisição para API...');
       const response = await api.post('/link-analyzer/analyze', {
         url: formData.affiliate_url
       });
 
-      console.log('📦 Resposta completa da API:', response.data);
+      console.log('📦 Resposta completa da API:', response);
+      console.log('📦 Dados da resposta:', response.data);
       
       const productInfo = response.data.data || response.data;
       
@@ -306,6 +309,9 @@ export default function Products() {
         variant: "success",
       });
     } catch (error) {
+      console.error('❌ Erro ao analisar link:', error);
+      console.error('❌ Resposta do erro:', error.response);
+      
       const errorMessage = error.response?.data?.error || 
                           error.response?.data?.message || 
                           error.message || 

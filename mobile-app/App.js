@@ -46,10 +46,10 @@ export default function App() {
           }, 1000);
         }
         
-        // Simular carregamento inicial
+        // Simular carregamento inicial (6 segundos para completar animação do GIF)
         setTimeout(() => {
           setIsLoading(false);
-        }, 2500);
+        }, 6000);
       } catch (error) {
         console.error('Erro ao inicializar app:', error);
         setIsReady(true);

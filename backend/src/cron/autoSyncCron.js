@@ -170,7 +170,7 @@ class AutoSyncCron {
       const products = await meliSync.fetchMeliProducts(config.keywords, 50);
 
       // 2. Filtrar promoções
-      const promotions = meliSync.filterMeliPromotions(
+      const promotions = await meliSync.filterMeliPromotions(
         products,
         config.min_discount_percentage
       );

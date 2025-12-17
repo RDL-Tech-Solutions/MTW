@@ -35,7 +35,7 @@ class BotConfig {
       telegram_enabled: false,
       telegram_bot_token: '',
       telegram_bot_username: '',
-      telegram_parse_mode: 'Markdown',
+      telegram_parse_mode: 'HTML',
       telegram_disable_preview: false,
       
       // WhatsApp

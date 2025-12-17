@@ -20,20 +20,23 @@ class BotMessageTemplate {
         .limit(1)
         .maybeSingle();
 
-      // Se não encontrar, buscar template genérico (all) e ATIVO
-      if (!data && error?.code === 'PGRST116') {
-        ({ data, error } = await supabase
-          .from('bot_message_templates')
-          .select('*')
-          .eq('template_type', templateType)
-          .eq('platform', 'all')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle());
+      // Se não encontrar template específico da plataforma, buscar template genérico (all) e ATIVO
+      if (!data) {
+        // Se a plataforma já é 'all', não precisa buscar novamente
+        if (platform !== 'all') {
+          ({ data, error } = await supabase
+            .from('bot_message_templates')
+            .select('*')
+            .eq('template_type', templateType)
+            .eq('platform', 'all')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle());
+        }
       }
 
-      // Se ainda não encontrar, buscar qualquer template do tipo (mesmo inativo) para debug
+      // Se ainda não encontrar template ativo, buscar qualquer template do tipo para debug
       if (!data) {
         ({ data, error } = await supabase
           .from('bot_message_templates')
@@ -46,6 +49,22 @@ class BotMessageTemplate {
         
         if (data && !data.is_active) {
           console.warn(`⚠️ Template encontrado mas está INATIVO: ${templateType} para ${platform}`);
+          // Tentar buscar template 'all' inativo como último recurso
+          if (platform !== 'all') {
+            const { data: allData } = await supabase
+              .from('bot_message_templates')
+              .select('*')
+              .eq('template_type', templateType)
+              .eq('platform', 'all')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (allData) {
+              console.warn(`⚠️ Usando template 'all' (mesmo inativo): ${templateType}`);
+              return allData;
+            }
+          }
           return null; // Retornar null se estiver inativo
         }
       }
@@ -69,12 +88,12 @@ class BotMessageTemplate {
    */
   static async findAll(filters = {}) {
     try {
+      // Verificar se a tabela existe fazendo uma query simples primeiro
       let query = supabase
         .from('bot_message_templates')
-        .select('*')
-        .order('template_type', { ascending: true })
-        .order('platform', { ascending: true });
+        .select('*', { count: 'exact' });
 
+      // Aplicar filtros
       if (filters.template_type) {
         query = query.eq('template_type', filters.template_type);
       }
@@ -87,13 +106,49 @@ class BotMessageTemplate {
         query = query.eq('is_active', filters.is_active);
       }
 
-      const { data, error } = await query;
+      // Ordenar - usar apenas uma ordenação principal
+      query = query.order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data || [];
+      const { data, error, count } = await query;
+
+      if (error) {
+        // Se a tabela não existir, retornar array vazio em vez de erro
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.warn('⚠️ Tabela bot_message_templates não existe ainda. Execute a migration.');
+          return [];
+        }
+        
+        console.error('Erro na query Supabase:', error);
+        console.error('Código do erro:', error.code);
+        console.error('Mensagem:', error.message);
+        console.error('Detalhes:', JSON.stringify(error, null, 2));
+        throw error;
+      }
+      
+      // Ordenar manualmente após buscar os dados
+      const sorted = (data || []).sort((a, b) => {
+        // Primeiro por tipo
+        if (a.template_type !== b.template_type) {
+          return a.template_type.localeCompare(b.template_type);
+        }
+        // Depois por plataforma
+        if (a.platform !== b.platform) {
+          return a.platform.localeCompare(b.platform);
+        }
+        // Por último por data de criação (mais recente primeiro)
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+      
+      return sorted;
     } catch (error) {
       console.error('Erro ao buscar templates:', error.message);
-      return [];
+      console.error('Stack:', error.stack);
+      // Se for erro de tabela não existir, retornar array vazio
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        console.warn('⚠️ Tabela bot_message_templates não existe. Retornando array vazio.');
+        return [];
+      }
+      throw error; // Re-throw para que o controller possa capturar
     }
   }
 
@@ -109,7 +164,8 @@ class BotMessageTemplate {
       template,
       description,
       available_variables = [],
-      is_active = true
+      is_active = true,
+      is_system = false
     } = templateData;
 
     const { data, error } = await supabase
@@ -120,7 +176,8 @@ class BotMessageTemplate {
         template,
         description,
         available_variables,
-        is_active
+        is_active,
+        is_system
       }])
       .select()
       .single();

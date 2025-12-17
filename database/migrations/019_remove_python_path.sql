@@ -10,3 +10,5 @@ COMMENT ON TABLE app_settings IS 'Configurações gerais da aplicação migradas
 
 
 
+
+

@@ -42,6 +42,34 @@ class TelegramService {
   }
 
   /**
+   * Converter mensagem Markdown para HTML
+   * @param {string} message - Mensagem em Markdown
+   * @returns {string}
+   */
+  convertToHTML(message) {
+    if (!message) return '';
+    
+    // Converter negrito: *texto* ou **texto** para <b>texto</b>
+    message = message.replace(/\*\*([^*]+?)\*\*/g, '<b>$1</b>');
+    message = message.replace(/\*([^*\n]+?)\*/g, '<b>$1</b>');
+    
+    // Converter riscado: ~~texto~~ ou ~texto~ para <s>texto</s>
+    message = message.replace(/~~([^~]+?)~~/g, '<s>$1</s>');
+    message = message.replace(/~([^~\n]+?)~/g, '<s>$1</s>');
+    
+    // Converter itálico: _texto_ para <i>texto</i>
+    message = message.replace(/_([^_\n]+?)_/g, '<i>$1</i>');
+    
+    // Converter código: `texto` para <code>texto</code>
+    message = message.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Converter links: [texto](url) para <a href="url">texto</a>
+    message = message.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    
+    return message;
+  }
+
+  /**
    * Escapar caracteres especiais do Markdown
    * @param {string} text - Texto para escapar
    * @returns {string}
@@ -284,9 +312,14 @@ class TelegramService {
       logger.info(`   URL completa: ${imageUrl}`);
       logger.info(`   Caption length: ${message?.length || 0}`);
       
+      // Usar parse_mode das options ou da configuração, ou Markdown como padrão
+      const BotConfig = (await import('../../models/BotConfig.js')).default;
+      const botConfig = await BotConfig.get();
+      const defaultParseMode = botConfig.telegram_parse_mode || 'Markdown';
+      
       const photoOptions = {
         ...options,
-        parse_mode: 'HTML', // Usar HTML para melhor controle da formatação
+        parse_mode: options.parse_mode || defaultParseMode,
         disable_web_page_preview: true // Desabilitar preview automático de links
       };
       
@@ -377,6 +410,9 @@ class TelegramService {
       // Adicionar parse_mode apenas se especificado e não for undefined
       if (options.parse_mode !== undefined && options.parse_mode !== null) {
         payload.parse_mode = options.parse_mode;
+        logger.info(`📝 Parse mode: ${options.parse_mode}`);
+      } else {
+        logger.warn(`⚠️ Parse mode não especificado, enviando como texto puro`);
       }
       
       // Tentar enviar
@@ -389,17 +425,49 @@ class TelegramService {
           }
         );
 
-        logger.info(`✅ Mensagem Telegram enviada para chat ${chatId}`);
+        logger.info(`✅ Mensagem Telegram enviada para chat ${chatId} com parse_mode: ${payload.parse_mode || 'nenhum'}`);
         return {
           success: true,
           messageId: response.data.result.message_id,
           data: response.data
         };
       } catch (markdownError) {
-        // Se falhar e tiver parse_mode, tentar sem parse_mode (texto puro)
+        // Se falhar e tiver parse_mode, tentar corrigir o erro
         if (payload.parse_mode && markdownError.response?.status === 400) {
-          logger.warn(`⚠️ Erro com Markdown, tentando sem formatação: ${markdownError.response?.data?.description || markdownError.message}`);
+          const errorDesc = markdownError.response?.data?.description || '';
+          logger.warn(`⚠️ Erro com ${payload.parse_mode}: ${errorDesc}`);
           
+          // Se for erro de HTML, tentar escapar caracteres HTML
+          if (payload.parse_mode === 'HTML') {
+            try {
+              // Escapar caracteres HTML problemáticos
+              logger.info('🔄 Tentando escapar caracteres HTML...');
+              const escapedMessage = message
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+              
+              payload.text = escapedMessage;
+              
+              const response = await axios.post(
+                `${this.apiUrl}/sendMessage`,
+                payload,
+                { timeout: 10000 }
+              );
+              
+              logger.info(`✅ Mensagem Telegram enviada com HTML escapado para chat ${chatId}`);
+              return {
+                success: true,
+                messageId: response.data.result.message_id,
+                data: response.data,
+                warning: 'Mensagem enviada com HTML escapado devido a erro de parsing'
+              };
+            } catch (htmlError) {
+              logger.warn(`⚠️ HTML escapado também falhou, tentando sem formatação: ${htmlError.message}`);
+            }
+          }
+          
+          // Último recurso: enviar sem formatação
           payload = {
             chat_id: chatId,
             text: message,
@@ -409,17 +477,15 @@ class TelegramService {
           const response = await axios.post(
             `${this.apiUrl}/sendMessage`,
             payload,
-            {
-              timeout: 10000
-            }
+            { timeout: 10000 }
           );
 
-          logger.info(`✅ Mensagem Telegram enviada (sem Markdown) para chat ${chatId}`);
+          logger.info(`✅ Mensagem Telegram enviada (sem formatação) para chat ${chatId}`);
           return {
             success: true,
             messageId: response.data.result.message_id,
             data: response.data,
-            warning: 'Mensagem enviada sem formatação Markdown devido a erro de parsing'
+            warning: 'Mensagem enviada sem formatação devido a erro de parsing'
           };
         }
         
@@ -586,6 +652,12 @@ ${coupon.restrictions ? `⚠️ ${coupon.restrictions}\n` : ''}
    * @returns {Promise<Object>}
    */
   async sendTestMessage(chatId) {
+    // Buscar parse_mode da configuração
+    const BotConfig = (await import('../../models/BotConfig.js')).default;
+    const botConfig = await BotConfig.get();
+    const parseMode = botConfig.telegram_parse_mode || 'HTML';
+    const finalParseMode = (parseMode === 'Markdown' || parseMode === 'MarkdownV2') ? 'HTML' : parseMode;
+    
     const message = `🤖 *Teste de Bot Telegram*
 
 ✅ Bot configurado e funcionando!
@@ -597,7 +669,13 @@ Você receberá notificações automáticas sobre:
 🎟 Novos cupons
 ⏰ Cupons expirando`;
 
-    return await this.sendMessage(chatId, message);
+    // Converter formatação
+    const templateRenderer = (await import('./templateRenderer.js')).default;
+    const convertedMessage = templateRenderer.convertBoldFormatting(message, 'telegram', finalParseMode);
+
+    return await this.sendMessage(chatId, convertedMessage, {
+      parse_mode: finalParseMode
+    });
   }
 
   /**

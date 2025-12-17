@@ -71,3 +71,5 @@ COMMENT ON COLUMN app_settings.expo_access_token IS 'Access Token do Expo para p
 
 
 
+
+

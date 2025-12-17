@@ -15,18 +15,24 @@ class BotTemplateController {
       if (platform) filters.platform = platform;
       if (is_active !== undefined) filters.is_active = is_active === 'true';
 
+      logger.info(`📋 Buscando templates com filtros: ${JSON.stringify(filters)}`);
+
       const templates = await BotMessageTemplate.findAll(filters);
+
+      logger.info(`✅ ${templates.length} templates encontrados`);
 
       res.json({
         success: true,
         data: templates
       });
     } catch (error) {
-      logger.error(`Erro ao listar templates: ${error.message}`);
+      logger.error(`❌ Erro ao listar templates: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
       res.status(500).json({
         success: false,
         message: 'Erro ao listar templates',
-        error: error.message
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
@@ -127,6 +133,33 @@ class BotTemplateController {
       const { id } = req.params;
       const updates = req.body;
 
+      // Verificar se o template existe e se é do sistema
+      const template = await BotMessageTemplate.findById(id);
+      
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          message: 'Template não encontrado'
+        });
+      }
+
+      // Para templates do sistema, permitir apenas atualizar alguns campos
+      if (template.is_system) {
+        // Campos permitidos para templates do sistema
+        const allowedFields = ['is_active', 'description'];
+        const restrictedFields = Object.keys(updates).filter(field => !allowedFields.includes(field));
+        
+        if (restrictedFields.length > 0) {
+          return res.status(403).json({
+            success: false,
+            message: `Templates padrão do sistema não podem ter os seguintes campos alterados: ${restrictedFields.join(', ')}. Apenas 'is_active' e 'description' podem ser modificados.`,
+            is_system: true,
+            restricted_fields: restrictedFields,
+            allowed_fields: allowedFields
+          });
+        }
+      }
+
       // Validar template_type se fornecido
       if (updates.template_type) {
         const validTypes = ['new_promotion', 'new_coupon', 'expired_coupon'];
@@ -164,6 +197,26 @@ class BotTemplateController {
   async delete(req, res) {
     try {
       const { id } = req.params;
+      
+      // Verificar se o template existe e se é do sistema
+      const template = await BotMessageTemplate.findById(id);
+      
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          message: 'Template não encontrado'
+        });
+      }
+
+      // Não permitir deletar templates do sistema
+      if (template.is_system) {
+        return res.status(403).json({
+          success: false,
+          message: 'Não é possível deletar templates padrão do sistema. Estes templates são fixos e não podem ser removidos.',
+          is_system: true
+        });
+      }
+
       await BotMessageTemplate.delete(id);
 
       logger.info(`✅ Template deletado: ${id}`);
@@ -177,6 +230,180 @@ class BotTemplateController {
       res.status(500).json({
         success: false,
         message: 'Erro ao deletar template',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Criar templates padrão
+   * POST /api/bots/templates/create-defaults
+   */
+  async createDefaults(req, res) {
+    try {
+      const defaultTemplates = [
+        // Modelos para Nova Promoção
+        {
+          template_type: 'new_promotion',
+          platform: 'all',
+          template: '🔥 **PROMOÇÃO IMPERDÍVEL!**\n\n📦 {product_name}\n\n💰 **{current_price}**{old_price}\n🏷️ **{discount_percentage}% OFF**\n\n🛒 {platform_name}\n\n{coupon_section}\n\n🔗 {affiliate_link}\n\n⚡ Corre que está acabando!',
+          description: 'Modelo Padrão 1: Simples e Direto - Todas as plataformas',
+          is_active: true,
+          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'affiliate_link']
+        },
+        {
+          template_type: 'new_promotion',
+          platform: 'all',
+          template: '🎯 **OFERTA ESPECIAL ENCONTRADA!**\n\n━━━━━━━━━━━━━━━━━━━━\n📦 **PRODUTO**\n{product_name}\n━━━━━━━━━━━━━━━━━━━━\n\n💰 **PREÇO ATUAL:** {current_price}{old_price}\n🎁 **DESCONTO:** {discount_percentage}% OFF\n\n🏪 **LOJA:** {platform_name}\n\n{coupon_section}\n\n🔗 **COMPRAR AGORA:**\n{affiliate_link}\n\n⏰ **Oferta limitada! Não perca!**',
+          description: 'Modelo Padrão 2: Detalhado e Informativo - Todas as plataformas',
+          is_active: false,
+          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'affiliate_link']
+        },
+        {
+          template_type: 'new_promotion',
+          platform: 'all',
+          template: '⚡ **ALERTA DE OFERTA!** ⚡\n\n🎁 {product_name}\n\n💸 De {old_price} por apenas **{current_price}**\n🔥 **ECONOMIZE {discount_percentage}%!**\n\n{coupon_section}\n\n🛒 {platform_name}\n🔗 {affiliate_link}\n\n⏰ **ÚLTIMAS HORAS! Aproveite agora!**',
+          description: 'Modelo Padrão 3: Urgente e Ação - Todas as plataformas',
+          is_active: false,
+          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'affiliate_link']
+        },
+        // Modelos para Novo Cupom
+        {
+          template_type: 'new_coupon',
+          platform: 'all',
+          template: '🎟️ **NOVO CUPOM DISPONÍVEL!**\n\n🏪 {platform_name}\n\n💬 **CÓDIGO:**\n`{coupon_code}`\n\n💰 **DESCONTO:** {discount_value} OFF\n📅 **VÁLIDO ATÉ:** {valid_until}\n{min_purchase}\n\n📝 {coupon_title}\n{coupon_description}\n\n🔗 {affiliate_link}\n\n⚡ Use agora e economize!',
+          description: 'Modelo Padrão 1: Simples e Direto - Todas as plataformas',
+          is_active: true,
+          available_variables: ['platform_name', 'coupon_code', 'discount_value', 'valid_until', 'min_purchase', 'coupon_title', 'coupon_description', 'affiliate_link']
+        },
+        {
+          template_type: 'new_coupon',
+          platform: 'all',
+          template: '🎁 **CUPOM DE DESCONTO ATIVO!**\n\n━━━━━━━━━━━━━━━━━━━━\n🏪 **PLATAFORMA:** {platform_name}\n━━━━━━━━━━━━━━━━━━━━\n\n💬 **COPIE O CÓDIGO:**\n`{coupon_code}`\n\n💰 **VALOR DO DESCONTO:** {discount_value} OFF\n📅 **VALIDADE:** {valid_until}\n{min_purchase}\n\n📋 **DETALHES:**\n{coupon_title}\n{coupon_description}\n\n🔗 **LINK PARA USAR:**\n{affiliate_link}\n\n✅ **Cupom pronto para uso!**',
+          description: 'Modelo Padrão 2: Detalhado e Informativo - Todas as plataformas',
+          is_active: false,
+          available_variables: ['platform_name', 'coupon_code', 'discount_value', 'valid_until', 'min_purchase', 'coupon_title', 'coupon_description', 'affiliate_link']
+        },
+        {
+          template_type: 'new_coupon',
+          platform: 'all',
+          template: '⚡ **CUPOM LIBERADO!** ⚡\n\n🎟️ **CÓDIGO EXCLUSIVO:**\n`{coupon_code}`\n\n🏪 {platform_name}\n💰 {discount_value} OFF\n📅 Válido até {valid_until}\n{min_purchase}\n\n{coupon_title}\n{coupon_description}\n\n🔗 {affiliate_link}\n\n⏰ **Use antes que expire!**',
+          description: 'Modelo Padrão 3: Urgente e Ação - Todas as plataformas',
+          is_active: false,
+          available_variables: ['platform_name', 'coupon_code', 'discount_value', 'valid_until', 'min_purchase', 'coupon_title', 'coupon_description', 'affiliate_link']
+        },
+        // Modelos para Cupom Expirado
+        {
+          template_type: 'expired_coupon',
+          platform: 'all',
+          template: '⚠️ **CUPOM EXPIROU**\n\n🏪 {platform_name}\n💬 Código: `{coupon_code}`\n📅 Expirado em: {expired_date}\n\n😔 Este cupom não está mais disponível.\n🔔 Fique atento às próximas promoções!',
+          description: 'Modelo Padrão 1: Simples e Direto - Todas as plataformas',
+          is_active: true,
+          available_variables: ['platform_name', 'coupon_code', 'expired_date']
+        },
+        {
+          template_type: 'expired_coupon',
+          platform: 'all',
+          template: '📢 **AVISO: CUPOM EXPIRADO**\n\n━━━━━━━━━━━━━━━━━━━━\n🏪 **Plataforma:** {platform_name}\n💬 **Código:** `{coupon_code}`\n📅 **Data de Expiração:** {expired_date}\n━━━━━━━━━━━━━━━━━━━━\n\nℹ️ Este cupom de desconto não está mais válido.\n\n🔔 **Não se preocupe!** Novos cupons são adicionados regularmente. Fique de olho!',
+          description: 'Modelo Padrão 2: Informativo - Todas as plataformas',
+          is_active: false,
+          available_variables: ['platform_name', 'coupon_code', 'expired_date']
+        },
+        {
+          template_type: 'expired_coupon',
+          platform: 'all',
+          template: '⏰ **CUPOM EXPIRADO**\n\n🏪 {platform_name}\n💬 `{coupon_code}`\n📅 {expired_date}\n\n😢 Infelizmente este cupom expirou.\n\n✨ Mas não desanime! Novas oportunidades estão chegando. Continue acompanhando para não perder as próximas ofertas! 🎁',
+          description: 'Modelo Padrão 3: Motivacional - Todas as plataformas',
+          is_active: false,
+          available_variables: ['platform_name', 'coupon_code', 'expired_date']
+        }
+      ];
+
+      const created = [];
+      const errors = [];
+
+      for (const templateData of defaultTemplates) {
+        try {
+          // Marcar apenas os 3 templates padrão ativos (Modelo Padrão 1) como sistema
+          const isSystemTemplate = templateData.is_active === true && 
+                                   templateData.description?.includes('Modelo Padrão 1');
+          
+          const template = await BotMessageTemplate.create({
+            ...templateData,
+            is_system: isSystemTemplate
+          });
+          created.push(template);
+        } catch (error) {
+          errors.push({
+            template: templateData.description,
+            error: error.message
+          });
+        }
+      }
+
+      logger.info(`✅ Templates padrão criados: ${created.length} sucesso, ${errors.length} erros`);
+
+      res.json({
+        success: true,
+        message: `Templates padrão criados: ${created.length} sucesso, ${errors.length} erros`,
+        data: {
+          created: created.length,
+          errors: errors.length,
+          details: {
+            created: created.map(t => ({ id: t.id, description: t.description })),
+            errors
+          }
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao criar templates padrão: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao criar templates padrão',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Duplicar template
+   * POST /api/bots/templates/:id/duplicate
+   */
+  async duplicate(req, res) {
+    try {
+      const { id } = req.params;
+      const { platform, is_active } = req.body;
+
+      const original = await BotMessageTemplate.findById(id);
+      
+      if (!original) {
+        return res.status(404).json({
+          success: false,
+          message: 'Template não encontrado'
+        });
+      }
+
+      const newTemplate = await BotMessageTemplate.create({
+        template_type: original.template_type,
+        platform: platform || original.platform,
+        template: original.template,
+        description: `${original.description || 'Template'} (Cópia)`,
+        available_variables: original.available_variables || [],
+        is_active: is_active !== undefined ? is_active : false
+      });
+
+      logger.info(`✅ Template duplicado: ${id} -> ${newTemplate.id}`);
+
+      res.json({
+        success: true,
+        message: 'Template duplicado com sucesso',
+        data: newTemplate
+      });
+    } catch (error) {
+      logger.error(`Erro ao duplicar template: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao duplicar template',
         error: error.message
       });
     }
@@ -221,7 +448,7 @@ class BotTemplateController {
         new_promotion: {
           product_name: 'Nome do produto',
           current_price: 'Preço atual formatado (R$ X,XX)',
-          old_price: 'Preço antigo formatado com riscado (~R$ X,XX~)',
+          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~ - será convertido automaticamente para cada plataforma)',
           discount_percentage: 'Percentual de desconto',
           platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
           affiliate_link: 'Link de afiliado do produto',

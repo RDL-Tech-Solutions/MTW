@@ -10,7 +10,10 @@ class LinkAnalyzerController {
     try {
       const { url } = req.body;
 
+      logger.info(`📥 Requisição recebida para análise de link: ${url}`);
+
       if (!url) {
+        logger.warn('⚠️ URL não fornecida');
         return res.status(400).json(
           errorResponse('URL é obrigatória', 'MISSING_URL')
         );
@@ -20,7 +23,9 @@ class LinkAnalyzerController {
       let validUrl;
       try {
         validUrl = new URL(url);
+        logger.info(`✅ URL válida: ${validUrl.href}`);
       } catch (error) {
+        logger.warn(`⚠️ URL inválida: ${url}`);
         return res.status(400).json(
           errorResponse('URL inválida', 'INVALID_URL')
         );
@@ -29,12 +34,16 @@ class LinkAnalyzerController {
       // Verificar cache
       const cacheKey = `link_analysis:${validUrl.href}`;
       const cached = await cacheGet(cacheKey);
-      
+
       if (cached) {
-        // Validar cache antes de usar (não usar cache com dados vazios)
-        const hasValidData = (cached.name && cached.name.trim().length > 0) || 
-                            (cached.currentPrice && cached.currentPrice > 0);
-        
+        // Validar cache antes de usar (não usar cache com dados vazios ou lixo conhecido)
+        const isGarbage = cached.name === 'shopee__settings' ||
+          (cached.name && cached.name.includes('shopee__')) ||
+          (cached.name && !cached.name.includes(' ')); // Nomes de produtos geralmente têm espaços
+
+        const hasValidData = !isGarbage && ((cached.name && cached.name.trim().length > 0) ||
+          (cached.currentPrice && cached.currentPrice > 0));
+
         if (hasValidData) {
           logger.info(`Link analisado (cache): ${url}`);
           return res.json(
@@ -82,7 +91,7 @@ class LinkAnalyzerController {
       // Validar se os dados essenciais foram extraídos antes de salvar no cache
       const hasName = productInfo.name && productInfo.name.trim().length > 0;
       const hasPrice = productInfo.currentPrice && productInfo.currentPrice > 0;
-      
+
       if (!hasName && !hasPrice) {
         logger.warn(`Extração retornou dados vazios para: ${url}`);
         return res.status(400).json(

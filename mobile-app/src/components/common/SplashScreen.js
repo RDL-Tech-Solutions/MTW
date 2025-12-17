@@ -1,21 +1,21 @@
 import React, { useEffect } from 'react';
 import {
   View,
-  Image,
   StyleSheet,
   Dimensions,
+  Image,
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ onFinish }) {
   useEffect(() => {
-    // Finalizar após 3 segundos (tempo suficiente para ver a animação do GIF)
+    // Finalizar após 6 segundos (tempo do GIF completo)
     const timer = setTimeout(() => {
       if (onFinish) {
         onFinish();
       }
-    }, 3000);
+    }, 6000);
 
     return () => clearTimeout(timer);
   }, [onFinish]);
@@ -23,7 +23,7 @@ export default function SplashScreen({ onFinish }) {
   return (
     <View style={styles.container}>
       <Image
-        source={require('../../assets/splash.gif')}
+        source={require('../../../assets/splash.gif')}
         style={styles.gif}
         resizeMode="contain"
       />

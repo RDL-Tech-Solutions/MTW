@@ -17,14 +17,11 @@ export default function Logo({ width = 64, height = 64, color = '#DC2626', style
   const coloredXml = color !== '#DC2626' ? logoXml.replace(/#DC2626/g, color) : logoXml;
 
   if (Platform.OS === 'web') {
-    // Para web, usar img tag
+    // Para web, usar SVG inline (melhor compatibilidade)
     return (
-      <img 
-        src={require('../../assets/logo.svg')} 
-        alt="PreçoCerto Logo" 
-        width={width}
-        height={height}
-        style={style}
+      <div 
+        style={{ width, height, display: 'inline-block', ...style }}
+        dangerouslySetInnerHTML={{ __html: coloredXml }}
       />
     );
   }
@@ -36,4 +33,5 @@ export default function Logo({ width = 64, height = 64, color = '#DC2626', style
     </View>
   );
 }
+
 

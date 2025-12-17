@@ -26,78 +26,156 @@ class LinkAnalyzer {
   async followRedirects(url) {
     try {
       console.log(`   🔄 Seguindo redirecionamentos de: ${url}`);
-      
-      // Configurar para seguir redirecionamentos manualmente para ter mais controle
-      let currentUrl = url;
-      let redirectCount = 0;
-      const maxRedirects = 10; // Aumentar limite para múltiplos redirecionamentos
-      
-      while (redirectCount < maxRedirects) {
+
+      // Timeout para evitar travamento (15 segundos)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout ao seguir redirecionamentos')), 15000);
+      });
+
+      const followPromise = (async () => {
+        // Configurar para seguir redirecionamentos automaticamente (mais simples e rápido)
         try {
-          const response = await axios.get(currentUrl, {
-            maxRedirects: 0, // Não seguir automaticamente, vamos fazer manualmente
-            validateStatus: (status) => status < 400,
+          const response = await axios.get(url, {
+            maxRedirects: 10,
+            validateStatus: (status) => status >= 200 && status < 400,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
               'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-              'Referer': 'https://shopee.com.br/'
+              'Referer': 'https://www.google.com/'
             },
             timeout: 10000
           });
+
+          // Pegar URL final após redirecionamentos
+          const finalUrl = response.request?.res?.responseUrl || 
+                          response.config?.url || 
+                          url;
           
-          // Se status é 200, chegamos na página final
-          if (response.status === 200) {
-            const finalUrl = response.request.res.responseUrl || response.request.res.requestUrl || currentUrl;
-            console.log(`   ✅ URL final após ${redirectCount} redirecionamento(s): ${finalUrl}`);
+          console.log(`   ✅ URL final: ${finalUrl}`);
             return finalUrl;
-          }
         } catch (error) {
-          // Verificar se é um redirecionamento (status 3xx)
-          if (error.response) {
-            const status = error.response.status;
-            const location = error.response.headers.location;
-            
-            if (status >= 300 && status < 400 && location) {
-              redirectCount++;
-              const nextUrl = location.startsWith('http') 
-                ? location 
-                : new URL(location, currentUrl).href;
-              
-              console.log(`   🔄 Redirecionamento ${redirectCount}: ${currentUrl} → ${nextUrl}`);
-              currentUrl = nextUrl;
-              continue; // Tentar novamente com a nova URL
-            }
+          // Se falhar, retornar URL original
+          console.log(`   ⚠️ Erro ao seguir redirecionamentos (usando URL original): ${error.message}`);
+          return url;
           }
-          
-          // Se não é redirecionamento ou excedeu tentativas, retornar última URL conhecida
-          console.log(`   ⚠️ Erro ao seguir redirecionamento: ${error.message}`);
-          return currentUrl;
-        }
-      }
-      
-      console.log(`   ⚠️ Limite de redirecionamentos atingido (${maxRedirects}), usando última URL: ${currentUrl}`);
-      return currentUrl;
-    } catch (error) {
+      })();
+
+      // Usar Promise.race para aplicar timeout
+      return await Promise.race([followPromise, timeoutPromise]);
+        } catch (error) {
       console.error(`   ❌ Erro ao seguir redirecionamentos: ${error.message}`);
       return url; // Retornar URL original em caso de erro
     }
   }
 
+  // Extrair IDs da URL da Shopee
+  extractShopeeIds(url) {
+    // URL padrão: https://shopee.com.br/{shop_name}/{shop_id}/{item_id}
+    // Exemplo: https://shopee.com.br/opaanlp/1224363395/21998198201
+    const match = url.match(/shopee\.com\.br\/[^/]+\/(\d+)\/(\d+)/);
+    if (match) {
+      return {
+        shopId: match[1],
+        itemId: match[2]
+      };
+    }
+    return null;
+  }
+
+  // Usar API interna da Shopee
+  async extractShopeeFromAPI(url) {
+    try {
+      const ids = this.extractShopeeIds(url);
+      if (!ids) {
+        console.log('⚠️ Não foi possível extrair IDs da URL da Shopee');
+        return null;
+      }
+
+      console.log(`🔍 IDs extraídos - Shop: ${ids.shopId}, Item: ${ids.itemId}`);
+
+      // API interna da Shopee (não requer autenticação)
+      const apiUrl = `https://shopee.com.br/api/v4/item/get?shopid=${ids.shopId}&itemid=${ids.itemId}`;
+      
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': url,
+          'Accept': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      if (!response.data || !response.data.data || response.data.error) {
+        console.log('⚠️ API da Shopee retornou erro ou dados vazios');
+        return null;
+      }
+
+      const item = response.data.data;
+      
+      // Extrair informações
+      const name = item.name || '';
+      const description = item.description || '';
+      
+      // Preços (Shopee usa valores em centavos de milhão - dividir por 100000)
+      const currentPrice = item.price ? item.price / 100000 : 0;
+      const oldPrice = item.price_before_discount ? item.price_before_discount / 100000 : 0;
+      
+      // Imagem
+      const imageUrl = item.image ? `https://cf.shopee.com.br/file/${item.image}` : '';
+
+      console.log('📦 Dados extraídos da API da Shopee:');
+      console.log('   Nome:', name?.substring(0, 50));
+      console.log('   Preço Atual:', currentPrice);
+      console.log('   Preço Original:', oldPrice);
+      console.log('   Imagem:', imageUrl ? 'Sim' : 'Não');
+
+      return {
+        name: name,
+        description: description,
+        imageUrl: imageUrl,
+        currentPrice: currentPrice,
+        oldPrice: oldPrice > currentPrice ? oldPrice : 0,
+        platform: 'shopee',
+        affiliateLink: url
+      };
+    } catch (error) {
+      console.error('❌ Erro ao usar API da Shopee:', error.message);
+      return null;
+    }
+  }
+
   // Extrair informações de produto Shopee
   async extractShopeeInfo(url) {
+    // Timeout geral para evitar travamento (30 segundos)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout: Extração demorou mais de 30 segundos')), 30000);
+    });
+    
+    const extractionPromise = (async () => {
     try {
       // Seguir redirecionamentos primeiro (importante para links encurtados como s.shopee.com.br)
       // A Shopee pode ter múltiplos redirecionamentos, então sempre seguir redirecionamentos
       console.log('🔗 URL Shopee original:', url);
       let finalUrl = url;
-      
+
       // Sempre seguir redirecionamentos para garantir que chegamos na URL final
       // Links encurtados (s.shopee.com.br, shp.ee) e links normais podem ter redirecionamentos
       console.log('   🔄 Seguindo redirecionamentos para obter URL final...');
       finalUrl = await this.followRedirects(url);
       console.log('   ✅ URL final após redirecionamento(s):', finalUrl);
-      
+
+      // TENTAR API DA SHOPEE PRIMEIRO (mais confiável)
+      try {
+        const shopeeApiData = await this.extractShopeeFromAPI(finalUrl);
+        if (shopeeApiData && shopeeApiData.name && shopeeApiData.currentPrice > 0) {
+          console.log('✅ Dados obtidos via API da Shopee!');
+          return shopeeApiData;
+        }
+      } catch (apiError) {
+        console.log('⚠️ API da Shopee falhou, tentando scraping:', apiError.message);
+      }
+
       // Validar que a URL final é realmente da Shopee
       if (!finalUrl.includes('shopee.com.br') && !finalUrl.includes('shopee.com')) {
         console.warn(`   ⚠️ URL final não parece ser da Shopee: ${finalUrl}`);
@@ -120,19 +198,22 @@ class LinkAnalyzer {
       });
 
       const $ = cheerio.load(response.data);
+      
+      // Extrair todos os scripts de uma vez para usar em múltiplos lugares
+      const scriptMatches = response.data.match(/<script[^>]*>(.*?)<\/script>/gs);
 
       // PRIORIDADE 1: Meta tags Open Graph (mais confiável)
       let name = $('meta[property="og:title"]').attr('content') ||
-                 $('meta[name="title"]').attr('content') ||
-                 $('title').text().split('|')[0].trim();
+        $('meta[name="title"]').attr('content') ||
+        $('title').text().split('|')[0].trim();
 
       let description = $('meta[property="og:description"]').attr('content') ||
-                        $('meta[name="description"]').attr('content') ||
-                        '';
+        $('meta[name="description"]').attr('content') ||
+        '';
 
       let imageUrl = $('meta[property="og:image"]').attr('content') ||
-                     $('meta[name="image"]').attr('content') ||
-                     '';
+        $('meta[name="image"]').attr('content') ||
+        '';
 
       // PRIORIDADE 2: Tentar extrair do JSON-LD (dados estruturados)
       const jsonLdScripts = $('script[type="application/ld+json"]');
@@ -145,7 +226,7 @@ class LinkAnalyzer {
             if (!imageUrl && jsonData.image) {
               imageUrl = Array.isArray(jsonData.image) ? jsonData.image[0] : jsonData.image;
             }
-            
+
             // Extrair preços do JSON-LD
             if (jsonData.offers && jsonData.offers.price) {
               const price = parseFloat(jsonData.offers.price);
@@ -212,11 +293,38 @@ class LinkAnalyzer {
       // Tentar extrair imagem com múltiplos seletores
       if (!imageUrl) {
         for (const selector of shopeeSelectors.image) {
-          const found = $(selector).first().attr('src') || $(selector).first().attr('data-src');
+          const found = $(selector).first().attr('src') || $(selector).first().attr('data-src') || $(selector).first().attr('data-lazy-src');
           if (found && found.startsWith('http')) {
             imageUrl = found;
             console.log(`   ✅ Imagem encontrada via seletor: ${selector}`);
             break;
+          }
+        }
+      }
+      
+      // Buscar imagem em scripts JSON também
+      if (!imageUrl && scriptMatches) {
+        for (const scriptContent of scriptMatches) {
+          try {
+            // Buscar por padrões de URL de imagem
+            const imagePatterns = [
+              /"image":\s*"([^"]+\.(jpg|jpeg|png|webp))"/i,
+              /"imageUrl":\s*"([^"]+\.(jpg|jpeg|png|webp))"/i,
+              /"thumbnail":\s*"([^"]+\.(jpg|jpeg|png|webp))"/i,
+              /og:image["\s:]*["']([^"']+\.(jpg|jpeg|png|webp))["']/i
+            ];
+            
+            for (const pattern of imagePatterns) {
+              const match = scriptContent.match(pattern);
+              if (match && match[1] && match[1].startsWith('http')) {
+                imageUrl = match[1];
+                console.log(`   ✅ Imagem encontrada em script JSON: ${imageUrl.substring(0, 50)}`);
+                break;
+              }
+            }
+            if (imageUrl) break;
+          } catch (e) {
+            // Continuar
           }
         }
       }
@@ -225,11 +333,164 @@ class LinkAnalyzer {
       let currentPrice = 0;
       let oldPrice = 0;
 
+      // PRIORIDADE 0: Buscar dados em scripts JSON da Shopee (mais confiável)
+      // A Shopee usa window.__INITIAL_STATE__ ou window.__NEXT_DATA__ para hidratação
+      // LIMITAR: Processar apenas scripts menores para evitar travamento
+      if (scriptMatches) {
+        const MAX_SCRIPT_SIZE = 500000; // Limitar tamanho do script (500KB)
+        let processedScripts = 0;
+        const MAX_SCRIPTS = 20; // Limitar número de scripts processados
+        
+        for (const scriptContent of scriptMatches) {
+          if (processedScripts >= MAX_SCRIPTS) break;
+          if (scriptContent.length > MAX_SCRIPT_SIZE) continue; // Pular scripts muito grandes
+          
+          processedScripts++;
+          
+          try {
+            // Buscar por padrões mais específicos primeiro (mais rápido)
+            // Padrão 1: Buscar diretamente por campos de produto em JSON
+            const productDataMatch = scriptContent.match(/"name"\s*:\s*"([^"]{10,200})"[\s\S]{0,2000}"price"\s*:\s*(\d+(?:\.\d+)?)/);
+            if (productDataMatch) {
+              if (!name || name.length < 5) {
+                const candidateName = productDataMatch[1];
+                if (candidateName && candidateName.length > 10 && candidateName.includes(' ') && !candidateName.includes('__')) {
+                  name = candidateName.trim();
+                  console.log(`   ✅ Nome encontrado via padrão direto: ${name.substring(0, 50)}`);
+                }
+              }
+              
+              if (currentPrice === 0) {
+                const candidatePrice = parseFloat(productDataMatch[2]);
+                if (candidatePrice > 0 && candidatePrice < 100000) {
+                  currentPrice = candidatePrice;
+                  console.log(`   ✅ Preço encontrado via padrão direto: ${currentPrice}`);
+                }
+              }
+              
+              // Se encontrou ambos, pode pular o resto
+              if (name && name.length > 5 && currentPrice > 0) {
+                break;
+              }
+            }
+            
+            // Padrão 2: Buscar window.__INITIAL_STATE__ (mais lento, fazer por último)
+            // Limitar tamanho do match para evitar travamento
+            const initialStateMatch = scriptContent.match(/window\.__INITIAL_STATE__\s*=\s*({[\s\S]{0,100000}});/);
+            const nextDataMatch = scriptContent.match(/window\.__NEXT_DATA__\s*=\s*({[\s\S]{0,100000}});/);
+            const jsonMatch = initialStateMatch || nextDataMatch;
+            
+            if (jsonMatch && jsonMatch[1].length < 100000) { // Limitar tamanho do JSON
+              try {
+                const jsonData = JSON.parse(jsonMatch[1]);
+                
+                // Função recursiva otimizada com limite de iterações
+                let iterations = 0;
+                const MAX_ITERATIONS = 1000; // Limitar iterações
+                
+                const findPriceInData = (obj, depth = 0) => {
+                  if (depth > 5 || iterations++ > MAX_ITERATIONS) return null; // Reduzir profundidade
+                  if (typeof obj !== 'object' || obj === null) return null;
+                  
+                  // Priorizar chaves comuns primeiro
+                  const priorityKeys = ['price', 'currentPrice', 'salePrice', 'amount', 'value'];
+                  for (const priorityKey of priorityKeys) {
+                    if (obj[priorityKey] && typeof obj[priorityKey] === 'number' && obj[priorityKey] > 0) {
+                      const value = obj[priorityKey];
+                      if (value > 1000000) return value / 100000;
+                      if (value > 1000 && value < 100000) return value / 100;
+                      if (value < 100000) return value;
+                    }
+                  }
+                  
+                  // Buscar em até 20 chaves (limitar)
+                  const entries = Object.entries(obj).slice(0, 20);
+                  for (const [key, value] of entries) {
+                    const keyLower = key.toLowerCase();
+                    if ((keyLower.includes('price') || keyLower.includes('amount')) && typeof value === 'number' && value > 0) {
+                      if (value > 1000000) return value / 100000;
+                      if (value > 1000 && value < 100000) return value / 100;
+                      if (value < 100000) return value;
+                    }
+                    if (typeof value === 'object' && depth < 3) {
+                      const found = findPriceInData(value, depth + 1);
+                      if (found) return found;
+                    }
+                  }
+                  return null;
+                };
+                
+                const findNameInData = (obj, depth = 0) => {
+                  if (depth > 5 || iterations++ > MAX_ITERATIONS) return null;
+                  if (typeof obj !== 'object' || obj === null) return null;
+                  
+                  // Priorizar chaves comuns
+                  const priorityKeys = ['name', 'title', 'productName', 'itemName'];
+                  for (const priorityKey of priorityKeys) {
+                    if (obj[priorityKey] && typeof obj[priorityKey] === 'string') {
+                      const value = obj[priorityKey];
+                      if (value.length > 10 && value.length < 200 && value.includes(' ') && !value.includes('__')) {
+                        return value.trim();
+                      }
+                    }
+                  }
+                  
+                  const entries = Object.entries(obj).slice(0, 20);
+                  for (const [key, value] of entries) {
+                    if (key.includes('__') || key.includes('setting')) continue;
+                    const keyLower = key.toLowerCase();
+                    if ((keyLower.includes('name') || keyLower.includes('title')) && typeof value === 'string') {
+                      if (value.length > 10 && value.length < 200 && value.includes(' ') && !value.includes('__')) {
+                        return value.trim();
+                      }
+                    }
+                    if (typeof value === 'object' && depth < 3) {
+                      const found = findNameInData(value, depth + 1);
+                      if (found) return found;
+                    }
+                  }
+                  return null;
+                };
+                
+                // Buscar preço
+                if (currentPrice === 0) {
+                  iterations = 0;
+                  const foundPrice = findPriceInData(jsonData);
+                  if (foundPrice && foundPrice > 0 && foundPrice < 100000) {
+                    currentPrice = foundPrice;
+                    console.log(`   ✅ Preço encontrado em __INITIAL_STATE__: ${currentPrice}`);
+                  }
+                }
+                
+                // Buscar nome se ainda não encontrou
+                if (!name || name.length < 5) {
+                  iterations = 0;
+                  const foundName = findNameInData(jsonData);
+                  if (foundName) {
+                    name = foundName;
+                    console.log(`   ✅ Nome encontrado em __INITIAL_STATE__: ${name.substring(0, 50)}`);
+                  }
+                }
+                
+                // Se encontrou ambos, pode parar
+                if (name && name.length > 5 && currentPrice > 0) {
+                  break;
+                }
+              } catch (e) {
+                // Continuar tentando
+              }
+            }
+          } catch (e) {
+            // Continuar com próximo script
+          }
+        }
+      }
+
       // Tentar extrair do JSON-LD primeiro
       jsonLdScripts.each((i, el) => {
         const jsonLdPrice = $(el).data('jsonldPrice');
         if (jsonLdPrice && jsonLdPrice > 0) {
-          currentPrice = jsonLdPrice;
+          currentPrice = currentPrice || jsonLdPrice;
           console.log(`   ✅ Preço encontrado no JSON-LD: ${currentPrice}`);
         }
       });
@@ -262,38 +523,81 @@ class LinkAnalyzer {
       }
 
       // Fallback: Buscar qualquer texto que pareça preço na página (mais agressivo)
-      if (currentPrice === 0) {
+      // LIMITAR: Processar apenas alguns scripts para evitar travamento
+      if (currentPrice === 0 && scriptMatches) {
         // Tentar encontrar preço em script tags com JSON (Shopee usa isso)
-        const scriptMatches = response.data.match(/<script[^>]*>(.*?)<\/script>/gs);
-        if (scriptMatches) {
+        // Já buscamos em __INITIAL_STATE__, agora vamos buscar em outros padrões
+        let fallbackScriptsProcessed = 0;
+        const MAX_FALLBACK_SCRIPTS = 10; // Limitar número de scripts
+        
           for (const scriptContent of scriptMatches) {
-            try {
-              // Tentar encontrar JSON com preço
+          if (fallbackScriptsProcessed >= MAX_FALLBACK_SCRIPTS) break;
+          if (scriptContent.length > 100000) continue; // Pular scripts muito grandes
+          
+          fallbackScriptsProcessed++;
+          
+          try {
+            // Buscar por padrões específicos de preço da Shopee (apenas primeiros matches)
+            const pricePatterns = [
+              /"price":\s*(\d+(?:\.\d+)?)/,
+              /"currentPrice":\s*(\d+(?:\.\d+)?)/,
+              /"salePrice":\s*(\d+(?:\.\d+)?)/
+            ];
+            
+            for (const pattern of pricePatterns) {
+              const match = scriptContent.match(pattern);
+              if (match && match[1]) {
+                let candidatePrice = parseFloat(match[1]);
+                
+                // Se o valor for muito grande, pode estar em centavos ou micros
+                if (candidatePrice > 1000000) {
+                  candidatePrice = candidatePrice / 100000; // Micros
+                } else if (candidatePrice > 1000 && candidatePrice < 100000) {
+                  candidatePrice = candidatePrice / 100; // Centavos
+                }
+                
+                if (candidatePrice > 0 && candidatePrice < 100000) {
+                  currentPrice = candidatePrice;
+                  console.log(`   💡 Preço encontrado via padrão regex: ${currentPrice}`);
+                  break;
+                }
+              }
+            }
+            
+            if (currentPrice > 0) break;
+            
+            // Tentar encontrar JSON com preço (método mais genérico, mas limitado)
+            // Limitar tamanho do JSON para evitar travamento
               const jsonMatch = scriptContent.match(/\{[\s\S]{100,5000}\}/);
-              if (jsonMatch) {
+            if (jsonMatch && jsonMatch[0].length < 5000) { // Limitar tamanho
                 try {
                   const jsonData = JSON.parse(jsonMatch[0]);
-                  // Procurar recursivamente por campos que podem conter preço
+                // Procurar recursivamente por campos que podem conter preço (com limite)
+                let priceIterations = 0;
                   const findPrice = (obj, depth = 0) => {
-                    if (depth > 5) return null;
+                  if (depth > 3 || priceIterations++ > 100) return null; // Limites mais rígidos
                     if (typeof obj !== 'object' || obj === null) return null;
-                    
-                    for (const [key, value] of Object.entries(obj)) {
-                      if (key.toLowerCase().includes('price') && typeof value === 'number' && value > 0 && value < 100000) {
-                        return value;
+
+                  // Limitar número de chaves processadas
+                  const entries = Object.entries(obj).slice(0, 15);
+                  for (const [key, value] of entries) {
+                      if (key.toLowerCase().includes('price') && typeof value === 'number' && value > 0) {
+                      if (value > 1000000) return value / 100000;
+                      if (value < 100000) return value;
                       }
                       if (key.toLowerCase().includes('price') && typeof value === 'string') {
                         const parsed = this.parsePrice(value);
                         if (parsed > 0 && parsed < 100000) return parsed;
                       }
-                      if (typeof value === 'object') {
+                    if (typeof value === 'object' && depth < 2) {
                         const found = findPrice(value, depth + 1);
                         if (found) return found;
                       }
                     }
                     return null;
                   };
-                  
+
+                priceIterations = 0;
                   const foundPrice = findPrice(jsonData);
                   if (foundPrice) {
                     currentPrice = foundPrice;
@@ -305,11 +609,10 @@ class LinkAnalyzer {
                 }
               }
             } catch (e) {
-              // Continuar
-            }
+            // Continuar com próximo script
           }
         }
-        
+
         // Tentar múltiplos padrões de preço no HTML
         const pricePatterns = [
           /R\$\s*([\d.,]+)/g,
@@ -319,7 +622,7 @@ class LinkAnalyzer {
           /"price"\s*:\s*"?(\d+(?:[.,]\d+)?)"?/gi,
           /"price"\s*:\s*(\d+(?:\.\d+)?)/gi
         ];
-        
+
         const allPrices = [];
         for (const pattern of pricePatterns) {
           const matches = response.data.match(pattern);
@@ -332,7 +635,7 @@ class LinkAnalyzer {
             });
           }
         }
-        
+
         if (allPrices.length > 0) {
           // Pegar o menor preço razoável (provavelmente é o preço atual)
           currentPrice = Math.min(...allPrices);
@@ -342,11 +645,18 @@ class LinkAnalyzer {
 
       // Fallback adicional: Tentar extrair do texto HTML bruto usando padrões específicos da Shopee
       // A Shopee usa renderização client-side, então precisamos procurar em script tags com dados JSON
-      if (!name || name.length < 5) {
+      if ((!name || name.length < 5) && scriptMatches) {
         // Tentar encontrar dados em script tags com dados JSON (Shopee usa isso para hidratação)
-        const scriptMatches = response.data.match(/<script[^>]*>(.*?)<\/script>/gs);
-        if (scriptMatches) {
+        // LIMITAR: Processar apenas alguns scripts
+        let nameScriptsProcessed = 0;
+        const MAX_NAME_SCRIPTS = 10;
+        
           for (const scriptContent of scriptMatches) {
+          if (nameScriptsProcessed >= MAX_NAME_SCRIPTS) break;
+          if (scriptContent.length > 100000) continue;
+          
+          nameScriptsProcessed++;
+          
             try {
               // Tentar encontrar JSON estruturado
               const jsonMatch = scriptContent.match(/\{[\s\S]{100,5000}\}/);
@@ -357,10 +667,18 @@ class LinkAnalyzer {
                   const findName = (obj, depth = 0) => {
                     if (depth > 5) return null; // Limitar profundidade
                     if (typeof obj !== 'object' || obj === null) return null;
-                    
+
                     for (const [key, value] of Object.entries(obj)) {
+                      // Ignorar chaves que parecem settings ou configs
+                      if (key.includes('setting') || key.includes('config') || key.includes('pref')) continue;
+
                       if (key.toLowerCase().includes('name') || key.toLowerCase().includes('title')) {
                         if (typeof value === 'string' && value.length > 10 && value.length < 200) {
+                          // Validação extra: nomes de produtos geralmente têm espaços
+                          // Ignorar nomes com __ (geralmente IDs ou chaves internas como shopee__settings)
+                          if (value.includes('__')) continue;
+                          if (!value.includes(' ')) continue;
+
                           return value;
                         }
                       }
@@ -371,7 +689,7 @@ class LinkAnalyzer {
                     }
                     return null;
                   };
-                  
+
                   const foundName = findName(jsonData);
                   if (foundName) {
                     name = foundName.trim();
@@ -382,7 +700,7 @@ class LinkAnalyzer {
                   // Continuar tentando outros scripts
                 }
               }
-              
+
               // Fallback: Procurar por padrões como "name": "..." ou productName: "..."
               const namePatterns = [
                 /"name"\s*:\s*"([^"]{10,200})"/i,
@@ -391,11 +709,15 @@ class LinkAnalyzer {
                 /"product_name"\s*:\s*"([^"]{10,200})"/i,
                 /item_name["\s:]*["']([^"']{10,200})["']/i
               ];
-              
+
               for (const pattern of namePatterns) {
                 const match = scriptContent.match(pattern);
                 if (match && match[1] && match[1].length > 10) {
-                  name = match[1].trim();
+                  const candidate = match[1].trim();
+                  // Validação: ignorar nomes com __ ou sem espaços
+                  if (candidate.includes('__') || !candidate.includes(' ')) continue;
+
+                  name = candidate;
                   console.log(`   💡 Nome encontrado via regex em script: ${name.substring(0, 50)}`);
                   break;
                 }
@@ -403,10 +725,9 @@ class LinkAnalyzer {
               if (name && name.length > 5) break;
             } catch (e) {
               // Continuar com próximo script
-            }
           }
         }
-        
+
         // Se ainda não encontrou, tentar extrair do título da página mais agressivamente
         if (!name || name.length < 5) {
           const titleMatch = response.data.match(/<title[^>]*>(.*?)<\/title>/i);
@@ -425,7 +746,7 @@ class LinkAnalyzer {
 
       // Limpar e validar resultados
       name = this.cleanText(name);
-      
+
       // Se ainda não temos nome, tentar do título da página
       if (!name || name.length < 3) {
         const pageTitle = $('title').text();
@@ -477,8 +798,21 @@ class LinkAnalyzer {
     } catch (error) {
       console.error('❌ Erro ao extrair info Shopee:', error.message);
       console.error('   Stack:', error.stack);
-      
+
       // Retornar erro ao invés de dados vazios
+        return {
+          error: `Erro ao extrair informações da Shopee: ${error.message}`,
+          platform: 'shopee',
+          affiliateLink: url
+        };
+      }
+    })(); // Fechar extractionPromise
+    
+    // Usar Promise.race para aplicar timeout
+    try {
+      return await Promise.race([extractionPromise, timeoutPromise]);
+    } catch (error) {
+      console.error('❌ Erro no timeout ou extração:', error.message);
       return {
         error: `Erro ao extrair informações da Shopee: ${error.message}`,
         platform: 'shopee',
@@ -522,9 +856,9 @@ class LinkAnalyzer {
       // O produto principal geralmente está em .ui-pdp-main ou similar
       const mainProductContainer = $('.ui-pdp-main, .ui-pdp-container, [data-testid="product-detail"]').first();
       const isMainProduct = mainProductContainer.length > 0;
-      
+
       console.log('   🔍 Container do produto principal encontrado:', isMainProduct);
-      
+
       // ESTRATÉGIA: SCAN COMPLETO E FILTRAGEM
       // Em vez de confiar em um único seletor, vamos pegar TODOS os preços da página,
       // MAS priorizar os que estão no container do produto principal
@@ -567,7 +901,7 @@ class LinkAnalyzer {
         const isInPriceSection = container.closest('.ui-pdp-price').length;
         const hasPercentOff = /\d+%\s*OFF/i.test(parentText) || /\d+%\s*OFF/i.test(grandParentText);
         const fullContext = (parentText + ' ' + grandParentText);
-        
+
         if (isInPriceSection && hasPercentOff) {
           // Extrair todos os preços do contexto
           const priceMatches = fullContext.match(/R\$\s*([\d.,]+)/g);
@@ -576,16 +910,16 @@ class LinkAnalyzer {
               const match = m.match(/R\$\s*([\d.,]+)/);
               return match ? this.parsePrice(match[1]) : 0;
             }).filter(p => p > 0);
-            
+
             if (prices.length >= 2) {
               const maxPrice = Math.max(...prices);
               const minPrice = Math.min(...prices);
-              
+
               // Se este preço é o menor e há um maior no contexto, é o preço atual com desconto
               if (price === minPrice && price < maxPrice && maxPrice - price > 1) {
                 type = 'currentPrice';
                 console.log('   💡 Padrão detectado: preço com desconto (menor):', price, 'vs original:', maxPrice);
-              } 
+              }
               // Se este preço é o maior, é o preço original
               else if (price === maxPrice && maxPrice > minPrice) {
                 type = 'oldPrice';
@@ -608,13 +942,13 @@ class LinkAnalyzer {
         else if (type === 'candidate' && isInPriceSection && hasPercentOff) {
           // Se tem "% OFF no Pix" ou "% OFF" seguido de método de pagamento, é o preço atual
           const hasPaymentMethod = /no\s+pix|no\s+cartão|à\s+vista|em\s+\d+x/i.test(fullContext);
-          
+
           // Se está na seção de preço principal e tem %OFF, é MUITO provável que seja o preço atual
           // NÃO um cupom separado, mas o preço com desconto do produto
           // Só classificar como cupom se estiver explicitamente em uma seção de cupom
-          if (container.closest('.ui-pdp-coupon').length || 
-              (/cupom|código|code/i.test(fullContext) && !hasPaymentMethod) ||
-              container.closest('[class*="coupon"]').length) {
+          if (container.closest('.ui-pdp-coupon').length ||
+            (/cupom|código|code/i.test(fullContext) && !hasPaymentMethod) ||
+            container.closest('[class*="coupon"]').length) {
             // Está em seção de cupom explícita, pode ser cupom
             type = 'coupon';
             console.log('   ⚠️ Classificado como cupom (está em seção de cupom):', price);
@@ -673,22 +1007,22 @@ class LinkAnalyzer {
             }
           }
         });
-        
+
         // Agora reclassificar cupons que são na verdade preços atuais
         allPrices.forEach((priceObj, index) => {
           if (priceObj.type === 'coupon') {
             // Encontrar o oldPrice correspondente (mesmo contexto)
             const contextKey = priceObj.context.substring(0, 30);
             const group = priceGroups[contextKey];
-            
+
             // Se não encontrou grupo, usar o maior oldPrice geral
             const relevantOldPrice = group ? group.oldPrice : Math.max(...oldPriceCandidatesForReclass.map(p => p.price));
-            
+
             // Verificar se é um preço atual mal classificado
             if (priceObj.price < relevantOldPrice &&
-                priceObj.price > (relevantOldPrice * 0.3) && // Pelo menos 30% do original
-                !priceObj.couponCode && // Não tem código de cupom explícito
-                (priceObj.context.includes('% OFF') || priceObj.context.includes('OFF'))) {
+              priceObj.price > (relevantOldPrice * 0.3) && // Pelo menos 30% do original
+              !priceObj.couponCode && // Não tem código de cupom explícito
+              (priceObj.context.includes('% OFF') || priceObj.context.includes('OFF'))) {
               console.log(`   🔄 Reclassificando preço de 'coupon' para 'currentPrice': ${priceObj.price} (oldPrice: ${relevantOldPrice})`);
               allPrices[index].type = 'currentPrice';
             }
@@ -703,7 +1037,7 @@ class LinkAnalyzer {
         '.andes-money-amount--previous .andes-money-amount__fraction',
         '[class*="original"] .andes-money-amount__fraction'
       ];
-      
+
       let oldPriceFound = false;
       for (const selector of oldPriceSelectors) {
         const oldPriceEl = $(selector).first();
@@ -717,13 +1051,13 @@ class LinkAnalyzer {
           }
         }
       }
-      
+
       // Se não encontrou via seletor, usar candidatos classificados (priorizar produto principal)
       if (!oldPriceFound) {
         const oldPriceCandidates = allPrices
           .filter(p => p.type === 'oldPrice')
           .sort((a, b) => b.priority - a.priority); // Priorizar produto principal
-        
+
         if (oldPriceCandidates.length > 0) {
           // Pegar o maior preço do produto principal, ou o maior geral se não houver
           const mainProductOldPrices = oldPriceCandidates.filter(p => p.isMainProduct);
@@ -740,7 +1074,7 @@ class LinkAnalyzer {
       // Decidir Current Price
       // ESTRATÉGIA MELHORADA: Buscar o preço principal da página
       // O preço atual geralmente está em uma seção específica de destaque
-      
+
       // Tentar seletores específicos para preço atual (principal)
       const mainPriceSelectors = [
         '.ui-pdp-price__second-line .andes-money-amount__fraction',
@@ -748,7 +1082,7 @@ class LinkAnalyzer {
         '.ui-pdp-price .andes-money-amount__fraction',
         '[data-testid="price"] .andes-money-amount__fraction'
       ];
-      
+
       let mainPriceFound = false;
       for (const selector of mainPriceSelectors) {
         const mainPriceEl = $(selector).first();
@@ -762,7 +1096,7 @@ class LinkAnalyzer {
           }
         }
       }
-      
+
       // Se não encontrou via seletor específico, usar lógica de candidatos
       if (!mainPriceFound) {
         // PRIORIDADE 1: Preços classificados como currentPrice (do produto principal)
@@ -776,7 +1110,7 @@ class LinkAnalyzer {
             // (preço no Pix geralmente é menor que preço parcelado)
             return a.price - b.price;
           });
-        
+
         if (currentPriceCandidates.length > 0) {
           // Pegar do produto principal primeiro, ou o menor preço se não houver produto principal
           const mainProductCurrent = currentPriceCandidates.find(p => p.isMainProduct);
@@ -792,7 +1126,7 @@ class LinkAnalyzer {
             mainPriceFound = true;
           }
         }
-        
+
         // PRIORIDADE 2: Se não encontrou, verificar se há preços classificados como 'coupon' 
         // que na verdade são preços atuais (estão na seção de preço principal)
         if (!mainPriceFound && oldPrice > 0) {
@@ -810,13 +1144,13 @@ class LinkAnalyzer {
               if (!a.isMainProduct && b.isMainProduct) return 1;
               return a.price - b.price;
             });
-          
+
           if (couponPricesInPriceSection.length > 0) {
             // Pegar o MENOR preço que seja válido (menor que oldPrice e pelo menos 30% do original)
-            const possibleCurrentPrice = couponPricesInPriceSection.find(p => 
+            const possibleCurrentPrice = couponPricesInPriceSection.find(p =>
               p.price < oldPrice && p.price > (oldPrice * 0.3) // Pelo menos 30% do original
             );
-            
+
             if (possibleCurrentPrice) {
               currentPrice = possibleCurrentPrice.price;
               mainPriceFound = true;
@@ -824,12 +1158,12 @@ class LinkAnalyzer {
             }
           }
         }
-        
+
         // PRIORIDADE 3: Se ainda não encontrou, usar candidatos gerais (priorizar produto principal)
         if (!mainPriceFound) {
           const validCandidates = allPrices
-            .filter(p => 
-              p.type === 'candidate' && 
+            .filter(p =>
+              p.type === 'candidate' &&
               p.price !== oldPrice &&
               p.price > 0
             )
@@ -862,14 +1196,14 @@ class LinkAnalyzer {
                     discount: ((oldPrice - p.price) / oldPrice) * 100
                   }))
                   .filter(p => p.discount >= 5 && p.discount <= 90); // Desconto entre 5% e 90%
-                
+
                 if (candidatesWithDiscount.length > 0) {
                   // Priorizar produto principal, mas pegar o MENOR preço válido (não o maior)
                   // O preço atual deve ser o menor preço válido que seja menor que o original
                   const mainProductWithDiscount = candidatesWithDiscount
                     .filter(p => p.isMainProduct)
                     .sort((a, b) => a.price - b.price); // Ordenar do menor para o maior
-                  
+
                   if (mainProductWithDiscount.length > 0) {
                     currentPrice = mainProductWithDiscount[0].price; // Pegar o menor
                     console.log('   ✅ Preço atual do produto principal (menor com desconto válido):', currentPrice);
@@ -914,7 +1248,7 @@ class LinkAnalyzer {
       // Validação final antes de retornar
       let finalCurrentPrice = currentPrice;
       let finalOldPrice = 0;
-      
+
       // Validar relação entre preços
       if (currentPrice > 0 && oldPrice > 0) {
         if (oldPrice > currentPrice) {
@@ -940,8 +1274,8 @@ class LinkAnalyzer {
       // IMPORTANTE: Não detectar como cupom se o valor for igual ou muito próximo do preço atual
       // (isso indica que foi mal classificado)
       let coupon = null;
-      const couponCandidates = allPrices.filter(p => 
-        p.type === 'coupon' && 
+      const couponCandidates = allPrices.filter(p =>
+        p.type === 'coupon' &&
         p.price > 0 &&
         // Garantir que não é o preço atual mal classificado
         (finalCurrentPrice === 0 || Math.abs(p.price - finalCurrentPrice) > 1) &&
@@ -953,13 +1287,13 @@ class LinkAnalyzer {
         // Priorizar cupom com código explícito
         const couponWithCode = couponCandidates.find(p => p.couponCode);
         const couponCandidate = couponWithCode || couponCandidates[0];
-        
+
         const couponCode = couponCandidate.couponCode || `MELI-${Math.floor(Math.random() * 10000)}`;
-        
+
         // Validar código do cupom antes de criar objeto
         const CouponValidator = (await import('../../utils/couponValidator.js')).default;
         const codeValidation = CouponValidator.validateCode(couponCode);
-        
+
         if (codeValidation.valid) {
           coupon = {
             discount_value: couponCandidate.price,
@@ -1036,7 +1370,8 @@ class LinkAnalyzer {
     const patterns = [
       /\/p\/MLB-?(\d+)/i,           // /p/MLB123 (catalog)
       /\/item\/MLB-?(\d+)/i,        // /item/MLB123
-      /MLB-?(\d+)/i                 // MLB123 em qualquer lugar
+      /\/MLB-?(\d+)/i,              // /MLB123 em qualquer lugar
+      /MLB-?(\d+)/i                 // MLB123 em qualquer lugar (mais genérico)
     ];
 
     for (const pattern of patterns) {
@@ -1047,7 +1382,9 @@ class LinkAnalyzer {
         return productId;
       }
     }
-    console.log('   ❌ Nenhum ID encontrado na URL');
+    
+    // Se não encontrou, pode ser que precise seguir redirecionamento
+    console.log('   ⚠️ Nenhum ID encontrado na URL, pode precisar seguir redirecionamento');
     return null;
   }
 
@@ -1104,21 +1441,21 @@ class LinkAnalyzer {
       console.log('   - product.original_price:', product.original_price);
       console.log('   - product.base_price:', product.base_price);
       console.log('   - product.currency_id:', product.currency_id);
-      
+
       // Fonte 1: API oficial (mais confiável)
       const apiCurrentPrice = product.price || 0;
       const apiOriginalPrice = product.original_price || 0;
       const apiBasePrice = product.base_price || 0;
-      
+
       console.log('\n📊 Dados processados da API:');
       console.log('   - Preço atual (price): R$', apiCurrentPrice);
       console.log('   - Preço original (original_price): R$', apiOriginalPrice || 'N/A');
       console.log('   - Preço base (base_price): R$', apiBasePrice || 'N/A');
-      
+
       // Inicializar variáveis finais
       let currentPrice = apiCurrentPrice;
       let oldPrice = 0;
-      
+
       // REGRA 1: Se a API tem original_price, usar diretamente
       if (apiOriginalPrice > 0 && apiOriginalPrice > apiCurrentPrice) {
         oldPrice = apiOriginalPrice;
@@ -1142,10 +1479,10 @@ class LinkAnalyzer {
       // REGRA 2: Analisar título para encontrar preços adicionais
       let coupon = null;
       const titlePrices = [];
-      
+
       if (product.title) {
         console.log('\n📝 Analisando título:', product.title.substring(0, 100) + '...');
-        
+
         // Detectar cupom explícito
         const couponMatch = product.title.match(/Cupom\s+(?:de\s+)?R\$\s*([\d.,]+)/i) ||
           product.title.match(/R\$\s*([\d.,]+)\s+OFF/i);
@@ -1154,12 +1491,12 @@ class LinkAnalyzer {
           const couponValue = this.parsePrice(couponMatch[1]);
           if (couponValue > 0) {
             const couponCode = `MELI-${Math.floor(Math.random() * 10000)}`;
-            
+
             // Validar código do cupom (usar import dinâmico para evitar dependência circular)
             try {
               const CouponValidator = (await import('../../utils/couponValidator.js')).default;
               const codeValidation = CouponValidator.validateCode(couponCode);
-              
+
               if (codeValidation.valid) {
                 coupon = {
                   discount_value: couponValue,
@@ -1188,7 +1525,7 @@ class LinkAnalyzer {
         const allPriceMatches = product.title.match(/R\$\s*([\d.,]+)/g);
         if (allPriceMatches && allPriceMatches.length > 0) {
           console.log('   💡 Preços encontrados no título:', allPriceMatches);
-          
+
           allPriceMatches.forEach(match => {
             const priceMatch = match.match(/R\$\s*([\d.,]+)/);
             if (priceMatch) {
@@ -1198,25 +1535,25 @@ class LinkAnalyzer {
               }
             }
           });
-          
+
           console.log('   💰 Preços parseados do título:', titlePrices);
-          
+
           if (titlePrices.length > 0) {
             // Ordenar preços do maior para o menor
             titlePrices.sort((a, b) => b - a);
             const maxTitlePrice = titlePrices[0];
             const minTitlePrice = titlePrices[titlePrices.length - 1];
-            
+
             console.log('   📊 Maior preço no título:', maxTitlePrice);
             console.log('   📊 Menor preço no título:', minTitlePrice);
             console.log('   📊 Preço atual da API:', currentPrice);
-            
+
             // REGRA 3: Se o maior preço do título for MAIOR que o da API
             // e a diferença for significativa (>5%), então o título tem o preço original
             if (oldPrice === 0 && maxTitlePrice > currentPrice) {
               const priceDiff = maxTitlePrice - currentPrice;
               const priceDiffPercent = (priceDiff / currentPrice) * 100;
-              
+
               if (priceDiffPercent > 5) {
                 // O título tem o preço original, a API tem o preço com desconto
                 oldPrice = maxTitlePrice;
@@ -1240,14 +1577,14 @@ class LinkAnalyzer {
           }
         }
       }
-      
+
       // REGRA 4: Validação final
       // Garantir que oldPrice > currentPrice para haver desconto válido
       if (oldPrice > 0 && oldPrice <= currentPrice) {
         console.log('   ⚠️ oldPrice não é maior que currentPrice, removendo desconto inválido');
         oldPrice = 0;
       }
-      
+
       // REGRA 5: Se ainda não temos desconto mas temos cupom, 
       // o cupom pode indicar que há desconto não capturado
       if (oldPrice === 0 && coupon && coupon.discount_value > 0) {
@@ -1255,7 +1592,7 @@ class LinkAnalyzer {
         // Mas não vamos inventar preços, apenas logar
         console.log('   ℹ️ Cupom encontrado mas sem preço original detectado');
       }
-      
+
       console.log('\n✅ === RESULTADO FINAL ===');
       console.log('   Preço Atual (com desconto):', currentPrice);
       console.log('   Preço Original (sem desconto):', oldPrice || 'N/A');
@@ -1278,14 +1615,14 @@ class LinkAnalyzer {
       // Garantir que oldPrice só existe se for maior que currentPrice
       const finalOldPrice = (oldPrice > 0 && oldPrice > currentPrice) ? oldPrice : 0;
       const finalCurrentPrice = currentPrice > 0 ? currentPrice : 0;
-      
+
       console.log('\n📦 === DADOS FINAIS PARA RETORNO ===');
       console.log('   Nome:', cleanTitle.substring(0, 50) + '...');
       console.log('   Preço Atual (final):', finalCurrentPrice);
       console.log('   Preço Original (final):', finalOldPrice || 'N/A');
       console.log('   Tem Desconto:', finalOldPrice > 0);
       console.log('   Tem Cupom:', !!coupon);
-      console.log('   Percentual de Desconto:', finalOldPrice > 0 
+      console.log('   Percentual de Desconto:', finalOldPrice > 0
         ? (((finalOldPrice - finalCurrentPrice) / finalOldPrice) * 100).toFixed(2) + '%'
         : '0%');
 
@@ -1308,8 +1645,33 @@ class LinkAnalyzer {
   // Extrair informações de produto Mercado Livre
   async extractMeliInfo(url) {
     try {
+      // Se for link encurtado (/sec/), tentar seguir redirecionamento primeiro
+      if (url.includes('/sec/')) {
+        console.log('🔗 Link encurtado do ML detectado, seguindo redirecionamento...');
+        try {
+          const finalUrl = await this.followRedirects(url);
+          if (finalUrl !== url) {
+            console.log('✅ URL final obtida:', finalUrl);
+            url = finalUrl;
+          }
+        } catch (e) {
+          console.warn('⚠️ Falha ao seguir redirecionamento, tentando com URL original');
+        }
+      }
+      
       // PRIMEIRO: Tentar usar a API oficial (mais rápido e preciso)
-      const productId = this.extractMeliProductId(url);
+      let productId = this.extractMeliProductId(url);
+      
+      // Se não encontrou ID e é link encurtado, não conseguiu seguir redirecionamento
+      if (!productId && url.includes('/sec/')) {
+        console.log('⚠️ Não foi possível extrair ID de link encurtado');
+        return {
+          error: 'Não foi possível processar este link. Tente copiar o link direto do produto.',
+          platform: 'mercadolivre',
+          affiliateLink: url
+        };
+      }
+      
       if (productId) {
         console.log('✅ ID do produto encontrado:', productId);
         const apiData = await this.getMeliProductFromAPI(productId);
@@ -1320,12 +1682,12 @@ class LinkAnalyzer {
           if (apiData.oldPrice === 0) {
             console.log('\n⚠️ API não retornou desconto, tentando scraping...');
             const scrapedData = await this.scrapeMeliPrices(url);
-            
+
             console.log('📊 Dados do scraping:');
             console.log('   - currentPrice:', scrapedData.currentPrice);
             console.log('   - oldPrice:', scrapedData.oldPrice);
             console.log('   - apiData.currentPrice:', apiData.currentPrice);
-            
+
             // Validar dados do scraping antes de usar
             if (scrapedData.oldPrice > 0 && scrapedData.currentPrice > 0) {
               // Se scraping tem ambos os preços e relação válida
@@ -1345,7 +1707,7 @@ class LinkAnalyzer {
               console.log('✅ Preço original encontrado via scraping!');
               apiData.oldPrice = scrapedData.oldPrice;
             }
-            
+
             if (scrapedData.coupon) {
               console.log('✅ Cupom encontrado via scraping!');
               apiData.coupon = scrapedData.coupon;
@@ -1354,15 +1716,15 @@ class LinkAnalyzer {
             // API já retornou desconto, mas vamos validar com scraping
             console.log('\n🔍 Validando dados da API com scraping...');
             const scrapedData = await this.scrapeMeliPrices(url);
-            
+
             // Se scraping encontrou valores diferentes, verificar qual é mais confiável
             if (scrapedData.oldPrice > 0 && scrapedData.currentPrice > 0) {
               const apiDiff = apiData.oldPrice - apiData.currentPrice;
               const scrapedDiff = scrapedData.oldPrice - scrapedData.currentPrice;
-              
+
               console.log('   📊 Diferença API:', apiDiff);
               console.log('   📊 Diferença Scraping:', scrapedDiff);
-              
+
               // Se scraping tem diferença maior (mais desconto), pode ser mais atualizado
               if (scrapedDiff > apiDiff * 1.1) {
                 console.log('   🔄 Scraping tem desconto maior, atualizando valores...');
@@ -1525,19 +1887,28 @@ class LinkAnalyzer {
         };
       }
 
-      // Seguir redirecionamentos primeiro (para links encurtados)
       console.log('🔗 URL original:', url);
-      let finalUrl;
-      try {
+      
+      // Detectar plataforma ANTES de seguir redirecionamentos
+      const platform = this.detectPlatform(url);
+      console.log('🏷️ Plataforma detectada:', platform);
+
+      // Seguir redirecionamentos apenas se necessário
+      let finalUrl = url;
+      const isShortLink = url.includes('shp.ee') || url.includes('s.shopee') || url.includes('/sec/');
+      
+      if (isShortLink) {
+        try {
+          console.log('🔗 Link encurtado detectado, seguindo redirecionamentos...');
         finalUrl = await this.followRedirects(url);
         console.log('🔗 URL final:', finalUrl);
       } catch (redirectError) {
         console.warn('⚠️ Erro ao seguir redirecionamentos:', redirectError.message);
         finalUrl = url; // Usar URL original se falhar
+        }
+      } else {
+        console.log('🔗 Link direto, pulando redirecionamentos');
       }
-
-      const platform = this.detectPlatform(finalUrl);
-      console.log('🏷️ Plataforma detectada:', platform);
 
       if (platform === 'shopee') {
         try {

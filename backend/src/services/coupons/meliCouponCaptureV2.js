@@ -318,24 +318,89 @@ class MeliCouponCaptureV2 {
   /**
    * Gerar link de afiliado do Mercado Livre
    */
+  /**
+   * Extrair ID MLB- de um link do Mercado Livre
+   * Ignora links com parâmetros de rastreamento proibidos
+   */
+  extractMeliProductId(link) {
+    if (!link || typeof link !== 'string') return null;
+
+    // Ignorar links com parâmetros proibidos
+    const forbiddenPatterns = [
+      /\/jm\/mlb/i,
+      /meuid=/i,
+      /redirect=/i,
+      /tracking_id=/i,
+      /reco_/i,
+      /[?&]c_id/i,
+      /[?&]c_uid/i,
+      /[?&]sid/i,
+      /[?&]wid/i
+    ];
+
+    for (const pattern of forbiddenPatterns) {
+      if (pattern.test(link)) {
+        logger.debug(`⚠️ Link ignorado por conter parâmetro proibido: ${link.substring(0, 100)}`);
+        return null;
+      }
+    }
+
+    // Extrair ID MLB- do link
+    const idPatterns = [
+      /MLB-(\d+)/i,
+      /\/MLB-(\d+)/i,
+      /MLB(\d{8,})/i
+    ];
+
+    for (const pattern of idPatterns) {
+      const match = link.match(pattern);
+      if (match) {
+        const id = match[1] || match[0].replace(/MLB-?/i, '');
+        if (id && id.length >= 8) {
+          return `MLB-${id}`;
+        }
+      }
+    }
+
+    return null;
+  }
+
   async generateAffiliateLink(productUrl) {
     // Garantir que as configurações foram carregadas
     if (!this.settingsLoaded) {
       await this.loadSettings();
     }
-    
-    if (!this.affiliateCode) {
-      return productUrl;
-    }
 
     try {
-      // Formato do link de afiliado ML:
-      // https://mercadolivre.com/jm/mlb?&meuid=SEU_CODIGO&redirect=URL_DO_PRODUTO
-      const encodedUrl = encodeURIComponent(productUrl);
-      return `https://mercadolivre.com/jm/mlb?&meuid=${this.affiliateCode}&redirect=${encodedUrl}`;
+      if (!productUrl || typeof productUrl !== 'string') {
+        return '';
+      }
+
+      // Extrair ID MLB- do link
+      const productId = this.extractMeliProductId(productUrl);
+      
+      if (!productId) {
+        logger.warn(`⚠️ Não foi possível extrair ID MLB- do link: ${productUrl.substring(0, 100)}`);
+        return '';
+      }
+
+      // Gerar link limpo no formato oficial
+      // Sempre usar o formato: https://produto.mercadolivre.com.br/MLB-XXXXXXXXXX?matt_word=IDAFILIADO
+      const cleanLink = `https://produto.mercadolivre.com.br/${productId}`;
+
+      // Se tiver código de afiliado, adicionar matt_word
+      if (this.affiliateCode && this.affiliateCode.trim()) {
+        const affiliateLink = `${cleanLink}?matt_word=${encodeURIComponent(this.affiliateCode.trim())}`;
+        logger.debug(`✅ Link de afiliado limpo gerado: ${affiliateLink}`);
+        return affiliateLink;
+      }
+
+      // Sem código de afiliado, retornar link limpo sem parâmetros
+      // Mas ainda no formato correto: https://produto.mercadolivre.com.br/MLB-XXXXXXXXXX
+      return cleanLink;
     } catch (error) {
       logger.error(`Erro ao gerar link de afiliado: ${error.message}`);
-      return productUrl;
+      return '';
     }
   }
 

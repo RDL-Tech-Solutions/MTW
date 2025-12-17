@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send } from 'lucide-react';
+import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send, Copy as CopyIcon, Download, Sparkles } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -133,7 +133,16 @@ export default function BotTemplates() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, isSystem) => {
+    if (isSystem) {
+      toast({
+        title: "Ação não permitida",
+        description: "Templates padrão do sistema não podem ser deletados. Eles são fixos e sempre devem existir.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     if (!confirm('Tem certeza que deseja deletar este template?')) return;
     
     try {
@@ -162,7 +171,7 @@ export default function BotTemplates() {
       const exampleValues = {
         product_name: 'Produto Exemplo',
         current_price: 'R$ 99,90',
-        old_price: ' ~R$ 199,90~',
+        old_price: ' ~~R$ 199,90~~',
         discount_percentage: '50',
         platform_name: 'Mercado Livre',
         affiliate_link: 'https://exemplo.com/produto',
@@ -193,21 +202,84 @@ export default function BotTemplates() {
 
   const handleSendTest = async () => {
     try {
-      // Enviar teste para todos os canais ativos usando o endpoint de teste geral
-      await api.post('/bots/test', {
-        message: `🧪 TESTE DE TEMPLATE\n\n${testTemplate.template}`
+      if (!testTemplate) {
+        toast({
+          title: "Erro",
+          description: "Template não encontrado",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Preparar variáveis de exemplo para renderizar o template
+      const exampleVariables = {
+        // Variáveis para new_promotion
+        product_name: 'Produto de Exemplo',
+        current_price: 'R$ 99,90',
+        old_price: ' ~~R$ 199,90~~',
+        discount_percentage: '50',
+        platform_name: 'Mercado Livre',
+        affiliate_link: 'https://exemplo.com/produto',
+        coupon_section: '\n🎟️ **CUPOM DISPONÍVEL**\n\n💬 **Código:** `CUPOM10`\n💰 **Desconto:** 10% OFF\n',
+        // Variáveis para new_coupon
+        coupon_code: 'CUPOM10',
+        discount_value: '10%',
+        valid_until: '31/12/2024',
+        min_purchase: '💳 **Compra mínima:** R$ 50,00\n',
+        max_discount: '',
+        usage_limit: '',
+        applicability: '✅ **Válido para todos os produtos**',
+        coupon_title: 'Cupom de Desconto',
+        coupon_description: '\nDescrição do cupom de exemplo\n',
+        // Variáveis para expired_coupon
+        expired_date: '31/12/2024'
+      };
+
+      // Renderizar template com variáveis de exemplo
+      let renderedMessage = testTemplate.template;
+      for (const [key, value] of Object.entries(exampleVariables)) {
+        const regex = new RegExp(`\\{${key}\\}`, 'g');
+        renderedMessage = renderedMessage.replace(regex, value);
+      }
+
+      // Remover variáveis não substituídas (deixar vazio)
+      renderedMessage = renderedMessage.replace(/\{[^}]+\}/g, '');
+
+      // Limpar linhas vazias extras
+      renderedMessage = renderedMessage.replace(/\n{3,}/g, '\n\n').trim();
+
+      // Adicionar prefixo de teste
+      const testMessage = `🧪 **TESTE DE TEMPLATE**\n\n${renderedMessage}\n\n_Esta é uma mensagem de teste do template "${testTemplate.description || testTemplate.template_type}"_`;
+
+      // Enviar teste para todos os canais ativos
+      const response = await api.post('/bots/test', {
+        message: testMessage
       });
       
-      toast({
-        title: "Sucesso",
-        description: "Mensagem de teste enviada para os canais ativos",
-        variant: "success"
-      });
+      const result = response.data.data;
+      const sentCount = result?.sent || result?.total || 0;
+      const failedCount = result?.failed || 0;
+
+      if (sentCount > 0) {
+        toast({
+          title: "Sucesso",
+          description: `Mensagem de teste enviada para ${sentCount} canal(is)${failedCount > 0 ? ` (${failedCount} falha(s))` : ''}`,
+          variant: "success"
+        });
+      } else {
+        toast({
+          title: "Aviso",
+          description: "Nenhum canal ativo encontrado ou todas as tentativas falharam",
+          variant: "destructive"
+        });
+      }
+      
       setIsTestDialogOpen(false);
     } catch (error) {
+      console.error('Erro ao enviar teste:', error);
       toast({
         title: "Erro",
-        description: error.response?.data?.message || "Falha ao enviar teste",
+        description: error.response?.data?.message || error.message || "Falha ao enviar teste",
         variant: "destructive"
       });
     }
@@ -220,6 +292,47 @@ export default function BotTemplates() {
       description: `Variável {${varName}} copiada para a área de transferência`,
       variant: "success"
     });
+  };
+
+  const handleCreateDefaults = async () => {
+    if (!confirm('Isso criará 9 templates padrão (3 para cada tipo). Deseja continuar?')) return;
+    
+    try {
+      const response = await api.post('/bots/templates/create-defaults');
+      toast({
+        title: "Sucesso",
+        description: response.data.message || "Templates padrão criados com sucesso",
+        variant: "success"
+      });
+      await loadTemplates();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao criar templates padrão",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDuplicate = async (template) => {
+    try {
+      const response = await api.post(`/bots/templates/${template.id}/duplicate`, {
+        platform: template.platform,
+        is_active: false
+      });
+      toast({
+        title: "Sucesso",
+        description: "Template duplicado com sucesso. Você pode editá-lo agora.",
+        variant: "success"
+      });
+      await loadTemplates();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao duplicar template",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleToggleActive = async (id, currentStatus) => {
@@ -255,12 +368,20 @@ export default function BotTemplates() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {template.is_system && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                🔒 <strong>Template Padrão do Sistema:</strong> Este é um template fixo. Apenas "Status" e "Descrição" podem ser alterados.
+              </p>
+            </div>
+          )}
           <div>
             <Label>Plataforma</Label>
             <select
               value={editingTemplate.platform}
               onChange={(e) => setEditingTemplate({ ...editingTemplate, platform: e.target.value })}
-              className="w-full p-2 border rounded-md"
+              disabled={template.is_system}
+              className={`w-full p-2 border rounded-md ${template.is_system ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : ''}`}
             >
               <option value="all">Todas (Telegram e WhatsApp)</option>
               <option value="telegram">Telegram</option>
@@ -298,11 +419,17 @@ export default function BotTemplates() {
               value={editingTemplate.template}
               onChange={(e) => setEditingTemplate({ ...editingTemplate, template: e.target.value })}
               rows={15}
-              className="font-mono text-sm mt-1"
+              disabled={template.is_system}
+              className={`font-mono text-sm mt-1 ${template.is_system ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : ''}`}
               placeholder="Digite o template da mensagem usando variáveis entre chaves..."
             />
             <p className="text-xs text-muted-foreground mt-1">
               Use variáveis entre chaves {'{'}{'}'} para inserir dados dinâmicos. Exemplo: {'{'}{'}'}product_name{'}'}{'}'}
+              {template.is_system && (
+                <span className="text-blue-600 dark:text-blue-400 block mt-1">
+                  ⚠️ Este campo não pode ser editado em templates padrão do sistema.
+                </span>
+              )}
             </p>
           </div>
 
@@ -386,7 +513,16 @@ export default function BotTemplates() {
             Personalize as mensagens enviadas pelos bots. Use variáveis entre chaves {'{'}{'}'} para inserir dados dinâmicos.
           </p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleCreateDefaults}
+            title="Criar 3 modelos padrão para cada tipo de template"
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            Criar Templates Padrão
+          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => {
               setNewTemplate({
@@ -507,6 +643,7 @@ export default function BotTemplates() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -529,8 +666,23 @@ export default function BotTemplates() {
         {Object.entries(templateTypes).map(([type, label]) => (
           activeType === type && (
           <div key={type} className="space-y-4">
-            {templatesByType[type]?.map((template) => (
-              <Card key={template.id}>
+            {/* Agrupar por plataforma */}
+            {['all', 'telegram', 'whatsapp'].map((platform) => {
+              const platformTemplates = templatesByType[type]?.filter(t => t.platform === platform) || [];
+              if (platformTemplates.length === 0) return null;
+              
+              return (
+                <div key={platform} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">
+                      {platform === 'all' ? '🌐 Todas as Plataformas' : 
+                       platform === 'telegram' ? '📱 Telegram' : 
+                       '💬 WhatsApp'}
+                    </h3>
+                    <Badge variant="secondary">{platformTemplates.length} template(s)</Badge>
+                  </div>
+                  {platformTemplates.map((template) => (
+                    <Card key={template.id}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -542,6 +694,11 @@ export default function BotTemplates() {
                         </Badge>
                         {!template.is_active && (
                           <Badge variant="outline">Inativo</Badge>
+                        )}
+                        {template.is_system && (
+                          <Badge variant="default" className="bg-blue-600 hover:bg-blue-700">
+                            🔒 Template Padrão
+                          </Badge>
                         )}
                       </CardTitle>
                       {template.description && (
@@ -570,6 +727,14 @@ export default function BotTemplates() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handleDuplicate(template)}
+                        title="Duplicar template"
+                      >
+                        <CopyIcon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleToggleActive(template.id, template.is_active)}
                       >
                         {template.is_active ? 'Desativar' : 'Ativar'}
@@ -584,8 +749,10 @@ export default function BotTemplates() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(template.id)}
-                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(template.id, template.is_system)}
+                        disabled={template.is_system}
+                        className={template.is_system ? "opacity-50 cursor-not-allowed" : "text-destructive hover:text-destructive"}
+                        title={template.is_system ? "Template padrão do sistema não pode ser deletado" : "Deletar template"}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -616,9 +783,12 @@ export default function BotTemplates() {
                       )}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            ))}
+                    </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              );
+            })}
 
             {(!templatesByType[type] || templatesByType[type].length === 0) && (
               <Card>

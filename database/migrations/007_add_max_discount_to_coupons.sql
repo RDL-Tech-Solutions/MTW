@@ -19,3 +19,5 @@ SELECT 'Migration 007 aplicada com sucesso! Campo max_discount_value adicionado.
 
 
 
+
+

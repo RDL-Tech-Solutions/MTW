@@ -70,3 +70,5 @@ COMMENT ON COLUMN coupons.message_hash IS 'Hash SHA-256 para anti-duplicação';
 
 
 
+
+
