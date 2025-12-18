@@ -307,6 +307,39 @@ class TemplateRenderer {
       }
     }
 
+    // Informações específicas para Shopee (ofertas/coleções)
+    let shopeeOfferInfo = '';
+    if (product.platform === 'shopee') {
+      const commissionRate = product.commission_rate || 0;
+      const offerType = product.offer_type;
+      const periodEnd = product.period_end;
+      
+      if (commissionRate > 0) {
+        shopeeOfferInfo = `\n💰 **Comissão:** ${(commissionRate * 100).toFixed(2)}%\n`;
+      }
+      
+      if (offerType === 1) {
+        shopeeOfferInfo += `📦 **Tipo:** Coleção de Produtos\n`;
+      } else if (offerType === 2) {
+        shopeeOfferInfo += `🏷️ **Tipo:** Oferta por Categoria\n`;
+      }
+      
+      if (periodEnd) {
+        try {
+          // Garantir que periodEnd seja um Date válido
+          const endDate = periodEnd instanceof Date ? periodEnd : new Date(periodEnd);
+          if (!isNaN(endDate.getTime())) {
+            shopeeOfferInfo += `⏰ **Válido até:** ${this.formatDate(endDate)}\n`;
+          }
+        } catch (error) {
+          logger.warn(`Erro ao formatar data de validade da oferta Shopee: ${error.message}`);
+        }
+      }
+      
+      shopeeOfferInfo += `\n🔍 **Esta é uma oferta especial da Shopee com múltiplos produtos!**\n`;
+      shopeeOfferInfo += `Clique no link para ver todos os produtos disponíveis.\n`;
+    }
+
     return {
       product_name: productName,
       current_price: priceFormatted,
@@ -315,7 +348,9 @@ class TemplateRenderer {
       platform_name: platformName,
       category_name: categoryName,
       affiliate_link: product.affiliate_link || 'Link não disponível',
-      coupon_section: couponSection
+      coupon_section: couponSection,
+      shopee_offer_info: shopeeOfferInfo,
+      is_shopee_offer: product.platform === 'shopee' ? 'true' : 'false'
     };
   }
 
@@ -797,6 +832,11 @@ class TemplateRenderer {
     // Usar ** para negrito (será convertido automaticamente para WhatsApp)
     switch (templateType) {
       case 'new_promotion':
+        // Template específico para Shopee (ofertas/coleções)
+        if (variables.is_shopee_offer === 'true') {
+          return `🛍️ **OFERTA ESPECIAL SHOPEE**\n\n📦 **${variables.product_name || 'Oferta Shopee'}**\n\n${variables.shopee_offer_info || ''}\n${variables.coupon_section || ''}\n🔗 **Acesse a oferta:**\n${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Explore todos os produtos disponíveis nesta oferta!`;
+        }
+        // Template padrão para outras plataformas
         return `🔥 **NOVA PROMOÇÃO AUTOMÁTICA**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **${variables.current_price || 'R$ 0,00'}**${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n${variables.coupon_section || ''}\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Aproveite antes que acabe!`;
       
       case 'new_coupon':

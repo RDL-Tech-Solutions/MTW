@@ -246,6 +246,23 @@ class AutoSyncCron {
 
             // Buscar produto completo com todos os dados (incluindo cupom se houver)
             const fullProduct = await Product.findById(product.id);
+            
+            // Preservar dados extras da Shopee que não estão no banco
+            // Esses dados são necessários para o template específico da Shopee
+            if (promo.platform === 'shopee') {
+              if (promo.commission_rate !== undefined) {
+                fullProduct.commission_rate = promo.commission_rate;
+              }
+              if (promo.offer_type !== undefined) {
+                fullProduct.offer_type = promo.offer_type;
+              }
+              if (promo.period_end) {
+                fullProduct.period_end = promo.period_end;
+              }
+              if (promo.period_start) {
+                fullProduct.period_start = promo.period_start;
+              }
+            }
 
             // Publicar e notificar
             const publishResult = await publishService.publishAll(fullProduct);

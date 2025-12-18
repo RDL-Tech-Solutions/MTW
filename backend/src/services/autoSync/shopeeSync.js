@@ -74,7 +74,8 @@ class ShopeeSync {
                 original_price: null,
                 available_quantity: 0,
                 shop_id: null,
-                category_id: offer.categoryId || null,
+                category_id: null, // Será detectado automaticamente pelo categoryDetector
+                shopee_category_id: offer.categoryId || null, // ID numérico da Shopee (para referência)
                 collection_id: offer.collectionId || null,
                 offer_type: offer.offerType, // 1: Collection, 2: Category
                 commission_rate: parseFloat(offer.commissionRate || 0),
@@ -123,7 +124,8 @@ class ShopeeSync {
                     original_price: null,
                     available_quantity: 0,
                     shop_id: null,
-                    category_id: offer.categoryId || null,
+                    category_id: null, // Será detectado automaticamente pelo categoryDetector
+                    shopee_category_id: offer.categoryId || null, // ID numérico da Shopee (para referência)
                     collection_id: offer.collectionId || null,
                     offer_type: offer.offerType,
                     commission_rate: parseFloat(offer.commissionRate || 0),
@@ -197,9 +199,10 @@ class ShopeeSync {
         discount_percentage: minDiscountPercentage, // Usar mínimo configurado já que não temos preço real
         affiliate_link: product.affiliate_link, // Link já é de afiliado
         stock_available: true, // Assumir disponível
+        category_id: null, // Será detectado automaticamente em saveShopeeToDatabase
+        // Campos extras para referência (não salvos no banco)
         commission_rate: commissionRate,
         offer_type: product.offer_type,
-        category_id: product.category_id,
         collection_id: product.collection_id,
         period_start: product.period_start,
         period_end: product.period_end,
@@ -334,19 +337,40 @@ class ShopeeSync {
         logger.info(`   ✅ Link de afiliado já existe: ${product.affiliate_link.substring(0, 60)}...`);
       }
 
-      // Adicionar informações extras da oferta
+      // Preparar dados para salvar no banco
+      // Apenas campos que existem na tabela products
       const productData = {
-        ...product,
-        commission_rate: product.commission_rate || null,
-        offer_type: product.offer_type || null,
-        collection_id: product.collection_id || null,
-        period_start: product.period_start || null,
-        period_end: product.period_end || null,
-        quality_score: product.quality_score || null
+        name: product.name,
+        image_url: product.image_url,
+        platform: product.platform || 'shopee',
+        current_price: product.current_price || 0,
+        old_price: product.old_price || null,
+        discount_percentage: product.discount_percentage || 0,
+        category_id: product.category_id || null, // UUID ou null (já detectado)
+        coupon_id: product.coupon_id || null,
+        affiliate_link: product.affiliate_link,
+        external_id: product.external_id,
+        stock_available: product.stock_available !== undefined ? product.stock_available : true
       };
+      
+      // Remover campos null que não devem ser salvos
+      if (!productData.category_id) delete productData.category_id;
+      if (!productData.coupon_id) delete productData.coupon_id;
+      if (!productData.old_price) delete productData.old_price;
 
       // Criar novo produto
       const newProduct = await Product.create(productData);
+      
+      // Adicionar dados extras da Shopee ao objeto retornado (não salvos no banco)
+      // Esses dados serão usados no template
+      if (product.platform === 'shopee') {
+        newProduct.commission_rate = product.commission_rate || null;
+        newProduct.offer_type = product.offer_type || null;
+        newProduct.period_end = product.period_end || null;
+        newProduct.period_start = product.period_start || null;
+        newProduct.collection_id = product.collection_id || null;
+      }
+      
       logger.info(`✅ Novo produto salvo com link de afiliado: ${product.name}`);
       logger.info(`   Link: ${newProduct.affiliate_link?.substring(0, 60)}...`);
 
