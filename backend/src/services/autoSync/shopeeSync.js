@@ -1,4 +1,3 @@
-import axios from 'axios';
 import logger from '../../config/logger.js';
 import shopeeService from '../shopee/shopeeService.js';
 import Coupon from '../../models/Coupon.js';
@@ -7,72 +6,146 @@ import AppSettings from '../../models/AppSettings.js';
 
 class ShopeeSync {
   /**
-   * Buscar produtos da Shopee baseado em palavras-chave
-   * Usa a API oficial da Shopee Affiliate
+   * Buscar produtos da Shopee usando API GraphQL de Afiliados
+   * Retorna ofertas com links de afiliado já gerados
    */
   async fetchShopeeProducts(keywords, limit = 50) {
     try {
-      // Verificar se Shopee está configurado (buscar do banco primeiro)
-      let partnerId, partnerKey;
-      try {
-        const config = await AppSettings.getShopeeConfig();
-        partnerId = config.partnerId;
-        partnerKey = config.partnerKey;
-      } catch (error) {
-        logger.warn(`⚠️ Erro ao buscar configurações Shopee do banco: ${error.message}`);
-        partnerId = process.env.SHOPEE_PARTNER_ID;
-        partnerKey = process.env.SHOPEE_PARTNER_KEY;
+      // Garantir que keywords seja um array
+      let keywordsArray = [];
+      if (Array.isArray(keywords)) {
+        keywordsArray = keywords;
+      } else if (typeof keywords === 'string') {
+        keywordsArray = keywords.split(',').map(k => k.trim()).filter(k => k);
+      } else if (keywords) {
+        keywordsArray = [String(keywords)];
       }
-      
-      if (!partnerId || !partnerKey) {
-        logger.warn('⚠️ Shopee não configurado - Partner ID e Partner Key necessários');
+
+      // Verificar se Shopee está configurado
+      const config = await AppSettings.getShopeeConfig();
+      if (!config.partnerId || !config.partnerKey) {
+        logger.warn('⚠️ Shopee não configurado - AppID e Secret necessários');
         return [];
       }
 
-      logger.info(`🔍 Buscando produtos Shopee para: ${keywords.join(', ')}`);
+      logger.info(`🔍 Buscando ofertas Shopee para: ${keywordsArray.length > 0 ? keywordsArray.join(', ') : 'todas as ofertas'}`);
 
       const allProducts = [];
+      const processedOfferIds = new Set(); // Para evitar duplicatas
 
-      // Buscar produtos por categoria ou ofertas gerais
-      // Nota: A API Shopee pode ter limitações de busca por palavra-chave
-      // Vamos buscar ofertas em destaque e filtrar depois
+      // 1. Buscar ofertas gerais da Shopee (shopeeOfferV2)
+      // Sem keyword para pegar todas as ofertas disponíveis
       try {
-        const offers = await shopeeService.getOffers(null, limit);
-        
-        if (offers && offers.item_list && offers.item_list.length > 0) {
-          logger.info(`   ✅ ${offers.item_list.length} produtos encontrados na Shopee`);
-          
-          // Buscar detalhes de cada produto
-          for (const item of offers.item_list.slice(0, limit)) {
+        logger.info(`📦 Buscando ofertas gerais da Shopee...`);
+        const offers = await shopeeService.getShopeeOffers({
+          keyword: null, // Sem keyword para pegar todas as ofertas
+          sortType: 2, // Maior comissão (melhores ofertas)
+          page: 1,
+          limit: limit
+        });
+
+        if (offers.nodes && offers.nodes.length > 0) {
+          logger.info(`   ✅ ${offers.nodes.length} ofertas encontradas na Shopee`);
+
+          for (const offer of offers.nodes) {
             try {
-              const details = await shopeeService.getProductDetails(item.item_id);
+              // Criar ID único para evitar duplicatas
+              const offerId = `${offer.offerType}-${offer.collectionId || offer.categoryId || 'unknown'}`;
               
-              if (details && details.item) {
-                const product = {
-                  id: details.item.item_id?.toString(),
-                  title: details.item.name,
-                  permalink: details.item.url || `https://shopee.com.br/-i.${details.item.shop_id}.${details.item.item_id}`,
-                  thumbnail: details.item.images?.[0] || details.item.image || '',
-                  price: details.item.price / 100000, // Shopee usa preços multiplicados por 100000
-                  original_price: details.item.price_before_discount ? details.item.price_before_discount / 100000 : null,
-                  available_quantity: details.item.stock || 0,
-                  shop_id: details.item.shop_id,
-                  category_id: details.item.category_id
-                };
-                
-                allProducts.push(product);
+              if (processedOfferIds.has(offerId)) {
+                continue; // Já processado
               }
+              processedOfferIds.add(offerId);
+
+              // Converter oferta em formato de produto
+              // A API retorna offerLink que já é um link de afiliado com tracking
+              const affiliateLink = offer.offerLink || offer.originalLink;
+              
+              logger.debug(`   📦 Oferta: ${offer.offerName}`);
+              logger.debug(`   🔗 Link de afiliado: ${affiliateLink?.substring(0, 60)}...`);
+              logger.debug(`   💰 Comissão: ${(parseFloat(offer.commissionRate || 0) * 100).toFixed(2)}%`);
+
+              const product = {
+                id: offerId,
+                title: offer.offerName,
+                permalink: offer.originalLink || affiliateLink, // Link original sem tracking
+                thumbnail: offer.imageUrl || '',
+                price: 0, // API de afiliados não retorna preço diretamente
+                original_price: null,
+                available_quantity: 0,
+                shop_id: null,
+                category_id: offer.categoryId || null,
+                collection_id: offer.collectionId || null,
+                offer_type: offer.offerType, // 1: Collection, 2: Category
+                commission_rate: parseFloat(offer.commissionRate || 0),
+                period_start: offer.periodStartTime ? new Date(offer.periodStartTime * 1000) : null,
+                period_end: offer.periodEndTime ? new Date(offer.periodEndTime * 1000) : null,
+                affiliate_link: affiliateLink // Link de afiliado com tracking
+              };
+
+              allProducts.push(product);
             } catch (error) {
-              logger.warn(`   ⚠️ Erro ao buscar detalhes do produto ${item.item_id}: ${error.message}`);
+              logger.warn(`   ⚠️ Erro ao processar oferta ${offer.offerName}: ${error.message}`);
             }
           }
         }
       } catch (error) {
         logger.error(`❌ Erro ao buscar ofertas Shopee: ${error.message}`);
-        // Não lançar erro, apenas retornar array vazio para não quebrar o fluxo
       }
 
-      logger.info(`✅ Total de ${allProducts.length} produtos Shopee processados`);
+      // 2. Se houver keywords, buscar ofertas específicas por palavra-chave
+      if (keywordsArray.length > 0) {
+        for (const keyword of keywordsArray.slice(0, 3)) { // Limitar a 3 keywords para não exceder limite
+          try {
+            logger.info(`   🔍 Buscando ofertas para: ${keyword}`);
+            const keywordOffers = await shopeeService.getShopeeOffers({
+              keyword: keyword,
+              sortType: 2, // Maior comissão
+              page: 1,
+              limit: Math.floor(limit / keywordsArray.length) // Dividir limite entre keywords
+            });
+
+            if (keywordOffers.nodes && keywordOffers.nodes.length > 0) {
+              for (const offer of keywordOffers.nodes) {
+                const offerId = `${offer.offerType}-${offer.collectionId || offer.categoryId || 'unknown'}`;
+                
+                if (!processedOfferIds.has(offerId)) {
+                  processedOfferIds.add(offerId);
+
+                  const affiliateLink = offer.offerLink || offer.originalLink;
+                  
+                  const product = {
+                    id: offerId,
+                    title: offer.offerName,
+                    permalink: offer.originalLink || affiliateLink,
+                    thumbnail: offer.imageUrl || '',
+                    price: 0,
+                    original_price: null,
+                    available_quantity: 0,
+                    shop_id: null,
+                    category_id: offer.categoryId || null,
+                    collection_id: offer.collectionId || null,
+                    offer_type: offer.offerType,
+                    commission_rate: parseFloat(offer.commissionRate || 0),
+                    period_start: offer.periodStartTime ? new Date(offer.periodStartTime * 1000) : null,
+                    period_end: offer.periodEndTime ? new Date(offer.periodEndTime * 1000) : null,
+                    affiliate_link: affiliateLink // Link de afiliado com tracking
+                  };
+
+                  allProducts.push(product);
+                }
+              }
+            }
+
+            // Aguardar entre requisições para não exceder rate limit
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error) {
+            logger.warn(`   ⚠️ Erro ao buscar ofertas para "${keyword}": ${error.message}`);
+          }
+        }
+      }
+
+      logger.info(`✅ Total de ${allProducts.length} ofertas Shopee processadas`);
       return allProducts;
     } catch (error) {
       logger.error(`❌ Erro ao buscar produtos na Shopee: ${error.message}`);
@@ -81,90 +154,116 @@ class ShopeeSync {
   }
 
   /**
-   * Filtrar produtos que realmente são promoções
+   * Filtrar ofertas que são válidas para promoções
+   * Nota: A API de afiliados não retorna preços, então filtramos por comissão e validade
    */
   filterShopeePromotions(products, minDiscountPercentage = 10) {
     const promotions = [];
 
     for (const product of products) {
-      // Verificar se tem preço original e desconto
-      const currentPrice = product.price;
-      const originalPrice = product.original_price;
+      // Verificar se a oferta ainda está válida
+      const now = new Date();
+      const isExpired = product.period_end && new Date(product.period_end) < now;
+      const isNotStarted = product.period_start && new Date(product.period_start) > now;
 
-      // Se não tiver preço original, não é promoção
-      if (!originalPrice || originalPrice <= currentPrice) {
-        continue; // Não é uma promoção real
+      if (isExpired || isNotStarted) {
+        continue; // Oferta não está ativa
       }
 
-      // Calcular desconto
-      const discount = ((originalPrice - currentPrice) / originalPrice) * 100;
-
-      if (discount >= minDiscountPercentage) {
-        // Melhorar URL da imagem
-        let imageUrl = product.thumbnail;
-        if (imageUrl && imageUrl.includes('-tn.')) {
-          // Converter thumbnail pequeno para tamanho maior
-          imageUrl = imageUrl.replace('-tn.', '-o.');
-        }
-
-        promotions.push({
-          external_id: `shopee-${product.id}`,
-          name: product.title,
-          image_url: imageUrl || 'https://via.placeholder.com/300x300?text=Sem+Imagem',
-          platform: 'shopee',
-          current_price: currentPrice,
-          old_price: originalPrice,
-          discount_percentage: Math.round(discount),
-          affiliate_link: product.permalink,
-          stock_available: (product.available_quantity || 0) > 0,
-          raw_data: product
-        });
+      // Verificar se tem comissão mínima (indica oferta interessante)
+      const commissionRate = product.commission_rate || 0;
+      if (commissionRate < 0.01) { // Menos de 1% de comissão
+        continue; // Comissão muito baixa
       }
+
+      // Melhorar URL da imagem
+      let imageUrl = product.thumbnail;
+      if (imageUrl && imageUrl.includes('-tn.')) {
+        // Converter thumbnail pequeno para tamanho maior
+        imageUrl = imageUrl.replace('-tn.', '-o.');
+      }
+
+      // Como não temos preço, vamos usar a comissão como indicador de qualidade
+      // Ofertas com maior comissão geralmente são melhores
+      const qualityScore = commissionRate * 100; // Converter para percentual
+
+      promotions.push({
+        external_id: `shopee-${product.id}`,
+        name: product.title,
+        image_url: imageUrl || 'https://via.placeholder.com/300x300?text=Sem+Imagem',
+        platform: 'shopee',
+        current_price: product.price || 0,
+        old_price: product.original_price || null,
+        discount_percentage: minDiscountPercentage, // Usar mínimo configurado já que não temos preço real
+        affiliate_link: product.affiliate_link, // Link já é de afiliado
+        stock_available: true, // Assumir disponível
+        commission_rate: commissionRate,
+        offer_type: product.offer_type,
+        category_id: product.category_id,
+        collection_id: product.collection_id,
+        period_start: product.period_start,
+        period_end: product.period_end,
+        quality_score: qualityScore, // Score baseado em comissão
+        raw_data: product
+      });
     }
 
-    logger.info(`🎯 ${promotions.length} promoções válidas encontradas na Shopee (desconto ≥ ${minDiscountPercentage}%)`);
+    logger.info(`🎯 ${promotions.length} ofertas válidas encontradas na Shopee (comissão ≥ 1%)`);
     return promotions;
   }
 
   /**
-   * Gerar link de afiliado da Shopee
+   * Gerar link de afiliado da Shopee usando API GraphQL
    */
   async generateShopeeAffiliateLink(productUrl) {
     try {
-      // Verificar se Shopee está configurado (buscar do banco primeiro)
-      let partnerId, partnerKey;
-      try {
-        const config = await AppSettings.getShopeeConfig();
-        partnerId = config.partnerId;
-        partnerKey = config.partnerKey;
-      } catch (error) {
-        logger.warn(`⚠️ Erro ao buscar configurações Shopee do banco: ${error.message}`);
-        partnerId = process.env.SHOPEE_PARTNER_ID;
-        partnerKey = process.env.SHOPEE_PARTNER_KEY;
-      }
-      
-      if (!partnerId || !partnerKey) {
+      // Verificar se Shopee está configurado
+      const config = await AppSettings.getShopeeConfig();
+      if (!config.partnerId || !config.partnerKey) {
         logger.warn('⚠️ Shopee não configurado - retornando link original');
         return productUrl;
       }
 
-      // Usar o shopeeService para gerar link de afiliado
-      const affiliateLink = await shopeeService.createAffiliateLink(productUrl);
-      
-      if (affiliateLink && affiliateLink !== productUrl) {
-        logger.info(`✅ Link de afiliado Shopee gerado`);
-        return affiliateLink;
-      }
-
-      // Se não conseguir gerar via API, adicionar partner_id manualmente
-      try {
-        const url = new URL(productUrl);
-        url.searchParams.set('affiliate_id', partnerId);
-        return url.toString();
-      } catch (e) {
-        // Se não for URL válida, retornar original
+      // Se a URL já é um link curto da Shopee (s.shopee.com.br), retornar como está
+      if (productUrl && productUrl.includes('s.shopee.com.br')) {
+        logger.debug(`✅ Link já é de afiliado (curto): ${productUrl.substring(0, 50)}...`);
         return productUrl;
       }
+
+      // Se a URL já tem tracking (offerLink), retornar como está
+      if (productUrl && (productUrl.includes('affiliate_id') || productUrl.includes('utm_source'))) {
+        logger.debug(`✅ Link já tem tracking: ${productUrl.substring(0, 50)}...`);
+        return productUrl;
+      }
+
+      // Gerar link curto com rastreamento usando API GraphQL
+      try {
+        // Não passar subIds para evitar erro "invalid sub id"
+        const shortLink = await shopeeService.generateShortLink(productUrl, []);
+        
+        if (shortLink && shortLink !== productUrl) {
+          logger.info(`✅ Link de afiliado Shopee gerado via API: ${shortLink.substring(0, 50)}...`);
+          return shortLink;
+        }
+      } catch (apiError) {
+        logger.warn(`⚠️ Erro ao gerar link via API, tentando método alternativo: ${apiError.message}`);
+      }
+
+      // Fallback: Adicionar affiliate_id manualmente se for URL da Shopee
+      try {
+        if (productUrl && productUrl.includes('shopee.com.br')) {
+          const url = new URL(productUrl);
+          url.searchParams.set('affiliate_id', config.partnerId);
+          const affiliateUrl = url.toString();
+          logger.info(`✅ Link de afiliado gerado (método alternativo): ${affiliateUrl.substring(0, 50)}...`);
+          return affiliateUrl;
+        }
+      } catch (e) {
+        logger.warn(`⚠️ Erro ao adicionar affiliate_id: ${e.message}`);
+      }
+
+      // Se tudo falhar, retornar URL original
+      return productUrl;
     } catch (error) {
       logger.warn(`⚠️ Erro ao gerar link de afiliado Shopee: ${error.message}`);
       return productUrl;
@@ -172,7 +271,7 @@ class ShopeeSync {
   }
 
   /**
-   * Salvar produto no banco de dados
+   * Salvar produto no banco de dados com link de afiliado
    */
   async saveShopeeToDatabase(product, Product) {
     try {
@@ -184,7 +283,13 @@ class ShopeeSync {
         if (existing.current_price !== product.current_price) {
           await Product.updatePrice(existing.id, product.current_price);
           logger.info(`🔄 Produto atualizado (Preço): ${product.name}`);
-          return { product: existing, isNew: true }; // Considerar como "novo" evento para logs
+          return { product: existing, isNew: true };
+        }
+
+        // Atualizar link de afiliado se mudou
+        if (product.affiliate_link && existing.affiliate_link !== product.affiliate_link) {
+          await Product.update(existing.id, { affiliate_link: product.affiliate_link });
+          logger.info(`🔄 Link de afiliado atualizado: ${product.name}`);
         }
 
         logger.info(`📦 Produto já existe: ${product.name}`);
@@ -197,7 +302,6 @@ class ShopeeSync {
           product.image_url.includes('placeholder') ||
           !product.image_url.startsWith('http')) {
         logger.warn(`⚠️ Produto ${product.name} sem imagem válida`);
-        // Usar placeholder se não tiver imagem
         product.image_url = product.image_url || 'https://via.placeholder.com/300x300?text=Sem+Imagem';
       }
 
@@ -214,12 +318,37 @@ class ShopeeSync {
         }
       }
 
-      // Gerar link de afiliado (async)
-      product.affiliate_link = await this.generateShopeeAffiliateLink(product.affiliate_link);
+      // Garantir que o link de afiliado está gerado
+      // Se não tiver, gerar agora
+      if (!product.affiliate_link || product.affiliate_link === product.permalink) {
+        logger.info(`🔗 Gerando link de afiliado para: ${product.name}`);
+        const originalLink = product.affiliate_link || product.permalink || '';
+        product.affiliate_link = await this.generateShopeeAffiliateLink(originalLink);
+        
+        if (product.affiliate_link && product.affiliate_link !== originalLink) {
+          logger.info(`   ✅ Link de afiliado gerado: ${product.affiliate_link.substring(0, 60)}...`);
+        } else {
+          logger.warn(`   ⚠️ Link de afiliado não foi gerado, usando link original`);
+        }
+      } else {
+        logger.info(`   ✅ Link de afiliado já existe: ${product.affiliate_link.substring(0, 60)}...`);
+      }
+
+      // Adicionar informações extras da oferta
+      const productData = {
+        ...product,
+        commission_rate: product.commission_rate || null,
+        offer_type: product.offer_type || null,
+        collection_id: product.collection_id || null,
+        period_start: product.period_start || null,
+        period_end: product.period_end || null,
+        quality_score: product.quality_score || null
+      };
 
       // Criar novo produto
-      const newProduct = await Product.create(product);
-      logger.info(`✅ Novo produto salvo: ${product.name}`);
+      const newProduct = await Product.create(productData);
+      logger.info(`✅ Novo produto salvo com link de afiliado: ${product.name}`);
+      logger.info(`   Link: ${newProduct.affiliate_link?.substring(0, 60)}...`);
 
       return { product: newProduct, isNew: true };
     } catch (error) {

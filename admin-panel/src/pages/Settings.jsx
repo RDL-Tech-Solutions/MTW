@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
-import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -12,6 +12,9 @@ export default function Settings() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [meliCode, setMeliCode] = useState('');
+  const [gettingRefreshToken, setGettingRefreshToken] = useState(false);
+  const [generatingAccessToken, setGeneratingAccessToken] = useState(false);
   const [settings, setSettings] = useState({
     // Mercado Livre
     meli_client_id: '',
@@ -45,7 +48,12 @@ export default function Settings() {
     
     // Backend
     backend_url: 'http://localhost:3000',
-    backend_api_key: ''
+    backend_api_key: '',
+    
+    // OpenRouter / IA
+    openrouter_api_key: '',
+    openrouter_model: 'mistralai/mistral-7b-instruct',
+    openrouter_enabled: false
   });
 
   const [showSecrets, setShowSecrets] = useState({
@@ -55,7 +63,8 @@ export default function Settings() {
     shopee_partner_key: false,
     amazon_secret_key: false,
     expo_access_token: false,
-    backend_api_key: false
+    backend_api_key: false,
+    openrouter_api_key: false
   });
 
   // Estado para rastrear quais campos têm valores salvos (mas estão mascarados)
@@ -66,7 +75,8 @@ export default function Settings() {
     shopee_partner_key: false,
     amazon_secret_key: false,
     expo_access_token: false,
-    backend_api_key: false
+    backend_api_key: false,
+    openrouter_api_key: false
   });
 
   useEffect(() => {
@@ -93,7 +103,8 @@ export default function Settings() {
           shopee_partner_key: data.shopee_partner_key === '***' || !!restoredValues.shopee_partner_key,
           amazon_secret_key: data.amazon_secret_key === '***' || !!restoredValues.amazon_secret_key,
           expo_access_token: data.expo_access_token === '***' || !!restoredValues.expo_access_token,
-          backend_api_key: data.backend_api_key === '***' || !!restoredValues.backend_api_key
+          backend_api_key: data.backend_api_key === '***' || !!restoredValues.backend_api_key,
+          openrouter_api_key: data.openrouter_api_key === '***' || !!restoredValues.openrouter_api_key
         });
 
         setSettings({
@@ -116,7 +127,10 @@ export default function Settings() {
           telegram_collector_max_retries: data.telegram_collector_max_retries ?? 3,
           telegram_collector_reconnect_delay: data.telegram_collector_reconnect_delay ?? 30,
           backend_url: data.backend_url || 'http://localhost:3000',
-          backend_api_key: restoredValues.backend_api_key || '' // Restaurar do sessionStorage se existir
+          backend_api_key: restoredValues.backend_api_key || '', // Restaurar do sessionStorage se existir
+          openrouter_api_key: restoredValues.openrouter_api_key || '',
+          openrouter_model: data.openrouter_model || 'mistralai/mistral-7b-instruct',
+          openrouter_enabled: data.openrouter_enabled ?? false
         });
       }
     } catch (error) {
@@ -158,6 +172,9 @@ export default function Settings() {
       if (!dataToSend.backend_api_key || dataToSend.backend_api_key.trim() === '') {
         delete dataToSend.backend_api_key;
       }
+      if (!dataToSend.openrouter_api_key || dataToSend.openrouter_api_key.trim() === '') {
+        delete dataToSend.openrouter_api_key;
+      }
 
       const response = await api.put('/settings', dataToSend);
       if (response.data.success) {
@@ -179,7 +196,8 @@ export default function Settings() {
           shopee_partner_key: dataToSend.shopee_partner_key ? true : prev.shopee_partner_key,
           amazon_secret_key: dataToSend.amazon_secret_key ? true : prev.amazon_secret_key,
           expo_access_token: dataToSend.expo_access_token ? true : prev.expo_access_token,
-          backend_api_key: dataToSend.backend_api_key ? true : prev.backend_api_key
+          backend_api_key: dataToSend.backend_api_key ? true : prev.backend_api_key,
+          openrouter_api_key: dataToSend.openrouter_api_key ? true : prev.openrouter_api_key
         }));
         
         // Atualizar settings mantendo TODOS os valores que foram salvos
@@ -207,7 +225,10 @@ export default function Settings() {
           shopee_partner_key: dataToSend.shopee_partner_key ? prev.shopee_partner_key : prev.shopee_partner_key,
           amazon_secret_key: dataToSend.amazon_secret_key ? prev.amazon_secret_key : prev.amazon_secret_key,
           expo_access_token: dataToSend.expo_access_token ? prev.expo_access_token : prev.expo_access_token,
-          backend_api_key: dataToSend.backend_api_key ? prev.backend_api_key : prev.backend_api_key
+          backend_api_key: dataToSend.backend_api_key ? prev.backend_api_key : prev.backend_api_key,
+          openrouter_api_key: dataToSend.openrouter_api_key ? prev.openrouter_api_key : prev.openrouter_api_key,
+          openrouter_model: responseData.openrouter_model !== undefined ? responseData.openrouter_model : prev.openrouter_model,
+          openrouter_enabled: responseData.openrouter_enabled !== undefined ? responseData.openrouter_enabled : prev.openrouter_enabled
         }));
 
         // Salvar valores sensíveis no sessionStorage para persistir após recarregar
@@ -219,6 +240,7 @@ export default function Settings() {
         if (dataToSend.amazon_secret_key) sensitiveValues.amazon_secret_key = prev.amazon_secret_key;
         if (dataToSend.expo_access_token) sensitiveValues.expo_access_token = prev.expo_access_token;
         if (dataToSend.backend_api_key) sensitiveValues.backend_api_key = prev.backend_api_key;
+        if (dataToSend.openrouter_api_key) sensitiveValues.openrouter_api_key = prev.openrouter_api_key;
         
         if (Object.keys(sensitiveValues).length > 0) {
           const existing = sessionStorage.getItem('settings_saved_values');
@@ -239,6 +261,183 @@ export default function Settings() {
 
   const toggleSecret = (key) => {
     setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleGetRefreshToken = async () => {
+    if (!settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri) {
+      toast({
+        title: "Erro",
+        description: "Preencha Client ID, Client Secret e Redirect URI antes de obter o refresh token.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGettingRefreshToken(true);
+    try {
+      // Gerar URL de autorização
+      const response = await api.post('/settings/meli/authorize', {
+        client_id: settings.meli_client_id,
+        redirect_uri: settings.meli_redirect_uri
+      });
+
+      if (response.data.success) {
+        // Abrir URL de autorização em nova janela
+        const authUrl = response.data.data.auth_url;
+        const authWindow = window.open(authUrl, 'Mercado Livre Auth', 'width=600,height=700');
+        
+        // Escutar mensagem do callback
+        const messageHandler = (event) => {
+          // Verificar origem (pode ser do mesmo domínio ou do callback)
+          if (event.data && event.data.type === 'meli_code' && event.data.code) {
+            setMeliCode(event.data.code);
+            authWindow?.close();
+            window.removeEventListener('message', messageHandler);
+            
+            toast({
+              title: "Código recebido",
+              description: "Código de autorização capturado automaticamente. Clique em 'Trocar por Tokens'.",
+            });
+          }
+        };
+        
+        // Verificar periodicamente se a janela foi fechada
+        const checkWindow = setInterval(() => {
+          if (authWindow?.closed) {
+            clearInterval(checkWindow);
+            window.removeEventListener('message', messageHandler);
+            setGettingRefreshToken(false);
+          }
+        }, 500);
+        
+        window.addEventListener('message', messageHandler);
+
+        toast({
+          title: "Autorização",
+          description: "Uma nova janela foi aberta. Após autorizar, o código será capturado automaticamente.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao gerar URL de autorização.",
+        variant: "destructive"
+      });
+      setGettingRefreshToken(false);
+    }
+  };
+
+  const handleExchangeCode = async () => {
+    if (!meliCode || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri) {
+      toast({
+        title: "Erro",
+        description: "Preencha o código de autorização e todas as credenciais necessárias.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGettingRefreshToken(true);
+    try {
+      const response = await api.post('/settings/meli/exchange-code', {
+        code: meliCode,
+        client_id: settings.meli_client_id,
+        client_secret: settings.meli_client_secret,
+        redirect_uri: settings.meli_redirect_uri
+      });
+
+      if (response.data.success) {
+        // Atualizar tokens nos settings
+        setSettings(prev => ({
+          ...prev,
+          meli_access_token: response.data.data.access_token,
+          meli_refresh_token: response.data.data.refresh_token
+        }));
+
+        // Atualizar hasSavedValue
+        setHasSavedValue(prev => ({
+          ...prev,
+          meli_access_token: true,
+          meli_refresh_token: true
+        }));
+
+        // Salvar no sessionStorage
+        const savedValues = sessionStorage.getItem('settings_saved_values');
+        const existingValues = savedValues ? JSON.parse(savedValues) : {};
+        sessionStorage.setItem('settings_saved_values', JSON.stringify({
+          ...existingValues,
+          meli_access_token: response.data.data.access_token,
+          meli_refresh_token: response.data.data.refresh_token
+        }));
+
+        setMeliCode('');
+        toast({
+          title: "Sucesso",
+          description: "Refresh token e access token obtidos e salvos com sucesso!",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao trocar código por tokens.",
+        variant: "destructive"
+      });
+    } finally {
+      setGettingRefreshToken(false);
+    }
+  };
+
+  const handleGenerateAccessToken = async () => {
+    if (!settings.meli_refresh_token) {
+      toast({
+        title: "Erro",
+        description: "Refresh token não encontrado. Obtenha um refresh token primeiro.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGeneratingAccessToken(true);
+    try {
+      const response = await api.post('/settings/meli/refresh-token');
+
+      if (response.data.success) {
+        // Atualizar access token nos settings
+        setSettings(prev => ({
+          ...prev,
+          meli_access_token: response.data.data.access_token,
+          meli_refresh_token: response.data.data.refresh_token || prev.meli_refresh_token
+        }));
+
+        // Atualizar hasSavedValue
+        setHasSavedValue(prev => ({
+          ...prev,
+          meli_access_token: true
+        }));
+
+        // Salvar no sessionStorage
+        const savedValues = sessionStorage.getItem('settings_saved_values');
+        const existingValues = savedValues ? JSON.parse(savedValues) : {};
+        sessionStorage.setItem('settings_saved_values', JSON.stringify({
+          ...existingValues,
+          meli_access_token: response.data.data.access_token,
+          meli_refresh_token: response.data.data.refresh_token || existingValues.meli_refresh_token
+        }));
+
+        toast({
+          title: "Sucesso",
+          description: `Access token gerado com sucesso! Expira em ${Math.floor(response.data.data.expires_in / 3600)} horas.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao gerar access token.",
+        variant: "destructive"
+      });
+    } finally {
+      setGeneratingAccessToken(false);
+    }
   };
 
   if (loading) {
@@ -287,6 +486,10 @@ export default function Settings() {
           <TabsTrigger value="expo">
             <Bell className="h-4 w-4 mr-2" />
             Expo / Push
+          </TabsTrigger>
+          <TabsTrigger value="ai">
+            <Brain className="h-4 w-4 mr-2" />
+            IA / OpenRouter
           </TabsTrigger>
           <TabsTrigger value="other">
             <SettingsIcon className="h-4 w-4 mr-2" />
@@ -399,6 +602,59 @@ export default function Settings() {
                   />
                 </div>
               </div>
+              
+              {/* Seção de gerenciamento de tokens */}
+              <div className="mt-6 pt-6 border-t">
+                <h3 className="text-lg font-semibold mb-4">Gerenciamento de Tokens</h3>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="meli_auth_code">Código de Autorização</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="meli_auth_code"
+                        value={meliCode}
+                        onChange={(e) => setMeliCode(e.target.value)}
+                        placeholder="Cole o código recebido após autorizar no Mercado Livre"
+                      />
+                      <Button
+                        onClick={handleGetRefreshToken}
+                        disabled={gettingRefreshToken || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri}
+                        variant="outline"
+                      >
+                        <Key className="h-4 w-4 mr-2" />
+                        {gettingRefreshToken ? 'Abrindo...' : 'Obter Refresh Token'}
+                      </Button>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Clique em "Obter Refresh Token" para abrir a página de autorização do Mercado Livre.
+                      Após autorizar, cole o código recebido no campo acima e clique em "Trocar por Tokens".
+                    </p>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleExchangeCode}
+                      disabled={gettingRefreshToken || !meliCode || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri}
+                      variant="default"
+                    >
+                      <RefreshCw className={`h-4 mr-2 ${gettingRefreshToken ? 'animate-spin' : ''}`} />
+                      Trocar por Tokens
+                    </Button>
+                    
+                    <Button
+                      onClick={handleGenerateAccessToken}
+                      disabled={generatingAccessToken || !settings.meli_refresh_token}
+                      variant="default"
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${generatingAccessToken ? 'animate-spin' : ''}`} />
+                      {generatingAccessToken ? 'Gerando...' : 'Gerar Access Token'}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Use "Gerar Access Token" para renovar automaticamente o access token usando o refresh token salvo.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -415,23 +671,27 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="shopee_partner_id">Partner ID</Label>
+                  <Label htmlFor="shopee_partner_id">AppID (Partner ID)</Label>
                   <Input
                     id="shopee_partner_id"
                     value={settings.shopee_partner_id || ''}
                     onChange={(e) => setSettings({...settings, shopee_partner_id: e.target.value})}
-                    placeholder="Seu Partner ID"
+                    placeholder="Digite o AppID da Shopee (ex: 18349000441)"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O AppID fornecido pela Shopee é o mesmo que Partner ID
+                  </p>
                 </div>
                 <div>
-                  <Label htmlFor="shopee_partner_key">Partner Key</Label>
+                  <Label htmlFor="shopee_partner_key">Secret (Partner Key)</Label>
                   <div className="flex gap-2">
                     <Input
                       id="shopee_partner_key"
                       type={showSecrets.shopee_partner_key ? 'text' : 'password'}
                       value={settings.shopee_partner_key || ''}
                       onChange={(e) => setSettings({...settings, shopee_partner_key: e.target.value})}
-                      placeholder="Sua Partner Key"
+                      placeholder={hasSavedValue.shopee_partner_key ? "••••••••••••••••" : "Digite o Secret da Shopee"}
+                      disabled={hasSavedValue.shopee_partner_key && !showSecrets.shopee_partner_key}
                     />
                     <Button
                       variant="outline"
@@ -441,6 +701,9 @@ export default function Settings() {
                       {showSecrets.shopee_partner_key ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O Secret fornecido pela Shopee é o mesmo que Partner Key
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -536,6 +799,101 @@ export default function Settings() {
                   >
                     {showSecrets.expo_access_token ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* OpenRouter / IA */}
+        <TabsContent value="ai">
+          <Card>
+            <CardHeader>
+              <CardTitle>IA / OpenRouter</CardTitle>
+              <CardDescription>
+                Configure o módulo de IA para extração inteligente de cupons do Telegram
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="openrouter_enabled"
+                  checked={settings.openrouter_enabled || false}
+                  onChange={(e) => setSettings({...settings, openrouter_enabled: e.target.checked})}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="openrouter_enabled" className="cursor-pointer">
+                  Ativar módulo de IA para extração de cupons
+                </Label>
+              </div>
+              <p className="text-sm text-gray-500">
+                Quando ativado, o sistema usará IA para analisar mensagens do Telegram e extrair informações de cupons de forma mais precisa.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="openrouter_api_key">API Key do OpenRouter</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="openrouter_api_key"
+                      type={showSecrets.openrouter_api_key ? 'text' : 'password'}
+                      value={settings.openrouter_api_key || ''}
+                      onChange={(e) => setSettings({...settings, openrouter_api_key: e.target.value})}
+                      placeholder="sk-or-v1-..."
+                      disabled={!settings.openrouter_enabled}
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => toggleSecret('openrouter_api_key')}
+                      disabled={!settings.openrouter_enabled}
+                    >
+                      {showSecrets.openrouter_api_key ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Obtenha sua API Key em{' '}
+                    <a 
+                      href="https://openrouter.ai/keys" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      openrouter.ai/keys
+                    </a>
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="openrouter_model">Modelo de IA</Label>
+                  <select
+                    id="openrouter_model"
+                    value={settings.openrouter_model || 'mistralai/mistral-7b-instruct'}
+                    onChange={(e) => setSettings({...settings, openrouter_model: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={!settings.openrouter_enabled}
+                  >
+                    <option value="mistralai/mistral-7b-instruct">Mistral 7B Instruct (Gratuito)</option>
+                    <option value="openchat/openchat-7b">OpenChat 7B (Gratuito)</option>
+                    <option value="mistralai/mixtral-8x7b-instruct">Mixtral 8x7B Instruct (Pago)</option>
+                    <option value="anthropic/claude-3-haiku">Claude 3 Haiku (Pago)</option>
+                    <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo (Pago)</option>
+                  </select>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Modelos gratuitos têm limites de rate. Modelos pagos oferecem melhor qualidade mas consomem créditos.
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">ℹ️ Como funciona</h4>
+                  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                    <li>O módulo de IA analisa mensagens brutas capturadas do Telegram</li>
+                    <li>Extrai informações estruturadas de cupons (código, desconto, plataforma, etc.)</li>
+                    <li>Valida a confiabilidade da extração (confidence &gt; 0.75)</li>
+                    <li>Se a IA falhar ou não estiver habilitada, o sistema usa o método tradicional (Regex)</li>
+                    <li>Cupons extraídos pela IA são publicados automaticamente no App e Bots</li>
+                  </ul>
                 </div>
               </div>
             </CardContent>

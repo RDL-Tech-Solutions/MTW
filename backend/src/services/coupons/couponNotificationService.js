@@ -82,14 +82,21 @@ ${coupon.affiliate_link || 'Link não disponível'}
    */
   async notifyNewCoupon(coupon) {
     try {
-      logger.info(`📢 Enviando notificação de novo cupom: ${coupon.code}`);
+      logger.info(`📢 ========== NOTIFICAÇÃO DE NOVO CUPOM ==========`);
+      logger.info(`   Cupom: ${coupon.code}`);
+      logger.info(`   Plataforma: ${coupon.platform}`);
+      logger.info(`   ID: ${coupon.id}`);
 
       // Preparar variáveis do template
+      logger.debug(`   Preparando variáveis do template...`);
       const variables = templateRenderer.prepareCouponVariables(coupon);
+      logger.debug(`   Variáveis preparadas: ${Object.keys(variables).join(', ')}`);
 
       // Renderizar templates para cada plataforma
+      logger.debug(`   Renderizando templates...`);
       const whatsappMessage = await templateRenderer.render('new_coupon', 'whatsapp', variables);
       const telegramMessage = await templateRenderer.render('new_coupon', 'telegram', variables);
+      logger.info(`   Templates renderizados (WhatsApp: ${whatsappMessage.length} chars, Telegram: ${telegramMessage.length} chars)`);
 
       // Gerar imagem do cupom
       let couponImagePath = null;
@@ -101,37 +108,43 @@ ${coupon.affiliate_link || 'Link não disponível'}
       }
 
       // Enviar para WhatsApp (com imagem se disponível)
+      let whatsappResult = null;
       try {
+        logger.info(`📤 Enviando para WhatsApp...`);
         if (couponImagePath) {
-          await notificationDispatcher.sendToWhatsAppWithImage(
+          whatsappResult = await notificationDispatcher.sendToWhatsAppWithImage(
             whatsappMessage,
             couponImagePath,
             'coupon_update'
           );
-          logger.info('✅ Notificação WhatsApp com imagem enviada');
+          logger.info(`✅ Notificação WhatsApp com imagem enviada: ${JSON.stringify(whatsappResult)}`);
         } else {
-          await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_update');
-          logger.info('✅ Notificação WhatsApp enviada');
+          whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_update');
+          logger.info(`✅ Notificação WhatsApp enviada: ${JSON.stringify(whatsappResult)}`);
         }
       } catch (error) {
-        logger.error(`Erro ao enviar WhatsApp: ${error.message}`);
+        logger.error(`❌ Erro ao enviar WhatsApp: ${error.message}`);
+        logger.error(`   Stack: ${error.stack}`);
       }
 
       // Enviar para Telegram (com imagem se disponível)
+      let telegramResult = null;
       try {
+        logger.info(`📤 Enviando para Telegram...`);
         if (couponImagePath) {
-          await notificationDispatcher.sendToTelegramWithImage(
+          telegramResult = await notificationDispatcher.sendToTelegramWithImage(
             telegramMessage,
             couponImagePath,
             'coupon_new'
           );
-          logger.info('✅ Notificação Telegram com imagem enviada');
+          logger.info(`✅ Notificação Telegram com imagem enviada: ${JSON.stringify(telegramResult)}`);
         } else {
-          await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_update');
-          logger.info('✅ Notificação Telegram enviada');
+          telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_update');
+          logger.info(`✅ Notificação Telegram enviada: ${JSON.stringify(telegramResult)}`);
         }
       } catch (error) {
-        logger.error(`Erro ao enviar Telegram: ${error.message}`);
+        logger.error(`❌ Erro ao enviar Telegram: ${error.message}`);
+        logger.error(`   Stack: ${error.stack}`);
       }
 
       // Limpar imagem temporária após envio
@@ -145,12 +158,21 @@ ${coupon.affiliate_link || 'Link não disponível'}
       }
 
       // Criar notificações push para usuários
+      logger.info(`📱 Criando notificações push...`);
       await this.createPushNotifications(coupon, 'new_coupon');
+      logger.info(`✅ Notificações push criadas`);
 
-      return {
+      const result = {
         success: true,
-        message: 'Notificações enviadas'
+        message: 'Notificações enviadas',
+        whatsapp: whatsappResult,
+        telegram: telegramResult
       };
+      
+      logger.info(`✅ ========== NOTIFICAÇÃO CONCLUÍDA ==========`);
+      logger.info(`   Resultado: ${JSON.stringify(result)}`);
+      
+      return result;
 
     } catch (error) {
       logger.error(`Erro ao notificar novo cupom: ${error.message}`);

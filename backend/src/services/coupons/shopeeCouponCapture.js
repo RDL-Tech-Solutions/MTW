@@ -99,8 +99,17 @@ class ShopeeCouponCapture {
 
       // 1. Buscar deals ativos
       const deals = await this.fetchDeals();
+      logger.info(`   📦 ${deals.length} deals encontrados`);
       
-      // 2. Processar cada deal
+      // 2. Buscar vouchers/cupons diretos
+      const vouchers = await this.fetchVouchers();
+      logger.info(`   🎟️ ${vouchers.length} vouchers encontrados`);
+
+      // 3. Buscar produtos em promoção (que podem ter cupons)
+      const promotionProducts = await this.fetchPromotionProducts();
+      logger.info(`   🔥 ${promotionProducts.length} produtos em promoção encontrados`);
+
+      // 4. Processar deals
       for (const deal of deals) {
         try {
           const coupon = await this.processDeal(deal);
@@ -112,7 +121,31 @@ class ShopeeCouponCapture {
         }
       }
 
-      logger.info(`✅ Shopee: ${coupons.length} cupons capturados`);
+      // 5. Processar vouchers
+      for (const voucher of vouchers) {
+        try {
+          const coupon = await this.processVoucher(voucher);
+          if (coupon) {
+            coupons.push(coupon);
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar voucher ${voucher.voucher_id}: ${error.message}`);
+        }
+      }
+
+      // 6. Processar produtos em promoção (extrair cupons se houver)
+      for (const product of promotionProducts.slice(0, 20)) { // Limitar a 20 para não sobrecarregar
+        try {
+          const productCoupons = await this.extractCouponsFromProduct(product);
+          if (productCoupons && productCoupons.length > 0) {
+            coupons.push(...productCoupons);
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar produto ${product.item_id}: ${error.message}`);
+        }
+      }
+
+      logger.info(`✅ Shopee: ${coupons.length} cupons capturados no total`);
       return coupons;
 
     } catch (error) {
@@ -126,16 +159,40 @@ class ShopeeCouponCapture {
    */
   async fetchDeals() {
     try {
-      // Nota: Este endpoint pode variar dependendo da região
-      // Você pode precisar ajustar de acordo com a API Shopee Affiliate disponível
-      const response = await this.makeRequest('/deal/get', {
-        status: 'ongoing',
-        page_size: 50
-      });
-
-      return response.data?.deals || [];
+      // Usar shopeeService para buscar deals
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      const deals = await shopeeService.getDeals(50, 0);
+      return deals || [];
     } catch (error) {
       logger.error(`Erro ao buscar deals Shopee: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Buscar vouchers/cupons diretos
+   */
+  async fetchVouchers() {
+    try {
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      const vouchers = await shopeeService.getVouchers(50, 0);
+      return vouchers || [];
+    } catch (error) {
+      logger.error(`Erro ao buscar vouchers Shopee: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Buscar produtos em promoção
+   */
+  async fetchPromotionProducts() {
+    try {
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      const products = await shopeeService.getPromotionProducts(50);
+      return products || [];
+    } catch (error) {
+      logger.error(`Erro ao buscar produtos em promoção: ${error.message}`);
       return [];
     }
   }
@@ -215,15 +272,92 @@ class ShopeeCouponCapture {
   }
 
   /**
+   * Processar voucher e extrair informações do cupom
+   */
+  async processVoucher(voucher) {
+    try {
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      
+      // Buscar detalhes completos do voucher
+      const voucherDetails = await shopeeService.getVoucherDetails(voucher.voucher_id || voucher.id);
+      const voucherData = voucherDetails || voucher;
+
+      const coupon = {
+        platform: 'shopee',
+        code: voucherData.voucher_code || voucherData.code || voucherData.voucher_id?.toString(),
+        title: voucherData.voucher_name || voucherData.name || 'Cupom Shopee',
+        description: voucherData.description || voucherData.voucher_description || '',
+        discount_type: voucherData.discount_type === 'percentage' || voucherData.discount_percent ? 'percentage' : 'fixed',
+        discount_value: voucherData.discount_percent || voucherData.discount_amount || voucherData.discount_value || 0,
+        min_purchase: parseFloat(voucherData.min_spend || voucherData.min_purchase || 0),
+        max_discount: parseFloat(voucherData.max_discount || voucherData.discount_cap || 0),
+        valid_from: voucherData.start_time ? new Date(voucherData.start_time * 1000).toISOString() : new Date().toISOString(),
+        valid_until: voucherData.end_time ? new Date(voucherData.end_time * 1000).toISOString() : null,
+        usage_limit: voucherData.usage_limit || voucherData.quantity || null,
+        campaign_id: voucherData.campaign_id?.toString(),
+        campaign_name: voucherData.campaign_name || voucherData.voucher_name,
+        affiliate_link: await this.generateAffiliateLink({ deal_url: voucherData.url || '' }),
+        source_url: voucherData.url || '',
+        auto_captured: true,
+        is_general: true,
+        verification_status: 'active'
+      };
+
+      return coupon;
+    } catch (error) {
+      logger.error(`Erro ao processar voucher: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Extrair cupons de um produto em promoção
+   */
+  async extractCouponsFromProduct(product) {
+    try {
+      const coupons = [];
+
+      // Se o produto tem voucher associado
+      if (product.voucher_info && product.voucher_info.voucher_code) {
+        const coupon = {
+          platform: 'shopee',
+          code: product.voucher_info.voucher_code,
+          title: `Cupom ${product.name?.substring(0, 30)}`,
+          description: `Cupom para ${product.name}`,
+          discount_type: product.voucher_info.discount_type || 'percentage',
+          discount_value: product.voucher_info.discount_value || 0,
+          min_purchase: parseFloat(product.voucher_info.min_spend || 0),
+          valid_from: product.voucher_info.start_time ? new Date(product.voucher_info.start_time * 1000).toISOString() : new Date().toISOString(),
+          valid_until: product.voucher_info.end_time ? new Date(product.voucher_info.end_time * 1000).toISOString() : null,
+          affiliate_link: await this.generateAffiliateLink({ deal_url: product.url || '' }),
+          source_url: product.url || '',
+          auto_captured: true,
+          is_general: false,
+          verification_status: 'active'
+        };
+        coupons.push(coupon);
+      }
+
+      return coupons;
+    } catch (error) {
+      logger.error(`Erro ao extrair cupons do produto: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
    * Verificar validade de um cupom
    */
   async verifyCoupon(couponCode) {
     try {
-      // Implementar verificação se a API Shopee disponibilizar
-      // Por enquanto, retornar true
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      const result = await shopeeService.verifyVoucher(couponCode);
+      
       return {
-        valid: true,
-        message: 'Cupom válido'
+        valid: result.valid,
+        message: result.message,
+        discount: result.discount,
+        min_purchase: result.min_purchase
       };
     } catch (error) {
       logger.error(`Erro ao verificar cupom: ${error.message}`);
@@ -239,19 +373,89 @@ class ShopeeCouponCapture {
    */
   async fetchCategoryPromotions(categoryId = null) {
     try {
-      const params = {
-        status: 'ongoing',
-        page_size: 50
-      };
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      const products = await shopeeService.getProductsByCategory(categoryId, 50, 0);
+      
+      // Filtrar apenas produtos com desconto
+      const promotions = products.filter(p => 
+        p.price_before_discount && 
+        p.price_before_discount > p.price
+      );
 
-      if (categoryId) {
-        params.category_id = categoryId;
-      }
-
-      const response = await this.makeRequest('/product/get_category', params);
-      return response.data?.promotions || [];
+      return promotions;
     } catch (error) {
       logger.error(`Erro ao buscar promoções de categoria: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Buscar cupons por categoria
+   */
+  async captureCouponsByCategory(categoryId) {
+    try {
+      logger.info(`🛍️ Buscando cupons Shopee da categoria ${categoryId}...`);
+
+      const coupons = [];
+      
+      // 1. Buscar produtos da categoria
+      const products = await this.fetchCategoryPromotions(categoryId);
+      
+      // 2. Extrair cupons dos produtos
+      for (const product of products) {
+        try {
+          const productCoupons = await this.extractCouponsFromProduct(product);
+          if (productCoupons && productCoupons.length > 0) {
+            coupons.push(...productCoupons);
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar produto ${product.item_id}: ${error.message}`);
+        }
+      }
+
+      logger.info(`✅ Categoria ${categoryId}: ${coupons.length} cupons encontrados`);
+      return coupons;
+    } catch (error) {
+      logger.error(`❌ Erro ao buscar cupons por categoria: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Buscar cupons por palavra-chave
+   */
+  async captureCouponsByKeyword(keyword) {
+    try {
+      logger.info(`🛍️ Buscando cupons Shopee para: ${keyword}...`);
+
+      const coupons = [];
+      const shopeeService = (await import('../shopee/shopeeService.js')).default;
+      
+      // 1. Buscar produtos por palavra-chave
+      const products = await shopeeService.searchProducts(keyword, 50, 0);
+      
+      // 2. Filtrar produtos com desconto
+      const discountedProducts = products.filter(p => 
+        p.price_before_discount && 
+        p.price_before_discount > p.price
+      );
+
+      // 3. Extrair cupons
+      for (const product of discountedProducts) {
+        try {
+          const productCoupons = await this.extractCouponsFromProduct(product);
+          if (productCoupons && productCoupons.length > 0) {
+            coupons.push(...productCoupons);
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar produto ${product.item_id}: ${error.message}`);
+        }
+      }
+
+      logger.info(`✅ Palavra-chave "${keyword}": ${coupons.length} cupons encontrados`);
+      return coupons;
+    } catch (error) {
+      logger.error(`❌ Erro ao buscar cupons por palavra-chave: ${error.message}`);
       return [];
     }
   }

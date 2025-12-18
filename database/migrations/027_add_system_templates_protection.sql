@@ -97,3 +97,5 @@ COMMENT ON COLUMN bot_message_templates.is_system IS 'Indica se o template é do
 -- FIM DA MIGRATION
 -- =====================================================
 SELECT 'Migration 027_add_system_templates_protection executada com sucesso!' as status;
+
+

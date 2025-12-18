@@ -738,6 +738,413 @@ class CouponCaptureController {
       });
     }
   }
+
+  // ============================================
+  // Endpoints Específicos Shopee
+  // ============================================
+
+  /**
+   * Buscar cupons Shopee por categoria
+   * POST /api/coupon-capture/shopee/category/:categoryId
+   */
+  async captureShopeeByCategory(req, res) {
+    try {
+      const { categoryId } = req.params;
+      const shopeeCouponCapture = (await import('../services/coupons/shopeeCouponCapture.js')).default;
+
+      logger.info(`🔧 Captura manual de cupons Shopee por categoria: ${categoryId}`);
+
+      const coupons = await shopeeCouponCapture.captureCouponsByCategory(categoryId);
+
+      res.json({
+        success: true,
+        message: `Captura concluída para categoria ${categoryId}`,
+        data: {
+          found: coupons.length,
+          coupons
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro na captura por categoria: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro na captura',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Buscar cupons Shopee por palavra-chave
+   * POST /api/coupon-capture/shopee/keyword
+   */
+  async captureShopeeByKeyword(req, res) {
+    try {
+      const { keyword } = req.body;
+
+      if (!keyword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Palavra-chave é obrigatória'
+        });
+      }
+
+      const shopeeCouponCapture = (await import('../services/coupons/shopeeCouponCapture.js')).default;
+
+      logger.info(`🔧 Captura manual de cupons Shopee por palavra-chave: ${keyword}`);
+
+      const coupons = await shopeeCouponCapture.captureCouponsByKeyword(keyword);
+
+      res.json({
+        success: true,
+        message: `Captura concluída para "${keyword}"`,
+        data: {
+          found: coupons.length,
+          coupons
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro na captura por palavra-chave: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro na captura',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Buscar categorias Shopee
+   * GET /api/coupon-capture/shopee/categories
+   */
+  async getShopeeCategories(req, res) {
+    try {
+      const shopeeService = (await import('../services/shopee/shopeeService.js')).default;
+
+      logger.info('🔧 Buscando categorias Shopee...');
+
+      const categories = await shopeeService.getCategories();
+
+      res.json({
+        success: true,
+        message: 'Categorias obtidas com sucesso',
+        data: categories
+      });
+    } catch (error) {
+      logger.error(`Erro ao buscar categorias: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar categorias',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Verificar cupom Shopee
+   * POST /api/coupon-capture/shopee/verify
+   */
+  async verifyShopeeCoupon(req, res) {
+    try {
+      const { code } = req.body;
+
+      if (!code) {
+        return res.status(400).json({
+          success: false,
+          message: 'Código do cupom é obrigatório'
+        });
+      }
+
+      const shopeeCouponCapture = (await import('../services/coupons/shopeeCouponCapture.js')).default;
+
+      logger.info(`🔧 Verificando cupom Shopee: ${code}`);
+
+      const result = await shopeeCouponCapture.verifyCoupon(code);
+
+      res.json({
+        success: true,
+        message: 'Verificação concluída',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Erro ao verificar cupom: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao verificar cupom',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Buscar estatísticas de comissão Shopee
+   * GET /api/coupon-capture/shopee/commission-stats
+   */
+  async getShopeeCommissionStats(req, res) {
+    try {
+      const { start_date, end_date } = req.query;
+
+      if (!start_date || !end_date) {
+        return res.status(400).json({
+          success: false,
+          message: 'start_date e end_date são obrigatórios (formato: YYYY-MM-DD)'
+        });
+      }
+
+      const shopeeService = (await import('../services/shopee/shopeeService.js')).default;
+
+      logger.info(`🔧 Buscando estatísticas de comissão Shopee: ${start_date} a ${end_date}`);
+
+      const stats = await shopeeService.getCommissionStats(start_date, end_date);
+
+      res.json({
+        success: true,
+        message: 'Estatísticas obtidas com sucesso',
+        data: stats
+      });
+    } catch (error) {
+      logger.error(`Erro ao buscar estatísticas: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar estatísticas',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Analisar cupom Shopee com IA
+   * POST /api/coupon-capture/shopee/analyze-coupon
+   */
+  async analyzeShopeeCoupon(req, res) {
+    try {
+      const { coupon } = req.body;
+
+      if (!coupon) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dados do cupom são obrigatórios'
+        });
+      }
+
+      const shopeeAnalyzer = (await import('../ai/shopeeAnalyzer.js')).default;
+
+      logger.info(`🔧 Analisando cupom Shopee com IA...`);
+
+      const analysis = await shopeeAnalyzer.analyzeCoupon(coupon);
+
+      res.json({
+        success: true,
+        message: 'Análise concluída',
+        data: analysis
+      });
+    } catch (error) {
+      logger.error(`Erro ao analisar cupom: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao analisar cupom',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Analisar produto Shopee com IA
+   * POST /api/coupon-capture/shopee/analyze-product
+   */
+  async analyzeShopeeProduct(req, res) {
+    try {
+      const { product } = req.body;
+
+      if (!product) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dados do produto são obrigatórios'
+        });
+      }
+
+      const shopeeAnalyzer = (await import('../ai/shopeeAnalyzer.js')).default;
+
+      logger.info(`🔧 Analisando produto Shopee com IA...`);
+
+      const analysis = await shopeeAnalyzer.analyzeProduct(product);
+
+      res.json({
+        success: true,
+        message: 'Análise concluída',
+        data: analysis
+      });
+    } catch (error) {
+      logger.error(`Erro ao analisar produto: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao analisar produto',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Analisar cupons em lote com IA
+   * POST /api/coupon-capture/ai/batch-analyze
+   */
+  async batchAnalyzeCoupons(req, res) {
+    try {
+      const { coupons, options } = req.body;
+
+      if (!coupons || !Array.isArray(coupons)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Array de cupons é obrigatório'
+        });
+      }
+
+      if (coupons.length > 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Máximo de 50 cupons por lote'
+        });
+      }
+
+      const couponBatchAnalyzer = (await import('../ai/couponBatchAnalyzer.js')).default;
+
+      logger.info(`🔧 Analisando ${coupons.length} cupons em lote...`);
+
+      const analyses = await couponBatchAnalyzer.analyzeBatch(coupons, options || {});
+
+      res.json({
+        success: true,
+        message: 'Análise em lote concluída',
+        data: analyses
+      });
+    } catch (error) {
+      logger.error(`Erro na análise em lote: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro na análise em lote',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Gerar relatório de análise de cupons
+   * POST /api/coupon-capture/ai/generate-report
+   */
+  async generateAnalysisReport(req, res) {
+    try {
+      const { coupons } = req.body;
+
+      if (!coupons || !Array.isArray(coupons)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Array de cupons é obrigatório'
+        });
+      }
+
+      const couponBatchAnalyzer = (await import('../ai/couponBatchAnalyzer.js')).default;
+
+      logger.info(`🔧 Gerando relatório de análise para ${coupons.length} cupons...`);
+
+      const report = await couponBatchAnalyzer.generateReport(coupons);
+
+      res.json({
+        success: true,
+        message: 'Relatório gerado com sucesso',
+        data: report
+      });
+    } catch (error) {
+      logger.error(`Erro ao gerar relatório: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao gerar relatório',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Filtrar cupons usando análise em lote
+   * POST /api/coupon-capture/ai/filter-by-analysis
+   */
+  async filterCouponsByAnalysis(req, res) {
+    try {
+      const { coupons, min_score } = req.body;
+
+      if (!coupons || !Array.isArray(coupons)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Array de cupons é obrigatório'
+        });
+      }
+
+      const couponBatchAnalyzer = (await import('../ai/couponBatchAnalyzer.js')).default;
+
+      logger.info(`🔧 Filtrando ${coupons.length} cupons por análise...`);
+
+      const filtered = await couponBatchAnalyzer.filterByAnalysis(coupons, min_score || 0.7);
+
+      res.json({
+        success: true,
+        message: 'Filtragem concluída',
+        data: {
+          original_count: coupons.length,
+          filtered_count: filtered.length,
+          filtered_coupons: filtered
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro na filtragem por análise: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro na filtragem',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Melhorar qualidade de cupons com IA
+   * POST /api/coupon-capture/ai/enhance-coupons
+   */
+  async enhanceCoupons(req, res) {
+    try {
+      const { coupons } = req.body;
+
+      if (!coupons || !Array.isArray(coupons)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Array de cupons é obrigatório'
+        });
+      }
+
+      if (coupons.length > 20) {
+        return res.status(400).json({
+          success: false,
+          message: 'Máximo de 20 cupons por vez'
+        });
+      }
+
+      const couponQualityEnhancer = (await import('../ai/couponQualityEnhancer.js')).default;
+
+      logger.info(`🔧 Melhorando ${coupons.length} cupons com IA...`);
+
+      const enhanced = await couponQualityEnhancer.enhanceBatch(coupons, 3);
+
+      res.json({
+        success: true,
+        message: 'Cupons melhorados com sucesso',
+        data: enhanced
+      });
+    } catch (error) {
+      logger.error(`Erro ao melhorar cupons: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao melhorar cupons',
+        error: error.message
+      });
+    }
+  }
 }
 
 export default new CouponCaptureController();

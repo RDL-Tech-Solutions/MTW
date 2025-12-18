@@ -463,37 +463,8 @@ class MeliSync {
       }
 
       if (discount >= minDiscountPercentage || hasCoupon) {
-        // Processar link para garantir formato correto
-        let processedLink = '';
-        try {
-          // Extrair ID MLB- do permalink
-          const productId = this.extractMeliProductId(product.permalink);
-          if (productId) {
-            // Buscar código de afiliado
-            let affiliateCode = '';
-            try {
-              const AppSettings = (await import('../../models/AppSettings.js')).default;
-              const config = await AppSettings.getMeliConfig();
-              affiliateCode = config.affiliateCode || '';
-            } catch (error) {
-              affiliateCode = process.env.MELI_AFFILIATE_CODE || '';
-            }
-
-            // Gerar link limpo no formato correto
-            const cleanLink = `https://produto.mercadolivre.com.br/${productId}`;
-            if (affiliateCode && affiliateCode.trim()) {
-              processedLink = `${cleanLink}?matt_word=${encodeURIComponent(affiliateCode.trim())}`;
-            } else {
-              processedLink = cleanLink;
-            }
-          } else {
-            // Se não conseguir extrair ID, usar link original (será processado depois)
-            processedLink = product.permalink || '';
-          }
-        } catch (error) {
-          logger.warn(`⚠️ Erro ao processar link, usando original: ${error.message}`);
-          processedLink = product.permalink || '';
-        }
+        // Usar link original do produto (não transformar)
+        const originalLink = product.permalink || '';
 
         promotions.push({
           external_id: `mercadolivre-${product.id}`,
@@ -503,7 +474,7 @@ class MeliSync {
           current_price: currentPrice,
           old_price: originalPrice || 0, // Garantir 0 se null
           discount_percentage: Math.round(discount),
-          affiliate_link: processedLink,
+          affiliate_link: originalLink, // Usar link original do produto
           stock_available: product.available_quantity > 0,
           coupon: product.coupon,
           raw_data: product
@@ -681,11 +652,17 @@ class MeliSync {
       const existing = await Product.findByExternalId(product.external_id);
 
       if (existing) {
-        // Sempre atualizar o link para garantir formato correto
-        const newAffiliateLink = await this.generateMeliAffiliateLink(product);
-        if (newAffiliateLink && newAffiliateLink !== existing.affiliate_link) {
-          await Product.update(existing.id, { affiliate_link: newAffiliateLink });
-          logger.info(`🔄 Link atualizado para formato correto: ${product.name}`);
+        // Preservar link original se já existir e for válido
+        // Só atualizar se o link atual estiver vazio ou inválido
+        if (!existing.affiliate_link || !existing.affiliate_link.includes('mercadolivre')) {
+          const newAffiliateLink = await this.generateMeliAffiliateLink(product);
+          if (newAffiliateLink && newAffiliateLink !== existing.affiliate_link) {
+            await Product.update(existing.id, { affiliate_link: newAffiliateLink });
+            logger.info(`🔄 Link atualizado: ${product.name}`);
+          }
+        } else {
+          // Se já tem link válido, preservar o original
+          logger.debug(`✅ Link original preservado para: ${product.name}`);
         }
 
         // Se o preço mudou, atualizar
@@ -764,8 +741,21 @@ class MeliSync {
         }
       }
 
-      // Gerar link de afiliado (Async)
-      product.affiliate_link = await this.generateMeliAffiliateLink(product);
+      // Preservar link original do produto
+      // Prioridade: product.affiliate_link > product.link > product.permalink
+      if (!product.affiliate_link) {
+        if (product.link && product.link.includes('mercadolivre')) {
+          product.affiliate_link = product.link;
+        } else if (product.permalink && product.permalink.includes('mercadolivre')) {
+          product.affiliate_link = product.permalink;
+        } else {
+          // Fallback: tentar gerar um link limpo apenas se não tiver nenhum link válido
+          const generatedLink = await this.generateMeliAffiliateLink(product);
+          if (generatedLink) {
+            product.affiliate_link = generatedLink;
+          }
+        }
+      }
 
       // Criar novo produto
       const newProduct = await Product.create(product);

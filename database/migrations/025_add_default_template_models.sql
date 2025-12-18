@@ -231,3 +231,5 @@ ON CONFLICT DO NOTHING;
 -- Todos os modelos são criados com platform='all' para funcionar
 -- em todas as plataformas. Templates específicos por plataforma
 -- podem ser criados pelo painel admin.
+
+

@@ -20,6 +20,9 @@ router.patch('/:id/stats', telegramChannelController.updateStats);
 router.post('/coupons', telegramChannelController.saveCoupon);
 router.get('/coupons', telegramChannelController.listCoupons);
 
+// Rotas de IA
+router.get('/ai/status', telegramChannelController.getAiStatus);
+
 export default router;
 
 

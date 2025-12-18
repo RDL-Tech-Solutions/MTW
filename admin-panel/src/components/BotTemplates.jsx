@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send, Copy as CopyIcon, Download, Sparkles } from 'lucide-react';
+import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send, Copy as CopyIcon, Download, Sparkles, Brain, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -29,6 +29,8 @@ export default function BotTemplates() {
   const [isTestDialogOpen, setIsTestDialogOpen] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState(null);
   const [testTemplate, setTestTemplate] = useState(null);
+  const [generatingTemplate, setGeneratingTemplate] = useState(false);
+  const [aiDescription, setAiDescription] = useState('');
   const [newTemplate, setNewTemplate] = useState({
     template_type: Object.keys(templateTypes)[0],
     platform: 'all',
@@ -98,6 +100,47 @@ export default function BotTemplates() {
     }
   };
 
+  const handleGenerateWithAI = async () => {
+    if (!newTemplate.template_type) {
+      toast({
+        title: "Erro",
+        description: "Selecione o tipo de template primeiro",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGeneratingTemplate(true);
+    try {
+      const response = await api.post('/bots/templates/generate', {
+        template_type: newTemplate.template_type,
+        platform: newTemplate.platform,
+        description: aiDescription
+      });
+
+      if (response.data.success) {
+        setNewTemplate({
+          ...newTemplate,
+          template: response.data.data.template
+        });
+        toast({
+          title: "Sucesso",
+          description: "Template gerado com IA! Revise e ajuste se necessário.",
+          variant: "success"
+        });
+        setAiDescription(''); // Limpar descrição após gerar
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao gerar template com IA",
+        variant: "destructive"
+      });
+    } finally {
+      setGeneratingTemplate(false);
+    }
+  };
+
   const handleCreate = async () => {
     try {
       if (!newTemplate.template.trim()) {
@@ -123,6 +166,7 @@ export default function BotTemplates() {
         description: '',
         is_active: true
       });
+      setAiDescription('');
       await loadTemplates();
     } catch (error) {
       toast({
@@ -522,7 +566,14 @@ export default function BotTemplates() {
             <Sparkles className="mr-2 h-4 w-4" />
             Criar Templates Padrão
           </Button>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) {
+              // Limpar campos quando dialog fecha
+              setAiDescription('');
+              setGeneratingTemplate(false);
+            }
+          }}>
           <DialogTrigger asChild>
             <Button onClick={() => {
               setNewTemplate({
@@ -532,6 +583,8 @@ export default function BotTemplates() {
                 description: '',
                 is_active: true
               });
+              setAiDescription('');
+              setGeneratingTemplate(false);
             }}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Template
@@ -572,13 +625,56 @@ export default function BotTemplates() {
               </div>
 
               <div>
-                <Label>Template da Mensagem *</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Template da Mensagem *</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateWithAI}
+                    disabled={generatingTemplate}
+                    className="flex items-center gap-2"
+                  >
+                    {generatingTemplate ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Gerando...
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="h-4 w-4" />
+                        Gerar com IA
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {generatingTemplate && (
+                  <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      🤖 Gerando template com IA... Isso pode levar alguns segundos.
+                    </p>
+                  </div>
+                )}
+                <div className="mb-2">
+                  <Label className="text-sm text-muted-foreground">Descrição para IA (opcional)</Label>
+                  <Input
+                    value={aiDescription}
+                    onChange={(e) => setAiDescription(e.target.value)}
+                    placeholder="Ex: Template criativo e atrativo com emojis, focado em economia..."
+                    className="text-sm"
+                    disabled={generatingTemplate}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Descreva como você quer que o template seja. Deixe vazio para usar padrão.
+                  </p>
+                </div>
                 <Textarea
                   value={newTemplate.template}
                   onChange={(e) => setNewTemplate({ ...newTemplate, template: e.target.value })}
                   rows={12}
                   className="font-mono text-sm"
-                  placeholder="Digite o template da mensagem..."
+                  placeholder="Digite o template da mensagem ou clique em 'Gerar com IA' para criar automaticamente..."
+                  disabled={generatingTemplate}
                 />
                 {variables[newTemplate.template_type] && (
                   <div className="mt-2 p-3 bg-muted rounded-md">

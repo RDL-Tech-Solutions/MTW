@@ -1,5 +1,6 @@
 import AppSettings from '../models/AppSettings.js';
 import logger from '../config/logger.js';
+import axios from 'axios';
 
 class AppSettingsController {
   /**
@@ -19,7 +20,8 @@ class AppSettingsController {
         shopee_partner_key: settings.shopee_partner_key ? '***' : null,
         amazon_secret_key: settings.amazon_secret_key ? '***' : null,
         expo_access_token: settings.expo_access_token ? '***' : null,
-        backend_api_key: settings.backend_api_key ? '***' : null
+        backend_api_key: settings.backend_api_key ? '***' : null,
+        openrouter_api_key: settings.openrouter_api_key ? '***' : null
       };
 
       res.json({
@@ -81,6 +83,7 @@ class AppSettingsController {
       if (logUpdates.amazon_secret_key) logUpdates.amazon_secret_key = '***';
       if (logUpdates.expo_access_token) logUpdates.expo_access_token = '***';
       if (logUpdates.backend_api_key) logUpdates.backend_api_key = '***';
+      if (logUpdates.openrouter_api_key) logUpdates.openrouter_api_key = '***';
       
       logger.info('✅ Atualizando configurações:', JSON.stringify(logUpdates));
 
@@ -97,7 +100,8 @@ class AppSettingsController {
         shopee_partner_key: settings.shopee_partner_key ? '***' : null,
         amazon_secret_key: settings.amazon_secret_key ? '***' : null,
         expo_access_token: settings.expo_access_token ? '***' : null,
-        backend_api_key: settings.backend_api_key ? '***' : null
+        backend_api_key: settings.backend_api_key ? '***' : null,
+        openrouter_api_key: settings.openrouter_api_key ? '***' : null
       };
 
       res.json({
@@ -164,6 +168,178 @@ class AppSettingsController {
         success: false,
         message: 'Erro ao buscar configurações',
         error: error.message
+      });
+    }
+  }
+
+  /**
+   * Gerar URL de autorização do Mercado Livre
+   * POST /api/settings/meli/authorize
+   */
+  async generateMeliAuthUrl(req, res) {
+    try {
+      const { client_id, redirect_uri } = req.body;
+
+      if (!client_id || !redirect_uri) {
+        return res.status(400).json({
+          success: false,
+          message: 'Client ID e Redirect URI são obrigatórios'
+        });
+      }
+
+      // Gerar URL de autorização do Mercado Livre
+      const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}`;
+
+      res.json({
+        success: true,
+        data: {
+          auth_url: authUrl
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao gerar URL de autorização: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao gerar URL de autorização',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Trocar código de autorização por tokens (refresh token e access token)
+   * POST /api/settings/meli/exchange-code
+   */
+  async exchangeMeliCode(req, res) {
+    try {
+      const { code, client_id, client_secret, redirect_uri } = req.body;
+
+      if (!code || !client_id || !client_secret || !redirect_uri) {
+        return res.status(400).json({
+          success: false,
+          message: 'Code, Client ID, Client Secret e Redirect URI são obrigatórios'
+        });
+      }
+
+      logger.info('🔄 Trocando código por tokens do Mercado Livre...');
+
+      // Trocar código por tokens
+      const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
+        grant_type: 'authorization_code',
+        client_id: client_id,
+        client_secret: client_secret,
+        code: code,
+        redirect_uri: redirect_uri
+      }, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        }
+      });
+
+      const { access_token, refresh_token, expires_in, user_id } = response.data;
+
+      // Salvar tokens no banco de dados
+      await AppSettings.update({
+        meli_access_token: access_token,
+        meli_refresh_token: refresh_token
+      });
+
+      logger.info('✅ Tokens do Mercado Livre salvos com sucesso');
+
+      res.json({
+        success: true,
+        message: 'Tokens obtidos e salvos com sucesso',
+        data: {
+          access_token: access_token,
+          refresh_token: refresh_token,
+          expires_in: expires_in,
+          user_id: user_id
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao trocar código por tokens: ${error.message}`);
+      
+      const errorMessage = error.response?.data?.message || error.message;
+      const errorDetails = error.response?.data || {};
+
+      res.status(error.response?.status || 500).json({
+        success: false,
+        message: 'Erro ao trocar código por tokens',
+        error: errorMessage,
+        details: errorDetails
+      });
+    }
+  }
+
+  /**
+   * Gerar access token usando refresh token
+   * POST /api/settings/meli/refresh-token
+   */
+  async refreshMeliToken(req, res) {
+    try {
+      // Obter configurações do banco
+      const config = await AppSettings.getMeliConfig();
+
+      if (!config.clientId || !config.clientSecret) {
+        return res.status(400).json({
+          success: false,
+          message: 'Client ID e Client Secret devem estar configurados'
+        });
+      }
+
+      if (!config.refreshToken) {
+        return res.status(400).json({
+          success: false,
+          message: 'Refresh Token não encontrado. Obtenha um refresh token primeiro.'
+        });
+      }
+
+      logger.info('🔄 Renovando access token do Mercado Livre...');
+
+      // Renovar token usando refresh token
+      const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
+        grant_type: 'refresh_token',
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        refresh_token: config.refreshToken
+      }, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        }
+      });
+
+      const { access_token, refresh_token, expires_in } = response.data;
+
+      // Atualizar refresh token se um novo foi retornado
+      const newRefreshToken = refresh_token || config.refreshToken;
+
+      // Salvar tokens atualizados no banco
+      await AppSettings.updateMeliToken(access_token, newRefreshToken);
+
+      logger.info('✅ Access token renovado com sucesso');
+
+      res.json({
+        success: true,
+        message: 'Access token gerado com sucesso',
+        data: {
+          access_token: access_token,
+          refresh_token: newRefreshToken,
+          expires_in: expires_in
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao renovar token: ${error.message}`);
+      
+      const errorMessage = error.response?.data?.message || error.message;
+      const errorDetails = error.response?.data || {};
+
+      res.status(error.response?.status || 500).json({
+        success: false,
+        message: 'Erro ao renovar token',
+        error: errorMessage,
+        details: errorDetails
       });
     }
   }

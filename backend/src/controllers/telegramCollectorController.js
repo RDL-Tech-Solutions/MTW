@@ -333,6 +333,124 @@ class TelegramCollectorController {
   }
 
   /**
+   * Buscar mensagens históricas de um canal
+   * POST /api/telegram-collector/listener/fetch-history
+   */
+  async fetchHistory(req, res) {
+    try {
+      const { channel_id, limit = 100 } = req.body;
+
+      if (!channel_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'channel_id é obrigatório'
+        });
+      }
+
+      const listenerService = (await import('../services/telegramCollector/listenerService.js')).default;
+      const messages = await listenerService.fetchHistoricalMessages(channel_id, limit);
+
+      res.json({
+        success: true,
+        message: `${messages.length} mensagens processadas`,
+        data: {
+          messages_count: messages.length,
+          channel_id: channel_id
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao buscar mensagens históricas: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar mensagens históricas',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Buscar mensagens históricas de todos os canais
+   * POST /api/telegram-collector/listener/fetch-all-history
+   */
+  async fetchAllHistory(req, res) {
+    try {
+      const { limit_per_channel = 100 } = req.body;
+
+      logger.info(`📥 Iniciando busca de mensagens históricas de todos os canais...`);
+
+      const listenerService = (await import('../services/telegramCollector/listenerService.js')).default;
+      const client = telegramClient.getClient();
+      
+      if (!client || (!client.connected && !client._connected)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cliente Telegram não está conectado. Inicie o listener primeiro.'
+        });
+      }
+
+      // Executar em background para não bloquear a resposta
+      listenerService.fetchAllHistoricalMessages(client, limit_per_channel).catch(error => {
+        logger.error(`Erro ao buscar mensagens históricas em background: ${error.message}`);
+      });
+
+      res.json({
+        success: true,
+        message: 'Busca de mensagens históricas iniciada em background',
+        data: {
+          limit_per_channel: limit_per_channel,
+          channels_count: listenerService.monitoredChannels.size
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao iniciar busca de mensagens históricas: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao iniciar busca de mensagens históricas',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Limpar sessão atual (forçar nova conexão)
+   * POST /api/telegram-collector/sessions/clear-current
+   */
+  async clearCurrentSession(req, res) {
+    try {
+      logger.info('🗑️ Limpando sessão atual do Telegram...');
+      
+      // Parar listener primeiro se estiver rodando
+      try {
+        await collectorService.stop();
+        logger.info('✅ Listener parado antes de limpar sessão');
+      } catch (stopError) {
+        logger.warn(`⚠️ Erro ao parar listener: ${stopError.message}`);
+      }
+      
+      // Limpar sessão atual
+      const result = await telegramClient.clearSession();
+      
+      if (result) {
+        logger.info(`✅ Sessão atual limpa com sucesso`);
+        
+        res.json({
+          success: true,
+          message: 'Sessão limpa com sucesso. Reinicie o listener para criar nova conexão.',
+        });
+      } else {
+        throw new Error('Falha ao limpar sessão');
+      }
+    } catch (error) {
+      logger.error(`Erro ao limpar sessão atual: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao limpar sessão atual',
+        error: error.message
+      });
+    }
+  }
+
+  /**
    * Limpar sessões do Telegram
    * DELETE /api/telegram-collector/sessions
    */
@@ -355,6 +473,96 @@ class TelegramCollectorController {
       res.status(500).json({
         success: false,
         message: 'Erro ao limpar sessões',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Testar captura manual de mensagem
+   * POST /api/telegram-collector/test-capture
+   */
+  async testCapture(req, res) {
+    try {
+      const { text, channel_username } = req.body;
+
+      if (!text) {
+        return res.status(400).json({
+          success: false,
+          message: 'Texto é obrigatório'
+        });
+      }
+
+      logger.info(`🧪 Testando captura manual de cupom...`);
+      logger.info(`   Canal: @${channel_username || 'teste'}`);
+      logger.info(`   Texto: ${text.substring(0, 100)}...`);
+
+      // Importar extrator
+      const couponExtractor = (await import('../services/telegramCollector/couponExtractor.js')).default;
+      
+      // Testar extração
+      const couponData = couponExtractor.extractCouponInfo(
+        text,
+        Date.now(),
+        channel_username || 'teste'
+      );
+
+      if (!couponData) {
+        return res.json({
+          success: false,
+          message: 'Nenhum cupom detectado no texto',
+          has_keywords: couponExtractor.hasCouponKeywords(text)
+        });
+      }
+
+      logger.info(`✅ Cupom detectado: ${couponData.code}`);
+
+      res.json({
+        success: true,
+        message: 'Cupom detectado com sucesso',
+        data: couponData
+      });
+    } catch (error) {
+      logger.error(`Erro ao testar captura: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao testar captura',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Verificar canais monitorados
+   * GET /api/telegram-collector/listener/channels
+   */
+  async getMonitoredChannels(req, res) {
+    try {
+      const listenerService = (await import('../services/telegramCollector/listenerService.js')).default;
+      
+      const channels = Array.from(listenerService.monitoredChannels.values()).map(ch => ({
+        id: ch.id,
+        name: ch.name,
+        username: ch.username,
+        channel_id: ch.channel_id,
+        is_active: ch.is_active
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          channels: channels,
+          count: channels.length,
+          is_running: listenerService.isRunning,
+          events_received: listenerService.eventCount || 0,
+          messages_received: listenerService.messageCount || 0
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao obter canais monitorados: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao obter canais monitorados',
         error: error.message
       });
     }

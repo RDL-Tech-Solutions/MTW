@@ -47,3 +47,5 @@ COMMENT ON COLUMN bot_config.telegram_parse_mode IS 'Modo de parsing do Telegram
 -- FIM DA MIGRATION
 -- =====================================================
 SELECT 'Migration 026_update_telegram_parse_mode_to_html executada com sucesso!' as status;
+
+

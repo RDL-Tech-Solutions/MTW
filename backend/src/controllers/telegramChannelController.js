@@ -1,6 +1,7 @@
 import TelegramChannel from '../models/TelegramChannel.js';
 import Coupon from '../models/Coupon.js';
 import logger from '../config/logger.js';
+import couponAnalyzer from '../ai/couponAnalyzer.js';
 
 class TelegramChannelController {
   /**
@@ -16,9 +17,28 @@ class TelegramChannelController {
         search
       });
 
+      // Adicionar informações sobre IA
+      const aiEnabled = await couponAnalyzer.isEnabled();
+      
+      // Contar cupons extraídos via IA
+      let aiCouponsCount = 0;
+      try {
+        const result = await Coupon.findAll({
+          capture_source: 'telegram_ai',
+          limit: 1000
+        });
+        aiCouponsCount = result?.coupons?.length || result?.total || 0;
+      } catch (error) {
+        logger.warn(`Erro ao contar cupons de IA: ${error.message}`);
+      }
+
       res.json({
         success: true,
-        data: channels
+        data: channels,
+        ai: {
+          enabled: aiEnabled,
+          coupons_extracted: aiCouponsCount
+        }
       });
     } catch (error) {
       logger.error(`Erro ao listar canais Telegram: ${error.message}`);
@@ -308,6 +328,63 @@ class TelegramChannelController {
       res.status(500).json({
         success: false,
         message: 'Erro ao listar cupons',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Obter status do módulo de IA
+   * GET /api/telegram-channels/ai/status
+   */
+  async getAiStatus(req, res) {
+    try {
+      const aiEnabled = await couponAnalyzer.isEnabled();
+      
+      // Estatísticas de cupons extraídos via IA
+      let stats = {
+        total_ai_coupons: 0,
+        total_traditional_coupons: 0,
+        ai_success_rate: 0
+      };
+
+      try {
+        // Contar cupons extraídos via IA
+        const aiResult = await Coupon.findAll({
+          capture_source: 'telegram_ai',
+          limit: 10000
+        });
+        stats.total_ai_coupons = aiResult?.coupons?.length || aiResult?.total || 0;
+
+        // Contar cupons extraídos via método tradicional
+        const traditionalResult = await Coupon.findAll({
+          origem: 'telegram',
+          capture_source: 'telegram',
+          limit: 10000
+        });
+        stats.total_traditional_coupons = traditionalResult?.coupons?.length || traditionalResult?.total || 0;
+
+        // Calcular taxa de sucesso (se houver cupons)
+        const total = stats.total_ai_coupons + stats.total_traditional_coupons;
+        if (total > 0) {
+          stats.ai_success_rate = (stats.total_ai_coupons / total) * 100;
+        }
+      } catch (error) {
+        logger.warn(`Erro ao calcular estatísticas de IA: ${error.message}`);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          enabled: aiEnabled,
+          stats: stats
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao obter status da IA: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao obter status da IA',
         error: error.message
       });
     }

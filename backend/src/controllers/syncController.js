@@ -8,6 +8,12 @@ import aliExpressSync from '../services/autoSync/aliExpressSync.js';
 import publishService from '../services/autoSync/publishService.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
+// Módulos de IA
+import productAnalyzer from '../ai/productAnalyzer.js';
+import descriptionOptimizer from '../ai/descriptionOptimizer.js';
+import priceAnalyzer from '../ai/priceAnalyzer.js';
+import keywordOptimizer from '../ai/keywordOptimizer.js';
+import intelligentFilter from '../ai/intelligentFilter.js';
 
 class SyncController {
   /**
@@ -418,6 +424,154 @@ class SyncController {
     }
 
     return results;
+  }
+
+  // ============================================
+  // Endpoints de IA
+  // ============================================
+
+  /**
+   * POST /api/sync/ai/analyze-product
+   * Analisar produto usando IA
+   */
+  static async analyzeProduct(req, res, next) {
+    try {
+      const { product } = req.body;
+
+      if (!product) {
+        return res.status(400).json(errorResponse('Produto é obrigatório'));
+      }
+
+      const analysis = await productAnalyzer.analyzeProduct(product);
+
+      res.json(successResponse(analysis, 'Análise concluída com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/sync/ai/optimize-description
+   * Otimizar descrição de produto usando IA
+   */
+  static async optimizeDescription(req, res, next) {
+    try {
+      const { product, current_description } = req.body;
+
+      if (!product) {
+        return res.status(400).json(errorResponse('Produto é obrigatório'));
+      }
+
+      const optimized = await descriptionOptimizer.optimizeDescription(
+        product,
+        current_description || ''
+      );
+
+      res.json(successResponse({ description: optimized }, 'Descrição otimizada com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/sync/ai/analyze-price
+   * Analisar preço de produto usando IA
+   */
+  static async analyzePrice(req, res, next) {
+    try {
+      const { product, similar_products } = req.body;
+
+      if (!product) {
+        return res.status(400).json(errorResponse('Produto é obrigatório'));
+      }
+
+      const analysis = await priceAnalyzer.analyzePrice(
+        product,
+        similar_products || []
+      );
+
+      res.json(successResponse(analysis, 'Análise de preço concluída'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/sync/ai/optimize-keywords
+   * Otimizar keywords usando IA
+   */
+  static async optimizeKeywords(req, res, next) {
+    try {
+      const { current_keywords, product_name, category } = req.body;
+
+      if (!product_name) {
+        return res.status(400).json(errorResponse('Nome do produto é obrigatório'));
+      }
+
+      const optimized = await keywordOptimizer.optimizeKeywords(
+        current_keywords || '',
+        product_name,
+        category || ''
+      );
+
+      res.json(successResponse(optimized, 'Keywords otimizadas com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/sync/ai/filter-products
+   * Filtrar produtos usando IA
+   */
+  static async filterProducts(req, res, next) {
+    try {
+      const { products, config } = req.body;
+
+      if (!products || !Array.isArray(products)) {
+        return res.status(400).json(errorResponse('Array de produtos é obrigatório'));
+      }
+
+      const filterConfig = {
+        minQualityScore: config?.min_quality_score || 0.6,
+        minRelevanceScore: config?.min_relevance_score || 0.5,
+        minPriceScore: config?.min_price_score || 0.5,
+        requireGoodDeal: config?.require_good_deal || false,
+        useAI: config?.use_ai !== false, // Default true
+        min_discount_percentage: config?.min_discount_percentage || 10,
+        ...config
+      };
+
+      const results = await intelligentFilter.filterProducts(products, filterConfig);
+
+      res.json(successResponse(results, 'Filtragem concluída'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/sync/ai/batch-analyze
+   * Analisar múltiplos produtos em lote
+   */
+  static async batchAnalyze(req, res, next) {
+    try {
+      const { products } = req.body;
+
+      if (!products || !Array.isArray(products)) {
+        return res.status(400).json(errorResponse('Array de produtos é obrigatório'));
+      }
+
+      if (products.length > 50) {
+        return res.status(400).json(errorResponse('Máximo de 50 produtos por lote'));
+      }
+
+      const analyses = await productAnalyzer.analyzeBatch(products);
+
+      res.json(successResponse(analyses, 'Análises concluídas'));
+    } catch (error) {
+      next(error);
+    }
   }
 }
 

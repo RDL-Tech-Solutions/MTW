@@ -27,6 +27,11 @@ class TelegramClientService {
     this.isCheckingAuth = false; // Lock para evitar verificações simultâneas
     this.lastAuthCheck = null; // Cache do último resultado
     this.lastAuthCheckTime = 0; // Timestamp do último check
+    this.isConnecting = false; // Lock para evitar múltiplas conexões simultâneas
+    this.connectionPromise = null; // Promise da conexão atual
+    this.reconnectErrors = 0; // Contador de erros de reconexão
+    this.maxReconnectErrors = 10; // Máximo de erros antes de limpar sessão
+    this.lastSessionSaveTime = 0; // Throttling para salvar sessão
   }
 
   /**
@@ -96,29 +101,55 @@ class TelegramClientService {
 
     // Carregar sessão - se houver problema de conexão, pode ser útil limpar a sessão
     // para forçar o gramjs a escolher um novo data center
-    const session = this.loadSession();
+    let session = this.loadSession();
+    
+    // Se muitos erros de reconexão, limpar sessão para forçar novo data center
+    if (this.reconnectErrors >= this.maxReconnectErrors) {
+      logger.warn(`⚠️ Muitos erros de reconexão (${this.reconnectErrors}). Limpando sessão para forçar novo data center...`);
+      if (this.sessionPath && fs.existsSync(this.sessionPath)) {
+        try {
+          fs.unlinkSync(this.sessionPath);
+          logger.info(`✅ Sessão antiga removida`);
+          // Criar nova sessão vazia
+          session = new StringSession('');
+          this.reconnectErrors = 0; // Reset contador
+        } catch (deleteError) {
+          logger.warn(`⚠️ Erro ao remover sessão: ${deleteError.message}`);
+        }
+      }
+    }
     
     // Se a sessão existir mas estiver causando problemas, podemos limpar
-    // Por enquanto, vamos usar a sessão existente
     if (session && session.dcId) {
       logger.info(`📡 Sessão existente encontrada com DC: ${session.dcId}`);
-      logger.info(`   Se houver problemas de conexão, tente limpar a sessão para forçar nova escolha de DC`);
+      // Verificar se o DC está usando porta 80 (problemático)
+      if (session.dcId === 1) {
+        logger.warn(`⚠️ Sessão usando DC1 (Europa) - pode tentar usar porta 80`);
+        logger.warn(`   Se houver problemas, limpe a sessão para forçar novo data center`);
+      }
     }
     
     // Configurações do cliente
+    // IMPORTANTE: Desabilitar autoReconnect para evitar loops infinitos
+    // O listenerService vai gerenciar reconexões manualmente
     const clientOptions = {
-      connectionRetries: 3, // Reduzido para evitar demoras
-      retryDelay: 1000,
-      autoReconnect: true, // Habilitar auto-reconnect para listener manter conexão
+      connectionRetries: 3, // Reduzido para evitar loops
+      retryDelay: 3000, // 3 segundos entre tentativas
+      autoReconnect: false, // DESABILITADO - vamos gerenciar manualmente no listener
       // Configurações adicionais para melhor estabilidade
       useWSS: false, // Usar TCP ao invés de WebSocket
       testServers: false, // Usar servidores de produção (não test servers)
-      // Timeout para operações individuais
-      timeout: 30000, // 30 segundos
+      // Timeout para operações individuais (aumentado para evitar timeouts prematuros)
+      timeout: 60000, // 60 segundos (aumentado de 30s)
+      // Timeout para o loop de atualizações (crítico para evitar TIMEOUT errors)
+      receiveTimeout: 300000, // 5 minutos para receber atualizações
       // Reduzir retries para evitar demoras
-      requestRetries: 1,
+      requestRetries: 2,
       // Não desconectar automaticamente após operações
       noUpdates: false, // Receber atualizações
+      // Configurações de reconexão do loop de atualizações
+      updateRetries: 5, // Máximo de 5 tentativas antes de reconectar
+      updateRetryDelay: 5000, // 5 segundos entre tentativas de atualização
     };
 
     // Tentar forçar data center 2 (Brasil/EUA) se disponível na sessão
@@ -139,6 +170,7 @@ class TelegramClientService {
       logger.info(`   💡 Solução: Verificar se porta 80 está bloqueada e permitir 443 (HTTPS)`);
     }
 
+    // Usar sessão (pode ser nova se foi limpa)
     this.client = new TelegramClient(session, parseInt(this.config.api_id), this.config.api_hash, clientOptions);
     
     // Log do servidor que será usado (se disponível)
@@ -152,15 +184,12 @@ class TelegramClientService {
     this.isMigrating = false;
     this.migrationPromise = null;
 
-    // Salvar sessão quando mudar
-    this.client.addEventHandler(async (update) => {
-      if (this.client.session && this.client.session.save) {
-        const sessionString = this.client.session.save();
-        if (sessionString) {
-          this.saveSession(sessionString);
-        }
-      }
-    });
+    // IMPORTANTE: Não adicionar handlers aqui que possam causar loops
+    // Os handlers devem ser adicionados apenas no listenerService
+    // para evitar múltiplos handlers processando os mesmos eventos
+    // 
+    // O salvamento de sessão será feito apenas quando necessário (após autenticação bem-sucedida)
+    // e não a cada evento para evitar loops
 
     return this.client;
   }
@@ -169,7 +198,53 @@ class TelegramClientService {
    * Conectar e autenticar
    */
   async connect() {
+    // Prevenir múltiplas conexões simultâneas
+    if (this.isConnecting) {
+      logger.debug(`⏳ Conexão já em andamento, aguardando...`);
+      if (this.connectionPromise) {
+        return await this.connectionPromise;
+      }
+    }
+
+    // Se já está conectado, retornar
+    if (this.client && (this.client.connected || this.client._connected)) {
+      logger.debug(`✅ Cliente já está conectado`);
+      return true;
+    }
+
+    this.isConnecting = true;
+    this.connectionPromise = this._doConnect();
+    
     try {
+      const result = await this.connectionPromise;
+      return result;
+    } finally {
+      this.isConnecting = false;
+      this.connectionPromise = null;
+    }
+  }
+
+  /**
+   * Método interno para realizar a conexão
+   */
+  async _doConnect() {
+    try {
+      // Se já existe cliente, desconectar primeiro para evitar múltiplas instâncias
+      if (this.client) {
+        try {
+          // Verificar se está realmente desconectado
+          if (this.client.connected || this.client._connected) {
+            logger.info(`🔄 Desconectando cliente existente antes de reconectar...`);
+            await this.client.disconnect();
+            // Aguardar um pouco para garantir desconexão
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (disconnectError) {
+          logger.warn(`⚠️ Erro ao desconectar cliente existente: ${disconnectError.message}`);
+          // Continuar mesmo se falhar
+        }
+      }
+
       if (!this.client) {
         this.createClient();
       }
@@ -212,9 +287,27 @@ class TelegramClientService {
         // Não lançar erro - deixar continuar
       }
 
+      // Reset contador de erros se conectar com sucesso
+      this.reconnectErrors = 0;
+      
       return true;
     } catch (error) {
       logger.error(`Erro ao conectar: ${error.message}`);
+      
+      // Incrementar contador de erros
+      this.reconnectErrors++;
+      
+      // Se muitos erros consecutivos, limpar sessão
+      if (this.reconnectErrors >= this.maxReconnectErrors) {
+        logger.error(`❌ Muitos erros de conexão (${this.reconnectErrors}). Limpando sessão para forçar novo data center...`);
+        await this.clearSession();
+        this.reconnectErrors = 0;
+      }
+      
+      // Limpar referência do cliente se falhar
+      if (this.client && !this.client.connected && !this.client._connected) {
+        this.client = null;
+      }
       throw error;
     }
   }
@@ -243,11 +336,36 @@ class TelegramClientService {
       if (this.client) {
         // Marcar listener como inativo antes de desconectar
         this.isListenerActive = false;
-        await this.client.disconnect();
-        logger.info('✅ Cliente Telegram desconectado');
+        
+        // Verificar se está realmente conectado antes de desconectar
+        const isConnected = this.client.connected || this.client._connected;
+        if (isConnected) {
+          logger.info(`🔌 Desconectando cliente Telegram...`);
+          try {
+            await this.client.disconnect();
+            logger.info('✅ Cliente Telegram desconectado');
+          } catch (disconnectError) {
+            logger.warn(`⚠️ Erro ao desconectar: ${disconnectError.message}`);
+            // Forçar limpeza mesmo se falhar
+          }
+        } else {
+          logger.debug(`ℹ️ Cliente já estava desconectado`);
+        }
       }
+      
+      // Limpar referência do cliente
+      this.client = null;
+      this.isConnecting = false;
+      this.connectionPromise = null;
+      
+      return true;
     } catch (error) {
       logger.error(`Erro ao desconectar: ${error.message}`);
+      // Limpar referência mesmo se falhar
+      this.client = null;
+      this.isConnecting = false;
+      this.connectionPromise = null;
+      return false;
     }
   }
 
@@ -1053,8 +1171,19 @@ class TelegramClientService {
    * Obter cliente (para uso em outros serviços)
    */
   getClient() {
+    // Verificar se cliente está realmente conectado antes de retornar
+    if (this.client && (this.client.connected || this.client._connected)) {
+      return this.client;
+    }
+    // Se não está conectado, retornar null para evitar uso de cliente desconectado
+    // Isso evita loops infinitos de reconexão
+    if (this.client && !this.client.connected && !this.client._connected) {
+      logger.debug(`⚠️ Cliente existe mas não está conectado, retornando null`);
+      return null;
+    }
     if (!this.client) {
-      throw new Error('Cliente não inicializado. Chame connect() primeiro.');
+      logger.debug(`⚠️ Cliente não inicializado`);
+      return null;
     }
     return this.client;
   }
@@ -1066,6 +1195,40 @@ class TelegramClientService {
     this.lastAuthCheck = null;
     this.lastAuthCheckTime = 0;
     logger.debug('Cache de autenticação limpo');
+  }
+
+  /**
+   * Limpar sessão atual (forçar nova conexão)
+   */
+  async clearSession() {
+    try {
+      logger.info(`🗑️ Limpando sessão atual...`);
+      
+      // Desconectar cliente se existir
+      if (this.client) {
+        try {
+          await this.disconnect();
+        } catch (disconnectError) {
+          logger.warn(`⚠️ Erro ao desconectar antes de limpar sessão: ${disconnectError.message}`);
+        }
+      }
+      
+      // Limpar arquivo de sessão
+      if (this.sessionPath && fs.existsSync(this.sessionPath)) {
+        fs.unlinkSync(this.sessionPath);
+        logger.info(`✅ Arquivo de sessão removido: ${this.sessionPath}`);
+      }
+      
+      // Limpar referências
+      this.client = null;
+      this.reconnectErrors = 0;
+      
+      logger.info(`✅ Sessão limpa. Nova conexão usará novo data center.`);
+      return true;
+    } catch (error) {
+      logger.error(`Erro ao limpar sessão: ${error.message}`);
+      return false;
+    }
   }
 
   /**

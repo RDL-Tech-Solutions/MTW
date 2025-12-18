@@ -9,6 +9,10 @@ import aliExpressCouponCapture from './aliExpressCouponCapture.js';
 import gatryCouponCapture from './gatryCouponCapture.js';
 import couponNotificationService from './couponNotificationService.js';
 import CouponValidator from '../../utils/couponValidator.js';
+// Módulos de IA
+import shopeeAnalyzer from '../../ai/shopeeAnalyzer.js';
+import descriptionOptimizer from '../../ai/descriptionOptimizer.js';
+import couponIntelligentFilter from '../../ai/couponIntelligentFilter.js';
 
 class CouponCaptureService {
   /**
@@ -115,13 +119,67 @@ class CouponCaptureService {
       const validCoupons = CouponValidator.filterValidCoupons(coupons);
       logger.info(`✅ ${platform}: ${validCoupons.length} cupons válidos após filtragem (${coupons.length - validCoupons.length} inválidos removidos)`);
 
+      // Aplicar filtragem inteligente com IA (se habilitada)
+      let filteredCoupons = validCoupons;
+      const settings = await CouponSettings.get();
+      if (settings.use_ai_filtering) {
+        try {
+          logger.info(`🤖 Aplicando filtragem inteligente com IA...`);
+          const filterResult = await couponIntelligentFilter.filterCoupons(
+            validCoupons,
+            {
+              minQualityScore: settings.ai_min_quality_score || 0.6,
+              minRelevanceScore: settings.ai_min_relevance_score || 0.5,
+              minPriceScore: settings.ai_min_price_score || 0.5,
+              requireGoodDeal: settings.ai_require_good_deal || false,
+              useAI: true,
+              platform: platform,
+              min_discount_percentage: settings.min_discount_percentage || 10
+            }
+          );
+
+          // Mapear resultados de volta para cupons
+          const approvedCodes = new Set(filterResult.approved.map(r => r.coupon.code));
+          filteredCoupons = validCoupons.filter(c => approvedCodes.has(c.code));
+          
+          logger.info(`🤖 IA: ${filterResult.approved.length} aprovados, ${filterResult.rejected.length} rejeitados, ${filterResult.needsReview.length} precisam revisão`);
+        } catch (aiError) {
+          logger.warn(`⚠️ Erro na filtragem IA, usando filtragem tradicional: ${aiError.message}`);
+          // Continuar com filtragem tradicional
+        }
+      }
+
       // Processar e salvar cupons
       let created = 0;
       let errors = 0;
+      let optimized = 0;
 
-      for (const coupon of validCoupons) {
+      for (const coupon of filteredCoupons) {
         try {
-          const saved = await this.saveCoupon(coupon);
+          // Otimizar descrição com IA (se habilitada)
+          let finalCoupon = { ...coupon };
+          if (settings.use_ai_optimization && platform === 'shopee') {
+            try {
+              const optimizedDescription = await descriptionOptimizer.optimizeDescription(
+                {
+                  name: coupon.title || coupon.code,
+                  current_price: coupon.min_purchase || '0',
+                  discount_percentage: coupon.discount_type === 'percentage' ? coupon.discount_value : 0,
+                  platform: 'shopee',
+                  category: coupon.category_id
+                },
+                coupon.description || ''
+              );
+              if (optimizedDescription && optimizedDescription.length > 0) {
+                finalCoupon.description = optimizedDescription;
+                optimized++;
+              }
+            } catch (optError) {
+              logger.warn(`⚠️ Erro ao otimizar descrição: ${optError.message}`);
+            }
+          }
+
+          const saved = await this.saveCoupon(finalCoupon);
           if (saved.isNew) {
             created++;
             // Enviar notificação apenas se o cupom não estiver pendente de aprovação
@@ -142,15 +200,21 @@ class CouponCaptureService {
         coupons_found: coupons.length,
         coupons_created: created,
         errors,
-        duration_ms: duration
+        duration_ms: duration,
+        ai_optimized: optimized || 0,
+        ai_filtered: settings.use_ai_filtering ? (validCoupons.length - filteredCoupons.length) : 0
       });
 
-      logger.info(`✅ ${platform}: ${created} novos cupons salvos`);
+      logger.info(`✅ ${platform}: ${created} novos cupons salvos${optimized > 0 ? ` (${optimized} otimizados com IA)` : ''}${settings.use_ai_filtering ? ` (${validCoupons.length - filteredCoupons.length} filtrados pela IA)` : ''}`);
 
       return {
         found: coupons.length,
+        valid: validCoupons.length,
+        filtered: filteredCoupons.length,
         created,
-        errors
+        errors,
+        ai_optimized: optimized || 0,
+        ai_filtered: settings.use_ai_filtering ? (validCoupons.length - filteredCoupons.length) : 0
       };
 
     } catch (error) {

@@ -58,19 +58,70 @@ class TemplateRenderer {
       }
 
       logger.info(`✅ Template encontrado e ativo: ${template.id} - ${template.template_type} para ${template.platform}`);
+      logger.debug(`📋 Template original: ${template.template.substring(0, 200)}...`);
 
       // Substituir variáveis no template
       let message = template.template;
       
-      // Substituir todas as variáveis
+      // Primeiro, substituir todas as variáveis (mesmo as vazias)
       for (const [key, value] of Object.entries(variables)) {
         const regex = new RegExp(`\\{${key}\\}`, 'g');
         const replacement = value !== null && value !== undefined ? String(value) : '';
         message = message.replace(regex, replacement);
       }
 
-      // Converter formatação de negrito baseado na plataforma
-      // Para Telegram, usar HTML que é mais confiável e suporta tudo
+      // Agora, remover linhas que ficaram vazias após substituição
+      // Remover linhas que contêm apenas espaços, tags HTML vazias, ou que são completamente vazias
+      const lines = message.split('\n');
+      const cleanedLines = lines.map((line) => {
+        const trimmed = line.trim();
+        
+        // Se a linha está completamente vazia, remover
+        if (!trimmed) {
+          return null;
+        }
+        
+        // Se a linha contém apenas tags HTML vazias ou espaços, remover
+        if (trimmed.match(/^[\s<>\/]*$/)) {
+          return null;
+        }
+        
+        // Se a linha contém apenas tags HTML sem conteúdo (ex: <b></b>, <code></code>)
+        if (trimmed.match(/^<[^>]+><\/[^>]+>$/)) {
+          return null;
+        }
+        
+        // Remover conteúdo HTML para verificar se há texto real
+        const withoutHtml = trimmed.replace(/<[^>]+>/g, '').trim();
+        
+        // Se após remover HTML não há conteúdo, remover linha
+        if (!withoutHtml || withoutHtml.match(/^[\s\p{Emoji}:]*$/u)) {
+          return null;
+        }
+        
+        // Remover linhas que têm apenas label sem valor após substituição
+        // Exemplo: "📅 <b>VÁLIDO ATÉ:</b>" ou "📅 <b>VÁLIDO ATÉ:</b> " (sem valor)
+        // Padrão: emoji + tags HTML + texto + ":" + apenas espaços no final
+        if (trimmed.match(/^[\s\p{Emoji}<>\/]*<[^>]+>[^<]*<\/[^>]+>[\s:]*\s*$/u)) {
+          return null;
+        }
+        
+        // Verificar se a linha tem apenas label e dois pontos, sem valor real
+        // Exemplo: "📅 <b>VÁLIDO ATÉ:</b>" ou "<b>CÓDIGO:</b>" sem valor após
+        if (trimmed.match(/^[\s\p{Emoji}<>\/]*<[^>]+>[^<]*<\/[^>]+>[\s:]*$/u)) {
+          return null;
+        }
+        
+        return line;
+      }).filter(line => line !== null);
+      
+      message = cleanedLines.join('\n');
+
+      // Verificar se o template já está em HTML ou Markdown
+      const hasHtmlTags = /<[a-z][\s\S]*>/i.test(message);
+      const hasMarkdownBold = /\*\*[^*]+\*\*/.test(message);
+      
+      // Determinar parse_mode para Telegram
       let parseMode = 'HTML'; // Padrão HTML para melhor compatibilidade
       if (platform === 'telegram') {
         try {
@@ -79,7 +130,6 @@ class TemplateRenderer {
           const configuredMode = botConfig.telegram_parse_mode || 'HTML';
           
           // HTML é mais confiável e suporta tudo (negrito, riscado, itálico, etc)
-          // Se estiver configurado como Markdown/MarkdownV2, usar HTML
           if (configuredMode === 'Markdown' || configuredMode === 'MarkdownV2') {
             parseMode = 'HTML';
           } else {
@@ -90,10 +140,63 @@ class TemplateRenderer {
           parseMode = 'HTML';
         }
       }
-      message = this.convertBoldFormatting(message, platform, parseMode);
+      
+      // Se o template já está em HTML (salvo no painel admin), garantir que está correto
+      if (hasHtmlTags) {
+        logger.debug(`📋 Template já contém HTML, validando formatação`);
+        // Se o parse_mode é HTML, manter HTML mas garantir formatação correta
+        if (platform === 'telegram' && parseMode === 'HTML') {
+          // Para HTML do Telegram, apenas garantir que caracteres especiais no conteúdo estejam escapados
+          // Mas manter as tags HTML intactas
+          // O Telegram processa HTML automaticamente se parse_mode='HTML' for passado
+          // Não fazer escape excessivo que possa quebrar as tags
+          message = this.ensureValidHtml(message);
+        } else if (platform === 'telegram' && parseMode !== 'HTML') {
+          // Converter HTML para Markdown/MarkdownV2
+          message = this.convertHtmlToFormat(message, parseMode);
+        }
+      } else if (hasMarkdownBold) {
+        // Se tem Markdown, converter para o formato da plataforma
+        message = this.convertBoldFormatting(message, platform, parseMode);
+      }
 
-      // Remover linhas vazias extras
+      // Limpar linhas vazias extras (máximo 2 quebras de linha consecutivas)
       message = message.replace(/\n{3,}/g, '\n\n').trim();
+      
+      // Remover espaços em branco no início/fim de cada linha (mas manter estrutura)
+      message = message.split('\n').map(line => {
+        // Se a linha contém HTML, não remover espaços dentro das tags
+        if (line.includes('<')) {
+          // Remover espaços no início e fim, mas manter dentro das tags
+          return line.trim();
+        }
+        return line.trim();
+      }).join('\n');
+
+      // Verificar se a mensagem final está muito vazia ou mal formatada
+      // Se tiver muitas tags HTML sem conteúdo, usar template padrão
+      const htmlTagCount = (message.match(/<[^>]+>/g) || []).length;
+      const textContent = message.replace(/<[^>]+>/g, '').trim();
+      
+      // Se há muitas tags HTML mas pouco conteúdo, pode ser template mal formatado
+      if (htmlTagCount > 0 && textContent.length < 50 && htmlTagCount > textContent.length / 10) {
+        logger.warn(`⚠️ Template pode estar mal formatado (muitas tags HTML, pouco conteúdo). Usando template padrão.`);
+        const defaultMsg = this.getDefaultTemplate(templateType, variables, platform);
+        let parseMode = 'HTML';
+        if (platform === 'telegram') {
+          try {
+            const BotConfig = (await import('../../models/BotConfig.js')).default;
+            const botConfig = await BotConfig.get();
+            parseMode = botConfig.telegram_parse_mode || 'HTML';
+            if (parseMode === 'Markdown' || parseMode === 'MarkdownV2') {
+              parseMode = 'HTML';
+            }
+          } catch (error) {
+            parseMode = 'HTML';
+          }
+        }
+        return this.convertBoldFormatting(defaultMsg, platform, parseMode);
+      }
 
       logger.debug(`📝 Mensagem renderizada (${message.length} caracteres)`);
 
@@ -228,6 +331,9 @@ class TemplateRenderer {
 
     const platformName = this.getPlatformName(coupon.platform);
     
+    // Verificar se é cupom capturado do Telegram
+    const isTelegramCaptured = coupon.capture_source === 'telegram' || coupon.auto_captured === true;
+    
     // Compra mínima
     const minPurchase = coupon.min_purchase > 0
       ? `💳 **Compra mínima:** R$ ${coupon.min_purchase.toFixed(2)}\n`
@@ -238,24 +344,59 @@ class TemplateRenderer {
       ? `💰 **Limite de desconto:** R$ ${coupon.max_discount_value.toFixed(2)}\n`
       : '';
 
-    // Limite de usos
-    const usageLimit = coupon.max_uses
+    // Limite de usos (não incluir para cupons do Telegram)
+    const usageLimit = (!isTelegramCaptured && coupon.max_uses)
       ? `📊 **Limite de usos:** ${coupon.current_uses || 0} / ${coupon.max_uses}\n`
       : '';
 
-    // Aplicabilidade (todos os produtos ou produtos selecionados)
+    // Aplicabilidade (não incluir para cupons do Telegram)
     let applicability = '';
-    if (coupon.is_general) {
-      applicability = '✅ **Válido para todos os produtos**';
-    } else {
-      const productCount = coupon.applicable_products?.length || 0;
-      if (productCount > 0) {
-        applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
+    if (!isTelegramCaptured) {
+      if (coupon.is_general) {
+        applicability = '✅ **Válido para todos os produtos**';
       } else {
-        applicability = '📦 **Em produtos selecionados**';
+        const productCount = coupon.applicable_products?.length || 0;
+        if (productCount > 0) {
+          applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
+        } else {
+          applicability = '📦 **Em produtos selecionados**';
+        }
       }
     }
 
+    // Para cupons capturados do Telegram: NÃO incluir descrição e link de afiliado
+    // Incluir: plataforma, código, desconto, compra mínima, limite desconto, aviso de expiração
+    if (isTelegramCaptured) {
+      // Se não tem data de validade ou é muito genérica, usar aviso padrão
+      let validUntilText = '⚠️ Sujeito à expiração';
+      if (coupon.valid_until) {
+        try {
+          const validDate = new Date(coupon.valid_until);
+          if (!isNaN(validDate.getTime()) && validDate > new Date()) {
+            // Data válida no futuro, formatar
+            validUntilText = this.formatDate(coupon.valid_until);
+          }
+        } catch (error) {
+          // Manter aviso padrão se erro ao parsear data
+        }
+      }
+
+      return {
+        platform_name: platformName,
+        coupon_code: coupon.code || 'N/A',
+        discount_value: discountText,
+        valid_until: validUntilText,
+        min_purchase: minPurchase,
+        max_discount: maxDiscount,
+        usage_limit: '', // NÃO incluir limite de usos
+        applicability: '', // NÃO incluir aplicabilidade
+        coupon_title: '', // NÃO incluir título
+        coupon_description: '', // NÃO incluir descrição
+        affiliate_link: '' // NÃO incluir link de afiliado
+      };
+    }
+
+    // Para cupons normais: incluir tudo
     return {
       platform_name: platformName,
       coupon_code: coupon.code || 'N/A',
@@ -409,6 +550,79 @@ class TemplateRenderer {
       
       message = message.replace(placeholder, restoredCode);
     });
+    
+    return message;
+  }
+
+  /**
+   * Garantir que HTML está válido para Telegram
+   * Escapa apenas caracteres especiais no conteúdo, mantendo tags HTML intactas
+   * @param {string} message - Mensagem com HTML
+   * @returns {string}
+   */
+  ensureValidHtml(message) {
+    if (!message) return '';
+    
+    // Para HTML do Telegram, precisamos escapar apenas &, <, > no conteúdo
+    // Mas manter as tags HTML intactas
+    // Estratégia: proteger tags HTML, escapar conteúdo, restaurar tags
+    
+    const tagPlaceholders = [];
+    let placeholderIndex = 0;
+    
+    // Proteger todas as tags HTML (abertas e fechadas)
+    let protectedMessage = message.replace(/<[^>]+>/g, (match) => {
+      const placeholder = `__HTML_TAG_${placeholderIndex}__`;
+      tagPlaceholders.push({ placeholder, tag: match });
+      placeholderIndex++;
+      return placeholder;
+    });
+    
+    // Escapar caracteres especiais no conteúdo (fora das tags)
+    protectedMessage = protectedMessage
+      .replace(/&(?!(amp|lt|gt|quot|#39|#x[0-9a-fA-F]+);)/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    // Restaurar tags HTML
+    tagPlaceholders.forEach(({ placeholder, tag }) => {
+      protectedMessage = protectedMessage.replace(placeholder, tag);
+    });
+    
+    return protectedMessage;
+  }
+
+  /**
+   * Converter HTML para formato específico (Markdown/MarkdownV2)
+   * @param {string} message - Mensagem com HTML
+   * @param {string} targetFormat - Formato alvo (Markdown, MarkdownV2)
+   * @returns {string}
+   */
+  convertHtmlToFormat(message, targetFormat) {
+    if (!message) return '';
+    
+    // Converter <b>texto</b> para **texto** ou *texto*
+    if (targetFormat === 'MarkdownV2' || targetFormat === 'Markdown') {
+      message = message.replace(/<b>(.*?)<\/b>/gi, '*$1*');
+      message = message.replace(/<strong>(.*?)<\/strong>/gi, '*$1*');
+      message = message.replace(/<i>(.*?)<\/i>/gi, '_$1_');
+      message = message.replace(/<em>(.*?)<\/em>/gi, '_$1_');
+      message = message.replace(/<s>(.*?)<\/s>/gi, '~$1~');
+      message = message.replace(/<strike>(.*?)<\/strike>/gi, '~$1~');
+      message = message.replace(/<code>(.*?)<\/code>/gi, '`$1`');
+      message = message.replace(/<pre>(.*?)<\/pre>/gi, '```$1```');
+    }
+    
+    // Remover outras tags HTML não suportadas
+    message = message.replace(/<[^>]+>/g, '');
+    
+    // Decodificar entidades HTML
+    message = message
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
     
     return message;
   }
@@ -586,7 +800,41 @@ class TemplateRenderer {
         return `🔥 **NOVA PROMOÇÃO AUTOMÁTICA**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **${variables.current_price || 'R$ 0,00'}**${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n${variables.coupon_section || ''}\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Aproveite antes que acabe!`;
       
       case 'new_coupon':
-        return `🎟️ **NOVO CUPOM DISPONÍVEL!**\n\n🏪 **Plataforma:** ${variables.platform_name || 'N/A'}\n💬 **Código:** \`${variables.coupon_code || 'N/A'}\`\n💰 **Desconto:** ${variables.discount_value || 'N/A'} OFF\n${variables.min_purchase || ''}${variables.applicability ? `\n${variables.applicability}\n` : ''}\n📝 **${variables.coupon_title || 'Cupom de Desconto'}**\n${variables.coupon_description || ''}\n📅 **Válido até:** ${variables.valid_until || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Use agora e economize!`;
+        // Se não tem descrição nem data de validade, é cupom capturado do Telegram
+        // Usar template simplificado apenas com: plataforma, código, compra mínima, limite desconto
+        // SEM link de afiliado
+        if (!variables.coupon_description && !variables.valid_until) {
+          // Template simplificado e limpo para cupons do Telegram (formato padronizado)
+        // Seguindo o formato especificado: 🎟️ CUPOM DISPONÍVEL
+        let message = `🎟️ **CUPOM DISPONÍVEL**\n\n`;
+        message += `**Código:** ${variables.coupon_code || 'N/A'}\n`;
+        message += `**Plataforma:** ${variables.platform_name || 'N/A'}\n`;
+        message += `**Desconto:** ${variables.discount_value || 'N/A'}\n`;
+        if (variables.min_purchase) {
+          // Remover formatação markdown da variável min_purchase (já vem formatada)
+          const minPurchaseText = variables.min_purchase.replace(/\*\*/g, '').replace(/💳\s*/g, '').replace(/Compra mínima:\s*/gi, '').trim();
+          if (minPurchaseText) {
+            message += `**Compra mínima:** ${minPurchaseText}\n`;
+          }
+        }
+        // Sempre incluir aviso de expiração (formato padronizado)
+        message += `\n⚠️ **Sujeito à expiração**\n`;
+        return message;
+        }
+        // Template completo para cupons normais
+        let fullMessage = `🎟️ **NOVO CUPOM DISPONÍVEL!**\n\n`;
+        fullMessage += `🏪 **Plataforma:** ${variables.platform_name || 'N/A'}\n`;
+        fullMessage += `💬 **Código:** \`${variables.coupon_code || 'N/A'}\`\n`;
+        fullMessage += `💰 **Desconto:** ${variables.discount_value || 'N/A'} OFF\n`;
+        if (variables.min_purchase) fullMessage += `${variables.min_purchase}`;
+        if (variables.max_discount) fullMessage += `${variables.max_discount}`;
+        if (variables.applicability) fullMessage += `\n${variables.applicability}\n`;
+        if (variables.coupon_title) fullMessage += `\n📝 **${variables.coupon_title}**\n`;
+        if (variables.coupon_description) fullMessage += `${variables.coupon_description}\n`;
+        if (variables.valid_until) fullMessage += `\n📅 **Válido até:** ${variables.valid_until}\n`;
+        if (variables.affiliate_link) fullMessage += `\n🔗 ${variables.affiliate_link}\n`;
+        fullMessage += `\n⚡ Use agora e economize!`;
+        return fullMessage;
       
       case 'expired_coupon':
         return `⚠️ **CUPOM EXPIROU**\n\n🏪 Plataforma: ${variables.platform_name || 'N/A'}\n💬 Código: \`${variables.coupon_code || 'N/A'}\`\n📅 Expirado em: ${variables.expired_date || 'N/A'}\n\n😔 Infelizmente este cupom não está mais disponível.\n🔔 Fique atento às próximas promoções!`;

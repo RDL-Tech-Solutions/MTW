@@ -43,6 +43,7 @@ router.get('/status', botController.checkStatus);
 // ============================================
 router.get('/templates', botTemplateController.list);
 router.get('/templates/variables/:template_type', botTemplateController.getVariables);
+router.post('/templates/generate', botTemplateController.generateWithAI);
 router.get('/templates/:id', botTemplateController.getById);
 router.post('/templates', botTemplateController.create);
 router.post('/templates/create-defaults', botTemplateController.createDefaults);

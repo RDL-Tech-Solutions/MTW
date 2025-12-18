@@ -169,6 +169,7 @@ class Coupon {
       search,
       origem,
       channel_origin,
+      capture_source,
       min_discount,
       max_discount,
       discount_type,
@@ -196,6 +197,7 @@ class Coupon {
     if (is_general !== undefined) query = query.eq('is_general', is_general);
     if (origem) query = query.eq('origem', origem);
     if (channel_origin) query = query.eq('channel_origin', channel_origin);
+    if (capture_source) query = query.eq('capture_source', capture_source);
 
     // Filtros de busca
     if (search) {

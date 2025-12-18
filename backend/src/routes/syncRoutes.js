@@ -22,4 +22,14 @@ router.get('/history', SyncController.getHistory);
 // GET /api/sync/stats - Estatísticas
 router.get('/stats', SyncController.getStats);
 
+// ============================================
+// Rotas de IA
+// ============================================
+router.post('/ai/analyze-product', SyncController.analyzeProduct);
+router.post('/ai/optimize-description', SyncController.optimizeDescription);
+router.post('/ai/analyze-price', SyncController.analyzePrice);
+router.post('/ai/optimize-keywords', SyncController.optimizeKeywords);
+router.post('/ai/filter-products', SyncController.filterProducts);
+router.post('/ai/batch-analyze', SyncController.batchAnalyze);
+
 export default router;

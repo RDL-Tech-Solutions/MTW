@@ -3,7 +3,7 @@ import {
   RefreshCw, Settings, TrendingUp, Clock, AlertCircle,
   CheckCircle, XCircle, Play, Pause, Eye, Download,
   Zap, ShoppingBag, Search, Filter, CheckSquare, Square,
-  FileDown, Trash2, CheckCircle2, Loader2
+  FileDown, Trash2, CheckCircle2, Loader2, Brain, Sparkles
 } from 'lucide-react';
 import api from '../services/api';
 import { Pagination } from '../components/ui/Pagination';
@@ -56,6 +56,13 @@ export default function CouponCapture() {
     totalPages: 1,
     total: 0
   });
+  
+  // Estados para funcionalidades Shopee
+  const [shopeeCategories, setShopeeCategories] = useState([]);
+  const [shopeeLoading, setShopeeLoading] = useState(false);
+  const [shopeeKeyword, setShopeeKeyword] = useState('');
+  const [shopeeResults, setShopeeResults] = useState(null);
+  const [shopeeAnalysis, setShopeeAnalysis] = useState(null);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -586,7 +593,7 @@ export default function CouponCapture() {
       <div className="bg-white rounded-lg shadow">
         <div className="border-b border-gray-200">
           <div className="flex gap-4 px-6">
-            {['overview', 'pending', 'coupons', 'logs', 'settings'].map((tab) => (
+            {['overview', 'pending', 'coupons', 'shopee', 'logs', 'settings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -598,6 +605,7 @@ export default function CouponCapture() {
                 {tab === 'overview' && 'Visão Geral'}
                 {tab === 'pending' && `Cupons Pendentes (${pendingPagination.total})`}
                 {tab === 'coupons' && 'Cupons Capturados'}
+                {tab === 'shopee' && '🛍️ Shopee'}
                 {tab === 'logs' && 'Logs de Sincronização'}
                 {tab === 'settings' && 'Configurações'}
               </button>
@@ -1126,6 +1134,348 @@ export default function CouponCapture() {
             </div>
           )}
 
+          {/* Shopee Tab */}
+          {activeTab === 'shopee' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">🛍️ Funcionalidades Avançadas Shopee</h3>
+                <p className="text-gray-600">Use a API completa da Shopee para capturar cupons e analisar produtos</p>
+              </div>
+
+              {/* Buscar Categorias */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3">📂 Categorias Disponíveis</h4>
+                <Button
+                  onClick={async () => {
+                    try {
+                      setShopeeLoading(true);
+                      const response = await api.get('/coupon-capture/shopee/categories');
+                      setShopeeCategories(response.data.data || []);
+                      alert(`✅ ${response.data.data?.length || 0} categorias encontradas!`);
+                    } catch (error) {
+                      console.error('Erro ao buscar categorias:', error);
+                      alert('Erro ao buscar categorias');
+                    } finally {
+                      setShopeeLoading(false);
+                    }
+                  }}
+                  disabled={shopeeLoading}
+                  className="mb-3"
+                >
+                  {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  Buscar Categorias
+                </Button>
+                {shopeeCategories.length > 0 && (
+                  <div className="mt-3 max-h-60 overflow-y-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {shopeeCategories.slice(0, 20).map((cat, idx) => (
+                        <button
+                          key={idx}
+                          onClick={async () => {
+                            try {
+                              setShopeeLoading(true);
+                              const response = await api.post(`/coupon-capture/shopee/category/${cat.category_id || cat.id}`);
+                              setShopeeResults(response.data.data);
+                              alert(`✅ ${response.data.data.found || 0} cupons encontrados na categoria!`);
+                            } catch (error) {
+                              console.error('Erro ao buscar cupons:', error);
+                              alert('Erro ao buscar cupons da categoria');
+                            } finally {
+                              setShopeeLoading(false);
+                            }
+                          }}
+                          className="p-2 text-sm border rounded hover:bg-gray-50 text-left"
+                        >
+                          {cat.category_name || cat.name || `Categoria ${cat.category_id || cat.id}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Buscar por Palavra-chave */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3">🔍 Buscar Cupons por Palavra-chave</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={shopeeKeyword}
+                    onChange={(e) => setShopeeKeyword(e.target.value)}
+                    placeholder="Ex: notebook, fone bluetooth, smartwatch..."
+                    className="flex-1 px-3 py-2 border rounded-md"
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!shopeeKeyword.trim()) {
+                        alert('Digite uma palavra-chave');
+                        return;
+                      }
+                      try {
+                        setShopeeLoading(true);
+                        const response = await api.post('/coupon-capture/shopee/keyword', { keyword: shopeeKeyword });
+                        setShopeeResults(response.data.data);
+                        alert(`✅ ${response.data.data.found || 0} cupons encontrados!`);
+                      } catch (error) {
+                        console.error('Erro ao buscar cupons:', error);
+                        alert('Erro ao buscar cupons');
+                      } finally {
+                        setShopeeLoading(false);
+                      }
+                    }}
+                    disabled={shopeeLoading || !shopeeKeyword.trim()}
+                  >
+                    {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                    Buscar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Verificar Cupom */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3">✅ Verificar Cupom</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="verify-code"
+                    placeholder="Digite o código do cupom..."
+                    className="flex-1 px-3 py-2 border rounded-md"
+                  />
+                  <Button
+                    onClick={async () => {
+                      const code = document.getElementById('verify-code').value;
+                      if (!code.trim()) {
+                        alert('Digite um código de cupom');
+                        return;
+                      }
+                      try {
+                        setShopeeLoading(true);
+                        const response = await api.post('/coupon-capture/shopee/verify', { code });
+                        alert(`Cupom: ${response.data.data.valid ? '✅ Válido' : '❌ Inválido'}\n${response.data.data.message}`);
+                      } catch (error) {
+                        console.error('Erro ao verificar cupom:', error);
+                        alert('Erro ao verificar cupom');
+                      } finally {
+                        setShopeeLoading(false);
+                      }
+                    }}
+                    disabled={shopeeLoading}
+                  >
+                    {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                    Verificar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Análise com IA */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Análise com IA
+                </h4>
+                <div className="space-y-3">
+                  <Button
+                    onClick={async () => {
+                      const code = prompt('Digite o código do cupom para análise:');
+                      if (!code) return;
+                      try {
+                        setShopeeLoading(true);
+                        const response = await api.post('/coupon-capture/shopee/analyze-coupon', {
+                          coupon: { code, title: 'Cupom Shopee', discount_value: 10, discount_type: 'percentage' }
+                        });
+                        setShopeeAnalysis(response.data.data);
+                        alert('✅ Análise concluída! Veja os resultados abaixo.');
+                      } catch (error) {
+                        console.error('Erro ao analisar cupom:', error);
+                        alert('Erro ao analisar cupom');
+                      } finally {
+                        setShopeeLoading(false);
+                      }
+                    }}
+                    disabled={shopeeLoading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Analisar Cupom com IA
+                  </Button>
+                  
+                  {shopeeResults && shopeeResults.coupons && shopeeResults.coupons.length > 0 && (
+                    <>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            setShopeeLoading(true);
+                            const response = await api.post('/coupon-capture/ai/batch-analyze', {
+                              coupons: shopeeResults.coupons.slice(0, 20),
+                              options: { platform: 'shopee' }
+                            });
+                            const updatedCoupons = shopeeResults.coupons.map((coupon, idx) => ({
+                              ...coupon,
+                              analysis: response.data.data[idx]?.analysis || null
+                            }));
+                            setShopeeResults({ ...shopeeResults, coupons: updatedCoupons });
+                            alert(`✅ ${response.data.data.length} cupons analisados!`);
+                          } catch (error) {
+                            console.error('Erro ao analisar em lote:', error);
+                            alert('Erro ao analisar cupons');
+                          } finally {
+                            setShopeeLoading(false);
+                          }
+                        }}
+                        disabled={shopeeLoading}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
+                        Analisar Todos os Cupons em Lote
+                      </Button>
+
+                      <Button
+                        onClick={async () => {
+                          if (!confirm(`Melhorar ${shopeeResults.coupons.length} cupons com IA? Isso otimizará títulos e descrições.`)) {
+                            return;
+                          }
+                          try {
+                            setShopeeLoading(true);
+                            const response = await api.post('/coupon-capture/ai/enhance-coupons', {
+                              coupons: shopeeResults.coupons.slice(0, 20)
+                            });
+                            setShopeeResults({ ...shopeeResults, coupons: response.data.data });
+                            alert(`✅ ${response.data.data.length} cupons melhorados!`);
+                          } catch (error) {
+                            console.error('Erro ao melhorar cupons:', error);
+                            alert('Erro ao melhorar cupons');
+                          } finally {
+                            setShopeeLoading(false);
+                          }
+                        }}
+                        disabled={shopeeLoading}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                        Melhorar Cupons com IA
+                      </Button>
+
+                      <Button
+                        onClick={async () => {
+                          try {
+                            setShopeeLoading(true);
+                            const response = await api.post('/coupon-capture/ai/generate-report', {
+                              coupons: shopeeResults.coupons
+                            });
+                            const report = response.data.data;
+                            alert(`📊 Relatório Gerado!\n\nTotal: ${report.total}\nAnalisados: ${report.analyzed}\nErros: ${report.errors}\n\nAlta Qualidade: ${report.stats.high_quality}\nMédia Qualidade: ${report.stats.medium_quality}\nBaixa Qualidade: ${report.stats.low_quality}\n\nRecomendados: ${report.stats.should_promote}\nNão Recomendados: ${report.stats.should_not_promote}`);
+                          } catch (error) {
+                            console.error('Erro ao gerar relatório:', error);
+                            alert('Erro ao gerar relatório');
+                          } finally {
+                            setShopeeLoading(false);
+                          }
+                        }}
+                        disabled={shopeeLoading}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <TrendingUp className="mr-2 h-4 w-4" />}
+                        Gerar Relatório de Análise
+                      </Button>
+                    </>
+                  )}
+                </div>
+                {shopeeAnalysis && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded">
+                    <h5 className="font-semibold mb-2">Resultado da Análise:</h5>
+                    <div className="text-sm space-y-1">
+                      <p>Qualidade: {(shopeeAnalysis.quality_score * 100).toFixed(0)}%</p>
+                      <p>Relevância: {(shopeeAnalysis.relevance_score * 100).toFixed(0)}%</p>
+                      <p>Valor: {(shopeeAnalysis.value_score * 100).toFixed(0)}%</p>
+                      <p>Promover: {shopeeAnalysis.should_promote ? '✅ Sim' : '❌ Não'}</p>
+                      {shopeeAnalysis.suggested_title && <p>Título sugerido: {shopeeAnalysis.suggested_title}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Resultados */}
+              {shopeeResults && shopeeResults.coupons && shopeeResults.coupons.length > 0 && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-bold text-gray-900 mb-3">
+                    📦 Resultados ({shopeeResults.found || 0} cupons encontrados)
+                  </h4>
+                  <div className="max-h-96 overflow-y-auto space-y-2">
+                    {shopeeResults.coupons.slice(0, 10).map((coupon, idx) => (
+                      <div key={idx} className={`p-3 border rounded ${coupon.analysis?.should_promote ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-semibold">{coupon.title || coupon.code}</p>
+                            <p className="text-sm text-gray-600">Código: <code className="bg-gray-200 px-1 rounded">{coupon.code}</code></p>
+                            <p className="text-sm text-green-600 font-semibold">
+                              Desconto: {coupon.discount_value}{coupon.discount_type === 'percentage' ? '%' : ' R$'}
+                            </p>
+                            {coupon.min_purchase && (
+                              <p className="text-xs text-gray-500">Compra mínima: R$ {coupon.min_purchase}</p>
+                            )}
+                            {coupon.analysis && (
+                              <div className="mt-2 text-xs space-y-1 p-2 bg-white rounded border">
+                                <div className="flex gap-4">
+                                  <span className="text-blue-600">
+                                    Qualidade: {(coupon.analysis.quality_score * 100).toFixed(0)}%
+                                  </span>
+                                  <span className="text-purple-600">
+                                    Relevância: {(coupon.analysis.relevance_score * 100).toFixed(0)}%
+                                  </span>
+                                  <span className="text-orange-600">
+                                    Valor: {(coupon.analysis.value_score * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                                {coupon.analysis.should_promote ? (
+                                  <p className="text-green-600 font-semibold">✅ Recomendado para promoção</p>
+                                ) : (
+                                  <p className="text-red-600">❌ Não recomendado</p>
+                                )}
+                                {coupon.analysis.suggested_title && (
+                                  <p className="text-gray-600 italic">💡 Título sugerido: {coupon.analysis.suggested_title}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-1 ml-2">
+                            <Button
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  setShopeeLoading(true);
+                                  const response = await api.post('/coupon-capture/shopee/analyze-coupon', { coupon });
+                                  const updatedCoupons = shopeeResults.coupons.map(c => 
+                                    c.code === coupon.code ? { ...c, analysis: response.data.data } : c
+                                  );
+                                  setShopeeResults({ ...shopeeResults, coupons: updatedCoupons });
+                                  alert(`Análise: ${response.data.data.should_promote ? '✅ Promover' : '❌ Não promover'}\nConfiança: ${(response.data.data.confidence * 100).toFixed(0)}%`);
+                                } catch (error) {
+                                  console.error('Erro:', error);
+                                  alert('Erro ao analisar cupom');
+                                } finally {
+                                  setShopeeLoading(false);
+                                }
+                              }}
+                              disabled={shopeeLoading}
+                              variant="outline"
+                              title="Analisar com IA"
+                            >
+                              <Brain className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Logs Tab */}
           {activeTab === 'logs' && (
             <div className="space-y-4">
@@ -1181,6 +1531,230 @@ export default function CouponCapture() {
             </div>
           )}
 
+          {/* Shopee Tab */}
+          {activeTab === 'shopee' && (
+            <div className="space-y-6 p-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">🛍️ Funcionalidades Avançadas Shopee</h3>
+                <p className="text-gray-600">Use a API completa da Shopee para capturar cupons e analisar produtos</p>
+              </div>
+
+              {/* Buscar Categorias */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3">📂 Categorias Disponíveis</h4>
+                <Button
+                  onClick={async () => {
+                    try {
+                      setShopeeLoading(true);
+                      const response = await api.get('/coupon-capture/shopee/categories');
+                      setShopeeCategories(response.data.data || []);
+                      alert(`✅ ${response.data.data?.length || 0} categorias encontradas!`);
+                    } catch (error) {
+                      console.error('Erro ao buscar categorias:', error);
+                      alert('Erro ao buscar categorias');
+                    } finally {
+                      setShopeeLoading(false);
+                    }
+                  }}
+                  disabled={shopeeLoading}
+                  className="mb-3"
+                >
+                  {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  Buscar Categorias
+                </Button>
+                {shopeeCategories.length > 0 && (
+                  <div className="mt-3 max-h-60 overflow-y-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {shopeeCategories.slice(0, 20).map((cat, idx) => (
+                        <button
+                          key={idx}
+                          onClick={async () => {
+                            try {
+                              setShopeeLoading(true);
+                              const response = await api.post(`/coupon-capture/shopee/category/${cat.category_id || cat.id}`);
+                              setShopeeResults(response.data.data);
+                              alert(`✅ ${response.data.data.found || 0} cupons encontrados na categoria!`);
+                            } catch (error) {
+                              console.error('Erro ao buscar cupons:', error);
+                              alert('Erro ao buscar cupons da categoria');
+                            } finally {
+                              setShopeeLoading(false);
+                            }
+                          }}
+                          className="p-2 text-sm border rounded hover:bg-gray-50 text-left"
+                        >
+                          {cat.category_name || cat.name || `Categoria ${cat.category_id || cat.id}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Buscar por Palavra-chave */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3">🔍 Buscar Cupons por Palavra-chave</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={shopeeKeyword}
+                    onChange={(e) => setShopeeKeyword(e.target.value)}
+                    placeholder="Ex: notebook, fone bluetooth, smartwatch..."
+                    className="flex-1 px-3 py-2 border rounded-md"
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!shopeeKeyword.trim()) {
+                        alert('Digite uma palavra-chave');
+                        return;
+                      }
+                      try {
+                        setShopeeLoading(true);
+                        const response = await api.post('/coupon-capture/shopee/keyword', { keyword: shopeeKeyword });
+                        setShopeeResults(response.data.data);
+                        alert(`✅ ${response.data.data.found || 0} cupons encontrados!`);
+                      } catch (error) {
+                        console.error('Erro ao buscar cupons:', error);
+                        alert('Erro ao buscar cupons');
+                      } finally {
+                        setShopeeLoading(false);
+                      }
+                    }}
+                    disabled={shopeeLoading || !shopeeKeyword.trim()}
+                  >
+                    {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                    Buscar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Verificar Cupom */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3">✅ Verificar Cupom</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="verify-code"
+                    placeholder="Digite o código do cupom..."
+                    className="flex-1 px-3 py-2 border rounded-md"
+                  />
+                  <Button
+                    onClick={async () => {
+                      const code = document.getElementById('verify-code').value;
+                      if (!code.trim()) {
+                        alert('Digite um código de cupom');
+                        return;
+                      }
+                      try {
+                        setShopeeLoading(true);
+                        const response = await api.post('/coupon-capture/shopee/verify', { code });
+                        alert(`Cupom: ${response.data.data.valid ? '✅ Válido' : '❌ Inválido'}\n${response.data.data.message}`);
+                      } catch (error) {
+                        console.error('Erro ao verificar cupom:', error);
+                        alert('Erro ao verificar cupom');
+                      } finally {
+                        setShopeeLoading(false);
+                      }
+                    }}
+                    disabled={shopeeLoading}
+                  >
+                    {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                    Verificar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Análise com IA */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Análise com IA
+                </h4>
+                <div className="space-y-3">
+                  <Button
+                    onClick={async () => {
+                      const code = prompt('Digite o código do cupom para análise:');
+                      if (!code) return;
+                      try {
+                        setShopeeLoading(true);
+                        const response = await api.post('/coupon-capture/shopee/analyze-coupon', {
+                          coupon: { code, title: 'Cupom Shopee', discount_value: 10, discount_type: 'percentage' }
+                        });
+                        setShopeeAnalysis(response.data.data);
+                        alert('✅ Análise concluída! Veja os resultados abaixo.');
+                      } catch (error) {
+                        console.error('Erro ao analisar cupom:', error);
+                        alert('Erro ao analisar cupom');
+                      } finally {
+                        setShopeeLoading(false);
+                      }
+                    }}
+                    disabled={shopeeLoading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {shopeeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Analisar Cupom com IA
+                  </Button>
+                </div>
+                {shopeeAnalysis && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded">
+                    <h5 className="font-semibold mb-2">Resultado da Análise:</h5>
+                    <div className="text-sm space-y-1">
+                      <p>Qualidade: {(shopeeAnalysis.quality_score * 100).toFixed(0)}%</p>
+                      <p>Relevância: {(shopeeAnalysis.relevance_score * 100).toFixed(0)}%</p>
+                      <p>Valor: {(shopeeAnalysis.value_score * 100).toFixed(0)}%</p>
+                      <p>Promover: {shopeeAnalysis.should_promote ? '✅ Sim' : '❌ Não'}</p>
+                      {shopeeAnalysis.suggested_title && <p>Título sugerido: {shopeeAnalysis.suggested_title}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Resultados */}
+              {shopeeResults && shopeeResults.coupons && shopeeResults.coupons.length > 0 && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-bold text-gray-900 mb-3">
+                    📦 Resultados ({shopeeResults.found || 0} cupons encontrados)
+                  </h4>
+                  <div className="max-h-96 overflow-y-auto space-y-2">
+                    {shopeeResults.coupons.slice(0, 10).map((coupon, idx) => (
+                      <div key={idx} className="p-3 border rounded bg-gray-50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-semibold">{coupon.title || coupon.code}</p>
+                            <p className="text-sm text-gray-600">Código: {coupon.code}</p>
+                            <p className="text-sm text-green-600">
+                              Desconto: {coupon.discount_value}{coupon.discount_type === 'percentage' ? '%' : ' R$'}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                setShopeeLoading(true);
+                                const response = await api.post('/coupon-capture/shopee/analyze-coupon', { coupon });
+                                alert(`Análise: ${response.data.data.should_promote ? '✅ Promover' : '❌ Não promover'}\nConfiança: ${(response.data.data.confidence * 100).toFixed(0)}%`);
+                              } catch (error) {
+                                console.error('Erro:', error);
+                              } finally {
+                                setShopeeLoading(false);
+                              }
+                            }}
+                            disabled={shopeeLoading}
+                            variant="outline"
+                          >
+                            <Brain className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Settings Tab */}
           {activeTab === 'settings' && settings && (
             <div className="space-y-6">
@@ -1218,6 +1792,9 @@ export default function CouponCapture() {
                         />
                         Ativar captura Shopee
                       </label>
+                      <p className="text-xs text-gray-600">
+                        Configure Partner ID e Partner Key em Configurações → Shopee
+                      </p>
                     </div>
                   </div>
 
@@ -1286,6 +1863,91 @@ export default function CouponCapture() {
                         Captura cupons do site gatry.com/cupons via web scraping
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                {/* Configurações de IA */}
+                <div className="border-t pt-4">
+                  <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    Inteligência Artificial
+                  </h4>
+                  <div className="space-y-4">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={settings.use_ai_filtering || false}
+                        onChange={(e) => handleUpdateSettings({ use_ai_filtering: e.target.checked })}
+                        className="mr-2"
+                      />
+                      Usar IA para filtrar cupons automaticamente
+                    </label>
+                    <p className="text-xs text-gray-600 ml-6">
+                      A IA analisará qualidade, relevância e valor antes de salvar cupons
+                    </p>
+
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={settings.use_ai_optimization || false}
+                        onChange={(e) => handleUpdateSettings({ use_ai_optimization: e.target.checked })}
+                        className="mr-2"
+                      />
+                      Usar IA para otimizar descrições de cupons
+                    </label>
+                    <p className="text-xs text-gray-600 ml-6">
+                      A IA gerará descrições otimizadas para melhor conversão
+                    </p>
+
+                    {settings.use_ai_filtering && (
+                      <div className="ml-6 space-y-2 p-3 bg-gray-50 rounded">
+                        <div>
+                          <label className="text-sm font-medium">Score Mínimo de Qualidade (0.0-1.0)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="1"
+                            value={settings.ai_min_quality_score || 0.6}
+                            onChange={(e) => handleUpdateSettings({ ai_min_quality_score: parseFloat(e.target.value) || 0.6 })}
+                            className="w-full px-2 py-1 border rounded mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Score Mínimo de Relevância (0.0-1.0)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="1"
+                            value={settings.ai_min_relevance_score || 0.5}
+                            onChange={(e) => handleUpdateSettings({ ai_min_relevance_score: parseFloat(e.target.value) || 0.5 })}
+                            className="w-full px-2 py-1 border rounded mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Score Mínimo de Preço (0.0-1.0)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="1"
+                            value={settings.ai_min_price_score || 0.5}
+                            onChange={(e) => handleUpdateSettings({ ai_min_price_score: parseFloat(e.target.value) || 0.5 })}
+                            className="w-full px-2 py-1 border rounded mt-1"
+                          />
+                        </div>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={settings.ai_require_good_deal || false}
+                            onChange={(e) => handleUpdateSettings({ ai_require_good_deal: e.target.checked })}
+                            className="mr-2"
+                          />
+                          Requerer que seja uma boa oportunidade
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
 

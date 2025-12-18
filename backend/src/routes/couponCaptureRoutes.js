@@ -175,4 +175,23 @@ router.post('/coupons/approve-batch', couponCaptureController.approveBatch);
  */
 router.post('/coupons/reject-batch', couponCaptureController.rejectBatch);
 
+// ============================================
+// Rotas Específicas Shopee
+// ============================================
+router.get('/shopee/categories', couponCaptureController.getShopeeCategories);
+router.post('/shopee/keyword', couponCaptureController.captureShopeeByKeyword);
+router.post('/shopee/category/:categoryId', couponCaptureController.captureShopeeByCategory);
+router.post('/shopee/verify', couponCaptureController.verifyShopeeCoupon);
+router.get('/shopee/commission-stats', couponCaptureController.getShopeeCommissionStats);
+router.post('/shopee/analyze-coupon', couponCaptureController.analyzeShopeeCoupon);
+router.post('/shopee/analyze-product', couponCaptureController.analyzeShopeeProduct);
+
+// ============================================
+// Rotas de IA para Cupons
+// ============================================
+router.post('/ai/batch-analyze', couponCaptureController.batchAnalyzeCoupons);
+router.post('/ai/generate-report', couponCaptureController.generateAnalysisReport);
+router.post('/ai/filter-by-analysis', couponCaptureController.filterCouponsByAnalysis);
+router.post('/ai/enhance-coupons', couponCaptureController.enhanceCoupons);
+
 export default router;

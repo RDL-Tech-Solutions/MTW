@@ -39,8 +39,16 @@ class ImageGenerator {
 
       // Converter SVG para PNG usando sharp com alta qualidade
       const buffer = await sharp(Buffer.from(svg))
-        .png({ quality: 100, compressionLevel: 6 })
-        .resize(width, height, { fit: 'fill' })
+        .png({ 
+          quality: 100, 
+          compressionLevel: 9, // Máxima compressão sem perda de qualidade
+          palette: true // Usar paleta de cores para melhor qualidade
+        })
+        .resize(width, height, { 
+          fit: 'fill',
+          kernel: 'lanczos3' // Melhor algoritmo de redimensionamento
+        })
+        .sharpen() // Aplicar nitidez para melhorar qualidade
         .toBuffer();
 
       // Salvar temporariamente
@@ -63,25 +71,33 @@ class ImageGenerator {
       ? `${coupon.discount_value}%`
       : `R$ ${coupon.discount_value.toFixed(2)}`;
 
-    const discountLabel = coupon.discount_type === 'percentage' ? 'OFF' : 'OFF';
-    const title = this.truncateText(coupon.title || 'Cupom de Desconto', 60);
-    const description = this.truncateText(coupon.description || '', 80);
+    const discountLabel = 'OFF';
+    
+    // Para cupons capturados do Telegram, não usar título/descrição
+    const isTelegramCaptured = coupon.capture_source === 'telegram' || coupon.auto_captured === true;
+    const title = isTelegramCaptured 
+      ? 'Cupom de Desconto' 
+      : this.truncateText(coupon.title || 'Cupom de Desconto', 60);
+    const description = isTelegramCaptured 
+      ? '' 
+      : this.truncateText(coupon.description || '', 80);
 
-    const expiryDate = coupon.valid_until
-      ? new Date(coupon.valid_until).toLocaleDateString('pt-BR', { 
+    const expiryDate = (isTelegramCaptured || !coupon.valid_until)
+      ? ''
+      : new Date(coupon.valid_until).toLocaleDateString('pt-BR', { 
           day: '2-digit', 
           month: '2-digit', 
           year: 'numeric' 
-        })
-      : '';
+        });
 
-    // Calcular posições
+    // Calcular posições (ajustado para melhor layout)
     const padding = 60;
-    const headerHeight = 120;
-    const discountSectionHeight = 200;
-    const codeSectionY = headerHeight + discountSectionHeight + 40;
-    const codeSectionHeight = 120;
-    const footerY = codeSectionY + codeSectionHeight + 40;
+    const headerHeight = 140;
+    const discountSectionHeight = 220;
+    const titleY = headerHeight + discountSectionHeight + 30;
+    const codeSectionY = description ? titleY + 80 : titleY + 40;
+    const codeSectionHeight = 100;
+    const footerY = codeSectionY + codeSectionHeight + 30;
 
     // Gradiente para o fundo do desconto
     const gradientId = `gradient-${coupon.platform || 'general'}`;
@@ -144,63 +160,73 @@ class ImageGenerator {
   
   <!-- Seção de desconto destacada -->
   <rect x="${padding}" y="${headerHeight + 20}" width="${width - padding * 2}" height="${discountSectionHeight}" 
-        fill="url(#${gradientId})" rx="20" filter="url(#softShadow)"/>
+        fill="url(#${gradientId})" rx="24" filter="url(#softShadow)"/>
   
   <!-- Valor do desconto grande -->
-  <text x="${width / 2}" y="${headerHeight + 100}" font-family="Arial, sans-serif" font-size="120" 
-        font-weight="bold" fill="#FFFFFF" text-anchor="middle" filter="url(#shadow)">${discountText}</text>
+  <text x="${width / 2}" y="${headerHeight + 130}" font-family="Arial, sans-serif" font-size="140" 
+        font-weight="bold" fill="#FFFFFF" text-anchor="middle" filter="url(#shadow)" letter-spacing="2">${discountText}</text>
   
   <!-- Label "OFF" -->
-  <text x="${width / 2}" y="${headerHeight + 160}" font-family="Arial, sans-serif" font-size="48" 
-        font-weight="bold" fill="#FFFFFF" text-anchor="middle" opacity="0.9">${discountLabel}</text>
+  <text x="${width / 2}" y="${headerHeight + 190}" font-family="Arial, sans-serif" font-size="52" 
+        font-weight="bold" fill="#FFFFFF" text-anchor="middle" opacity="0.95" letter-spacing="3">${discountLabel}</text>
   
-  <!-- Título do cupom -->
-  <text x="${width / 2}" y="${headerHeight + discountSectionHeight + 80}" font-family="Arial, sans-serif" 
-        font-size="36" font-weight="bold" fill="#1F2937" text-anchor="middle">${this.escapeXml(title)}</text>
+  <!-- Título do cupom (apenas se não for Telegram) -->
+  ${!isTelegramCaptured ? `
+  <text x="${width / 2}" y="${titleY}" font-family="Arial, sans-serif" 
+        font-size="38" font-weight="bold" fill="#1F2937" text-anchor="middle">${this.escapeXml(title)}</text>
+  ` : ''}
   
-  <!-- Descrição (se houver) -->
-  ${description ? `
-  <text x="${width / 2}" y="${headerHeight + discountSectionHeight + 120}" font-family="Arial, sans-serif" 
-        font-size="20" fill="#6B7280" text-anchor="middle">${this.escapeXml(description)}</text>
+  <!-- Descrição (se houver e não for Telegram) -->
+  ${description && !isTelegramCaptured ? `
+  <text x="${width / 2}" y="${titleY + 50}" font-family="Arial, sans-serif" 
+        font-size="22" fill="#6B7280" text-anchor="middle">${this.escapeXml(description)}</text>
   ` : ''}
   
   <!-- Seção do código do cupom destacada -->
   <rect x="${padding}" y="${codeSectionY}" width="${width - padding * 2}" height="${codeSectionHeight}" 
-        fill="#F9FAFB" rx="16" stroke="${styles.primaryColor}" stroke-width="3" filter="url(#shadow)"/>
+        fill="#F9FAFB" rx="20" stroke="${styles.primaryColor}" stroke-width="4" filter="url(#shadow)"/>
   
   <!-- Label "CÓDIGO DO CUPOM" -->
-  <text x="${padding + 30}" y="${codeSectionY + 40}" font-family="Arial, sans-serif" font-size="18" 
-        font-weight="600" fill="#6B7280" letter-spacing="1">CÓDIGO DO CUPOM</text>
+  <text x="${padding + 30}" y="${codeSectionY + 35}" font-family="Arial, sans-serif" font-size="20" 
+        font-weight="600" fill="#6B7280" letter-spacing="2">CÓDIGO DO CUPOM</text>
   
   <!-- Código destacado -->
-  <rect x="${padding + 30}" y="${codeSectionY + 55}" width="${width - padding * 2 - 60}" height="50" 
-        fill="#FFFFFF" rx="10" stroke="${styles.primaryColor}" stroke-width="2" stroke-dasharray="5,5"/>
-  <text x="${width / 2}" y="${codeSectionY + 90}" font-family="'Courier New', monospace" font-size="42" 
-        font-weight="bold" fill="${styles.primaryColor}" text-anchor="middle" letter-spacing="4">${coupon.code}</text>
+  <rect x="${padding + 30}" y="${codeSectionY + 50}" width="${width - padding * 2 - 60}" height="45" 
+        fill="#FFFFFF" rx="12" stroke="${styles.primaryColor}" stroke-width="3" stroke-dasharray="6,4"/>
+  <text x="${width / 2}" y="${codeSectionY + 82}" font-family="'Courier New', monospace" font-size="48" 
+        font-weight="bold" fill="${styles.primaryColor}" text-anchor="middle" letter-spacing="5">${this.escapeXml(coupon.code || 'N/A')}</text>
   
   <!-- Footer com informações -->
   <g transform="translate(${padding}, ${footerY})">
     <!-- Informações em grid -->
     ${coupon.min_purchase > 0 ? `
     <g>
-      <circle cx="15" cy="15" r="12" fill="${this.hexToRgba(styles.primaryColor, 0.1)}"/>
-      <text x="15" y="20" font-family="Arial, sans-serif" font-size="16" fill="${styles.primaryColor}" text-anchor="middle">💳</text>
-      <text x="40" y="20" font-family="Arial, sans-serif" font-size="16" fill="#374151">Compra mínima: <tspan font-weight="bold">R$ ${coupon.min_purchase.toFixed(2)}</tspan></text>
+      <circle cx="18" cy="18" r="14" fill="${this.hexToRgba(styles.primaryColor, 0.15)}"/>
+      <text x="18" y="23" font-family="Arial, sans-serif" font-size="18" fill="${styles.primaryColor}" text-anchor="middle">💳</text>
+      <text x="45" y="23" font-family="Arial, sans-serif" font-size="18" fill="#374151">Compra mínima: <tspan font-weight="bold">R$ ${coupon.min_purchase.toFixed(2)}</tspan></text>
     </g>
     ` : ''}
     
-    ${expiryDate ? `
-    <g transform="translate(0, ${coupon.min_purchase > 0 ? 35 : 0})">
-      <circle cx="15" cy="15" r="12" fill="${this.hexToRgba(styles.primaryColor, 0.1)}"/>
-      <text x="15" y="20" font-family="Arial, sans-serif" font-size="16" fill="${styles.primaryColor}" text-anchor="middle">📅</text>
-      <text x="40" y="20" font-family="Arial, sans-serif" font-size="16" fill="#374151">Válido até: <tspan font-weight="bold">${expiryDate}</tspan></text>
+    ${coupon.max_discount_value > 0 ? `
+    <g transform="translate(0, ${coupon.min_purchase > 0 ? 40 : 0})">
+      <circle cx="18" cy="18" r="14" fill="${this.hexToRgba(styles.primaryColor, 0.15)}"/>
+      <text x="18" y="23" font-family="Arial, sans-serif" font-size="18" fill="${styles.primaryColor}" text-anchor="middle">💰</text>
+      <text x="45" y="23" font-family="Arial, sans-serif" font-size="18" fill="#374151">Limite: <tspan font-weight="bold">R$ ${coupon.max_discount_value.toFixed(2)}</tspan></text>
+    </g>
+    ` : ''}
+    
+    ${expiryDate && !isTelegramCaptured ? `
+    <g transform="translate(0, ${(coupon.min_purchase > 0 ? 40 : 0) + (coupon.max_discount_value > 0 ? 40 : 0)})">
+      <circle cx="18" cy="18" r="14" fill="${this.hexToRgba(styles.primaryColor, 0.15)}"/>
+      <text x="18" y="23" font-family="Arial, sans-serif" font-size="18" fill="${styles.primaryColor}" text-anchor="middle">📅</text>
+      <text x="45" y="23" font-family="Arial, sans-serif" font-size="18" fill="#374151">Válido até: <tspan font-weight="bold">${expiryDate}</tspan></text>
     </g>
     ` : ''}
     
     ${coupon.is_exclusive ? `
     <g transform="translate(${width - padding * 2 - 200}, 0)">
-      <rect x="0" y="0" width="180" height="30" fill="${styles.primaryColor}" rx="15" filter="url(#shadow)"/>
-      <text x="90" y="22" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">⭐ CUPOM EXCLUSIVO</text>
+      <rect x="0" y="0" width="180" height="35" fill="${styles.primaryColor}" rx="18" filter="url(#shadow)"/>
+      <text x="90" y="25" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#FFFFFF" text-anchor="middle">⭐ EXCLUSIVO</text>
     </g>
     ` : ''}
   </g>

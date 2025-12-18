@@ -1,5 +1,6 @@
 import BotMessageTemplate from '../models/BotMessageTemplate.js';
 import logger from '../config/logger.js';
+import templateGenerator from '../ai/templateGenerator.js';
 
 class BotTemplateController {
   /**
@@ -488,6 +489,120 @@ class BotTemplateController {
       res.status(500).json({
         success: false,
         message: 'Erro ao obter variáveis',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Gerar template usando IA
+   * POST /api/bots/templates/generate
+   */
+  async generateWithAI(req, res) {
+    try {
+      const {
+        template_type,
+        platform = 'all',
+        description = ''
+      } = req.body;
+
+      // Validar tipo
+      const validTypes = ['new_promotion', 'new_coupon', 'expired_coupon'];
+      if (!template_type || !validTypes.includes(template_type)) {
+        return res.status(400).json({
+          success: false,
+          message: `template_type deve ser um de: ${validTypes.join(', ')}`
+        });
+      }
+
+      // Obter variáveis disponíveis (usar mesma lógica do getVariables)
+      const variables = {
+        new_promotion: [
+          'product_name',
+          'current_price',
+          'old_price',
+          'discount_percentage',
+          'platform_name',
+          'affiliate_link',
+          'coupon_section'
+        ],
+        new_coupon: [
+          'platform_name',
+          'coupon_code',
+          'discount_value',
+          'valid_until',
+          'min_purchase',
+          'coupon_title',
+          'coupon_description',
+          'affiliate_link'
+        ],
+        expired_coupon: [
+          'platform_name',
+          'coupon_code',
+          'expired_date'
+        ]
+      };
+
+      const descriptions = {
+        new_promotion: {
+          product_name: 'Nome do produto',
+          current_price: 'Preço atual formatado (R$ X,XX)',
+          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~ - será convertido automaticamente para cada plataforma)',
+          discount_percentage: 'Percentual de desconto',
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
+          affiliate_link: 'Link de afiliado do produto',
+          coupon_section: 'Seção completa do cupom (se houver) - inclui código, desconto, validade'
+        },
+        new_coupon: {
+          platform_name: 'Nome da plataforma',
+          coupon_code: 'Código do cupom (entre crases para fácil cópia)',
+          discount_value: 'Valor do desconto formatado',
+          valid_until: 'Data de validade formatada',
+          min_purchase: 'Compra mínima (se houver)',
+          coupon_title: 'Título do cupom',
+          coupon_description: 'Descrição do cupom',
+          affiliate_link: 'Link de afiliado'
+        },
+        expired_coupon: {
+          platform_name: 'Nome da plataforma',
+          coupon_code: 'Código do cupom expirado',
+          expired_date: 'Data de expiração formatada'
+        }
+      };
+
+      const availableVars = variables[template_type] || [];
+      const varDescriptions = descriptions[template_type] || {};
+
+      const availableVariables = availableVars.map(varName => ({
+        name: varName,
+        description: varDescriptions[varName] || varName
+      }));
+
+      logger.info(`🤖 Gerando template via IA: ${template_type} para ${platform}`);
+
+      // Gerar template usando IA
+      const generatedTemplate = await templateGenerator.generateTemplate(
+        template_type,
+        platform,
+        availableVariables,
+        description
+      );
+
+      res.json({
+        success: true,
+        message: 'Template gerado com sucesso',
+        data: {
+          template: generatedTemplate,
+          template_type,
+          platform
+        }
+      });
+
+    } catch (error) {
+      logger.error(`Erro ao gerar template com IA: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Erro ao gerar template com IA',
         error: error.message
       });
     }

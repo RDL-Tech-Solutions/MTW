@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import api from '../services/api';
-import { RefreshCw, Save, Play, TrendingUp, Package, AlertCircle } from 'lucide-react';
+import { RefreshCw, Save, Play, TrendingUp, Package, AlertCircle, Brain, Sparkles, DollarSign, FileText, Filter, Loader2 } from 'lucide-react';
 
 export default function AutoSync() {
   const { toast } = useToast();
@@ -28,6 +28,14 @@ export default function AutoSync() {
   const [history, setHistory] = useState([]);
   const [stats, setStats] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [aiLoading, setAiLoading] = useState({
+    analyze: false,
+    optimize: false,
+    price: false,
+    keywords: false,
+    filter: false
+  });
+  const [aiResults, setAiResults] = useState(null);
 
   useEffect(() => {
     fetchConfig();
@@ -170,6 +178,142 @@ export default function AutoSync() {
     return new Date(dateString).toLocaleString('pt-BR');
   };
 
+  // ============================================
+  // Funções de IA
+  // ============================================
+
+  const handleAnalyzeProduct = async () => {
+    const productName = prompt('Digite o nome do produto para análise:');
+    if (!productName) return;
+
+    setAiLoading({ ...aiLoading, analyze: true });
+    try {
+      const response = await api.post('/sync/ai/analyze-product', {
+        product: {
+          name: productName,
+          current_price: 'R$ 99,90',
+          original_price: 'R$ 199,90',
+          discount_percentage: 50,
+          platform: 'Mercado Livre',
+          category: 'Eletrônicos'
+        }
+      });
+      setAiResults({ type: 'analyze', data: response.data.data });
+      toast({
+        title: "Análise concluída!",
+        description: `Score de qualidade: ${(response.data.data.quality_score * 100).toFixed(0)}%`,
+        variant: "success"
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Erro ao analisar produto",
+        variant: "destructive"
+      });
+    } finally {
+      setAiLoading({ ...aiLoading, analyze: false });
+    }
+  };
+
+  const handleOptimizeDescription = async () => {
+    const productName = prompt('Digite o nome do produto:');
+    if (!productName) return;
+
+    setAiLoading({ ...aiLoading, optimize: true });
+    try {
+      const response = await api.post('/sync/ai/optimize-description', {
+        product: {
+          name: productName,
+          current_price: 'R$ 99,90',
+          discount_percentage: 30,
+          platform: 'Shopee'
+        }
+      });
+      setAiResults({ type: 'optimize', data: response.data.data });
+      toast({
+        title: "Descrição otimizada!",
+        description: "Verifique o resultado abaixo",
+        variant: "success"
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Erro ao otimizar descrição",
+        variant: "destructive"
+      });
+    } finally {
+      setAiLoading({ ...aiLoading, optimize: false });
+    }
+  };
+
+  const handleAnalyzePrice = async () => {
+    const productName = prompt('Digite o nome do produto:');
+    if (!productName) return;
+
+    setAiLoading({ ...aiLoading, price: true });
+    try {
+      const response = await api.post('/sync/ai/analyze-price', {
+        product: {
+          name: productName,
+          current_price: 'R$ 199,90',
+          original_price: 'R$ 299,90',
+          discount_percentage: 33,
+          platform: 'Mercado Livre'
+        }
+      });
+      setAiResults({ type: 'price', data: response.data.data });
+      toast({
+        title: "Análise de preço concluída!",
+        description: response.data.data.recommendation === 'buy_now' ? 'Recomendado comprar!' : 'Avaliar melhor',
+        variant: "success"
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Erro ao analisar preço",
+        variant: "destructive"
+      });
+    } finally {
+      setAiLoading({ ...aiLoading, price: false });
+    }
+  };
+
+  const handleOptimizeKeywords = async () => {
+    const productName = prompt('Digite o nome do produto:');
+    if (!productName) return;
+
+    setAiLoading({ ...aiLoading, keywords: true });
+    try {
+      const response = await api.post('/sync/ai/optimize-keywords', {
+        product_name: productName,
+        current_keywords: 'produto, promoção',
+        category: 'Eletrônicos'
+      });
+      setAiResults({ type: 'keywords', data: response.data.data });
+      toast({
+        title: "Keywords otimizadas!",
+        description: `${response.data.data.optimized_keywords.length} keywords principais`,
+        variant: "success"
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Erro ao otimizar keywords",
+        variant: "destructive"
+      });
+    } finally {
+      setAiLoading({ ...aiLoading, keywords: false });
+    }
+  };
+
+  const handleFilterProducts = async () => {
+    toast({
+      title: "Filtragem Inteligente",
+      description: "Esta funcionalidade será usada automaticamente durante a sincronização quando a IA estiver habilitada",
+      variant: "default"
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -255,6 +399,181 @@ export default function AutoSync() {
           </Card>
         </div>
       )}
+
+      {/* Módulos de IA */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            Módulos de IA para Produtos
+          </CardTitle>
+          <CardDescription>
+            Use inteligência artificial para analisar, otimizar e filtrar produtos automaticamente
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Análise de Produtos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Análise de Produtos
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Analisa qualidade, relevância e categorização
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={handleAnalyzeProduct}
+                  disabled={aiLoading.analyze}
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                >
+                  {aiLoading.analyze ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Testar Análise
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Otimização de Descrições */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Otimizar Descrições
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Gera descrições otimizadas para conversão
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={handleOptimizeDescription}
+                  disabled={aiLoading.optimize}
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                >
+                  {aiLoading.optimize ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="mr-2 h-4 w-4" />
+                  )}
+                  Testar Otimização
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Análise de Preços */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Análise de Preços
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Avalia se o preço é competitivo
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={handleAnalyzePrice}
+                  disabled={aiLoading.price}
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                >
+                  {aiLoading.price ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <DollarSign className="mr-2 h-4 w-4" />
+                  )}
+                  Testar Análise
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Otimização de Keywords */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Otimizar Keywords
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Sugere keywords melhores para busca
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={handleOptimizeKeywords}
+                  disabled={aiLoading.keywords}
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                >
+                  {aiLoading.keywords ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Filter className="mr-2 h-4 w-4" />
+                  )}
+                  Testar Otimização
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Filtragem Inteligente */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Brain className="h-4 w-4" />
+                  Filtragem Inteligente
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Filtra produtos automaticamente com IA
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={handleFilterProducts}
+                  disabled={aiLoading.filter}
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                >
+                  <Brain className="mr-2 h-4 w-4" />
+                  Ver Informações
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Resultados da IA */}
+          {aiResults && (
+            <div className="mt-6 p-4 bg-muted rounded-lg">
+              <h3 className="font-semibold mb-2">Resultado da Análise:</h3>
+              <pre className="text-xs overflow-auto max-h-60 bg-background p-3 rounded">
+                {JSON.stringify(aiResults.data, null, 2)}
+              </pre>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onClick={() => setAiResults(null)}
+              >
+                Fechar
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Configurações */}
       <Card>

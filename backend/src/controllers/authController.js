@@ -524,6 +524,7 @@ class AuthController {
 
       // Retornar código via query string para o script processar
       // O script vai fazer a troca do code por tokens
+      // Também enviar para o opener (admin panel) via postMessage
       res.send(`
         <html>
           <head>
@@ -558,14 +559,29 @@ class AuthController {
             <div class="success">
               <h1>✅ Código Recebido!</h1>
               <p>O código de autorização foi recebido com sucesso.</p>
-              <p>Verifique o terminal onde o script está rodando para ver os tokens.</p>
+              <p>Esta janela será fechada automaticamente...</p>
             </div>
             <div class="info">
-              <p><strong>Você pode fechar esta janela agora.</strong></p>
+              <p><strong>Aguarde enquanto processamos...</strong></p>
             </div>
             <script>
-              // Enviar código para o script via evento (se necessário)
-              window.opener?.postMessage({ type: 'meli_code', code: '${code}' }, '*');
+              // Enviar código para o opener (admin panel) via postMessage
+              if (window.opener) {
+                window.opener.postMessage({ 
+                  type: 'meli_code', 
+                  code: '${code}' 
+                }, '*');
+                
+                // Fechar janela após um breve delay
+                setTimeout(() => {
+                  window.close();
+                }, 1000);
+              } else {
+                // Se não houver opener, mostrar código para copiar manualmente
+                document.querySelector('.info').innerHTML = 
+                  '<p><strong>Código:</strong> <code>${code}</code></p>' +
+                  '<p>Copie este código e cole no campo de código de autorização.</p>';
+              }
             </script>
           </body>
         </html>

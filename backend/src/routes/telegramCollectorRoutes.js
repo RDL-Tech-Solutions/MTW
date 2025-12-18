@@ -21,9 +21,16 @@ router.get('/listener/status', telegramCollectorController.getListenerStatus);
 router.post('/listener/start', telegramCollectorController.startListener);
 router.post('/listener/stop', telegramCollectorController.stopListener);
 router.post('/listener/restart', telegramCollectorController.restartListener);
+router.post('/listener/fetch-history', telegramCollectorController.fetchHistory);
+router.post('/listener/fetch-all-history', telegramCollectorController.fetchAllHistory);
+router.get('/listener/channels', telegramCollectorController.getMonitoredChannels);
 
 // Sessões
 router.delete('/sessions', telegramCollectorController.clearSessions);
+router.post('/sessions/clear-current', telegramCollectorController.clearCurrentSession);
+
+// Testes
+router.post('/test-capture', telegramCollectorController.testCapture);
 
 export default router;
 

@@ -37,20 +37,35 @@ class LinkAnalyzerController {
 
       if (cached) {
         // Validar cache antes de usar (não usar cache com dados vazios ou lixo conhecido)
-        const isGarbage = cached.name === 'shopee__settings' ||
+        // Validar cache - rejeitar dados inválidos ou parciais
+        const isGarbage = 
+          cached.name === 'shopee__settings' ||
           (cached.name && cached.name.includes('shopee__')) ||
-          (cached.name && !cached.name.includes(' ')); // Nomes de produtos geralmente têm espaços
+          (cached.name === 'Produto Shopee' && cached.currentPrice === 0) || // Nome padrão sem dados reais
+          (cached.name && cached.name.trim().length < 5) || // Nome muito curto
+          (cached.warning && !cached.currentPrice); // Tem warning mas não tem preço
 
-        const hasValidData = !isGarbage && ((cached.name && cached.name.trim().length > 0) ||
-          (cached.currentPrice && cached.currentPrice > 0));
+        // Dados válidos devem ter nome real (não padrão) E preço válido
+        const hasValidData = !isGarbage && 
+          cached.name && 
+          cached.name.trim().length > 5 && 
+          cached.name !== 'Produto Shopee' && // Não aceitar nome padrão
+          cached.currentPrice && 
+          cached.currentPrice > 0; // Deve ter preço válido
 
         if (hasValidData) {
-          logger.info(`Link analisado (cache): ${url}`);
+          logger.info(`Link analisado (cache válido): ${url} - Nome: ${cached.name.substring(0, 30)}, Preço: ${cached.currentPrice}`);
           return res.json(
             successResponse(cached, 'Link analisado com sucesso (cache)')
           );
         } else {
-          logger.warn(`Cache inválido encontrado, re-analisando: ${url}`);
+          logger.warn(`Cache inválido encontrado (nome: "${cached.name}", preço: ${cached.currentPrice}), re-analisando: ${url}`);
+          // Limpar cache inválido imediatamente
+          try {
+            await cacheSet(cacheKey, null, 0); // Expirar imediatamente
+          } catch (e) {
+            // Ignorar erro ao limpar cache
+          }
           // Não retornar cache inválido, continuar com a análise
         }
       }
@@ -82,9 +97,11 @@ class LinkAnalyzerController {
         }
       }
 
-      if (productInfo.error) {
+      // Se tiver erro mas também tiver dados parciais, retornar dados parciais com warning
+      if (productInfo.error && (!productInfo.name || productInfo.name.trim().length === 0) && (!productInfo.currentPrice || productInfo.currentPrice === 0)) {
+        logger.warn(`Extração falhou completamente para: ${url} - ${productInfo.error}`);
         return res.status(400).json(
-          errorResponse(productInfo.error, 'ANALYSIS_ERROR')
+          errorResponse(productInfo.error || 'Não foi possível extrair informações do produto', 'ANALYSIS_ERROR')
         );
       }
 
@@ -92,6 +109,7 @@ class LinkAnalyzerController {
       const hasName = productInfo.name && productInfo.name.trim().length > 0;
       const hasPrice = productInfo.currentPrice && productInfo.currentPrice > 0;
 
+      // Se não tiver nem nome nem preço, retornar erro
       if (!hasName && !hasPrice) {
         logger.warn(`Extração retornou dados vazios para: ${url}`);
         return res.status(400).json(
@@ -100,6 +118,11 @@ class LinkAnalyzerController {
             'EXTRACTION_FAILED'
           )
         );
+      }
+
+      // Se tiver warning (dados parciais), incluir no response mas não retornar erro
+      if (productInfo.warning) {
+        logger.info(`Extração parcial para ${url}: ${productInfo.warning}`);
       }
 
       // Só salvar no cache se temos dados válidos

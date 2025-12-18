@@ -4,7 +4,7 @@ import {
   Plus, Edit, Trash2, MessageSquare, Activity, 
   Play, Square, RefreshCw, CheckCircle2, XCircle,
   ExternalLink, Eye, EyeOff, Settings, Key, Power,
-  Send, Shield, AlertCircle, Trash
+  Send, Shield, AlertCircle, Trash, Brain
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -25,10 +25,28 @@ export default function TelegramChannels() {
   const [channelForm, setChannelForm] = useState({
     name: '',
     username: '',
-    is_active: true
+    is_active: true,
+    capture_schedule_start: '',
+    capture_schedule_end: '',
+    capture_mode: 'new_only',
+    platform_filter: 'all'
+  });
+  
+  // Dialog de configuração de captura
+  const [captureConfigDialog, setCaptureConfigDialog] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [captureConfig, setCaptureConfig] = useState({
+    capture_schedule_start: '',
+    capture_schedule_end: '',
+    capture_mode: 'new_only',
+    platform_filter: 'all'
   });
   const [listenerStatus, setListenerStatus] = useState('unknown');
   const [activeTab, setActiveTab] = useState('channels');
+  const [aiStatus, setAiStatus] = useState({
+    enabled: false,
+    coupons_extracted: 0
+  });
   
   // Configuração
   const [config, setConfig] = useState({
@@ -73,6 +91,14 @@ export default function TelegramChannels() {
     try {
       const response = await api.get('/telegram-channels');
       setChannels(response.data.data || []);
+      
+      // Atualizar status da IA se disponível
+      if (response.data.ai) {
+        setAiStatus({
+          enabled: response.data.ai.enabled || false,
+          coupons_extracted: response.data.ai.coupons_extracted || 0
+        });
+      }
     } catch (error) {
       toast({
         title: "Erro",
@@ -392,15 +418,22 @@ export default function TelegramChannels() {
         return;
       }
 
+      // Converter strings vazias para null nos campos TIME
+      const formToSave = {
+        ...channelForm,
+        capture_schedule_start: channelForm.capture_schedule_start === '' ? null : channelForm.capture_schedule_start,
+        capture_schedule_end: channelForm.capture_schedule_end === '' ? null : channelForm.capture_schedule_end
+      };
+
       if (editingChannel) {
-        await api.put(`/telegram-channels/${editingChannel.id}`, channelForm);
+        await api.put(`/telegram-channels/${editingChannel.id}`, formToSave);
         toast({
           title: "Sucesso",
           description: "Canal atualizado",
           variant: "success"
         });
       } else {
-        await api.post('/telegram-channels', channelForm);
+        await api.post('/telegram-channels', formToSave);
         toast({
           title: "Sucesso",
           description: "Canal criado",
@@ -410,7 +443,15 @@ export default function TelegramChannels() {
       
       setIsDialogOpen(false);
       setEditingChannel(null);
-      setChannelForm({ name: '', username: '', is_active: true });
+      setChannelForm({ 
+        name: '', 
+        username: '', 
+        is_active: true,
+        capture_schedule_start: '',
+        capture_schedule_end: '',
+        capture_mode: 'new_only',
+        platform_filter: 'all'
+      });
       loadChannels();
     } catch (error) {
       toast({
@@ -446,9 +487,64 @@ export default function TelegramChannels() {
     setChannelForm({
       name: channel.name,
       username: channel.username,
-      is_active: channel.is_active
+      is_active: channel.is_active,
+      capture_schedule_start: channel.capture_schedule_start || '',
+      capture_schedule_end: channel.capture_schedule_end || '',
+      capture_mode: channel.capture_mode || 'new_only',
+      platform_filter: channel.platform_filter || 'all'
     });
     setIsDialogOpen(true);
+  };
+  
+  const handleOpenCaptureConfig = (channel) => {
+    setSelectedChannel(channel);
+    setCaptureConfig({
+      capture_schedule_start: channel.capture_schedule_start || '',
+      capture_schedule_end: channel.capture_schedule_end || '',
+      capture_mode: channel.capture_mode || 'new_only',
+      platform_filter: channel.platform_filter || 'all'
+    });
+    setCaptureConfigDialog(true);
+  };
+  
+  const handleSaveCaptureConfig = async (e) => {
+    e.preventDefault();
+    try {
+      // Converter strings vazias para null nos campos TIME
+      const configToSave = {
+        ...captureConfig,
+        capture_schedule_start: captureConfig.capture_schedule_start === '' ? null : captureConfig.capture_schedule_start,
+        capture_schedule_end: captureConfig.capture_schedule_end === '' ? null : captureConfig.capture_schedule_end
+      };
+      
+      await api.put(`/telegram-channels/${selectedChannel.id}`, configToSave);
+      toast({
+        title: "Sucesso",
+        description: "Configuração de captura salva",
+        variant: "success"
+      });
+      setCaptureConfigDialog(false);
+      setSelectedChannel(null);
+      loadChannels();
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Erro ao salvar configuração";
+      
+      // Verificar se é erro de migration não executada
+      if (errorMessage.includes('migration') || errorMessage.includes('não encontrados')) {
+        toast({
+          title: "Migration Necessária",
+          description: errorMessage + " Execute a migration 028_add_telegram_channel_capture_settings.sql no Supabase.",
+          variant: "destructive",
+          duration: 10000
+        });
+      } else {
+        toast({
+          title: "Erro",
+          description: errorMessage,
+          variant: "destructive"
+        });
+      }
+    }
   };
 
   const handleToggleActive = async (channel) => {
@@ -552,11 +648,167 @@ export default function TelegramChannels() {
                   <Label htmlFor="is_active">Canal ativo</Label>
                 </div>
 
+                <div className="border-t pt-4 space-y-4">
+                  <h3 className="font-semibold text-sm">Configurações de Captura</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="capture_schedule_start">Horário Início</Label>
+                      <Input
+                        id="capture_schedule_start"
+                        type="time"
+                        value={channelForm.capture_schedule_start}
+                        onChange={(e) => setChannelForm({...channelForm, capture_schedule_start: e.target.value})}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Deixe vazio para capturar 24h
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="capture_schedule_end">Horário Fim</Label>
+                      <Input
+                        id="capture_schedule_end"
+                        type="time"
+                        value={channelForm.capture_schedule_end}
+                        onChange={(e) => setChannelForm({...channelForm, capture_schedule_end: e.target.value})}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Deixe vazio para capturar 24h
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="capture_mode">Modo de Captura *</Label>
+                    <select
+                      id="capture_mode"
+                      value={channelForm.capture_mode}
+                      onChange={(e) => setChannelForm({...channelForm, capture_mode: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-md bg-background"
+                      required
+                    >
+                      <option value="new_only">Apenas novas mensagens</option>
+                      <option value="1_day">Mensagens antigas (máx 1 dia)</option>
+                      <option value="2_days">Mensagens antigas (máx 2 dias)</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Define quantas mensagens antigas serão capturadas
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="platform_filter">Filtro de Plataforma *</Label>
+                    <select
+                      id="platform_filter"
+                      value={channelForm.platform_filter}
+                      onChange={(e) => setChannelForm({...channelForm, platform_filter: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-md bg-background"
+                      required
+                    >
+                      <option value="all">Todas as plataformas</option>
+                      <option value="mercadolivre">Mercado Livre</option>
+                      <option value="amazon">Amazon</option>
+                      <option value="shopee">Shopee</option>
+                      <option value="aliexpress">AliExpress</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Capturar cupons apenas desta plataforma ou todas
+                    </p>
+                  </div>
+                </div>
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
                   </Button>
                   <Button type="submit">{editingChannel ? 'Salvar' : 'Criar'}</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Dialog de Configuração de Captura */}
+          <Dialog open={captureConfigDialog} onOpenChange={setCaptureConfigDialog}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Configurações de Captura</DialogTitle>
+                <DialogDescription>
+                  Configure quando e como capturar mensagens do canal {selectedChannel?.name}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSaveCaptureConfig} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="config_capture_schedule_start">Horário Início</Label>
+                    <Input
+                      id="config_capture_schedule_start"
+                      type="time"
+                      value={captureConfig.capture_schedule_start}
+                      onChange={(e) => setCaptureConfig({...captureConfig, capture_schedule_start: e.target.value})}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Deixe vazio para 24h
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="config_capture_schedule_end">Horário Fim</Label>
+                    <Input
+                      id="config_capture_schedule_end"
+                      type="time"
+                      value={captureConfig.capture_schedule_end}
+                      onChange={(e) => setCaptureConfig({...captureConfig, capture_schedule_end: e.target.value})}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Deixe vazio para 24h
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="config_capture_mode">Modo de Captura *</Label>
+                  <select
+                    id="config_capture_mode"
+                    value={captureConfig.capture_mode}
+                    onChange={(e) => setCaptureConfig({...captureConfig, capture_mode: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    required
+                  >
+                    <option value="new_only">Apenas novas mensagens</option>
+                    <option value="1_day">Mensagens antigas (máx 1 dia)</option>
+                    <option value="2_days">Mensagens antigas (máx 2 dias)</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Define quantas mensagens antigas serão capturadas
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="config_platform_filter">Filtro de Plataforma *</Label>
+                  <select
+                    id="config_platform_filter"
+                    value={captureConfig.platform_filter}
+                    onChange={(e) => setCaptureConfig({...captureConfig, platform_filter: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    required
+                  >
+                    <option value="all">Todas as plataformas</option>
+                    <option value="mercadolivre">Mercado Livre</option>
+                    <option value="amazon">Amazon</option>
+                    <option value="shopee">Shopee</option>
+                    <option value="aliexpress">AliExpress</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Capturar cupons apenas desta plataforma ou todas
+                  </p>
+                </div>
+                
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setCaptureConfigDialog(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">Salvar</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -988,7 +1240,7 @@ export default function TelegramChannels() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>Status do Listener</span>
-                <Badge variant={listenerStatus === 'running' ? 'success' : 'destructive'}>
+                <Badge variant={listenerStatus === 'running' ? 'default' : 'destructive'}>
                   {listenerStatus === 'running' ? (
                     <>
                       <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -1016,6 +1268,55 @@ export default function TelegramChannels() {
             </CardContent>
           </Card>
 
+          {/* AI Status Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Módulo de IA
+                </span>
+                <Badge variant={aiStatus.enabled ? 'success' : 'secondary'}>
+                  {aiStatus.enabled ? (
+                    <>
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      Ativo
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="mr-1 h-3 w-3" />
+                      Inativo
+                    </>
+                  )}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Status do módulo de IA para extração inteligente de cupons
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Status:</span>
+                  <span className="text-sm font-medium">
+                    {aiStatus.enabled ? 'Habilitado e funcionando' : 'Desabilitado - usando método tradicional'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Cupons extraídos via IA:</span>
+                  <span className="text-sm font-medium">{aiStatus.coupons_extracted}</span>
+                </div>
+                {!aiStatus.enabled && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <p className="text-sm text-yellow-800">
+                      💡 Para ativar a IA, configure o OpenRouter em <strong>Configurações → IA / OpenRouter</strong>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Channels Table */}
           <Card>
         <CardHeader>
@@ -1031,6 +1332,7 @@ export default function TelegramChannels() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Configurações</TableHead>
                 <TableHead className="text-center">Cupons Capturados</TableHead>
                 <TableHead>Última Mensagem</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -1039,7 +1341,7 @@ export default function TelegramChannels() {
             <TableBody>
               {channels.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Nenhum canal cadastrado. Clique em "Novo Canal" para adicionar.
                   </TableCell>
                 </TableRow>
@@ -1062,6 +1364,27 @@ export default function TelegramChannels() {
                       <Badge variant={channel.is_active ? 'success' : 'destructive'}>
                         {channel.is_active ? 'Ativo' : 'Inativo'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1 text-xs">
+                        {channel.capture_mode && (
+                          <Badge variant="outline" className="text-xs">
+                            {channel.capture_mode === 'new_only' ? 'Apenas novas' : 
+                             channel.capture_mode === '1_day' ? 'Até 1 dia' : 
+                             'Até 2 dias'}
+                          </Badge>
+                        )}
+                        {channel.platform_filter && channel.platform_filter !== 'all' && (
+                          <Badge variant="outline" className="text-xs">
+                            {channel.platform_filter}
+                          </Badge>
+                        )}
+                        {channel.capture_schedule_start && channel.capture_schedule_end && (
+                          <span className="text-muted-foreground">
+                            {channel.capture_schedule_start} - {channel.capture_schedule_end}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge variant="secondary">
@@ -1091,6 +1414,14 @@ export default function TelegramChannels() {
                               Ativar
                             </>
                           )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenCaptureConfig(channel)}
+                          title="Configurar captura"
+                        >
+                          <Settings className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
