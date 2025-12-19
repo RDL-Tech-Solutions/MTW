@@ -516,9 +516,18 @@ class CouponExtractor {
       }
     }
     
-    // Se ainda não encontrou, tentar extrair múltiplos códigos da mesma mensagem
-    if (coupons.length === 0 && allCodes.length > 0) {
+    // Se ainda não encontrou ou encontrou menos cupons que códigos, tentar extrair múltiplos códigos da mesma mensagem
+    // IMPORTANTE: Se há múltiplos códigos, garantir que todos sejam extraídos
+    if (allCodes.length > coupons.length) {
+      logger.debug(`   🔍 Encontrados ${allCodes.length} código(s) mas apenas ${coupons.length} cupom(ns) extraído(s). Tentando extrair os restantes...`);
+      
       for (const code of allCodes) {
+        // Verificar se já extraímos este código
+        const alreadyExtracted = coupons.some(c => c.code === code);
+        if (alreadyExtracted) {
+          continue; // Pular se já foi extraído
+        }
+        
         // Criar contexto ao redor do código
         const codePattern = new RegExp(`\`${code}\``);
         let codeMatch = text.match(codePattern);
@@ -529,10 +538,12 @@ class CouponExtractor {
         }
         
         if (codeMatch && codeMatch.index !== undefined) {
-          const start = Math.max(0, codeMatch.index - 200);
-          const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 200);
+          // Aumentar contexto para capturar mais informações (300 caracteres antes e depois)
+          const start = Math.max(0, codeMatch.index - 300);
+          const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
           const context = text.substring(start, end);
           
+          // Tentar extrair cupom do contexto
           const coupon = this.extractCouponInfo(context, messageId, channelUsername);
           if (coupon && coupon.code === code) {
             // Verificar se já não adicionamos este cupom
@@ -540,6 +551,51 @@ class CouponExtractor {
             if (!isDuplicate) {
               coupons.push(coupon);
               logger.debug(`   ✅ Cupom extraído do contexto: ${coupon.code}`);
+            }
+          } else {
+            // Se não conseguiu extrair informações completas, criar cupom básico com o código
+            logger.debug(`   ⚠️ Não foi possível extrair informações completas para código ${code}, criando cupom básico...`);
+            const basicCoupon = this.extractCouponInfo(text, messageId, channelUsername);
+            if (basicCoupon && basicCoupon.code === code) {
+              const isDuplicate = coupons.some(c => c.code === basicCoupon.code);
+              if (!isDuplicate) {
+                coupons.push(basicCoupon);
+                logger.debug(`   ✅ Cupom básico criado: ${basicCoupon.code}`);
+              }
+            } else {
+              // Criar cupom mínimo com o código encontrado
+              const minCoupon = {
+                code: code,
+                platform: this.extractPlatform(text) || 'general',
+                discount_type: 'percentage',
+                discount_value: 10.0, // Valor padrão
+                min_purchase: this.extractMinPurchase(text) || 0,
+                max_discount_value: this.extractMaxDiscount(text) || null,
+                valid_from: new Date().toISOString(),
+                valid_until: this.extractValidUntil(text) || this.calculateDefaultExpiry(),
+                title: `Cupom ${code}`,
+                description: text.substring(0, 500),
+                source: 'telegram',
+                origem: 'telegram',
+                channel_origin: channelUsername,
+                message_id: messageId,
+                is_pending_approval: true,
+                capture_source: 'telegram',
+                auto_captured: true
+              };
+              
+              // Aplicar desconto se encontrado
+              const discount = this.extractDiscount(text);
+              if (discount && discount.value) {
+                minCoupon.discount_type = discount.type;
+                minCoupon.discount_value = discount.value;
+              }
+              
+              const isDuplicate = coupons.some(c => c.code === minCoupon.code);
+              if (!isDuplicate) {
+                coupons.push(minCoupon);
+                logger.debug(`   ✅ Cupom mínimo criado para código: ${code}`);
+              }
             }
           }
         }

@@ -86,17 +86,41 @@ class Normalizer {
 
     // Remover emojis e caracteres especiais
     let normalized = code
-      .replace(/[🎟🎫💰💳]/g, '') // Remover emojis comuns
+      .replace(/[🎟🎫💰💳🔑]/g, '') // Remover emojis comuns
       .replace(/[`'"]/g, '') // Remover backticks e aspas
+      .replace(/[:\-–—]/g, '') // Remover dois pontos e traços
       .trim()
       .toUpperCase();
 
     // Remover espaços
     normalized = normalized.replace(/\s+/g, '');
 
+    // Validar comprimento (4-15 caracteres)
+    if (normalized.length < 4 || normalized.length > 15) {
+      logger.warn(`⚠️ Código com comprimento inválido: ${code} → ${normalized} (${normalized.length} chars)`);
+      return null;
+    }
+
     // Validar que é alfanumérico
     if (!/^[A-Z0-9]+$/.test(normalized)) {
       logger.warn(`⚠️ Código contém caracteres inválidos: ${code} → ${normalized}`);
+      // Tentar limpar caracteres inválidos
+      normalized = normalized.replace(/[^A-Z0-9]/g, '');
+      if (normalized.length < 4) {
+        return null;
+      }
+    }
+
+    // Filtrar códigos muito comuns que não são cupons
+    const invalidCodes = [
+      'HTTP', 'HTTPS', 'WWW', 'COM', 'BR', 'ORG', 'NET', 'HTML', 'JPEG', 'PNG',
+      'AMZN', 'AMAZON', 'SHOPEE', 'MELI', 'MERCADO', 'LIVRE', 'ALIEXPRESS',
+      'FACEBOOK', 'INSTAGRAM', 'TWITTER', 'YOUTUBE', 'TELEGRAM'
+    ];
+    
+    if (invalidCodes.includes(normalized)) {
+      logger.warn(`⚠️ Código é uma palavra comum, não um cupom: ${normalized}`);
+      return null;
     }
 
     return normalized.length > 0 ? normalized : null;
@@ -111,15 +135,19 @@ class Normalizer {
     }
 
     // Remover emojis e espaços extras
-    const cleaned = discount
+    let cleaned = discount
       .replace(/[🎟🎫💰💳]/g, '')
       .trim();
 
-    // Tentar extrair percentual
+    // Remover palavras comuns que não afetam o valor
+    cleaned = cleaned.replace(/\b(off|de\s*desconto|por\s*cento|percent)\b/gi, '').trim();
+
+    // Tentar extrair percentual (prioridade)
     const percentMatch = cleaned.match(/(\d+(?:[.,]\d+)?)\s*%/);
     if (percentMatch) {
       const value = parseFloat(percentMatch[1].replace(',', '.'));
       if (value > 0 && value <= 100) {
+        logger.debug(`   ✅ Desconto percentual normalizado: ${value}%`);
         return {
           type: 'percentage',
           value: value
@@ -130,8 +158,11 @@ class Normalizer {
     // Tentar extrair valor fixo em reais
     const fixedMatch = cleaned.match(/R\$\s*(\d+(?:[.,]\d+)?)/i);
     if (fixedMatch) {
-      const value = parseFloat(fixedMatch[1].replace(',', '.').replace(/\./g, ''));
-      if (value > 0) {
+      // Remover pontos de milhar e converter vírgula para ponto
+      const valueStr = fixedMatch[1].replace(/\./g, '').replace(',', '.');
+      const value = parseFloat(valueStr);
+      if (value > 0 && value <= 10000) { // Limite razoável de R$ 10.000
+        logger.debug(`   ✅ Desconto fixo normalizado: R$ ${value}`);
         return {
           type: 'fixed',
           value: value
@@ -142,14 +173,17 @@ class Normalizer {
     // Tentar apenas número (assumir percentual se < 100, fixo se >= 100)
     const numberMatch = cleaned.match(/(\d+(?:[.,]\d+)?)/);
     if (numberMatch) {
-      const value = parseFloat(numberMatch[1].replace(',', '.'));
+      const valueStr = numberMatch[1].replace(',', '.');
+      const value = parseFloat(valueStr);
       if (value > 0) {
         if (value <= 100) {
+          logger.debug(`   ✅ Desconto percentual inferido: ${value}%`);
           return {
             type: 'percentage',
             value: value
           };
-        } else {
+        } else if (value <= 10000) {
+          logger.debug(`   ✅ Desconto fixo inferido: R$ ${value}`);
           return {
             type: 'fixed',
             value: value
@@ -171,15 +205,21 @@ class Normalizer {
     }
 
     // Remover emojis e espaços
-    const cleaned = minPurchase
+    let cleaned = minPurchase
       .replace(/[🎟🎫💰💳]/g, '')
       .trim();
+
+    // Remover palavras comuns
+    cleaned = cleaned.replace(/\b(em|acima\s*de|acima|a\s*partir\s*de|mínimo|min|compra\s*mínima)\b/gi, '').trim();
 
     // Tentar extrair valor em reais
     const match = cleaned.match(/R\$\s*(\d+(?:[.,]\d+)?)/i);
     if (match) {
-      const value = parseFloat(match[1].replace(',', '.').replace(/\./g, ''));
-      if (value > 0) {
+      // Remover pontos de milhar e converter vírgula para ponto
+      const valueStr = match[1].replace(/\./g, '').replace(',', '.');
+      const value = parseFloat(valueStr);
+      if (value > 0 && value <= 100000) { // Limite razoável de R$ 100.000
+        logger.debug(`   ✅ Compra mínima normalizada: R$ ${value}`);
         return value;
       }
     }
@@ -187,8 +227,11 @@ class Normalizer {
     // Tentar apenas número
     const numberMatch = cleaned.match(/(\d+(?:[.,]\d+)?)/);
     if (numberMatch) {
-      const value = parseFloat(numberMatch[1].replace(',', '.').replace(/\./g, ''));
-      if (value > 0) {
+      // Remover pontos de milhar e converter vírgula para ponto
+      const valueStr = numberMatch[1].replace(/\./g, '').replace(',', '.');
+      const value = parseFloat(valueStr);
+      if (value > 0 && value <= 100000) {
+        logger.debug(`   ✅ Compra mínima normalizada (sem R$): R$ ${value}`);
         return value;
       }
     }

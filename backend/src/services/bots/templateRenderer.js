@@ -32,6 +32,20 @@ class TemplateRenderer {
           } else if (templateType === 'new_coupon') {
             // Gerar template de cupom
             message = await advancedTemplateGenerator.generateCouponTemplate(contextData.coupon || contextData, platform);
+            
+            // IMPORTANTE: Remover qualquer menção à data de validade que a IA possa ter incluído
+            // Remover padrões comuns de data de validade
+            message = message
+              .replace(/\n?📅\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
+              .replace(/\n?📅\s*\*\*?Válido até\*\*?:\s*[^\n]*\n?/gi, '')
+              .replace(/\n?📅\s*Válido até:\s*[^\n]*\n?/gi, '')
+              .replace(/\n?⏰\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
+              .replace(/\n?📅\s*\{valid_until\}[^\n]*\n?/gi, '')
+              .replace(/\n?.*válido até.*\n?/gi, '')
+              .replace(/\n?.*Válido até.*\n?/gi, '')
+              .replace(/\n?.*valid_until.*\n?/gi, '');
+            
+            logger.debug(`📝 Template de cupom após remoção de data de validade: ${message.length} chars`);
           } else if (templateType === 'expired_coupon') {
             // Gerar template de cupom expirado
             message = await advancedTemplateGenerator.generateExpiredCouponTemplate(contextData.coupon || contextData, platform);
@@ -190,6 +204,12 @@ class TemplateRenderer {
         const regex = new RegExp(`\\{${key}\\}`, 'g');
         let replacement = value !== null && value !== undefined ? String(value) : '';
         
+        // IMPORTANTE: Se for valid_until, SEMPRE remover (não incluir data de validade no bot)
+        if (key === 'valid_until') {
+          replacement = ''; // Sempre vazio para não incluir data de validade
+          logger.debug(`📝 Removendo data de validade ({valid_until}) do template`);
+        }
+        
         // IMPORTANTE: Se for coupon_code, SEMPRE formatar para facilitar cópia
         if (key === 'coupon_code' && replacement && replacement !== 'N/A') {
           // Verificar se o template já tem backticks ao redor da variável
@@ -231,6 +251,25 @@ class TemplateRenderer {
         const realLink = variables.affiliate_link || contextData.product?.affiliate_link || 'Link não disponível';
         message = message.replace(/\[Link de afiliado\]|\\\[Link de afiliado\\\]/g, realLink);
         logger.info(`✅ Texto literal substituído por link real`);
+      }
+      
+      // IMPORTANTE: Remover qualquer linha que contenha apenas data de validade ou variável {valid_until}
+      // Isso garante que mesmo se a IA incluir, será removido
+      if (templateType === 'new_coupon') {
+        message = message
+          .split('\n')
+          .filter(line => {
+            const trimmed = line.trim();
+            // Remover linhas que contenham apenas data de validade ou padrões relacionados
+            return !trimmed.match(/^📅.*[Vv]álido.*$/i) &&
+                   !trimmed.match(/^⏰.*[Vv]álido.*$/i) &&
+                   !trimmed.match(/.*\{valid_until\}.*/) &&
+                   !trimmed.match(/^.*válido até.*$/i) &&
+                   !trimmed.match(/^.*Válido até.*$/i) &&
+                   trimmed.length > 0;
+          })
+          .join('\n');
+        logger.debug(`📝 Template após remoção de linhas com data de validade`);
       }
       
       // IMPORTANTE: Após substituir variáveis, garantir que código do cupom esteja formatado
@@ -777,28 +816,17 @@ class TemplateRenderer {
       }
     }
 
-    // Para cupons capturados do Telegram: NÃO incluir descrição e link de afiliado
-    // Incluir: plataforma, código, desconto, compra mínima, limite desconto, aviso de expiração
+    // Para cupons capturados do Telegram: NÃO incluir descrição, link de afiliado e data de validade
+    // Incluir: plataforma, código, desconto, compra mínima, limite desconto
     if (isTelegramCaptured) {
-      // Se não tem data de validade ou é muito genérica, usar aviso padrão
-      let validUntilText = '⚠️ Sujeito à expiração';
-      if (coupon.valid_until) {
-        try {
-          const validDate = new Date(coupon.valid_until);
-          if (!isNaN(validDate.getTime()) && validDate > new Date()) {
-            // Data válida no futuro, formatar
-            validUntilText = this.formatDate(coupon.valid_until);
-          }
-        } catch (error) {
-          // Manter aviso padrão se erro ao parsear data
-        }
-      }
+      // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
+      // A data de validade não deve aparecer nos templates
 
       return {
         platform_name: platformName,
         coupon_code: coupon.code || 'N/A',
         discount_value: discountText,
-        valid_until: validUntilText,
+        valid_until: '', // NÃO incluir data de validade - deixar vazio
         min_purchase: minPurchase,
         max_discount: maxDiscount,
         usage_limit: '', // NÃO incluir limite de usos
@@ -814,7 +842,7 @@ class TemplateRenderer {
       platform_name: platformName,
       coupon_code: coupon.code || 'N/A',
       discount_value: discountText,
-      valid_until: this.formatDate(coupon.valid_until),
+      valid_until: '', // IMPORTANTE: NÃO incluir data de validade na mensagem do bot
       min_purchase: minPurchase,
       max_discount: maxDiscount,
       usage_limit: usageLimit,
@@ -1466,8 +1494,8 @@ class TemplateRenderer {
             message += `**Compra mínima:** ${minPurchaseText}\n`;
           }
         }
-        // Sempre incluir aviso de expiração (formato padronizado)
-        message += `\n⚠️ **Sujeito à expiração**\n`;
+        // IMPORTANTE: NÃO incluir aviso de expiração ou data de validade na mensagem do bot
+        // message += `\n⚠️ **Sujeito à expiração**\n`;
         return message;
         }
         // Template completo para cupons normais
@@ -1480,7 +1508,8 @@ class TemplateRenderer {
         if (variables.applicability) fullMessage += `\n${variables.applicability}\n`;
         if (variables.coupon_title) fullMessage += `\n📝 **${variables.coupon_title}**\n`;
         if (variables.coupon_description) fullMessage += `${variables.coupon_description}\n`;
-        if (variables.valid_until) fullMessage += `\n📅 **Válido até:** ${variables.valid_until}\n`;
+        // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
+        // if (variables.valid_until) fullMessage += `\n📅 **Válido até:** ${variables.valid_until}\n`;
         if (variables.affiliate_link) fullMessage += `\n🔗 ${variables.affiliate_link}\n`;
         fullMessage += `\n⚡ Use agora e economize!`;
         return fullMessage;

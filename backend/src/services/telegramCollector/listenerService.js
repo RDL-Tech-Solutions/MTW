@@ -678,15 +678,116 @@ class TelegramListenerService {
       
       let couponData = null;
 
-      // TENTAR IA PRIMEIRO (se habilitada)
+      // IMPORTANTE: Sempre verificar múltiplos cupons primeiro (tanto IA quanto método tradicional)
+      // Isso garante que todos os cupons sejam capturados, mesmo quando há 2+ cupons na mesma mensagem
+      logger.debug(`   🔍 Verificando múltiplos cupons na mensagem...`);
+      
+      // Tentar extrair múltiplos cupons usando método tradicional (mais confiável para múltiplos)
+      const multipleCoupons = couponExtractor.extractMultipleCoupons(
+        text,
+        messageId,
+        channel.username || channel.name
+      );
+
+      if (multipleCoupons && multipleCoupons.length > 1) {
+        logger.info(`   🎟️ ${multipleCoupons.length} cupom(ns) detectado(s) na mensagem - capturando todos!`);
+        
+        // Salvar cada cupom encontrado
+        for (const coupon of multipleCoupons) {
+          // Verificar filtro de plataforma antes de salvar
+          if (!this.matchesPlatformFilter(coupon, channel)) {
+            logger.debug(`   🚫 Cupom ${coupon.code} de plataforma '${coupon.platform}' não corresponde ao filtro '${channel.platform_filter}'`);
+            continue;
+          }
+          
+          logger.info(`   🎟️ Cupom: ${coupon.code || 'sem código'} - ${coupon.platform || 'plataforma desconhecida'}`);
+          
+          // Gerar hash único para cada cupom (incluindo código para diferenciar)
+          const couponHash = this.generateMessageHash(
+            `${text}:${coupon.code}`,
+            messageId,
+            channelId.toString()
+          );
+          
+          // Salvar cupom
+          await this.saveCoupon(coupon, couponHash);
+        }
+        return; // Retornar após processar todos os múltiplos cupons
+      }
+
+      // IMPORTANTE: Verificar se há múltiplos códigos na mensagem antes de usar IA
+      // Se há múltiplos códigos, garantir que todos sejam processados
+      const allCodes = couponExtractor.extractAllCouponCodes(text);
+      const hasMultipleCodes = allCodes.length > 1;
+      
+      if (hasMultipleCodes && (!multipleCoupons || multipleCoupons.length < allCodes.length)) {
+        logger.info(`   🔍 Detectados ${allCodes.length} código(s) na mensagem, mas apenas ${multipleCoupons?.length || 0} cupom(ns) extraído(s). Tentando extrair os restantes...`);
+        
+        // Tentar extrair cupons para cada código que ainda não foi processado
+        const processedCodes = new Set(multipleCoupons?.map(c => c.code) || []);
+        
+        for (const code of allCodes) {
+          if (processedCodes.has(code)) {
+            continue; // Já foi processado
+          }
+          
+          // Criar contexto ao redor do código
+          const codePattern = new RegExp(`\`${code}\``);
+          let codeMatch = text.match(codePattern);
+          
+          if (!codeMatch) {
+            codeMatch = text.match(new RegExp(`\\b${code}\\b`));
+          }
+          
+          if (codeMatch && codeMatch.index !== undefined) {
+            const start = Math.max(0, codeMatch.index - 300);
+            const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
+            const context = text.substring(start, end);
+            
+            const coupon = couponExtractor.extractCouponInfo(context, messageId, channel.username || channel.name);
+            if (coupon && coupon.code === code) {
+              // Verificar filtro de plataforma
+              if (!this.matchesPlatformFilter(coupon, channel)) {
+                logger.debug(`   🚫 Cupom ${coupon.code} de plataforma '${coupon.platform}' não corresponde ao filtro`);
+                continue;
+              }
+              
+              const couponHash = this.generateMessageHash(
+                `${text}:${coupon.code}`,
+                messageId,
+                channelId.toString()
+              );
+              
+              await this.saveCoupon(coupon, couponHash);
+              logger.info(`   ✅ Cupom adicional extraído: ${coupon.code}`);
+            }
+          }
+        }
+        
+        // Se processou múltiplos cupons, retornar
+        if (allCodes.length > 1) {
+          return;
+        }
+      }
+
+      // Se encontrou apenas 1 cupom ou nenhum, tentar IA (se habilitada) para melhorar precisão
       const aiEnabled = await couponAnalyzer.isEnabled();
-      if (aiEnabled) {
+      if (aiEnabled && (!multipleCoupons || multipleCoupons.length === 0)) {
         try {
           logger.info(`   🤖 Tentando extrair cupom via IA...`);
           const aiExtraction = await couponAnalyzer.analyze(text);
           
           if (aiExtraction && aiExtraction.code) {
             logger.info(`   ✅ IA extraiu cupom: ${aiExtraction.code} - ${aiExtraction.platform}`);
+            
+            // IMPORTANTE: Verificar se há outros códigos na mensagem que a IA não capturou
+            const aiCode = aiExtraction.code;
+            const otherCodes = allCodes.filter(code => code !== aiCode);
+            
+            if (otherCodes.length > 0) {
+              logger.info(`   🔍 IA extraiu ${aiCode}, mas há ${otherCodes.length} outro(s) código(s) na mensagem: ${otherCodes.join(', ')}`);
+              logger.info(`   📋 Processando cupom da IA e depois os outros códigos...`);
+            }
             
             // Preparar dados do cupom no formato esperado
             couponData = {
@@ -708,6 +809,40 @@ class TelegramListenerService {
               capture_source: 'telegram_ai',
               auto_captured: true
             };
+            
+            // Se há outros códigos, processá-los também
+            if (otherCodes.length > 0) {
+              for (const otherCode of otherCodes) {
+                const codePattern = new RegExp(`\`${otherCode}\``);
+                let codeMatch = text.match(codePattern);
+                
+                if (!codeMatch) {
+                  codeMatch = text.match(new RegExp(`\\b${otherCode}\\b`));
+                }
+                
+                if (codeMatch && codeMatch.index !== undefined) {
+                  const start = Math.max(0, codeMatch.index - 300);
+                  const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
+                  const context = text.substring(start, end);
+                  
+                  const otherCoupon = couponExtractor.extractCouponInfo(context, messageId, channel.username || channel.name);
+                  if (otherCoupon && otherCoupon.code === otherCode) {
+                    if (!this.matchesPlatformFilter(otherCoupon, channel)) {
+                      continue;
+                    }
+                    
+                    const otherCouponHash = this.generateMessageHash(
+                      `${text}:${otherCoupon.code}`,
+                      messageId,
+                      channelId.toString()
+                    );
+                    
+                    await this.saveCoupon(otherCoupon, otherCouponHash);
+                    logger.info(`   ✅ Cupom adicional processado: ${otherCoupon.code}`);
+                  }
+                }
+              }
+            }
           } else {
             logger.debug(`   ⚠️ IA não conseguiu extrair cupom válido, tentando método tradicional...`);
           }
@@ -716,38 +851,17 @@ class TelegramListenerService {
         }
       }
 
+      // Se encontrou 1 cupom no método tradicional, usar ele
+      if (!couponData && multipleCoupons && multipleCoupons.length === 1) {
+        couponData = multipleCoupons[0];
+        logger.info(`   ✅ Usando cupom extraído pelo método tradicional: ${couponData.code}`);
+      }
+
       // FALLBACK: Método tradicional (Regex) se IA não funcionou ou não está habilitada
       if (!couponData) {
         logger.debug(`   🔍 Usando método tradicional de extração (Regex)...`);
         
-        // Tentar extrair múltiplos cupons primeiro
-        const multipleCoupons = couponExtractor.extractMultipleCoupons(
-          text,
-          messageId,
-          channel.username || channel.name
-        );
-
-        if (multipleCoupons && multipleCoupons.length > 0) {
-          logger.info(`   🎟️ ${multipleCoupons.length} cupom(ns) detectado(s) na mensagem`);
-          
-          // Salvar cada cupom encontrado
-          for (const coupon of multipleCoupons) {
-            logger.info(`   🎟️ Cupom: ${coupon.code || 'sem código'} - ${coupon.platform || 'plataforma desconhecida'}`);
-            
-            // Gerar hash único para cada cupom (incluindo código para diferenciar)
-            const couponHash = this.generateMessageHash(
-              `${text}:${coupon.code}`,
-              messageId,
-              channelId.toString()
-            );
-            
-            // Salvar cupom
-            await this.saveCoupon(coupon, couponHash);
-          }
-          return;
-        }
-        
-        // Se não encontrou múltiplos, tentar extrair um único cupom
+        // Tentar extrair um único cupom
         couponData = couponExtractor.extractCouponInfo(
           text,
           messageId,
@@ -769,8 +883,56 @@ class TelegramListenerService {
 
       logger.info(`   🎟️ Cupom detectado: ${couponData.code || 'sem código'} - ${couponData.platform || 'plataforma desconhecida'}`);
 
-      // Gerar hash da mensagem
-      const messageHash = this.generateMessageHash(text, messageId, channelId.toString());
+      // IMPORTANTE: Verificar se há outros códigos na mensagem que ainda não foram processados
+      // Mesmo quando processamos 1 cupom, pode haver mais na mesma mensagem
+      const allCodesInMessage = couponExtractor.extractAllCouponCodes(text);
+      const currentCode = couponData.code;
+      const otherCodes = allCodesInMessage.filter(code => code !== currentCode);
+      
+      if (otherCodes.length > 0) {
+        logger.info(`   🔍 Detectado cupom ${currentCode}, mas há ${otherCodes.length} outro(s) código(s) na mensagem: ${otherCodes.join(', ')}`);
+        logger.info(`   📋 Processando cupom atual e depois os outros códigos...`);
+        
+        // Processar outros códigos também
+        for (const otherCode of otherCodes) {
+          const codePattern = new RegExp(`\`${otherCode}\``);
+          let codeMatch = text.match(codePattern);
+          
+          if (!codeMatch) {
+            codeMatch = text.match(new RegExp(`\\b${otherCode}\\b`));
+          }
+          
+          if (codeMatch && codeMatch.index !== undefined) {
+            const start = Math.max(0, codeMatch.index - 300);
+            const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
+            const context = text.substring(start, end);
+            
+            const otherCoupon = couponExtractor.extractCouponInfo(context, messageId, channel.username || channel.name);
+            if (otherCoupon && otherCoupon.code === otherCode) {
+              if (!this.matchesPlatformFilter(otherCoupon, channel)) {
+                logger.debug(`   🚫 Cupom ${otherCoupon.code} de plataforma '${otherCoupon.platform}' não corresponde ao filtro`);
+                continue;
+              }
+              
+              const otherCouponHash = this.generateMessageHash(
+                `${text}:${otherCoupon.code}`,
+                messageId,
+                channelId.toString()
+              );
+              
+              await this.saveCoupon(otherCoupon, otherCouponHash);
+              logger.info(`   ✅ Cupom adicional processado: ${otherCoupon.code}`);
+            }
+          }
+        }
+      }
+
+      // Gerar hash da mensagem (usar código específico para evitar duplicatas)
+      const messageHash = this.generateMessageHash(
+        `${text}:${couponData.code}`,
+        messageId,
+        channelId.toString()
+      );
 
       // Salvar cupom
       await this.saveCoupon(couponData, messageHash);

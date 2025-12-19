@@ -325,8 +325,6 @@ CONTEXTO DO CUPOM:
 - Plataforma: ${coupon.platform === 'mercadolivre' ? 'Mercado Livre' : coupon.platform === 'shopee' ? 'Shopee' : coupon.platform}
 ${context.hasMinPurchase ? `- Compra mínima: R$ ${coupon.min_purchase.toFixed(2)}` : ''}
 ${context.hasMaxDiscount ? `- Limite de desconto: R$ ${coupon.max_discount_value.toFixed(2)}` : ''}
-- Válido até: ${this.formatDate(coupon.valid_until)}
-- Dias restantes: ${context.daysUntilExpiry} dias
 - Urgência: ${this.getUrgencyText(context.urgencyLevel)}
 ${context.isGeneral ? '- Válido para TODOS os produtos' : '- Válido para produtos selecionados'}
 
@@ -334,26 +332,28 @@ VARIÁVEIS DISPONÍVEIS (use {nome_variavel}):
 - {platform_name} - Nome da plataforma
 - {coupon_code} - Código do cupom
 - {discount_value} - Valor do desconto formatado
-- {valid_until} - Data de validade
 - {min_purchase} - Compra mínima (se houver)
 - {coupon_title} - Título do cupom
 - {coupon_description} - Descrição do cupom
 - {affiliate_link} - Link de afiliado
 
+**IMPORTANTE**: NÃO inclua data de validade ({valid_until}) na mensagem. A data de validade não deve aparecer no template do bot.
+
 REQUISITOS:
-1. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE (últimas horas!)' : context.urgencyLevel === 'urgente' ? 'urgente (poucos dias restantes)' : 'atrativa'}
+1. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara'}
 2. **CRÍTICO**: O código do cupom DEVE aparecer formatado com backticks: \`{coupon_code}\` (exemplo: \`ADMLAYS\`). Isso permite cópia fácil no Telegram.
 3. **IMPORTANTE**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b> ou <strong>texto</strong>
 4. Enfatize o valor do desconto de forma clara e destacada
-5. ${context.daysUntilExpiry <= 3 ? 'Crie senso de urgência pela validade próxima' : 'Mencione a validade mas sem urgência excessiva'}
-6. Use emojis relevantes (máximo 4-5 por mensagem, não exagere): 🎟️, 💰, ⏰, 🔥, ⚡
+5. **CRÍTICO**: NÃO inclua data de validade ou informações sobre quando o cupom expira. Apenas crie senso de urgência genérico se necessário.
+6. Use emojis relevantes (máximo 4-5 por mensagem, não exagere): 🎟️, 💰, 🔥, ⚡
 7. ${formatGuide}
 8. Seja conciso mas informativo (máximo 8-10 linhas)
 9. Use quebras de linha para organizar (uma linha em branco entre seções)
 10. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown
 11. **CRÍTICO**: Para riscar texto, use ~~texto~~ (dois tildes), NÃO use ~~~~ ou <s>
-12. NÃO invente variáveis que não foram listadas
-13. Retorne APENAS o template, sem explicações
+12. **CRÍTICO**: NÃO use a variável {valid_until} e NÃO mencione data de validade na mensagem
+13. NÃO invente variáveis que não foram listadas
+14. Retorne APENAS o template, sem explicações
 
 EXEMPLO DE ESTRUTURA BOM (para cupons):
 🎟️ **NOVO CUPOM DISPONÍVEL!** 🎟️
@@ -361,9 +361,7 @@ EXEMPLO DE ESTRUTURA BOM (para cupons):
 🛒 {platform_name}
 💰 **{discount_value} OFF**
 
-${context.hasMinPurchase ? '💳 Compra mínima: {min_purchase}\n' : ''}📅 Válido até: {valid_until}
-
-🔑 Código: \`{coupon_code}\`
+${context.hasMinPurchase ? '💳 Compra mínima: {min_purchase}\n' : ''}🔑 Código: \`{coupon_code}\`
 
 🔗 {affiliate_link}
 
