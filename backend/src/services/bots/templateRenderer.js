@@ -231,6 +231,28 @@ class TemplateRenderer {
           message = message.replace(codeRegex, `\`${couponCode}\``);
           logger.info(`   ✅ Código formatado: \`${couponCode}\``);
         }
+        
+        // IMPORTANTE: Se o código do cupom não está na mensagem, adicionar
+        // Isso garante que mesmo se a IA não incluir, o código será adicionado
+        if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
+          logger.warn(`⚠️ Código do cupom não encontrado na mensagem, adicionando...`);
+          // Adicionar código do cupom após a seção de preço ou antes do link
+          const priceSectionPattern = /(🏷️.*?🏷️)/;
+          const linkPattern = /(👉.*?affiliate_link)/;
+          
+          const couponSection = `\n\n🎟️ **CUPOM DISPONÍVEL!**\n\n🔑 **Código:** \`${couponCode}\`\n`;
+          
+          if (priceSectionPattern.test(message)) {
+            message = message.replace(priceSectionPattern, `$1${couponSection}`);
+          } else if (linkPattern.test(message)) {
+            message = message.replace(linkPattern, `${couponSection}$1`);
+          } else {
+            // Adicionar antes do link de afiliado
+            message = message.replace(/(👉.*?\{affiliate_link\})/, `${couponSection}$1`);
+          }
+          
+          logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+        }
       }
       
       // IMPORTANTE: Verificar se o título do produto está presente na mensagem após substituição

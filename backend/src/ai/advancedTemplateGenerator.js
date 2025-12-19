@@ -214,23 +214,25 @@ REQUISITOS:
 4. **CRÍTICO**: O título do produto ({product_name}) DEVE aparecer logo após o cabeçalho da oferta, em uma linha separada e destacada
 5. **CRÍTICO**: Use a variável {affiliate_link} para o link, NÃO escreva "[Link de afiliado]" ou texto literal. O link será substituído automaticamente.
 6. **CRÍTICO**: A mensagem DEVE ser enviada como caption de uma imagem, então seja direto e impactante
-7. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara'}
-8. ${context.hasCoupon ? 'Destaque a ECONOMIA DUPLA (desconto do produto + cupom)' : 'Destaque o desconto e a oportunidade'}
+${context.hasCoupon ? `7. **CRÍTICO**: O código do cupom DEVE aparecer na mensagem usando a variável {coupon_code} formatada com backticks: \`{coupon_code}\`. Isso permite cópia fácil no Telegram. O código do cupom é OBRIGATÓRIO quando há cupom vinculado.` : '7. Crie uma mensagem ' + (context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara')}
+${context.hasCoupon ? '' : '8. Crie uma mensagem ' + (context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara')}
+${context.hasCoupon ? '8. **CRÍTICO**: Destaque a ECONOMIA DUPLA (desconto do produto + cupom) e SEMPRE inclua o código do cupom formatado' : '9. Destaque o desconto e a oportunidade'}
 9. Use emojis relevantes e estratégicos (4-6 por mensagem para melhor visualização)
 10. ${formatGuide}
 11. Seja detalhado e persuasivo (mínimo 10-15 linhas para criar uma mensagem completa e atrativa)
 12. **IMPORTANTE**: Inclua uma seção descrevendo o produto baseado no título, destacando características, benefícios e por que vale a pena comprar
 13. Crie senso de urgência se o desconto for alto (${context.discount}%)
-14. ${context.hasCoupon ? 'Enfatize o valor final com cupom aplicado' : 'Enfatize o preço com desconto'}
+${context.hasCoupon ? '14. **CRÍTICO**: Enfatize o valor final com cupom aplicado e SEMPRE mostre o código do cupom formatado com backticks' : '14. Enfatize o preço com desconto'}
 15. Use quebras de linha para organizar (uma linha em branco entre seções principais)
 16. ${context.hasOldPrice ? 'Para preço antigo, use ~~{old_price}~~ (dois tildes) para riscar o preço antigo' : ''}
-17. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown (**texto** para negrito, ~~texto~~ para riscado)
+17. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown (**texto** para negrito, ~~texto~~ para riscado, \`código\` para código)
 18. **CRÍTICO**: Para riscar preço antigo, use ~~texto~~ (dois tildes), NÃO use ~~~~ ou <s>
 19. **CRÍTICO**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b>
-20. **CRÍTICO**: NUNCA escreva "[Link de afiliado]" ou qualquer texto literal para o link - use APENAS {affiliate_link}
-21. **CRÍTICO**: A mensagem DEVE incluir TODAS as seções: cabeçalho, título do produto, descrição, preço, desconto, link e urgência
-22. NÃO invente variáveis que não foram listadas
-23. Retorne APENAS o template completo, sem explicações
+20. **CRÍTICO**: Para código do cupom, use \`{coupon_code}\` (backticks), NÃO use <code> ou tags HTML
+21. **CRÍTICO**: NUNCA escreva "[Link de afiliado]" ou qualquer texto literal para o link - use APENAS {affiliate_link}
+22. **CRÍTICO**: A mensagem DEVE incluir TODAS as seções: cabeçalho, título do produto, descrição, preço, desconto${context.hasCoupon ? ', código do cupom' : ''}, link e urgência
+23. NÃO invente variáveis que não foram listadas
+24. Retorne APENAS o template completo, sem explicações
 
 EXEMPLO DE ESTRUTURA BOM (para produtos - MENSAGEM COMPLETA E ELABORADA):
 🔥 **Oferta Imperdível!** 🔥
@@ -243,7 +245,12 @@ EXEMPLO DE ESTRUTURA BOM (para produtos - MENSAGEM COMPLETA E ELABORADA):
 💰 **Preço especial: {current_price}** ${context.hasOldPrice ? '(de {old_price})' : ''}
 🏷️ **${context.discount}% OFF - Economize R$ ${Math.round((product.old_price || product.current_price) - (product.current_price || 0))}!** 🏷️
 
-${context.hasCoupon ? '🎟️ **CUPOM INCLUSO!** Aproveite ainda mais desconto!\n\n' : ''}🛒 Disponível no {platform_name}
+${context.hasCoupon ? `🎟️ **CUPOM INCLUSO!** Aproveite ainda mais desconto!
+
+🔑 **Código do Cupom:** \`{coupon_code}\`
+💰 **Desconto do Cupom:** {coupon_discount}
+
+` : ''}🛒 Disponível no {platform_name}
 
 👉 {affiliate_link}
 [CRÍTICO: Use {affiliate_link} aqui, NÃO escreva "[Link de afiliado]" ou qualquer texto literal. A variável será substituída pelo link real automaticamente.]
@@ -257,6 +264,7 @@ IMPORTANTE SOBRE VARIÁVEIS:
 - Use {old_price} para o preço antigo (se houver)
 - Use {discount_percentage} para o desconto
 - Use {platform_name} para o nome da plataforma
+${context.hasCoupon ? `- **CRÍTICO**: Use {coupon_code} para o código do cupom - SEMPRE formatado com backticks: \`{coupon_code}\`\n- Use {coupon_discount} para o desconto do cupom\n- Use {coupon_section} para a seção completa do cupom (opcional, pode usar {coupon_code} diretamente)` : ''}
 - NUNCA escreva texto literal como "[Link de afiliado]" - use sempre as variáveis
 
 IMPORTANTE SOBRE FORMATAÇÃO:
@@ -274,8 +282,7 @@ ESTRUTURA OBRIGATÓRIA (todas as seções devem estar presentes):
 2. Título do produto usando {product_name}
 3. Descrição persuasiva do produto (3-5 linhas)
 4. Preço e desconto formatados
-5. Link de afiliado usando {affiliate_link}
-6. Mensagem de urgência final
+${context.hasCoupon ? '5. **OBRIGATÓRIO**: Código do cupom formatado com backticks: \\`{coupon_code}\\`\n6. Link de afiliado usando {affiliate_link}\n7. Mensagem de urgência final' : '5. Link de afiliado usando {affiliate_link}\n6. Mensagem de urgência final'}
 
 Template:`;
 
