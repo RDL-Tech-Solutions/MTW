@@ -79,6 +79,23 @@ class TemplateRenderer {
           // 2.1. IMPORTANTE: Garantir que {product_name} esteja presente na mensagem
           // Se a IA não incluiu o título, adicionar no início
           const productName = variables.product_name || contextData.product?.name || 'Produto';
+          
+          // Verificar se a IA gerou uma descrição longa no lugar do título
+          // Se a primeira linha após o cabeçalho é muito longa (> 100 chars) e não contém o título, pode ser uma descrição
+          const lines = message.split('\n');
+          const headerLineIndex = lines.findIndex(line => line.includes('🔥') && line.includes('**'));
+          if (headerLineIndex >= 0 && headerLineIndex + 1 < lines.length) {
+            const lineAfterHeader = lines[headerLineIndex + 1].trim();
+            // Se a linha após o cabeçalho é muito longa e não contém o título, pode ser uma descrição no lugar do título
+            if (lineAfterHeader.length > 100 && !lineAfterHeader.includes(productName) && !lineAfterHeader.includes('{product_name}')) {
+              logger.warn(`⚠️ Detectada possível descrição longa no lugar do título, corrigindo...`);
+              // Adicionar o título antes dessa linha longa
+              lines[headerLineIndex + 1] = `📦 **${productName}**\n\n${lineAfterHeader}`;
+              message = lines.join('\n');
+              logger.info(`✅ Título do produto adicionado antes da descrição: "${productName}"`);
+            }
+          }
+          
           if (!message.includes('{product_name}') && !message.includes(productName)) {
             logger.warn(`⚠️ Título do produto não encontrado na mensagem da IA, adicionando...`);
             // Adicionar título após o cabeçalho da oferta

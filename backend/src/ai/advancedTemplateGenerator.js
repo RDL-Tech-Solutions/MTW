@@ -176,7 +176,8 @@ class AdvancedTemplateGenerator {
 
 CONTEXTO DO PRODUTO:
 - Nome original: ${context.originalTitle || product.name || 'Produto'}
-- Nome otimizado: ${context.optimizedTitle || product.name || 'Produto'} ${context.optimizedTitle ? '(USE ESTE TÍTULO na mensagem)' : ''}
+- Nome otimizado: ${context.optimizedTitle || product.name || 'Produto'} ${context.optimizedTitle ? '(USE ESTE TÍTULO EXATAMENTE na mensagem, sem modificações)' : ''}
+- **CRÍTICO**: O título otimizado acima já está curto e pronto para uso. Use EXATAMENTE a variável {product_name} sem criar um novo título ou descrição longa.
 - Preço atual: R$ ${product.current_price || '0,00'}
 ${context.hasOldPrice ? `- Preço antigo: R$ ${product.old_price} (use ~~R$ ${product.old_price}~~ para riscar)` : ''}
 - Desconto: ${context.discount}% OFF
@@ -208,10 +209,10 @@ ${context.hasCoupon ? `
 `}
 
 REQUISITOS:
-1. **CRÍTICO**: O título do produto DEVE aparecer na mensagem usando a variável {product_name}. ${context.optimizedTitle ? 'USE O TÍTULO OTIMIZADO fornecido no contexto' : 'Use o nome do produto fornecido'}
+1. **CRÍTICO**: O título do produto DEVE aparecer na mensagem usando EXATAMENTE a variável {product_name} SEM MODIFICAR. ${context.optimizedTitle ? 'USE O TÍTULO OTIMIZADO fornecido no contexto' : 'Use o nome do produto fornecido'} O título já está otimizado e curto, NÃO crie um novo título ou descrição longa no lugar do título.
 2. **CRÍTICO**: Crie uma mensagem COMPLETA e ELABORADA, não apenas um template básico
-3. **CRÍTICO**: Analise o produto pelo título e crie uma descrição persuasiva destacando benefícios e características principais
-4. **CRÍTICO**: O título do produto ({product_name}) DEVE aparecer logo após o cabeçalho da oferta, em uma linha separada e destacada
+3. **CRÍTICO**: O título do produto ({product_name}) DEVE aparecer logo após o cabeçalho da oferta, em uma linha separada e destacada, usando EXATAMENTE a variável {product_name} sem alterações
+4. **CRÍTICO**: Após o título, crie uma seção SEPARADA de descrição persuasiva destacando benefícios e características principais baseadas no título fornecido
 5. **CRÍTICO**: Use a variável {affiliate_link} para o link, NÃO escreva "[Link de afiliado]" ou texto literal. O link será substituído automaticamente.
 6. **CRÍTICO**: A mensagem DEVE ser enviada como caption de uma imagem, então seja direto e impactante
 ${context.hasCoupon ? `7. **CRÍTICO**: O código do cupom DEVE aparecer na mensagem usando a variável {coupon_code} formatada com backticks: \`{coupon_code}\`. Isso permite cópia fácil no Telegram. O código do cupom é OBRIGATÓRIO quando há cupom vinculado.` : '7. Crie uma mensagem ' + (context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara')}
@@ -238,9 +239,9 @@ EXEMPLO DE ESTRUTURA BOM (para produtos - MENSAGEM COMPLETA E ELABORADA):
 🔥 **Oferta Imperdível!** 🔥
 
 📦 **{product_name}**
-[CRÍTICO: O título do produto DEVE aparecer aqui, usando a variável {product_name}. Use o título otimizado fornecido no contexto.]
+[CRÍTICO: O título do produto DEVE aparecer aqui EXATAMENTE como fornecido, usando a variável {product_name}. NÃO modifique o título, NÃO crie uma descrição longa no lugar do título. O título já está otimizado e curto (exemplo: "🔥 Fonte Gigabyte GP-P650G PG5, 650W, 80 Plus Gold, PFC Ativo, PCIe 5.1, ATX 3.1, Preta"). Use EXATAMENTE a variável {product_name} sem alterações.]
 
-💡 [AQUI: Crie uma descrição persuasiva do produto baseada no título, destacando características principais, benefícios e por que vale a pena comprar. Seja específico e convincente, usando 3-5 linhas. Analise o título do produto e crie uma descrição que destaque as características mencionadas no título.]
+💡 [AQUI: Crie uma descrição persuasiva do produto baseada no título fornecido, destacando características principais, benefícios e por que vale a pena comprar. Seja específico e convincente, usando 3-5 linhas. Esta é uma seção SEPARADA do título - o título já foi mostrado acima usando {product_name}.]
 
 💰 **Preço especial: {current_price}** ${context.hasOldPrice ? '(de {old_price})' : ''}
 🏷️ **${context.discount}% OFF - Economize R$ ${Math.round((product.old_price || product.current_price) - (product.current_price || 0))}!** 🏷️
@@ -258,7 +259,7 @@ ${context.hasCoupon ? `🎟️ **CUPOM INCLUSO!** Aproveite ainda mais desconto!
 ⏳ **Aproveite antes que acabe!** ⏳
 
 IMPORTANTE SOBRE VARIÁVEIS:
-- Use {product_name} para o título (será substituído pelo título otimizado)
+- **CRÍTICO**: Use {product_name} para o título - será substituído pelo título otimizado que já está curto e pronto. NÃO modifique, NÃO crie um novo título, NÃO substitua por uma descrição longa. Use EXATAMENTE a variável {product_name} sem alterações.
 - Use {affiliate_link} para o link (será substituído pelo link real)
 - Use {current_price} para o preço atual
 - Use {old_price} para o preço antigo (se houver)
@@ -279,10 +280,28 @@ IMPORTANTE SOBRE FORMATAÇÃO:
 
 ESTRUTURA OBRIGATÓRIA (todas as seções devem estar presentes):
 1. Cabeçalho com emojis e chamada de atenção
-2. Título do produto usando {product_name}
-3. Descrição persuasiva do produto (3-5 linhas)
+2. **CRÍTICO**: Título do produto usando EXATAMENTE {product_name} - NÃO modifique, NÃO crie descrição longa no lugar. O título já está otimizado e curto.
+3. Descrição persuasiva do produto (3-5 linhas) - Esta é uma seção SEPARADA, após o título
 4. Preço e desconto formatados
 ${context.hasCoupon ? '5. **OBRIGATÓRIO**: Código do cupom formatado com backticks: \\`{coupon_code}\\`\n6. Link de afiliado usando {affiliate_link}\n7. Mensagem de urgência final' : '5. Link de afiliado usando {affiliate_link}\n6. Mensagem de urgência final'}
+
+**ATENÇÃO ESPECIAL SOBRE O TÍTULO:**
+- O título do produto ({product_name}) já está otimizado e curto (exemplo: "🔥 Fonte Gigabyte GP-P650G PG5, 650W, 80 Plus Gold, PFC Ativo, PCIe 5.1, ATX 3.1, Preta")
+- Use EXATAMENTE a variável {product_name} sem modificações
+- NÃO substitua o título por uma descrição longa
+- NÃO crie um novo título baseado no título fornecido
+- O título deve aparecer curto e direto, exatamente como fornecido
+
+**EXEMPLO DO QUE NÃO FAZER (ERRADO):**
+❌ "💡 Transforme sua experiência de digitação com este teclado RGB de 69 teclas! Com 18 modos de luz de fundo personalizáveis..."
+   (Isso é uma descrição longa, NÃO é o título)
+
+**EXEMPLO DO QUE FAZER (CORRETO):**
+✅ 📦 **{product_name}**
+   (O título aparece curto e direto, usando a variável {product_name})
+
+💡 Transforme sua experiência de digitação com este teclado RGB de 69 teclas! Com 18 modos de luz de fundo personalizáveis...
+   (A descrição vem DEPOIS do título, em uma seção separada)
 
 Template:`;
 
