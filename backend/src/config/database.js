@@ -12,10 +12,19 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 // Cliente Supabase com privilégios de admin
+// Configurações adicionais para melhorar confiabilidade
 export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false
+  },
+  db: {
+    schema: 'public'
+  },
+  global: {
+    headers: {
+      'x-client-info': 'precocerto-backend'
+    }
   }
 });
 

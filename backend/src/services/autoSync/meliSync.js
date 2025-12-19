@@ -46,11 +46,22 @@ class MeliSync {
           }
 
           // Tentar API (se não for forçado scraping)
+          // IMPORTANTE: Enviar access token em TODAS as chamadas (mesmo públicas) conforme recomendação de segurança
 
           let usedApi = false;
 
           if (!forceScraping) {
             try {
+              // Sempre tentar obter token se disponível (recomendação de segurança)
+              if (meliAuth.isConfigured() && !headers['Authorization']) {
+                try {
+                  const token = await meliAuth.getAccessToken();
+                  headers['Authorization'] = `Bearer ${token}`;
+                } catch (e) {
+                  logger.debug('⚠️ Token não disponível para busca pública, continuando sem auth');
+                }
+              }
+
               const response = await axios.get('https://api.mercadolibre.com/sites/MLB/search', {
                 params: {
                   q: term,
@@ -66,7 +77,29 @@ class MeliSync {
                 usedApi = true;
               }
             } catch (apiError) {
-              logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
+              const status = apiError.response?.status;
+              const errorData = apiError.response?.data;
+
+              // Tratamento detalhado de erro 403 conforme documentação
+              if (status === 403) {
+                const errorCode = errorData?.code || errorData?.error;
+                const errorMessage = errorData?.message || apiError.message;
+                
+                logger.warn(`   ⚠️ Erro 403 na busca: ${errorMessage}`);
+                logger.warn(`   💡 Verifique: scopes, IPs permitidos, aplicação ativa, usuário validado`);
+              } else if (status === 401) {
+                logger.warn(`   ⚠️ Token expirado/inválido. Tentando renovar...`);
+                // Tentar renovar token e continuar
+                try {
+                  const token = await meliAuth.getAccessToken();
+                  headers['Authorization'] = `Bearer ${token}`;
+                  // Não retentar automaticamente aqui para evitar loop
+                } catch (e) {
+                  logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
+                }
+              } else {
+                logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
+              }
             }
           }
 
@@ -743,23 +776,34 @@ class MeliSync {
 
       // Preservar link original do produto
       // Prioridade: product.affiliate_link > product.link > product.permalink
+      let originalLink = null;
       if (!product.affiliate_link) {
         if (product.link && product.link.includes('mercadolivre')) {
           product.affiliate_link = product.link;
+          originalLink = product.link;
         } else if (product.permalink && product.permalink.includes('mercadolivre')) {
           product.affiliate_link = product.permalink;
+          originalLink = product.permalink;
         } else {
           // Fallback: tentar gerar um link limpo apenas se não tiver nenhum link válido
           const generatedLink = await this.generateMeliAffiliateLink(product);
           if (generatedLink) {
             product.affiliate_link = generatedLink;
+            originalLink = generatedLink;
           }
         }
+      } else {
+        // Se já tem affiliate_link, usar como original também
+        originalLink = product.affiliate_link;
       }
 
-      // Criar novo produto
-      const newProduct = await Product.create(product);
-      logger.info(`✅ Novo produto salvo: ${product.name}`);
+      // Salvar produto com status 'pending' e original_link
+      const newProduct = await Product.create({
+        ...product,
+        status: 'pending',
+        original_link: originalLink
+      });
+      logger.info(`✅ Novo produto salvo (pendente): ${product.name}`);
 
       return { product: newProduct, isNew: true };
     } catch (error) {

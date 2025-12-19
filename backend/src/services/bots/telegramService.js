@@ -145,7 +145,16 @@ class TelegramService {
       // Validar e limpar caption
       caption = this.sanitizeMessage(caption);
       
-      // Se for URL, SEMPRE baixar e enviar como arquivo (mais confiável e evita link preview)
+      // IMPORTANTE: Validar que a caption não está vazia
+      if (!caption || caption.trim().length === 0) {
+        logger.warn(`⚠️ Caption está vazia! A imagem será enviada sem texto.`);
+      } else {
+        logger.info(`📝 Caption preparada: ${caption.length} caracteres`);
+        logger.debug(`📝 Primeiros 200 chars da caption: ${caption.substring(0, 200)}`);
+      }
+      
+      // Se for URL HTTP, SEMPRE baixar e enviar como arquivo (mais confiável e evita link preview)
+      // Se for arquivo local, usar diretamente
       if (typeof photo === 'string' && (photo.startsWith('http://') || photo.startsWith('https://'))) {
         try {
           logger.info(`📥 [1/3] Baixando imagem de ${photo.substring(0, 80)}...`);
@@ -166,10 +175,14 @@ class TelegramService {
           form.append('chat_id', chatId);
           if (caption && caption.trim().length > 0) {
             form.append('caption', caption);
+            logger.info(`📝 Caption adicionada ao FormData: ${caption.length} caracteres`);
             // Adicionar parse_mode se especificado nas options
             if (options.parse_mode) {
               form.append('parse_mode', options.parse_mode);
+              logger.info(`📝 Parse mode adicionado: ${options.parse_mode}`);
             }
+          } else {
+            logger.warn(`⚠️ Caption vazia ou inválida, enviando imagem sem texto`);
           }
           form.append('photo', imageResponse.data, { filename: 'product.jpg' });
           
@@ -235,6 +248,14 @@ class TelegramService {
         form.append('chat_id', chatId);
         if (caption && caption.trim().length > 0) {
           form.append('caption', caption);
+          logger.info(`📝 Caption adicionada ao FormData (arquivo local): ${caption.length} caracteres`);
+          // Adicionar parse_mode se especificado nas options
+          if (options.parse_mode) {
+            form.append('parse_mode', options.parse_mode);
+            logger.info(`📝 Parse mode adicionado: ${options.parse_mode}`);
+          }
+        } else {
+          logger.warn(`⚠️ Caption vazia ou inválida, enviando imagem sem texto`);
         }
         
         if (typeof photo === 'string') {
@@ -312,16 +333,31 @@ class TelegramService {
       logger.info(`   URL completa: ${imageUrl}`);
       logger.info(`   Caption length: ${message?.length || 0}`);
       
-      // Usar parse_mode das options ou da configuração, ou Markdown como padrão
+      // IMPORTANTE: Validar que a mensagem não está vazia
+      if (!message || message.trim().length === 0) {
+        logger.error(`❌ ERRO CRÍTICO: Mensagem está vazia! Não é possível enviar imagem sem template.`);
+        throw new Error('Mensagem (template) está vazia. Verifique se o template foi gerado corretamente.');
+      }
+      
+      logger.debug(`📝 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
+      
+      // Usar parse_mode das options ou da configuração, ou HTML como padrão (mais confiável)
       const BotConfig = (await import('../../models/BotConfig.js')).default;
       const botConfig = await BotConfig.get();
-      const defaultParseMode = botConfig.telegram_parse_mode || 'Markdown';
+      let defaultParseMode = botConfig.telegram_parse_mode || 'HTML';
+      
+      // Se estiver configurado como Markdown/MarkdownV2, usar HTML (mais confiável)
+      if (defaultParseMode === 'Markdown' || defaultParseMode === 'MarkdownV2') {
+        defaultParseMode = 'HTML';
+      }
       
       const photoOptions = {
         ...options,
         parse_mode: options.parse_mode || defaultParseMode,
         disable_web_page_preview: true // Desabilitar preview automático de links
       };
+      
+      logger.info(`📝 Parse mode para foto: ${photoOptions.parse_mode}`);
       
       // Tentar enviar com HTML primeiro
       let photoResult;
@@ -395,8 +431,13 @@ class TelegramService {
         throw new Error('Chat ID não fornecido');
       }
 
-      // Validar e limpar mensagem
+      // Validar e limpar mensagem (preservando quebras de linha)
       message = this.sanitizeMessage(message);
+      
+      // Log para debug: verificar quebras de linha
+      const lineBreaks = (message.match(/\n/g) || []).length;
+      logger.debug(`📤 Enviando mensagem Telegram com ${lineBreaks} quebras de linha`);
+      logger.debug(`📤 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
 
       // Preparar payload base
       let payload = {

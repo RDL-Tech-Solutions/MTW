@@ -284,6 +284,23 @@ class TelegramChannelController {
 
       logger.info(`✅ Cupom Telegram salvo: ${couponData.code} de @${couponData.channel_origin}`);
 
+      // IMPORTANTE: Enviar notificação usando template do painel admin e logo da plataforma
+      // Apenas se o cupom não estiver pendente de aprovação
+      if (!coupon.is_pending_approval && coupon.is_active) {
+        try {
+          logger.info(`📢 Enviando notificação de novo cupom capturado do Telegram: ${coupon.code}`);
+          const couponNotificationService = (await import('../services/coupons/couponNotificationService.js')).default;
+          const notificationResult = await couponNotificationService.notifyNewCoupon(coupon);
+          logger.info(`✅ Notificação de cupom enviada: ${JSON.stringify(notificationResult)}`);
+        } catch (notifError) {
+          logger.error(`❌ Erro ao enviar notificação de cupom: ${notifError.message}`);
+          logger.error(`   Stack: ${notifError.stack}`);
+          // Não falhar o salvamento se a notificação falhar
+        }
+      } else {
+        logger.info(`⏸️ Cupom está pendente de aprovação ou inativo, notificação não será enviada`);
+      }
+
       res.status(201).json({
         success: true,
         message: 'Cupom salvo com sucesso',

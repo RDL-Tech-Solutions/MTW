@@ -181,3 +181,5 @@ Retorne APENAS a descrição, sem explicações, sem markdown.`;
 }
 
 export default new DescriptionOptimizer();
+
+

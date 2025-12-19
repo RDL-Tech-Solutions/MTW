@@ -159,6 +159,11 @@ class WhatsAppService {
       if (!this.apiUrl || !this.apiToken) {
         throw new Error('WhatsApp API não configurada. Configure no painel admin.');
       }
+      
+      // Log para debug: verificar quebras de linha
+      const lineBreaks = (message.match(/\n/g) || []).length;
+      logger.debug(`📤 Enviando mensagem WhatsApp com ${lineBreaks} quebras de linha`);
+      logger.debug(`📤 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
 
       const response = await axios.post(
         `${this.apiUrl}/${this.phoneNumberId}/messages`,

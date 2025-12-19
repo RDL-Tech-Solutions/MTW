@@ -10,6 +10,8 @@ router.use(authenticateToken, requireAdmin);
 // Rotas de configurações
 router.get('/', appSettingsController.getSettings);
 router.put('/', appSettingsController.updateSettings);
+// IMPORTANTE: /reveal deve vir ANTES de /:platform para não ser interpretado como platform
+router.get('/reveal', appSettingsController.revealSettings); // Endpoint para revelar valores sensíveis
 router.get('/:platform', appSettingsController.getPlatformSettings);
 
 // Rotas específicas do Mercado Livre

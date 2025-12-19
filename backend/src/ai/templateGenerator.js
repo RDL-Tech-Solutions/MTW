@@ -126,3 +126,5 @@ Template:`;
 }
 
 export default new TemplateGenerator();
+
+

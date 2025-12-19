@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Copy, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, Calendar, Zap, Brain } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -44,6 +44,7 @@ export default function Coupons() {
   const [errors, setErrors] = useState({});
   const [isLoadingCoupon, setIsLoadingCoupon] = useState(false);
   const [codeSearchTimeout, setCodeSearchTimeout] = useState(null);
+  const [templateMode, setTemplateMode] = useState('custom');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -52,6 +53,29 @@ export default function Coupons() {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  useEffect(() => {
+    loadTemplateMode();
+  }, []);
+
+  const loadTemplateMode = async () => {
+    try {
+      const response = await api.get('/settings');
+      const settings = response.data.data;
+      setTemplateMode(settings.template_mode_coupon || 'custom');
+    } catch (error) {
+      console.error('Erro ao carregar modo de template:', error);
+    }
+  };
+
+  const getTemplateModeInfo = () => {
+    const modeNames = {
+      'default': { label: 'Padrão', icon: '📋', color: 'bg-gray-100 text-gray-800' },
+      'custom': { label: 'Customizado', icon: '✏️', color: 'bg-blue-100 text-blue-800' },
+      'ai_advanced': { label: 'IA ADVANCED', icon: '🤖', color: 'bg-purple-100 text-purple-800' }
+    };
+    return modeNames[templateMode] || modeNames['custom'];
+  };
 
   // Função para buscar cupom por código e auto-preencher
   const handleCodeChange = (code) => {
@@ -416,7 +440,7 @@ export default function Coupons() {
                 Novo Cupom
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingCoupon ? 'Editar Cupom' : 'Novo Cupom'}
@@ -426,7 +450,7 @@ export default function Coupons() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="platform">Plataforma *</Label>
                     <select
@@ -485,7 +509,7 @@ export default function Coupons() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="discount_type">Tipo de Desconto *</Label>
                     <select
@@ -562,7 +586,7 @@ export default function Coupons() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="valid_from">Data de Início</Label>
                     <Input
@@ -585,7 +609,7 @@ export default function Coupons() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="max_uses">Limite de Usos</Label>
                     <Input
@@ -637,11 +661,34 @@ export default function Coupons() {
                   </p>
                 </div>
 
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                {/* Informação sobre Modo de Template */}
+                {!editingCoupon && (
+                  <div className="p-3 bg-muted rounded-md border">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="flex-1">
+                        <Label className="text-sm font-semibold">Modo de Template Ativo</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Este cupom será enviado usando o template de "Novo Cupom"
+                        </p>
+                      </div>
+                      <Badge className={`${getTemplateModeInfo().color} shrink-0`}>
+                        {getTemplateModeInfo().icon} {getTemplateModeInfo().label}
+                      </Badge>
+                    </div>
+                    {getTemplateModeInfo().label === 'IA ADVANCED' && (
+                      <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-800 dark:text-purple-200">
+                        <Brain className="h-3 w-3 inline mr-1" />
+                        A IA irá gerar o template automaticamente baseado no cupom e contexto
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto">
                     Cancelar
                   </Button>
-                  <Button type="submit">
+                  <Button type="submit" className="w-full sm:w-auto">
                     {editingCoupon ? 'Salvar' : 'Criar'}
                   </Button>
                 </DialogFooter>

@@ -187,3 +187,5 @@ node scripts/test-shopee-graphql.js
 2. Ajustar métodos que dependem de preços (podem precisar de scraping)
 3. Implementar cache para ofertas frequentes
 4. Adicionar retry logic para requisições falhadas
+
+

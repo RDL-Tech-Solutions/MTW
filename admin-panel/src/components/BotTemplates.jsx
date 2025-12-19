@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send, Copy as CopyIcon, Download, Sparkles, Brain, Loader2 } from 'lucide-react';
+import { Edit, Save, X, Plus, Trash2, FileText, Info, Eye, Play, Copy, CheckCircle2, AlertCircle, Send, Copy as CopyIcon, Download, Sparkles, Brain, Loader2, Settings, Zap } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from './ui/textarea';
 
 const templateTypes = {
-  new_promotion: 'Nova Promoção',
+  new_promotion: 'Nova Promoção (Sem Cupom)',
+  promotion_with_coupon: 'Promoção + Cupom',
   new_coupon: 'Novo Cupom',
   expired_coupon: 'Cupom Expirado'
 };
@@ -31,6 +32,13 @@ export default function BotTemplates() {
   const [testTemplate, setTestTemplate] = useState(null);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [aiDescription, setAiDescription] = useState('');
+  const [templateModes, setTemplateModes] = useState({
+    new_promotion: 'custom',
+    promotion_with_coupon: 'custom',
+    new_coupon: 'custom',
+    expired_coupon: 'custom'
+  });
+  const [loadingModes, setLoadingModes] = useState(true);
   const [newTemplate, setNewTemplate] = useState({
     template_type: Object.keys(templateTypes)[0],
     platform: 'all',
@@ -41,7 +49,56 @@ export default function BotTemplates() {
 
   useEffect(() => {
     loadTemplates();
+    loadTemplateModes();
   }, []);
+
+  const loadTemplateModes = async () => {
+    try {
+      setLoadingModes(true);
+      const response = await api.get('/settings');
+      const settings = response.data.data;
+      setTemplateModes({
+        new_promotion: settings.template_mode_promotion || 'custom',
+        promotion_with_coupon: settings.template_mode_promotion_coupon || 'custom',
+        new_coupon: settings.template_mode_coupon || 'custom',
+        expired_coupon: settings.template_mode_expired_coupon || 'custom'
+      });
+    } catch (error) {
+      console.error('Erro ao carregar modos de template:', error);
+    } finally {
+      setLoadingModes(false);
+    }
+  };
+
+  const handleTemplateModeChange = async (templateType, mode) => {
+    try {
+      const fieldMap = {
+        new_promotion: 'template_mode_promotion',
+        promotion_with_coupon: 'template_mode_promotion_coupon',
+        new_coupon: 'template_mode_coupon',
+        expired_coupon: 'template_mode_expired_coupon'
+      };
+
+      const field = fieldMap[templateType];
+      if (!field) return;
+
+      await api.put('/settings', { [field]: mode });
+      
+      setTemplateModes(prev => ({ ...prev, [templateType]: mode }));
+      
+      toast({
+        title: "Sucesso",
+        description: `Modo de template atualizado para ${mode === 'default' ? 'Padrão' : mode === 'custom' ? 'Customizado' : 'IA ADVANCED'}`,
+        variant: "success"
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao atualizar modo de template",
+        variant: "destructive"
+      });
+    }
+  };
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -550,6 +607,72 @@ export default function BotTemplates() {
 
   return (
     <div className="space-y-6">
+      {/* Seção de Configuração de Modo de Template */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Configuração de Modo de Template
+          </CardTitle>
+          <CardDescription>
+            Escolha como os templates serão gerados para cada tipo de mensagem
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {Object.entries(templateTypes).map(([key, label]) => {
+              const currentMode = templateModes[key] || 'custom';
+              return (
+                <div key={key} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <Label className="text-base font-semibold">{label}</Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {currentMode === 'default' && '📋 Usa template padrão do sistema'}
+                      {currentMode === 'custom' && '✏️ Usa template salvo no painel admin'}
+                      {currentMode === 'ai_advanced' && '🤖 IA ADVANCED: Gera template automaticamente baseado no contexto'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={currentMode === 'default' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleTemplateModeChange(key, 'default')}
+                      disabled={loadingModes}
+                    >
+                      Padrão
+                    </Button>
+                    <Button
+                      variant={currentMode === 'custom' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleTemplateModeChange(key, 'custom')}
+                      disabled={loadingModes}
+                    >
+                      Customizado
+                    </Button>
+                    <Button
+                      variant={currentMode === 'ai_advanced' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleTemplateModeChange(key, 'ai_advanced')}
+                      disabled={loadingModes}
+                      className={currentMode === 'ai_advanced' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}
+                    >
+                      <Zap className="h-3 w-3 mr-1" />
+                      IA ADVANCED
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>💡 Dica:</strong> IA ADVANCED analisa o produto/cupom e gera templates personalizados automaticamente, 
+              adaptando-se ao desconto, urgência e contexto. Requer OpenRouter configurado em Configurações → IA / OpenRouter.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Templates de Mensagens</h2>

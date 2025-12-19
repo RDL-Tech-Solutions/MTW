@@ -4,7 +4,7 @@ import {
   Plus, Edit, Trash2, MessageSquare, Activity, 
   Play, Square, RefreshCw, CheckCircle2, XCircle,
   ExternalLink, Eye, EyeOff, Settings, Key, Power,
-  Send, Shield, AlertCircle, Trash, Brain
+  Send, Shield, AlertCircle, Trash, Brain, Zap
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -47,6 +47,7 @@ export default function TelegramChannels() {
     enabled: false,
     coupons_extracted: 0
   });
+  const [templateMode, setTemplateMode] = useState('custom');
   
   // Configuração
   const [config, setConfig] = useState({
@@ -76,6 +77,7 @@ export default function TelegramChannels() {
     loadConfig();
     checkAuthStatus();
     checkListenerStatus();
+    loadTemplateMode();
     
     // Verificar status periodicamente (aumentado para 15 segundos para evitar muitas requisições)
     const interval = setInterval(() => {
@@ -85,6 +87,25 @@ export default function TelegramChannels() {
     
     return () => clearInterval(interval);
   }, []);
+
+  const loadTemplateMode = async () => {
+    try {
+      const response = await api.get('/settings');
+      const settings = response.data.data;
+      setTemplateMode(settings.template_mode_coupon || 'custom');
+    } catch (error) {
+      console.error('Erro ao carregar modo de template:', error);
+    }
+  };
+
+  const getTemplateModeInfo = () => {
+    const modeNames = {
+      'default': { label: 'Padrão', icon: '📋', color: 'bg-gray-100 text-gray-800' },
+      'custom': { label: 'Customizado', icon: '✏️', color: 'bg-blue-100 text-blue-800' },
+      'ai_advanced': { label: 'IA ADVANCED', icon: '🤖', color: 'bg-purple-100 text-purple-800' }
+    };
+    return modeNames[templateMode] || modeNames['custom'];
+  };
 
   const loadChannels = async () => {
     setLoading(true);
@@ -1326,6 +1347,26 @@ export default function TelegramChannels() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Informação sobre Modo de Template */}
+          <div className="mb-4 p-3 bg-muted rounded-md border">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-semibold">Modo de Template para Cupons Capturados</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Cupons capturados do Telegram serão enviados usando o template de "Novo Cupom"
+                </p>
+              </div>
+              <Badge className={getTemplateModeInfo().color}>
+                {getTemplateModeInfo().icon} {getTemplateModeInfo().label}
+              </Badge>
+            </div>
+            {getTemplateModeInfo().label === 'IA ADVANCED' && (
+              <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-800 dark:text-purple-200">
+                <Brain className="h-3 w-3 inline mr-1" />
+                A IA irá gerar o template automaticamente baseado no cupom capturado e contexto
+              </div>
+            )}
+          </div>
           <Table>
             <TableHeader>
               <TableRow>

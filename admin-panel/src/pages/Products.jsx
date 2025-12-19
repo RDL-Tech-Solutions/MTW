@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -20,6 +20,7 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [analyzingLink, setAnalyzingLink] = useState(false);
@@ -44,11 +45,40 @@ export default function Products() {
     platform: 'shopee'
   });
 
+  const [templateModes, setTemplateModes] = useState({
+    new_promotion: 'custom',
+    promotion_with_coupon: 'custom'
+  });
+
   useEffect(() => {
     fetchProducts(1);
     fetchCategories();
     fetchCoupons();
+    loadTemplateModes();
   }, []);
+
+  const loadTemplateModes = async () => {
+    try {
+      const response = await api.get('/settings');
+      const settings = response.data.data;
+      setTemplateModes({
+        new_promotion: settings.template_mode_promotion || 'custom',
+        promotion_with_coupon: settings.template_mode_promotion_coupon || 'custom'
+      });
+    } catch (error) {
+      console.error('Erro ao carregar modos de template:', error);
+    }
+  };
+
+  const getTemplateModeInfo = (hasCoupon) => {
+    const mode = hasCoupon ? templateModes.promotion_with_coupon : templateModes.new_promotion;
+    const modeNames = {
+      'default': { label: 'Padrão', icon: '📋', color: 'bg-gray-100 text-gray-800' },
+      'custom': { label: 'Customizado', icon: '✏️', color: 'bg-blue-100 text-blue-800' },
+      'ai_advanced': { label: 'IA ADVANCED', icon: '🤖', color: 'bg-purple-100 text-purple-800' }
+    };
+    return modeNames[mode] || modeNames['custom'];
+  };
 
   const fetchProducts = async (page = 1) => {
     try {
@@ -101,7 +131,7 @@ export default function Products() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, platformFilter, categoryFilter]);
+  }, [searchTerm, platformFilter, categoryFilter, statusFilter]);
 
   const fetchCategories = async () => {
     try {
@@ -632,6 +662,31 @@ export default function Products() {
                   </div>
                 </div>
 
+                {/* Informação sobre Modo de Template */}
+                {!editingProduct && (
+                  <div className="p-3 bg-muted rounded-md border">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-sm font-semibold">Modo de Template Ativo</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formData.coupon_id 
+                            ? 'Este produto será enviado usando o template de "Promoção + Cupom"'
+                            : 'Este produto será enviado usando o template de "Nova Promoção"'}
+                        </p>
+                      </div>
+                      <Badge className={getTemplateModeInfo(!!formData.coupon_id).color}>
+                        {getTemplateModeInfo(!!formData.coupon_id).icon} {getTemplateModeInfo(!!formData.coupon_id).label}
+                      </Badge>
+                    </div>
+                    {getTemplateModeInfo(!!formData.coupon_id).label === 'IA ADVANCED' && (
+                      <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-800 dark:text-purple-200">
+                        <Brain className="h-3 w-3 inline mr-1" />
+                        A IA irá gerar o template automaticamente baseado no produto e contexto
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                   <Button type="submit">{editingProduct ? 'Salvar' : 'Criar'}</Button>
@@ -684,6 +739,17 @@ export default function Products() {
                     {category.icon} {category.name}
                   </option>
                 ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">Todos os Status</option>
+                <option value="published">Publicados</option>
+                <option value="pending">Pendentes</option>
+                <option value="approved">Aprovados</option>
+                <option value="rejected">Rejeitados</option>
               </select>
             </div>
           </div>
@@ -770,18 +836,33 @@ export default function Products() {
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            {product.old_price && product.old_price > product.current_price ? (
+                            {product.old_price && product.old_price > (product.final_price || product.current_price) ? (
                               <>
                                 <div className="font-medium text-green-600">
-                                  R$ {parseFloat(product.current_price).toFixed(2)}
+                                  R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
+                                  {product.final_price && product.final_price < product.current_price && (
+                                    <Badge variant="outline" className="ml-2 text-xs">
+                                      Com cupom
+                                    </Badge>
+                                  )}
                                 </div>
                                 <div className="text-sm text-muted-foreground line-through">
                                   R$ {parseFloat(product.old_price).toFixed(2)}
                                 </div>
+                                {product.final_price && product.final_price < product.current_price && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Sem cupom: R$ {parseFloat(product.current_price).toFixed(2)}
+                                  </div>
+                                )}
                               </>
                             ) : (
                               <div className="font-medium">
-                                R$ {parseFloat(product.current_price).toFixed(2)}
+                                R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
+                                {product.final_price && product.final_price < product.current_price && (
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    Com cupom
+                                  </Badge>
+                                )}
                               </div>
                             )}
                           </div>

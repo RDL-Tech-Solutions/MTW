@@ -11,13 +11,15 @@ import {
   Bot,
   Bell,
   MessageSquare,
-  Settings
+  Settings,
+  Clock
 } from 'lucide-react';
 import Logo from '../Logo';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Produtos', href: '/products', icon: Package },
+  { name: 'Pendentes', href: '/pending-products', icon: Clock },
   { name: 'Cupons', href: '/coupons', icon: Ticket },
   { name: 'Captura de Cupons', href: '/coupon-capture', icon: Zap },
   { name: 'Categorias', href: '/categories', icon: FolderTree },

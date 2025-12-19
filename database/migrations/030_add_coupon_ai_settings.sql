@@ -14,3 +14,5 @@ COMMENT ON COLUMN coupon_settings.ai_min_quality_score IS 'Score mínimo de qual
 COMMENT ON COLUMN coupon_settings.ai_min_relevance_score IS 'Score mínimo de relevância (0.0-1.0)';
 COMMENT ON COLUMN coupon_settings.ai_min_price_score IS 'Score mínimo de preço (0.0-1.0)';
 COMMENT ON COLUMN coupon_settings.ai_require_good_deal IS 'Requerer que seja uma boa oportunidade';
+
+

@@ -15,6 +15,7 @@ import CouponCapture from './pages/CouponCapture';
 import Notifications from './pages/Notifications';
 import TelegramChannels from './pages/TelegramChannels';
 import Settings from './pages/Settings';
+import PendingProducts from './pages/PendingProducts';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -44,6 +45,7 @@ function App() {
           <Route path="auto-sync" element={<AutoSync />} />
           <Route path="coupon-capture" element={<CouponCapture />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="pending-products" element={<PendingProducts />} />
         </Route>
       </Routes>
       <Toaster />

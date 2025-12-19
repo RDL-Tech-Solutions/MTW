@@ -166,3 +166,5 @@ node scripts/test-shopee-sync.js
 3. **Relatórios**
    - Usar `conversionReport` para ver cliques
    - Usar `validatedReport` para ver comissões confirmadas
+
+

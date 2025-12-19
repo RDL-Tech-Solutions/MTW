@@ -337,12 +337,19 @@ class AmazonSync {
         }
       }
 
+      // Preservar link original antes de gerar link de afiliado
+      const originalLink = product.affiliate_link || product.link || '';
+      
       // Gerar link de afiliado (async)
-      product.affiliate_link = await this.generateAmazonAffiliateLink(product.affiliate_link);
+      product.affiliate_link = await this.generateAmazonAffiliateLink(originalLink);
 
-      // Criar novo produto
-      const newProduct = await Product.create(product);
-      logger.info(`✅ Novo produto salvo: ${product.name}`);
+      // Criar novo produto com status 'pending' e original_link
+      const newProduct = await Product.create({
+        ...product,
+        status: 'pending',
+        original_link: originalLink
+      });
+      logger.info(`✅ Novo produto salvo (pendente): ${product.name}`);
 
       return { product: newProduct, isNew: true };
     } catch (error) {

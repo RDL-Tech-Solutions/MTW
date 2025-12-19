@@ -143,7 +143,9 @@ class PublishService {
       
       if (hasValidImage) {
         try {
-          logger.info(`📤 Enviando imagem para Telegram: ${product.image_url.substring(0, 100)}...`);
+          // IMPORTANTE: Usar imagem do produto diretamente (como estava antes)
+          // A combinação com logo da plataforma pode ser feita opcionalmente no futuro
+          logger.info(`📤 Enviando imagem do produto para Telegram: ${product.image_url.substring(0, 100)}...`);
           const result = await notificationDispatcher.sendToTelegramWithImage(
             message,
             product.image_url,
@@ -279,26 +281,60 @@ class PublishService {
    */
   async formatBotMessage(product, platform = 'telegram') {
     try {
+      // IMPORTANTE: Sempre usar template do painel admin
+      // Escolher template baseado se produto tem cupom ou não
+      // Se produto tem cupom vinculado, usar template 'promotion_with_coupon'
+      // Se não tem cupom, usar template 'new_promotion' (sem cupom)
+      let templateType = 'new_promotion';
+      
+      if (product.coupon_id) {
+        templateType = 'promotion_with_coupon';
+        logger.info(`📋 Produto tem cupom vinculado (${product.coupon_id}), usando template 'promotion_with_coupon'`);
+      } else {
+        logger.info(`📋 Produto sem cupom, usando template 'new_promotion'`);
+      }
+      
+      // Preparar contextData para IA ADVANCED (antes de preparar variáveis)
+      // A IA ADVANCED pode otimizar o título do produto, então precisamos passar o produto
+      const contextData = { product };
+      
       // Preparar variáveis do template
+      // NOTA: Se IA ADVANCED for usada, o título será otimizado e as variáveis serão atualizadas depois
       const variables = await templateRenderer.preparePromotionVariables(product);
       
-      // Renderizar template
-      const message = await templateRenderer.render('new_promotion', platform, variables);
+      // Renderizar template - pode usar template do banco ou IA ADVANCED
+      // Se IA ADVANCED for usada, o título será otimizado e as variáveis serão atualizadas
+      logger.info(`📝 Renderizando template '${templateType}' para plataforma '${platform}'...`);
+      const message = await templateRenderer.render(templateType, platform, variables, contextData);
+      
+      if (!message || message.trim().length === 0) {
+        logger.error(`❌ Template renderizado está vazio para produto: ${product.name}`);
+        throw new Error('Template renderizado está vazio');
+      }
+      
+      logger.info(`✅ Mensagem formatada usando template '${templateType}' (${message.length} chars)`);
+      logger.debug(`📝 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
+      logger.debug(`📝 Mensagem completa tem ${(message.match(/\n/g) || []).length} quebras de linha`);
       
       return message;
     } catch (error) {
-      logger.error(`Erro ao formatar mensagem com template: ${error.message}`);
-      // Fallback para formato antigo
-      return this.formatBotMessageFallback(product);
+      logger.error(`❌ ERRO CRÍTICO ao formatar mensagem com template: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+      // NÃO usar fallback - template é obrigatório
+      throw new Error(`Falha ao renderizar template do painel admin: ${error.message}. Configure um template ativo no painel admin.`);
     }
   }
 
   /**
    * Formato de fallback caso template falhe
+   * @deprecated NÃO USAR - Template do painel admin é obrigatório
    * @param {Object} product - Dados do produto
    * @returns {string}
    */
   async formatBotMessageFallback(product) {
+    // MÉTODO DESCONTINUADO - Template do painel admin é obrigatório
+    // Este método não deve ser usado. Sempre use templateRenderer.render()
+    throw new Error('Fallback desabilitado. Template do painel admin é obrigatório.');
     const priceFormatted = new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'

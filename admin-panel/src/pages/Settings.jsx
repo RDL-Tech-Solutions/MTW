@@ -91,47 +91,78 @@ export default function Settings() {
         // Garantir que todos os valores sejam strings (nunca null ou undefined)
         const data = response.data.data || {};
         
-        // Restaurar valores salvos do sessionStorage (se existirem)
-        const savedValues = sessionStorage.getItem('settings_saved_values');
-        const restoredValues = savedValues ? JSON.parse(savedValues) : {};
+        // Lista de campos sensíveis que precisam ser carregados do banco
+        const sensitiveFields = [
+          'meli_client_secret',
+          'meli_access_token',
+          'meli_refresh_token',
+          'shopee_partner_key',
+          'amazon_secret_key',
+          'expo_access_token',
+          'backend_api_key',
+          'openrouter_api_key'
+        ];
+
+        // Identificar quais campos têm valores salvos (mascarados como '***')
+        const fieldsWithValues = sensitiveFields.filter(field => data[field] === '***');
         
-        // Rastrear quais campos têm valores salvos (mascarados como '***' ou restaurados)
+        // Carregar valores reais dos campos sensíveis que têm valores salvos
+        let realValues = {};
+        if (fieldsWithValues.length > 0) {
+          try {
+            const revealResponse = await api.get(`/settings/reveal?fields=${fieldsWithValues.join(',')}`);
+            if (revealResponse.data.success) {
+              realValues = revealResponse.data.data || {};
+            }
+          } catch (revealError) {
+            console.warn('Erro ao carregar valores sensíveis:', revealError);
+            // Continuar sem os valores reais se houver erro
+          }
+        }
+
+        // Rastrear quais campos têm valores salvos
         setHasSavedValue({
-          meli_client_secret: data.meli_client_secret === '***' || !!restoredValues.meli_client_secret,
-          meli_access_token: data.meli_access_token === '***' || !!restoredValues.meli_access_token,
-          meli_refresh_token: data.meli_refresh_token === '***' || !!restoredValues.meli_refresh_token,
-          shopee_partner_key: data.shopee_partner_key === '***' || !!restoredValues.shopee_partner_key,
-          amazon_secret_key: data.amazon_secret_key === '***' || !!restoredValues.amazon_secret_key,
-          expo_access_token: data.expo_access_token === '***' || !!restoredValues.expo_access_token,
-          backend_api_key: data.backend_api_key === '***' || !!restoredValues.backend_api_key,
-          openrouter_api_key: data.openrouter_api_key === '***' || !!restoredValues.openrouter_api_key
+          meli_client_secret: data.meli_client_secret === '***' || !!realValues.meli_client_secret,
+          meli_access_token: data.meli_access_token === '***' || !!realValues.meli_access_token,
+          meli_refresh_token: data.meli_refresh_token === '***' || !!realValues.meli_refresh_token,
+          shopee_partner_key: data.shopee_partner_key === '***' || !!realValues.shopee_partner_key,
+          amazon_secret_key: data.amazon_secret_key === '***' || !!realValues.amazon_secret_key,
+          expo_access_token: data.expo_access_token === '***' || !!realValues.expo_access_token,
+          backend_api_key: data.backend_api_key === '***' || !!realValues.backend_api_key,
+          openrouter_api_key: data.openrouter_api_key === '***' || !!realValues.openrouter_api_key
         });
 
+        // Carregar todos os valores, incluindo os reais dos campos sensíveis
         setSettings({
           meli_client_id: data.meli_client_id || '',
-          meli_client_secret: restoredValues.meli_client_secret || '', // Restaurar do sessionStorage se existir
-          meli_access_token: restoredValues.meli_access_token || '', // Restaurar do sessionStorage se existir
-          meli_refresh_token: restoredValues.meli_refresh_token || '', // Restaurar do sessionStorage se existir
+          meli_client_secret: realValues.meli_client_secret || '',
+          meli_access_token: realValues.meli_access_token || '',
+          meli_refresh_token: realValues.meli_refresh_token || '',
           meli_redirect_uri: data.meli_redirect_uri || '',
           meli_affiliate_code: data.meli_affiliate_code || '',
           meli_affiliate_tag: data.meli_affiliate_tag || '',
           shopee_partner_id: data.shopee_partner_id || '',
-          shopee_partner_key: restoredValues.shopee_partner_key || '', // Restaurar do sessionStorage se existir
+          shopee_partner_key: realValues.shopee_partner_key || '',
           amazon_access_key: data.amazon_access_key || '',
-          amazon_secret_key: restoredValues.amazon_secret_key || '', // Restaurar do sessionStorage se existir
+          amazon_secret_key: realValues.amazon_secret_key || '',
           amazon_partner_tag: data.amazon_partner_tag || '',
           amazon_marketplace: data.amazon_marketplace || 'www.amazon.com.br',
           aliexpress_api_url: data.aliexpress_api_url || 'https://api-sg.aliexpress.com/rest',
-          expo_access_token: restoredValues.expo_access_token || '', // Restaurar do sessionStorage se existir
+          expo_access_token: realValues.expo_access_token || '',
           telegram_collector_rate_limit_delay: data.telegram_collector_rate_limit_delay ?? 1.0,
           telegram_collector_max_retries: data.telegram_collector_max_retries ?? 3,
           telegram_collector_reconnect_delay: data.telegram_collector_reconnect_delay ?? 30,
           backend_url: data.backend_url || 'http://localhost:3000',
-          backend_api_key: restoredValues.backend_api_key || '', // Restaurar do sessionStorage se existir
-          openrouter_api_key: restoredValues.openrouter_api_key || '',
+          backend_api_key: realValues.backend_api_key || '',
+          openrouter_api_key: realValues.openrouter_api_key || '',
           openrouter_model: data.openrouter_model || 'mistralai/mistral-7b-instruct',
           openrouter_enabled: data.openrouter_enabled ?? false
         });
+
+        // Salvar valores sensíveis no sessionStorage para persistência
+        if (Object.keys(realValues).length > 0) {
+          sessionStorage.setItem('settings_saved_values', JSON.stringify(realValues));
+        }
       }
     } catch (error) {
       toast({
@@ -260,6 +291,7 @@ export default function Settings() {
   };
 
   const toggleSecret = (key) => {
+    // Apenas alternar visibilidade - os valores já estão carregados
     setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -412,7 +444,8 @@ export default function Settings() {
         // Atualizar hasSavedValue
         setHasSavedValue(prev => ({
           ...prev,
-          meli_access_token: true
+          meli_access_token: true,
+          meli_refresh_token: true
         }));
 
         // Salvar no sessionStorage
@@ -430,10 +463,30 @@ export default function Settings() {
         });
       }
     } catch (error) {
+      const errorData = error.response?.data || {};
+      const errorMessage = errorData.message || "Falha ao gerar access token.";
+      const suggestions = errorData.suggestions || [];
+      
+      // Verificar se é erro de refresh token inválido/expirado
+      const isInvalidGrant = errorMessage?.includes('invalid_grant') || 
+                            errorMessage?.includes('invalid_token') ||
+                            errorMessage?.includes('Refresh token inválido') ||
+                            errorMessage?.includes('expirado');
+
+      let description = errorMessage;
+      if (suggestions.length > 0) {
+        description += '\n\n' + suggestions.join('\n');
+      }
+
+      if (isInvalidGrant) {
+        description += '\n\n💡 O refresh token expirou ou foi usado. Você precisa obter um novo refresh token usando o fluxo de autorização acima.';
+      }
+
       toast({
-        title: "Erro",
-        description: error.response?.data?.message || "Falha ao gerar access token.",
-        variant: "destructive"
+        title: "Erro ao renovar token",
+        description: description,
+        variant: "destructive",
+        duration: 10000 // Mostrar por mais tempo para mensagens importantes
       });
     } finally {
       setGeneratingAccessToken(false);
@@ -525,7 +578,7 @@ export default function Settings() {
                       type={showSecrets.meli_client_secret ? 'text' : 'password'}
                       value={settings.meli_client_secret || ''}
                       onChange={(e) => setSettings({...settings, meli_client_secret: e.target.value})}
-                      placeholder={hasSavedValue.meli_client_secret ? "Valor salvo (clique para editar)" : "Seu Client Secret"}
+                      placeholder={hasSavedValue.meli_client_secret ? "Valor salvo no banco de dados" : "Seu Client Secret"}
                     />
                     <Button
                       variant="outline"
@@ -563,7 +616,7 @@ export default function Settings() {
                       type={showSecrets.meli_refresh_token ? 'text' : 'password'}
                       value={settings.meli_refresh_token || ''}
                       onChange={(e) => setSettings({...settings, meli_refresh_token: e.target.value})}
-                      placeholder={hasSavedValue.meli_refresh_token ? "Valor salvo (clique para editar)" : "Refresh Token"}
+                      placeholder={hasSavedValue.meli_refresh_token ? "Valor salvo no banco de dados" : "Refresh Token"}
                     />
                     <Button
                       variant="outline"
@@ -690,8 +743,7 @@ export default function Settings() {
                       type={showSecrets.shopee_partner_key ? 'text' : 'password'}
                       value={settings.shopee_partner_key || ''}
                       onChange={(e) => setSettings({...settings, shopee_partner_key: e.target.value})}
-                      placeholder={hasSavedValue.shopee_partner_key ? "••••••••••••••••" : "Digite o Secret da Shopee"}
-                      disabled={hasSavedValue.shopee_partner_key && !showSecrets.shopee_partner_key}
+                      placeholder={hasSavedValue.shopee_partner_key ? "Valor salvo no banco de dados" : "Digite o Secret da Shopee"}
                     />
                     <Button
                       variant="outline"
@@ -738,7 +790,7 @@ export default function Settings() {
                       type={showSecrets.amazon_secret_key ? 'text' : 'password'}
                       value={settings.amazon_secret_key || ''}
                       onChange={(e) => setSettings({...settings, amazon_secret_key: e.target.value})}
-                      placeholder="Sua Secret Key"
+                      placeholder={hasSavedValue.amazon_secret_key ? "Valor salvo no banco de dados" : "Sua Secret Key"}
                     />
                     <Button
                       variant="outline"
@@ -790,7 +842,7 @@ export default function Settings() {
                     type={showSecrets.expo_access_token ? 'text' : 'password'}
                     value={settings.expo_access_token || ''}
                     onChange={(e) => setSettings({...settings, expo_access_token: e.target.value})}
-                    placeholder="Seu Expo Access Token"
+                    placeholder={hasSavedValue.expo_access_token ? "Valor salvo no banco de dados" : "Seu Expo Access Token"}
                   />
                   <Button
                     variant="outline"
@@ -840,7 +892,7 @@ export default function Settings() {
                       type={showSecrets.openrouter_api_key ? 'text' : 'password'}
                       value={settings.openrouter_api_key || ''}
                       onChange={(e) => setSettings({...settings, openrouter_api_key: e.target.value})}
-                      placeholder="sk-or-v1-..."
+                      placeholder={hasSavedValue.openrouter_api_key ? "Valor salvo no banco de dados" : "sk-or-v1-..."}
                       disabled={!settings.openrouter_enabled}
                     />
                     <Button
@@ -970,7 +1022,7 @@ export default function Settings() {
                         type={showSecrets.backend_api_key ? 'text' : 'password'}
                         value={settings.backend_api_key || ''}
                         onChange={(e) => setSettings({...settings, backend_api_key: e.target.value})}
-                        placeholder="API Key (opcional)"
+                        placeholder={hasSavedValue.backend_api_key ? "Valor salvo no banco de dados" : "API Key (opcional)"}
                       />
                       <Button
                         variant="outline"

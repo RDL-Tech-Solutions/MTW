@@ -104,3 +104,5 @@ class CouponAnalyzer {
 }
 
 export default new CouponAnalyzer();
+
+

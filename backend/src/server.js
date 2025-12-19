@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { testConnection } from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import logger from './config/logger.js';
@@ -11,6 +13,9 @@ import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import { startCronJobs } from './services/cron/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -109,6 +114,9 @@ if (process.env.NODE_ENV === 'development') {
 
 // Rate limiting
 app.use('/api', generalLimiter);
+
+// Servir arquivos estáticos (logos, assets)
+app.use('/assets', express.static(path.join(__dirname, '../assets')));
 
 // Rotas
 app.get('/', (req, res) => {

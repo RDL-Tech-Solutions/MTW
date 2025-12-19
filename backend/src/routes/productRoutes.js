@@ -6,6 +6,14 @@ import { createLimiterDefault } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
+// Rotas para produtos pendentes (devem vir antes de /:id para evitar conflito)
+router.get('/pending', authenticateToken, requireAdmin, ProductController.listPending);
+router.post('/pending/:id/approve', authenticateToken, requireAdmin, ProductController.approve);
+router.post('/pending/:id/reject', authenticateToken, requireAdmin, ProductController.reject);
+
+// Estatísticas de produtos
+router.get('/stats', optionalAuth, ProductController.getStats);
+
 // Rotas públicas
 router.get('/', optionalAuth, ProductController.list);
 router.get('/:id', optionalAuth, ProductController.getById);

@@ -101,3 +101,5 @@ class ConfidenceValidator {
 }
 
 export default new ConfidenceValidator();
+
+

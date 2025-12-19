@@ -129,3 +129,5 @@ O template é **automático** - não requer configuração adicional. O sistema 
 1. **Dados Extras**: `commission_rate`, `offer_type`, `period_end` não são salvos no banco, mas são preservados em memória para o template
 2. **Compatibilidade**: Templates customizados no painel admin continuam funcionando
 3. **Fallback**: Se não houver template customizado, usa o template padrão específico para Shopee
+
+

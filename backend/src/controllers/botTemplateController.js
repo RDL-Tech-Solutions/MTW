@@ -91,7 +91,7 @@ class BotTemplateController {
         });
       }
 
-      const validTypes = ['new_promotion', 'new_coupon', 'expired_coupon'];
+      const validTypes = ['new_promotion', 'promotion_with_coupon', 'new_coupon', 'expired_coupon'];
       if (!validTypes.includes(template_type)) {
         return res.status(400).json({
           success: false,
@@ -163,7 +163,7 @@ class BotTemplateController {
 
       // Validar template_type se fornecido
       if (updates.template_type) {
-        const validTypes = ['new_promotion', 'new_coupon', 'expired_coupon'];
+        const validTypes = ['new_promotion', 'promotion_with_coupon', 'new_coupon', 'expired_coupon'];
         if (!validTypes.includes(updates.template_type)) {
           return res.status(400).json({
             success: false,
@@ -243,30 +243,55 @@ class BotTemplateController {
   async createDefaults(req, res) {
     try {
       const defaultTemplates = [
-        // Modelos para Nova Promoção
+        // Modelos para Nova Promoção (SEM CUPOM)
         {
           template_type: 'new_promotion',
           platform: 'all',
-          template: '🔥 **PROMOÇÃO IMPERDÍVEL!**\n\n📦 {product_name}\n\n💰 **{current_price}**{old_price}\n🏷️ **{discount_percentage}% OFF**\n\n🛒 {platform_name}\n\n{coupon_section}\n\n🔗 {affiliate_link}\n\n⚡ Corre que está acabando!',
-          description: 'Modelo Padrão 1: Simples e Direto - Todas as plataformas',
+          template: '🔥 **PROMOÇÃO IMPERDÍVEL!**\n\n📦 {product_name}\n\n💰 **{current_price}**{old_price}\n🏷️ **{discount_percentage}% OFF**\n\n🛒 {platform_name}\n\n🔗 {affiliate_link}\n\n⚡ Corre que está acabando!',
+          description: 'Modelo Padrão 1: Simples e Direto - Todas as plataformas (SEM CUPOM)',
           is_active: true,
-          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'affiliate_link']
+          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'affiliate_link']
         },
         {
           template_type: 'new_promotion',
           platform: 'all',
-          template: '🎯 **OFERTA ESPECIAL ENCONTRADA!**\n\n━━━━━━━━━━━━━━━━━━━━\n📦 **PRODUTO**\n{product_name}\n━━━━━━━━━━━━━━━━━━━━\n\n💰 **PREÇO ATUAL:** {current_price}{old_price}\n🎁 **DESCONTO:** {discount_percentage}% OFF\n\n🏪 **LOJA:** {platform_name}\n\n{coupon_section}\n\n🔗 **COMPRAR AGORA:**\n{affiliate_link}\n\n⏰ **Oferta limitada! Não perca!**',
-          description: 'Modelo Padrão 2: Detalhado e Informativo - Todas as plataformas',
+          template: '🎯 **OFERTA ESPECIAL ENCONTRADA!**\n\n━━━━━━━━━━━━━━━━━━━━\n📦 **PRODUTO**\n{product_name}\n━━━━━━━━━━━━━━━━━━━━\n\n💰 **PREÇO ATUAL:** {current_price}{old_price}\n🎁 **DESCONTO:** {discount_percentage}% OFF\n\n🏪 **LOJA:** {platform_name}\n\n🔗 **COMPRAR AGORA:**\n{affiliate_link}\n\n⏰ **Oferta limitada! Não perca!**',
+          description: 'Modelo Padrão 2: Detalhado e Informativo - Todas as plataformas (SEM CUPOM)',
           is_active: false,
-          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'affiliate_link']
+          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'affiliate_link']
         },
         {
           template_type: 'new_promotion',
           platform: 'all',
-          template: '⚡ **ALERTA DE OFERTA!** ⚡\n\n🎁 {product_name}\n\n💸 De {old_price} por apenas **{current_price}**\n🔥 **ECONOMIZE {discount_percentage}%!**\n\n{coupon_section}\n\n🛒 {platform_name}\n🔗 {affiliate_link}\n\n⏰ **ÚLTIMAS HORAS! Aproveite agora!**',
-          description: 'Modelo Padrão 3: Urgente e Ação - Todas as plataformas',
+          template: '⚡ **ALERTA DE OFERTA!** ⚡\n\n🎁 {product_name}\n\n💸 De {old_price} por apenas **{current_price}**\n🔥 **ECONOMIZE {discount_percentage}%!**\n\n🛒 {platform_name}\n🔗 {affiliate_link}\n\n⏰ **ÚLTIMAS HORAS! Aproveite agora!**',
+          description: 'Modelo Padrão 3: Urgente e Ação - Todas as plataformas (SEM CUPOM)',
           is_active: false,
-          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'affiliate_link']
+          available_variables: ['product_name', 'current_price', 'old_price', 'discount_percentage', 'platform_name', 'affiliate_link']
+        },
+        // Modelos para Promoção COM CUPOM
+        {
+          template_type: 'promotion_with_coupon',
+          platform: 'all',
+          template: '🔥 **PROMOÇÃO + CUPOM!**\n\n📦 {product_name}\n\n💰 **Preço:** {original_price}\n🎟️ **Com Cupom:** {final_price}\n{old_price}\n🏷️ **{discount_percentage}% OFF**\n\n{coupon_section}\n\n🛒 {platform_name}\n\n🔗 {affiliate_link}\n\n⚡ Economia dupla! Corre que está acabando!',
+          description: 'Modelo Padrão 1: Promoção com Cupom - Simples e Direto',
+          is_active: true,
+          available_variables: ['product_name', 'current_price', 'original_price', 'final_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'coupon_code', 'coupon_discount', 'affiliate_link']
+        },
+        {
+          template_type: 'promotion_with_coupon',
+          platform: 'all',
+          template: '🎯 **OFERTA ESPECIAL + CUPOM!**\n\n━━━━━━━━━━━━━━━━━━━━\n📦 **PRODUTO**\n{product_name}\n━━━━━━━━━━━━━━━━━━━━\n\n💰 **PREÇO ORIGINAL:** {original_price}\n🎟️ **PREÇO COM CUPOM:** {final_price}\n{old_price}\n🎁 **DESCONTO DO PRODUTO:** {discount_percentage}% OFF\n\n{coupon_section}\n\n🏪 **LOJA:** {platform_name}\n\n🔗 **COMPRAR AGORA:**\n{affiliate_link}\n\n⏰ **Oferta limitada! Não perca!**',
+          description: 'Modelo Padrão 2: Promoção com Cupom - Detalhado',
+          is_active: false,
+          available_variables: ['product_name', 'current_price', 'original_price', 'final_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'coupon_code', 'coupon_discount', 'affiliate_link']
+        },
+        {
+          template_type: 'promotion_with_coupon',
+          platform: 'all',
+          template: '⚡ **ECONOMIA DUPLA!** ⚡\n\n🎁 {product_name}\n\n💸 De {old_price}\n💰 Por {original_price}\n🎟️ **COM CUPOM: {final_price}**\n🔥 **ECONOMIZE {discount_percentage}% + CUPOM!**\n\n{coupon_section}\n\n🛒 {platform_name}\n🔗 {affiliate_link}\n\n⏰ **ÚLTIMA CHANCE! Use o cupom agora!**',
+          description: 'Modelo Padrão 3: Promoção com Cupom - Urgente',
+          is_active: false,
+          available_variables: ['product_name', 'current_price', 'original_price', 'final_price', 'old_price', 'discount_percentage', 'platform_name', 'coupon_section', 'coupon_code', 'coupon_discount', 'affiliate_link']
         },
         // Modelos para Novo Cupom
         {
@@ -425,8 +450,21 @@ class BotTemplateController {
           'old_price',
           'discount_percentage',
           'platform_name',
+          'affiliate_link'
+        ],
+        promotion_with_coupon: [
+          'product_name',
+          'current_price',
+          'original_price',
+          'final_price',
+          'old_price',
+          'discount_percentage',
+          'platform_name',
           'affiliate_link',
-          'coupon_section'
+          'coupon_section',
+          'coupon_code',
+          'coupon_discount',
+          'price_with_coupon'
         ],
         new_coupon: [
           'platform_name',
@@ -449,11 +487,24 @@ class BotTemplateController {
         new_promotion: {
           product_name: 'Nome do produto',
           current_price: 'Preço atual formatado (R$ X,XX)',
-          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~ - será convertido automaticamente para cada plataforma)',
+          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
           discount_percentage: 'Percentual de desconto',
           platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
+          affiliate_link: 'Link de afiliado do produto'
+        },
+        promotion_with_coupon: {
+          product_name: 'Nome do produto',
+          current_price: 'Preço final com cupom aplicado (R$ X,XX)',
+          original_price: 'Preço antes do cupom (R$ X,XX)',
+          final_price: 'Preço final com cupom (R$ X,XX)',
+          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
+          discount_percentage: 'Percentual de desconto do produto',
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
           affiliate_link: 'Link de afiliado do produto',
-          coupon_section: 'Seção completa do cupom (se houver) - inclui código, desconto, validade'
+          coupon_section: 'Seção completa do cupom - inclui código, desconto, validade',
+          coupon_code: 'Código do cupom',
+          coupon_discount: 'Desconto do cupom (ex: 10% OFF)',
+          price_with_coupon: 'Preço final com cupom formatado'
         },
         new_coupon: {
           platform_name: 'Nome da plataforma',
@@ -507,7 +558,7 @@ class BotTemplateController {
       } = req.body;
 
       // Validar tipo
-      const validTypes = ['new_promotion', 'new_coupon', 'expired_coupon'];
+      const validTypes = ['new_promotion', 'promotion_with_coupon', 'new_coupon', 'expired_coupon'];
       if (!template_type || !validTypes.includes(template_type)) {
         return res.status(400).json({
           success: false,
@@ -523,8 +574,21 @@ class BotTemplateController {
           'old_price',
           'discount_percentage',
           'platform_name',
+          'affiliate_link'
+        ],
+        promotion_with_coupon: [
+          'product_name',
+          'current_price',
+          'original_price',
+          'final_price',
+          'old_price',
+          'discount_percentage',
+          'platform_name',
           'affiliate_link',
-          'coupon_section'
+          'coupon_section',
+          'coupon_code',
+          'coupon_discount',
+          'price_with_coupon'
         ],
         new_coupon: [
           'platform_name',
@@ -547,11 +611,24 @@ class BotTemplateController {
         new_promotion: {
           product_name: 'Nome do produto',
           current_price: 'Preço atual formatado (R$ X,XX)',
-          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~ - será convertido automaticamente para cada plataforma)',
+          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
           discount_percentage: 'Percentual de desconto',
           platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
+          affiliate_link: 'Link de afiliado do produto'
+        },
+        promotion_with_coupon: {
+          product_name: 'Nome do produto',
+          current_price: 'Preço final com cupom aplicado (R$ X,XX)',
+          original_price: 'Preço antes do cupom (R$ X,XX)',
+          final_price: 'Preço final com cupom (R$ X,XX)',
+          old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
+          discount_percentage: 'Percentual de desconto do produto',
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
           affiliate_link: 'Link de afiliado do produto',
-          coupon_section: 'Seção completa do cupom (se houver) - inclui código, desconto, validade'
+          coupon_section: 'Seção completa do cupom - inclui código, desconto, validade',
+          coupon_code: 'Código do cupom',
+          coupon_discount: 'Desconto do cupom (ex: 10% OFF)',
+          price_with_coupon: 'Preço final com cupom formatado'
         },
         new_coupon: {
           platform_name: 'Nome da plataforma',

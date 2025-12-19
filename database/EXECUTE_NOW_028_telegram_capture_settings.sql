@@ -94,3 +94,5 @@ COMMENT ON COLUMN telegram_channels.last_sync_at IS 'Data/hora da última sincro
 -- no painel admin /telegram-channels
 -- ============================================
 
+
+

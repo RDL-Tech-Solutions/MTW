@@ -31,6 +31,7 @@ class MeliCouponCapture {
 
   /**
    * Fazer requisição para API Mercado Livre
+   * IMPORTANTE: Access token deve ser enviado em TODAS as chamadas (públicas e privadas)
    */
   async makeRequest(endpoint, params = {}) {
     try {
@@ -40,31 +41,57 @@ class MeliCouponCapture {
       }
       
       const url = `${this.baseUrl}${endpoint}`;
+      
+      // IMPORTANTE: Sempre tentar obter token se disponível (recomendação de segurança)
+      let token = this.accessToken;
+      if (!token) {
+        try {
+          const meliAuth = (await import('../autoSync/meliAuth.js')).default;
+          if (meliAuth.isConfigured()) {
+            token = await meliAuth.getAccessToken();
+          }
+        } catch (e) {
+          logger.debug(`⚠️ Token não disponível para ${endpoint}, continuando sem auth`);
+        }
+      }
+
       const config = {
         params,
         headers: {
-          'Authorization': `Bearer ${this.accessToken}`
+          'Accept': 'application/json'
         },
         timeout: 30000
       };
+
+      // Adicionar token se disponível (recomendação: sempre enviar)
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
 
       const response = await axios.get(url, config);
       return response.data;
     } catch (error) {
       const status = error.response?.status;
+      const errorData = error.response?.data;
       
-      // Tratar erros esperados sem logar como erro crítico
-      if (status === 404) {
+      // Tratamento detalhado de erro 403 conforme documentação
+      if (status === 403) {
+        const errorCode = errorData?.code || errorData?.error;
+        const errorMessage = errorData?.message || error.message;
+        
+        logger.warn(`⚠️ Erro 403 - Acesso negado:`);
+        logger.warn(`   Endpoint: ${endpoint}`);
+        logger.warn(`   Código: ${errorCode}`);
+        logger.warn(`   Mensagem: ${errorMessage}`);
+        logger.warn(`   💡 Verifique: scopes, IPs permitidos, aplicação ativa, usuário validado`);
+        throw error;
+      } else if (status === 404) {
         // 404 é esperado quando recurso não existe
         logger.debug(`⚠️ Recurso não encontrado: ${endpoint} (404)`);
         throw error;
       } else if (status === 401) {
         // 401 indica token expirado/inválido - aviso, não erro crítico
         logger.warn(`⚠️ Token do Mercado Livre expirado ou inválido (401)`);
-        throw error;
-      } else if (status === 403) {
-        // 403 indica falta de permissão - aviso, não erro crítico
-        logger.warn(`⚠️ Acesso negado ao endpoint ${endpoint} (403 Forbidden)`);
         throw error;
       } else {
         // Outros erros são críticos

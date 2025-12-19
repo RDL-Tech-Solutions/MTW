@@ -128,7 +128,16 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
           {product.old_price && (
             <Text style={styles.oldPrice}>R$ {product.old_price.toFixed(2)}</Text>
           )}
-          <Text style={styles.currentPrice}>R$ {product.current_price.toFixed(2)}</Text>
+          <Text style={styles.currentPrice}>
+            R$ {(product.final_price || product.current_price).toFixed(2)}
+          </Text>
+          {product.final_price && product.final_price < product.current_price && (
+            <View style={{ marginLeft: 4 }}>
+              <Text style={[styles.oldPrice, { fontSize: 10 }]}>
+                Cupom aplicado
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>

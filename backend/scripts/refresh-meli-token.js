@@ -22,14 +22,17 @@ async function refreshToken() {
   try {
     console.log('📡 Enviando requisição para Mercado Livre...\n');
 
-    const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
-      grant_type: 'refresh_token',
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      refresh_token: REFRESH_TOKEN
-    }, {
+    // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+    const params = new URLSearchParams();
+    params.append('grant_type', 'refresh_token');
+    params.append('client_id', CLIENT_ID);
+    params.append('client_secret', CLIENT_SECRET);
+    params.append('refresh_token', REFRESH_TOKEN);
+
+    const response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
       }
     });
 

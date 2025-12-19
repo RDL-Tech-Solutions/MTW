@@ -272,3 +272,5 @@ testAffiliateAPI().catch(error => {
   console.error('\n❌ Erro fatal ao executar testes:', error);
   process.exit(1);
 });
+
+

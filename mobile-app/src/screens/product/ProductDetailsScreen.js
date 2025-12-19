@@ -553,7 +553,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
           {/* Preços */}
           <View style={dynamicStyles.priceContainer}>
-            {product.old_price && product.old_price > product.current_price && (
+            {product.old_price && product.old_price > (product.final_price || product.current_price) && (
               <View style={dynamicStyles.oldPriceContainer}>
                 <Text style={dynamicStyles.oldPriceLabel}>De:</Text>
                 <Text style={dynamicStyles.oldPrice}>R$ {product.old_price.toFixed(2)}</Text>
@@ -561,7 +561,16 @@ export default function ProductDetailsScreen({ route, navigation }) {
             )}
             <View style={dynamicStyles.currentPriceContainer}>
               <Text style={dynamicStyles.currentPriceLabel}>Por apenas:</Text>
-              <Text style={dynamicStyles.currentPrice}>R$ {product.current_price.toFixed(2)}</Text>
+              <Text style={dynamicStyles.currentPrice}>
+                R$ {(product.final_price || product.current_price).toFixed(2)}
+              </Text>
+              {product.final_price && product.final_price < product.current_price && (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={[dynamicStyles.oldPrice, { fontSize: 12 }]}>
+                    Sem cupom: R$ {product.current_price.toFixed(2)}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 

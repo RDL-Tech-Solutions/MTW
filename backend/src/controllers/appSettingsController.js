@@ -6,27 +6,48 @@ class AppSettingsController {
   /**
    * Obter todas as configurações
    * GET /api/settings
+   * GET /api/settings?reveal=meli_client_secret,meli_access_token (para revelar valores específicos)
    */
   async getSettings(req, res) {
     try {
       const settings = await AppSettings.get();
+      const revealFields = req.query.reveal ? req.query.reveal.split(',') : [];
       
-      // Mascarar valores sensíveis
-      const safeSettings = {
-        ...settings,
-        meli_client_secret: settings.meli_client_secret ? '***' : null,
-        meli_access_token: settings.meli_access_token ? '***' : null,
-        meli_refresh_token: settings.meli_refresh_token ? '***' : null,
-        shopee_partner_key: settings.shopee_partner_key ? '***' : null,
-        amazon_secret_key: settings.amazon_secret_key ? '***' : null,
-        expo_access_token: settings.expo_access_token ? '***' : null,
-        backend_api_key: settings.backend_api_key ? '***' : null,
-        openrouter_api_key: settings.openrouter_api_key ? '***' : null
-      };
+      // Lista de campos sensíveis que podem ser revelados
+      const sensitiveFields = [
+        'meli_client_secret',
+        'meli_access_token',
+        'meli_refresh_token',
+        'shopee_partner_key',
+        'amazon_secret_key',
+        'expo_access_token',
+        'backend_api_key',
+        'openrouter_api_key'
+      ];
+
+      // Criar objeto de configurações seguras
+      const safeSettings = { ...settings };
+
+      // Para cada campo sensível, mascarar ou revelar conforme solicitado
+      sensitiveFields.forEach(field => {
+        if (settings[field]) {
+          // Se o campo foi solicitado para revelação, mostrar valor real
+          if (revealFields.includes(field)) {
+            safeSettings[field] = settings[field];
+          } else {
+            // Caso contrário, mascarar
+            safeSettings[field] = '***';
+          }
+        } else {
+          safeSettings[field] = null;
+        }
+      });
 
       res.json({
         success: true,
-        data: safeSettings
+        data: safeSettings,
+        // Informar quais campos foram revelados (para debug)
+        revealed: revealFields.filter(f => sensitiveFields.includes(f))
       });
     } catch (error) {
       logger.error(`Erro ao buscar configurações: ${error.message}`);
@@ -187,13 +208,19 @@ class AppSettingsController {
         });
       }
 
+      // Gerar ID seguro para state (recomendação de segurança)
+      const crypto = await import('crypto');
+      const state = crypto.default.randomBytes(32).toString('hex');
+      
       // Gerar URL de autorização do Mercado Livre
-      const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}`;
+      // IMPORTANTE: Adicionar parâmetro state para segurança conforme documentação
+      const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}&state=${state}`;
 
       res.json({
         success: true,
         data: {
-          auth_url: authUrl
+          auth_url: authUrl,
+          state: state // Retornar state para validação no frontend
         }
       });
     } catch (error) {
@@ -223,18 +250,21 @@ class AppSettingsController {
 
       logger.info('🔄 Trocando código por tokens do Mercado Livre...');
 
+      // IMPORTANTE: Enviar parâmetros no body usando URLSearchParams (não objeto) conforme documentação de segurança
+      const params = new URLSearchParams();
+      params.append('grant_type', 'authorization_code');
+      params.append('client_id', client_id.trim());
+      params.append('client_secret', client_secret.trim());
+      params.append('code', code.trim());
+      params.append('redirect_uri', redirect_uri.trim());
+
       // Trocar código por tokens
-      const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
-        grant_type: 'authorization_code',
-        client_id: client_id,
-        client_secret: client_secret,
-        code: code,
-        redirect_uri: redirect_uri
-      }, {
+      const response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json'
-        }
+        },
+        timeout: 15000
       });
 
       const { access_token, refresh_token, expires_in, user_id } = response.data;
@@ -244,6 +274,14 @@ class AppSettingsController {
         meli_access_token: access_token,
         meli_refresh_token: refresh_token
       });
+
+      // Resetar flag de refresh token inválido no meliAuth
+      try {
+        const meliAuth = (await import('../services/autoSync/meliAuth.js')).default;
+        meliAuth.resetRefreshTokenInvalid();
+      } catch (importError) {
+        logger.warn(`⚠️ Erro ao resetar flag de refresh token: ${importError.message}`);
+      }
 
       logger.info('✅ Tokens do Mercado Livre salvos com sucesso');
 
@@ -297,17 +335,37 @@ class AppSettingsController {
 
       logger.info('🔄 Renovando access token do Mercado Livre...');
 
+      // Validar que todos os valores estão presentes e não vazios
+      if (!config.clientId || !config.clientSecret || !config.refreshToken) {
+        logger.error('❌ Valores faltando:', {
+          hasClientId: !!config.clientId,
+          hasClientSecret: !!config.clientSecret,
+          hasRefreshToken: !!config.refreshToken
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'Configurações incompletas. Verifique Client ID, Client Secret e Refresh Token.'
+        });
+      }
+
+      // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+      const params = new URLSearchParams();
+      params.append('grant_type', 'refresh_token');
+      params.append('client_id', config.clientId.trim());
+      params.append('client_secret', config.clientSecret.trim());
+      params.append('refresh_token', config.refreshToken.trim());
+
+      logger.debug('📤 Enviando requisição de refresh token...');
+      logger.debug(`   Client ID: ${config.clientId.substring(0, 10)}...`);
+      logger.debug(`   Refresh Token: ${config.refreshToken.substring(0, 20)}...`);
+
       // Renovar token usando refresh token
-      const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
-        grant_type: 'refresh_token',
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        refresh_token: config.refreshToken
-      }, {
+      const response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json'
-        }
+        },
+        timeout: 15000
       });
 
       const { access_token, refresh_token, expires_in } = response.data;
@@ -317,6 +375,18 @@ class AppSettingsController {
 
       // Salvar tokens atualizados no banco
       await AppSettings.updateMeliToken(access_token, newRefreshToken);
+
+      // Resetar flag de refresh token inválido no meliAuth (se novo token foi recebido)
+      if (refresh_token) {
+        try {
+          const meliAuth = (await import('../services/autoSync/meliAuth.js')).default;
+          meliAuth.resetRefreshTokenInvalid();
+          // Atualizar refresh token na instância também
+          meliAuth.refreshToken = refresh_token;
+        } catch (importError) {
+          logger.warn(`⚠️ Erro ao resetar flag de refresh token: ${importError.message}`);
+        }
+      }
 
       logger.info('✅ Access token renovado com sucesso');
 
@@ -330,16 +400,117 @@ class AppSettingsController {
         }
       });
     } catch (error) {
-      logger.error(`Erro ao renovar token: ${error.message}`);
-      
-      const errorMessage = error.response?.data?.message || error.message;
-      const errorDetails = error.response?.data || {};
+      const status = error.response?.status;
+      const errorData = error.response?.data || {};
+      const errorMessage = errorData.message || errorData.error || error.message;
 
-      res.status(error.response?.status || 500).json({
+      logger.error(`❌ Erro ao renovar token (${status}): ${errorMessage}`);
+      
+      // Log detalhado para debug
+      if (error.response) {
+        logger.error('📋 Detalhes do erro:', JSON.stringify(errorData, null, 2));
+      }
+
+      // Mensagens específicas baseadas no erro
+      let userMessage = 'Erro ao renovar access token';
+      let suggestions = [];
+
+      if (status === 400) {
+        if (errorMessage?.includes('invalid_grant') || errorMessage?.includes('invalid_token') || 
+            errorMessage?.includes('expired') || errorMessage?.includes('already used')) {
+          userMessage = 'Refresh token inválido, expirado ou já utilizado';
+          suggestions.push('⚠️ O refresh token do Mercado Livre expira após 6 meses de inatividade');
+          suggestions.push('⚠️ Cada refresh token só pode ser usado UMA vez - após uso, um novo é gerado');
+          suggestions.push('💡 Solução: Obtenha um novo refresh token usando o fluxo de autorização');
+          suggestions.push('📝 Passos: 1) Clique em "Obter Refresh Token" 2) Autorize no Mercado Livre 3) Cole o código retornado');
+        } else if (errorMessage?.includes('invalid_client')) {
+          userMessage = 'Client ID ou Client Secret inválidos';
+          suggestions.push('Verifique se o Client ID e Client Secret estão corretos');
+          suggestions.push('Confirme as credenciais no DevCenter do Mercado Livre');
+        } else {
+          userMessage = 'Parâmetros inválidos na requisição';
+          suggestions.push('Verifique se todos os campos estão preenchidos corretamente');
+          suggestions.push('Client ID, Client Secret e Refresh Token são obrigatórios');
+        }
+      } else if (status === 401) {
+        userMessage = 'Não autorizado';
+        suggestions.push('Verifique as credenciais da aplicação');
+      } else if (status === 403) {
+        userMessage = 'Acesso negado';
+        suggestions.push('Verifique se a aplicação não está bloqueada');
+        suggestions.push('Confirme os scopes configurados no DevCenter');
+      }
+
+      res.status(status || 500).json({
         success: false,
-        message: 'Erro ao renovar token',
+        message: userMessage,
         error: errorMessage,
-        details: errorDetails
+        details: errorData,
+        suggestions: suggestions.length > 0 ? suggestions : undefined
+      });
+    }
+  }
+
+  /**
+   * Revelar valores sensíveis específicos
+   * GET /api/settings/reveal?fields=meli_client_secret,meli_access_token
+   */
+  async revealSettings(req, res) {
+    try {
+      const fieldsParam = req.query.fields || req.query.field || '';
+      const fieldsToReveal = fieldsParam ? fieldsParam.split(',').map(f => f.trim()) : [];
+
+      if (fieldsToReveal.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Parâmetro "fields" é obrigatório. Ex: ?fields=meli_client_secret,meli_access_token'
+        });
+      }
+
+      const settings = await AppSettings.get();
+      
+      // Lista de campos sensíveis permitidos
+      const allowedSensitiveFields = [
+        'meli_client_secret',
+        'meli_access_token',
+        'meli_refresh_token',
+        'shopee_partner_key',
+        'amazon_secret_key',
+        'expo_access_token',
+        'backend_api_key',
+        'openrouter_api_key'
+      ];
+
+      // Filtrar apenas campos permitidos
+      const validFields = fieldsToReveal.filter(f => allowedSensitiveFields.includes(f));
+
+      if (validFields.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Nenhum campo válido especificado. Campos permitidos: ' + allowedSensitiveFields.join(', ')
+        });
+      }
+
+      // Retornar apenas os campos solicitados
+      const revealed = {};
+      validFields.forEach(field => {
+        if (settings[field]) {
+          revealed[field] = settings[field];
+        } else {
+          revealed[field] = null;
+        }
+      });
+
+      res.json({
+        success: true,
+        data: revealed
+      });
+    } catch (error) {
+      logger.error(`Erro ao revelar configurações: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao revelar configurações',
+        error: error.message
       });
     }
   }

@@ -5,6 +5,7 @@ import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
+import couponNotificationService from '../services/coupons/couponNotificationService.js';
 import couponApiService from '../services/coupons/couponApiService.js';
 
 class CouponController {
@@ -114,12 +115,16 @@ class CouponController {
 
       logger.info(`Cupom criado: ${coupon.code}`);
 
-      // Enviar notificação automática via bots
+      // Enviar notificação automática via bots COM IMAGEM DA PLATAFORMA
+      // IMPORTANTE: Usar couponNotificationService que envia imagem com logo da plataforma
       try {
-        await notificationDispatcher.notifyNewCoupon(coupon);
-        logger.info(`Notificação de novo cupom enviada: ${coupon.code}`);
+        logger.info(`📢 Enviando notificação de novo cupom com imagem da plataforma: ${coupon.code}`);
+        const notificationResult = await couponNotificationService.notifyNewCoupon(coupon);
+        logger.info(`✅ Notificação de novo cupom enviada com imagem: ${coupon.code}`);
+        logger.info(`   Resultado: ${JSON.stringify(notificationResult)}`);
       } catch (notifError) {
-        logger.error(`Erro ao enviar notificação de cupom: ${notifError.message}`);
+        logger.error(`❌ Erro ao enviar notificação de cupom: ${notifError.message}`);
+        logger.error(`   Stack: ${notifError.stack}`);
         // Não falhar a criação do cupom se a notificação falhar
       }
 

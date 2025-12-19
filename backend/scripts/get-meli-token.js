@@ -247,15 +247,18 @@ async function main() {
         console.log('\n🔄 Trocando code por access token...\n');
         
         try {
-          const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
-            grant_type: 'authorization_code',
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            code: code,
-            redirect_uri: REDIRECT_URI
-          }, {
+          // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+          const params = new URLSearchParams();
+          params.append('grant_type', 'authorization_code');
+          params.append('client_id', CLIENT_ID);
+          params.append('client_secret', CLIENT_SECRET);
+          params.append('code', code);
+          params.append('redirect_uri', REDIRECT_URI);
+
+          const response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json'
             }
           });
 
@@ -387,16 +390,19 @@ async function main() {
       console.log('🔄 Trocando code por access token...\n');
 
       try {
+        // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+        const params = new URLSearchParams();
+        params.append('grant_type', 'authorization_code');
+        params.append('client_id', CLIENT_ID);
+        params.append('client_secret', CLIENT_SECRET);
+        params.append('code', code);
+        params.append('redirect_uri', REDIRECT_URI);
+
         // Trocar code por access token
-        const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
-          grant_type: 'authorization_code',
-          client_id: CLIENT_ID,
-          client_secret: CLIENT_SECRET,
-          code: code,
-          redirect_uri: REDIRECT_URI
-        }, {
+        const response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
           }
         });
 
@@ -514,11 +520,18 @@ async function main() {
       console.log(`🌐 Servidor temporário iniciado na porta ${serverPort}`);
       console.log(`✅ Aguardando callback em: ${REDIRECT_URI}\n`);
     
+      // Gerar ID seguro para state (recomendação de segurança)
+      const crypto = await import('crypto');
+      const state = crypto.default.randomBytes(32).toString('hex');
+
       // Gerar URL de autorização
-      const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-      
+      // IMPORTANTE: Adicionar parâmetro state para segurança conforme documentação
+      const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
+
       console.log('📋 URL de Autorização:');
       console.log(authUrl);
+      console.log(`\n🔐 State (para validação): ${state}`);
+      console.log('⚠️  IMPORTANTE: Valide o state retornado na callback para segurança\n');
       console.log('\n🔄 Abrindo navegador...\n');
       console.log('ℹ️  Instruções:');
       console.log('   1. Faça login no Mercado Livre');

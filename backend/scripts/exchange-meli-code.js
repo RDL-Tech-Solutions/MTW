@@ -36,15 +36,18 @@ async function exchangeCode() {
   try {
     console.log('📡 Enviando requisição para Mercado Livre...\n');
 
-    const response = await axios.post('https://api.mercadolibre.com/oauth/token', {
-      grant_type: 'authorization_code',
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      code: cleanCode,
-      redirect_uri: REDIRECT_URI
-    }, {
+    // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('client_id', CLIENT_ID);
+    params.append('client_secret', CLIENT_SECRET);
+    params.append('code', cleanCode);
+    params.append('redirect_uri', REDIRECT_URI);
+
+    const response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
       }
     });
 

@@ -321,17 +321,20 @@ class ShopeeSync {
         }
       }
 
+      // Preservar link original antes de gerar link de afiliado
+      const originalLink = product.permalink || product.link || product.affiliate_link || '';
+      
       // Garantir que o link de afiliado está gerado
       // Se não tiver, gerar agora
       if (!product.affiliate_link || product.affiliate_link === product.permalink) {
         logger.info(`🔗 Gerando link de afiliado para: ${product.name}`);
-        const originalLink = product.affiliate_link || product.permalink || '';
         product.affiliate_link = await this.generateShopeeAffiliateLink(originalLink);
         
         if (product.affiliate_link && product.affiliate_link !== originalLink) {
           logger.info(`   ✅ Link de afiliado gerado: ${product.affiliate_link.substring(0, 60)}...`);
         } else {
           logger.warn(`   ⚠️ Link de afiliado não foi gerado, usando link original`);
+          product.affiliate_link = originalLink;
         }
       } else {
         logger.info(`   ✅ Link de afiliado já existe: ${product.affiliate_link.substring(0, 60)}...`);
@@ -350,7 +353,9 @@ class ShopeeSync {
         coupon_id: product.coupon_id || null,
         affiliate_link: product.affiliate_link,
         external_id: product.external_id,
-        stock_available: product.stock_available !== undefined ? product.stock_available : true
+        stock_available: product.stock_available !== undefined ? product.stock_available : true,
+        status: 'pending',
+        original_link: originalLink
       };
       
       // Remover campos null que não devem ser salvos

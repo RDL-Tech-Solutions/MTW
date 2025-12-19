@@ -223,3 +223,5 @@ Retorne SOMENTE o JSON.`;
 }
 
 export default new CouponQualityEnhancer();
+
+

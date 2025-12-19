@@ -3,6 +3,7 @@ import logger from '../../config/logger.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -352,6 +353,145 @@ class ImageGenerator {
       }
     } catch (error) {
       logger.warn(`Erro ao limpar arquivos temporários: ${error.message}`);
+    }
+  }
+
+  /**
+   * Combinar imagem do produto com logo da plataforma
+   * @param {string} productImageUrl - URL da imagem do produto
+   * @param {string} platform - Plataforma (mercadolivre, shopee, etc)
+   * @returns {Promise<string>} - Caminho da imagem combinada
+   */
+  async combineProductWithPlatformLogo(productImageUrl, platform) {
+    try {
+      logger.info(`🖼️ Combinando imagem do produto com logo da plataforma: ${platform}`);
+      
+      // Mapear plataforma para nome do arquivo da logo
+      const platformLogos = {
+        mercadolivre: 'mercadolivre-logo.png',
+        shopee: 'shopee-logo.png',
+        aliexpress: 'aliexpress-logo.png',
+        amazon: 'amazon-logo.png'
+      };
+      
+      const logoFileName = platformLogos[platform];
+      if (!logoFileName) {
+        logger.warn(`⚠️ Plataforma ${platform} não tem logo padrão, retornando apenas imagem do produto`);
+        return productImageUrl; // Retornar URL original se não tiver logo
+      }
+      
+      // Buscar logo da plataforma
+      const logoPath = path.join(__dirname, '../../assets/logos', logoFileName);
+      let absoluteLogoPath = path.resolve(logoPath);
+      
+      logger.info(`   Logo path: ${absoluteLogoPath}`);
+      
+      // Verificar se logo existe
+      let logoFound = false;
+      try {
+        await fs.access(absoluteLogoPath);
+        const stats = await fs.stat(absoluteLogoPath);
+        if (!stats.isFile() || stats.size === 0) {
+          throw new Error('Logo não é um arquivo válido');
+        }
+        logger.info(`   ✅ Logo encontrado: ${stats.size} bytes`);
+        logoFound = true;
+      } catch (logoError) {
+        logger.warn(`⚠️ Logo não encontrado em ${absoluteLogoPath}, tentando caminhos alternativos...`);
+        
+        // Tentar caminhos alternativos
+        const alternativePaths = [
+          path.resolve(process.cwd(), 'assets/logos', logoFileName),
+          path.resolve(process.cwd(), 'backend/assets/logos', logoFileName),
+          path.resolve(__dirname, '../../../assets/logos', logoFileName),
+          path.resolve(__dirname, '../../../../assets/logos', logoFileName)
+        ];
+        
+        for (const altPath of alternativePaths) {
+          const resolvedAltPath = path.resolve(altPath);
+          try {
+            await fs.access(resolvedAltPath);
+            const altStats = await fs.stat(resolvedAltPath);
+            if (altStats.isFile() && altStats.size > 0) {
+              logger.info(`   ✅ Logo encontrado em caminho alternativo: ${resolvedAltPath}`);
+              absoluteLogoPath = resolvedAltPath;
+              logoFound = true;
+              break;
+            }
+          } catch (altError) {
+            logger.debug(`   Caminho alternativo não encontrado: ${resolvedAltPath}`);
+          }
+        }
+        
+        if (!logoFound) {
+          logger.warn(`⚠️ Logo não encontrado em nenhum caminho, retornando apenas imagem do produto`);
+          return productImageUrl; // Retornar URL original se logo não for encontrado
+        }
+      }
+      
+      // Baixar imagem do produto
+      logger.info(`   Baixando imagem do produto: ${productImageUrl.substring(0, 100)}...`);
+      const productImageResponse = await axios.get(productImageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 10000
+      });
+      const productImageBuffer = Buffer.from(productImageResponse.data);
+      
+      // Carregar imagens com sharp
+      const productImage = sharp(productImageBuffer);
+      const logoImage = sharp(absoluteLogoPath);
+      
+      // Obter metadados
+      const productMetadata = await productImage.metadata();
+      const logoMetadata = await logoImage.metadata();
+      
+      logger.info(`   Produto: ${productMetadata.width}x${productMetadata.height}`);
+      logger.info(`   Logo: ${logoMetadata.width}x${logoMetadata.height}`);
+      
+      // Redimensionar logo para 15% da largura do produto (máximo 200px)
+      const logoMaxWidth = Math.min(productMetadata.width * 0.15, 200);
+      const logoAspectRatio = logoMetadata.width / logoMetadata.height;
+      const logoNewHeight = logoMaxWidth / logoAspectRatio;
+      
+      const resizedLogo = await logoImage
+        .resize(Math.round(logoMaxWidth), Math.round(logoNewHeight), {
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .toBuffer();
+      
+      logger.info(`   Logo redimensionado: ${Math.round(logoMaxWidth)}x${Math.round(logoNewHeight)}`);
+      
+      // Combinar imagens: logo no canto superior direito
+      const padding = 20; // Padding do logo em relação às bordas
+      const logoX = productMetadata.width - Math.round(logoMaxWidth) - padding;
+      const logoY = padding;
+      
+      const combinedImage = await productImage
+        .composite([{
+          input: resizedLogo,
+          top: logoY,
+          left: logoX
+        }])
+        .png({ quality: 90 })
+        .toBuffer();
+      
+      // Salvar imagem combinada temporariamente
+      const filename = `product_${Date.now()}_${platform}.png`;
+      const filepath = path.join(this.tempDir, filename);
+      await fs.writeFile(filepath, combinedImage);
+      
+      logger.info(`   ✅ Imagem combinada salva: ${filepath}`);
+      logger.info(`   ✅ Tamanho final: ${combinedImage.length} bytes`);
+      
+      return filepath;
+      
+    } catch (error) {
+      logger.error(`❌ Erro ao combinar imagem com logo: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+      // Em caso de erro, retornar URL original do produto
+      logger.warn(`⚠️ Retornando apenas imagem do produto (sem logo)`);
+      return productImageUrl;
     }
   }
 }

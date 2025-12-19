@@ -30,6 +30,7 @@ class MercadoLivreService {
   }
 
   // Fazer requisição à API
+  // IMPORTANTE: Access token deve ser enviado em TODAS as chamadas (públicas e privadas)
   async makeRequest(endpoint, params = {}) {
     try {
       // Garantir que as configurações foram carregadas
@@ -39,19 +40,66 @@ class MercadoLivreService {
       
       const url = `${this.apiUrl}${endpoint}`;
       
+      // IMPORTANTE: Sempre tentar obter token se disponível (recomendação de segurança)
+      let token = this.accessToken;
+      if (!token && this.clientId && this.clientSecret) {
+        try {
+          const meliAuth = (await import('../autoSync/meliAuth.js')).default;
+          if (meliAuth.isConfigured()) {
+            token = await meliAuth.getAccessToken();
+          }
+        } catch (e) {
+          logger.debug(`⚠️ Token não disponível para ${endpoint}, continuando sem auth`);
+        }
+      }
+
+      const headers = {
+        'Accept': 'application/json'
+      };
+
+      // Adicionar token se disponível (recomendação: sempre enviar)
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await axios.get(url, {
         params,
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`
-        }
+        headers,
+        timeout: 15000
       });
 
       return response.data;
     } catch (error) {
       const status = error.response?.status;
-      // Não logar 401/403/404 como erro crítico - são esperados quando API não tem acesso
-      if (status === 401 || status === 403 || status === 404) {
-        logger.warn(`⚠️ Erro na API Mercado Livre (${status}): ${error.message}`);
+      const errorData = error.response?.data;
+
+      // Tratamento detalhado de erro 403 conforme documentação
+      if (status === 403) {
+        const errorCode = errorData?.code || errorData?.error;
+        const errorMessage = errorData?.message || error.message;
+        
+        logger.warn(`⚠️ Erro 403 na API Mercado Livre:`);
+        logger.warn(`   Endpoint: ${endpoint}`);
+        logger.warn(`   Código: ${errorCode}`);
+        logger.warn(`   Mensagem: ${errorMessage}`);
+        
+        // Sugestões baseadas na documentação
+        if (errorCode === 'FORBIDDEN' || errorMessage?.includes('Invalid scopes')) {
+          logger.warn(`   💡 Verifique se os scopes necessários estão configurados no DevCenter`);
+        }
+        if (errorMessage?.includes('IP')) {
+          logger.warn(`   💡 Verifique se o IP está na lista permitida da aplicação`);
+        }
+        if (errorMessage?.includes('blocked') || errorMessage?.includes('disabled')) {
+          logger.warn(`   💡 Verifique se a aplicação não está bloqueada ou desabilitada`);
+        }
+        if (errorMessage?.includes('user') || errorMessage?.includes('inactive')) {
+          logger.warn(`   💡 Verifique se o usuário está ativo e validado`);
+        }
+      } else if (status === 401) {
+        logger.warn(`⚠️ Token expirado/inválido (401): ${error.message}`);
+      } else if (status === 404) {
+        logger.warn(`⚠️ Recurso não encontrado (404): ${endpoint}`);
       } else {
         logger.error(`Erro na API Mercado Livre: ${error.message}`);
       }

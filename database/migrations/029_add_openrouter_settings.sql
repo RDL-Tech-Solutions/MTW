@@ -15,3 +15,5 @@ COMMENT ON COLUMN app_settings.openrouter_enabled IS 'Flag para ativar/desativar
 
 -- Índice para busca rápida (se necessário)
 -- CREATE INDEX IF NOT EXISTS idx_app_settings_openrouter_enabled ON app_settings(openrouter_enabled) WHERE openrouter_enabled = true;
+
+

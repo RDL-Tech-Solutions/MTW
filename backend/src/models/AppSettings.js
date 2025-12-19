@@ -1,34 +1,132 @@
 import supabase from '../config/database.js';
+import logger from '../config/logger.js';
+import { supabaseWithRetry } from '../utils/supabaseRetry.js';
 
 class AppSettings {
   /**
    * Obter configurações (sempre retorna o registro único)
    */
   static async get() {
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('*')
-      .eq('id', '00000000-0000-0000-0000-000000000001')
-      .single();
+    try {
+      // Primeiro, tentar buscar com select('*') - funciona se todas as colunas existirem
+      // Usar retry automático para lidar com erros 502 do Cloudflare
+      let result = await supabaseWithRetry(
+        async () => {
+          return await supabase
+            .from('app_settings')
+            .select('*')
+            .eq('id', '00000000-0000-0000-0000-000000000001')
+            .single();
+        },
+        { maxRetries: 3, initialDelay: 1000 }
+      );
+      
+      let { data, error } = result;
 
-    if (error) {
-      // Se não existir, criar com valores padrão
-      if (error.code === 'PGRST116') {
-        return await this.create();
+      // Se der erro de coluna não encontrada, tentar buscar sem as novas colunas
+      if (error && error.code === '42703') {
+        logger.warn('⚠️ Colunas de template_mode não existem ainda. Buscando sem essas colunas...');
+        logger.warn(`   Erro: ${error.message}`);
+        
+        // Buscar todas as colunas exceto template_mode
+        // Usar uma query mais específica que não inclua as novas colunas
+        // Usar retry automático
+        const basicResult = await supabaseWithRetry(
+          async () => {
+            return await supabase
+              .from('app_settings')
+              .select(`
+                id,
+                amazon_marketplace,
+                backend_url,
+                aliexpress_api_url,
+                telegram_collector_rate_limit_delay,
+                telegram_collector_max_retries,
+                telegram_collector_reconnect_delay,
+                meli_client_id,
+                meli_client_secret,
+                meli_access_token,
+                meli_refresh_token,
+                meli_redirect_uri,
+                meli_affiliate_code,
+                meli_affiliate_tag,
+                shopee_partner_id,
+                shopee_partner_key,
+                amazon_access_key,
+                amazon_secret_key,
+                amazon_partner_tag,
+                expo_access_token,
+                backend_api_key,
+                openrouter_api_key,
+                openrouter_model,
+                openrouter_enabled,
+                created_at,
+                updated_at
+              `)
+              .eq('id', '00000000-0000-0000-0000-000000000001')
+              .single();
+          },
+          { maxRetries: 3, initialDelay: 1000 }
+        );
+        
+        const { data: basicData, error: basicError } = basicResult;
+        
+        if (basicError) {
+          if (basicError.code === 'PGRST116') {
+            return await this.create();
+          }
+          throw basicError;
+        }
+        
+        if (basicData) {
+          // Adicionar valores padrão para template_mode
+          data = {
+            ...basicData,
+            template_mode_promotion: 'custom',
+            template_mode_promotion_coupon: 'custom',
+            template_mode_coupon: 'custom',
+            template_mode_expired_coupon: 'custom'
+          };
+          logger.info('✅ Retornando configurações com valores padrão para template_mode');
+        }
+      } else if (error) {
+        // Se não existir, criar com valores padrão
+        if (error.code === 'PGRST116') {
+          return await this.create();
+        }
+        throw error;
       }
+
+      // Garantir que campos de template_mode existam (com valores padrão se não existirem)
+      if (!data.template_mode_promotion) {
+        data.template_mode_promotion = 'custom';
+      }
+      if (!data.template_mode_promotion_coupon) {
+        data.template_mode_promotion_coupon = 'custom';
+      }
+      if (!data.template_mode_coupon) {
+        data.template_mode_coupon = 'custom';
+      }
+      if (!data.template_mode_expired_coupon) {
+        data.template_mode_expired_coupon = 'custom';
+      }
+
+      return data;
+    } catch (error) {
+      logger.error(`❌ Erro ao buscar app_settings: ${error.message}`);
+      logger.error(`   Código: ${error.code}`);
+      logger.error(`   Detalhes: ${JSON.stringify(error)}`);
       throw error;
     }
-
-    return data;
   }
 
   /**
    * Criar configuração padrão
    */
   static async create() {
-    const { data, error } = await supabase
-      .from('app_settings')
-      .insert([{
+    try {
+      // Tentar inserir com todas as colunas (incluindo template_mode se existirem)
+      const insertData = {
         id: '00000000-0000-0000-0000-000000000001',
         amazon_marketplace: 'www.amazon.com.br',
         backend_url: 'http://localhost:3000',
@@ -36,12 +134,44 @@ class AppSettings {
         telegram_collector_rate_limit_delay: 1.0,
         telegram_collector_max_retries: 3,
         telegram_collector_reconnect_delay: 30
-      }])
-      .select()
-      .single();
+      };
 
-    if (error) throw error;
-    return data;
+      // Tentar adicionar template_mode se as colunas existirem (não vai dar erro se não existirem)
+      try {
+        const { data: testData } = await supabase
+          .from('app_settings')
+          .select('template_mode_promotion')
+          .limit(0);
+        
+        // Se não deu erro, as colunas existem
+        insertData.template_mode_promotion = 'custom';
+        insertData.template_mode_promotion_coupon = 'custom';
+        insertData.template_mode_coupon = 'custom';
+        insertData.template_mode_expired_coupon = 'custom';
+      } catch (e) {
+        // Colunas não existem, não incluir
+        logger.debug('Colunas template_mode não existem, criando sem elas');
+      }
+
+      const { data, error } = await supabase
+        .from('app_settings')
+        .insert([insertData])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // Garantir valores padrão mesmo após criação
+      if (!data.template_mode_promotion) data.template_mode_promotion = 'custom';
+      if (!data.template_mode_promotion_coupon) data.template_mode_promotion_coupon = 'custom';
+      if (!data.template_mode_coupon) data.template_mode_coupon = 'custom';
+      if (!data.template_mode_expired_coupon) data.template_mode_expired_coupon = 'custom';
+      
+      return data;
+    } catch (error) {
+      logger.error(`Erro ao criar app_settings: ${error.message}`);
+      throw error;
+    }
   }
 
   /**

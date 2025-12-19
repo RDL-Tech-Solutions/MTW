@@ -1,5 +1,6 @@
 import supabase from '../config/database.js';
 import { calculateDiscountPercentage } from '../utils/helpers.js';
+import logger from '../config/logger.js';
 
 class Product {
   // Criar novo produto
@@ -14,12 +15,17 @@ class Product {
       coupon_id,
       affiliate_link,
       external_id,
-      stock_available = true
+      stock_available = true,
+      status = 'pending',
+      original_link
     } = productData;
 
     const discount_percentage = old_price
       ? calculateDiscountPercentage(old_price, current_price)
       : 0;
+
+    // Se original_link não foi fornecido, usar affiliate_link como original
+    const finalOriginalLink = original_link || affiliate_link;
 
     const { data, error } = await supabase
       .from('products')
@@ -34,7 +40,9 @@ class Product {
         coupon_id,
         affiliate_link,
         external_id,
-        stock_available
+        stock_available,
+        status,
+        original_link: finalOriginalLink
       }])
       .select()
       .single();
@@ -52,6 +60,43 @@ class Product {
       .single();
 
     if (error) throw error;
+    
+    // Calcular preço final com cupom se houver
+    if (data && data.coupon_id && data.coupon_discount_type && data.coupon_discount_value) {
+      try {
+        let finalPrice = data.current_price;
+        const currentPrice = parseFloat(data.current_price) || 0;
+        const discountValue = parseFloat(data.coupon_discount_value) || 0;
+
+        if (data.coupon_discount_type === 'percentage') {
+          // Desconto percentual
+          finalPrice = currentPrice - (currentPrice * (discountValue / 100));
+        } else {
+          // Desconto fixo
+          finalPrice = Math.max(0, currentPrice - discountValue);
+        }
+
+        // Aplicar limite máximo de desconto se existir
+        try {
+          const Coupon = (await import('./Coupon.js')).default;
+          const coupon = await Coupon.findById(data.coupon_id);
+          if (coupon && coupon.max_discount_value && coupon.max_discount_value > 0) {
+            const discountAmount = currentPrice - finalPrice;
+            if (discountAmount > coupon.max_discount_value) {
+              finalPrice = currentPrice - coupon.max_discount_value;
+            }
+          }
+        } catch (e) {
+          // Ignorar erro ao buscar cupom
+        }
+
+        data.final_price = parseFloat(finalPrice.toFixed(2));
+        data.price_with_coupon = parseFloat(finalPrice.toFixed(2));
+      } catch (e) {
+        logger.warn(`Erro ao calcular preço final para produto ${id}: ${e.message}`);
+      }
+    }
+    
     return data;
   }
 
@@ -79,6 +124,7 @@ class Product {
       max_price,
       min_discount,
       search,
+      status,
       sort = 'created_at',
       order = 'desc'
     } = filters;
@@ -97,6 +143,16 @@ class Product {
     if (max_price) query = query.lte('current_price', max_price);
     if (min_discount) query = query.gte('discount_percentage', min_discount);
     if (search) query = query.ilike('name', `%${search}%`);
+    
+    // Filtro por status (se a coluna existir)
+    if (status) {
+      try {
+        query = query.eq('status', status);
+      } catch (e) {
+        // Se a coluna status não existir, ignorar o filtro
+        logger.debug('Coluna status não encontrada, ignorando filtro');
+      }
+    }
 
     // Ordenação
     query = query.order(sort, { ascending: order === 'asc' });
@@ -108,8 +164,53 @@ class Product {
 
     if (error) throw error;
 
+    // Calcular preço final com cupom para cada produto
+    const productsWithFinalPrice = await Promise.all(
+      (data || []).map(async (product) => {
+        if (product.coupon_id && product.coupon_discount_type && product.coupon_discount_value) {
+          try {
+            let finalPrice = product.current_price;
+            const currentPrice = parseFloat(product.current_price) || 0;
+            const discountValue = parseFloat(product.coupon_discount_value) || 0;
+
+            if (product.coupon_discount_type === 'percentage') {
+              // Desconto percentual
+              finalPrice = currentPrice - (currentPrice * (discountValue / 100));
+            } else {
+              // Desconto fixo
+              finalPrice = Math.max(0, currentPrice - discountValue);
+            }
+
+            // Aplicar limite máximo de desconto se existir (buscar cupom completo)
+            try {
+              const Coupon = (await import('./Coupon.js')).default;
+              const coupon = await Coupon.findById(product.coupon_id);
+              if (coupon && coupon.max_discount_value && coupon.max_discount_value > 0) {
+                const discountAmount = currentPrice - finalPrice;
+                if (discountAmount > coupon.max_discount_value) {
+                  finalPrice = currentPrice - coupon.max_discount_value;
+                }
+              }
+            } catch (e) {
+              // Ignorar erro ao buscar cupom
+            }
+
+            return {
+              ...product,
+              final_price: parseFloat(finalPrice.toFixed(2)),
+              price_with_coupon: parseFloat(finalPrice.toFixed(2))
+            };
+          } catch (e) {
+            logger.warn(`Erro ao calcular preço final para produto ${product.id}: ${e.message}`);
+            return product;
+          }
+        }
+        return product;
+      })
+    );
+
     return {
-      products: data,
+      products: productsWithFinalPrice,
       total: count,
       page,
       limit,
@@ -328,6 +429,340 @@ class Product {
 
     if (error) throw error;
     return count;
+  }
+
+  // Buscar produtos pendentes de aprovação
+  static async findPending(filters = {}) {
+    const {
+      page = 1,
+      limit = 20,
+      platform,
+      search,
+      sort = 'created_at',
+      order = 'desc'
+    } = filters;
+
+    const offset = (page - 1) * limit;
+
+    try {
+      // Primeiro, verificar se a coluna status existe fazendo uma query de teste
+      const testQuery = supabase
+        .from('products')
+        .select('status')
+        .limit(1);
+      
+      const { error: testError } = await testQuery;
+      
+      // Se a coluna status não existir, retornar array vazio
+      if (testError && (
+        (testError.message && (
+          testError.message.includes('column') && 
+          (testError.message.includes('status') || testError.message.toLowerCase().includes('does not exist'))
+        )) ||
+        (testError.code && (
+          testError.code === '42703' || // PostgreSQL: column does not exist
+          testError.code === 'PGRST116' || // Supabase: column not found
+          testError.code === 'PGRST202' // Supabase: column not found (outro código)
+        ))
+      )) {
+        logger.warn('⚠️ Coluna status não encontrada. Execute o SQL: SIMPLE_FIX_STATUS.sql');
+        return {
+          products: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0
+        };
+      }
+      
+      // Se a coluna existe, fazer a query completa com filtro de status
+      let query = supabase
+        .from('products')
+        .select('id, name, image_url, platform, current_price, old_price, discount_percentage, affiliate_link, original_link, external_id, is_active, stock_available, status, category_id, coupon_id, created_at, updated_at', { count: 'exact' })
+        .eq('is_active', true)
+        .eq('status', 'pending');
+
+      // Aplicar filtros básicos
+      if (platform) query = query.eq('platform', platform);
+      if (search) query = query.ilike('name', `%${search}%`);
+
+      // Ordenação
+      query = query.order(sort, { ascending: order === 'asc' });
+
+      // Paginação
+      query = query.range(offset, offset + limit - 1);
+
+      // Buscar produtos pendentes
+      logger.debug(`🔍 Buscando produtos pendentes (findPending)...`);
+      const { data: allData, error, count: allCount } = await query;
+      
+      if (error) {
+        logger.error(`❌ Erro na query inicial: ${error.message}`);
+        logger.error(`   Código: ${error.code}`);
+        logger.error(`   Detalhes: ${JSON.stringify(error, null, 2)}`);
+        
+        // Se o erro for sobre a coluna status não existir, retornar array vazio
+        // Isso permite que a migração seja executada depois sem quebrar a aplicação
+        const isStatusColumnError = 
+          (error.message && (
+            error.message.includes('column') && 
+            (error.message.includes('status') || error.message.toLowerCase().includes('does not exist'))
+          )) ||
+          (error.code && (
+            error.code === '42703' || // PostgreSQL: column does not exist
+            error.code === 'PGRST116' || // Supabase: column not found
+            error.code === 'PGRST202' || // Supabase: column not found (outro código)
+            String(error.code).includes('42703') || // Pode vir como string
+            String(error.code).includes('PGRST')
+          ));
+        
+        if (isStatusColumnError) {
+          logger.warn('⚠️ Coluna status não encontrada. Execute o SQL: SIMPLE_FIX_STATUS.sql');
+          return {
+            products: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0
+          };
+        }
+        
+        // Se for outro tipo de erro, lançar para ser tratado pelo error handler
+        throw error;
+      }
+      
+      logger.debug(`   Produtos pendentes encontrados: ${allData?.length || 0}`);
+      logger.debug(`   Count total: ${allCount || 0}`);
+      
+      // Usar os dados retornados diretamente (já filtrados e paginados)
+      const paginatedProducts = allData || [];
+      const totalPending = allCount || 0;
+
+      // Extrair category_id e coupon_id dos produtos já retornados
+      const categoryIds = [...new Set(paginatedProducts.map(p => p.category_id).filter(Boolean))];
+      const couponIds = [...new Set(paginatedProducts.map(p => p.coupon_id).filter(Boolean))];
+
+      const categoriesMap = {};
+      const couponsMap = {};
+
+      if (categoryIds.length > 0) {
+        try {
+          const Category = (await import('./Category.js')).default;
+          const categories = await Promise.all(
+            categoryIds.map(id => Category.findById(id).catch(() => null))
+          );
+          categories.forEach(cat => {
+            if (cat) categoriesMap[cat.id] = cat;
+          });
+        } catch (catError) {
+          console.warn('Erro ao buscar categorias:', catError.message);
+        }
+      }
+
+      if (couponIds.length > 0) {
+        try {
+          const Coupon = (await import('./Coupon.js')).default;
+          const coupons = await Promise.all(
+            couponIds.map(id => Coupon.findById(id).catch(() => null))
+          );
+          coupons.forEach(coupon => {
+            if (coupon) couponsMap[coupon.id] = coupon;
+          });
+        } catch (couponError) {
+          console.warn('Erro ao buscar cupons:', couponError.message);
+        }
+      }
+
+      // Enriquecer produtos com dados de categoria e cupom
+      const enrichedProducts = paginatedProducts.map(product => {
+        const enriched = { ...product };
+
+        const category = product.category_id ? categoriesMap[product.category_id] : null;
+        const coupon = product.coupon_id ? couponsMap[product.coupon_id] : null;
+
+        if (category) {
+          enriched.category_name = category.name;
+          enriched.category_slug = category.slug;
+          enriched.category_icon = category.icon;
+        }
+
+        if (coupon) {
+          enriched.coupon_code = coupon.code;
+          enriched.coupon_discount_type = coupon.discount_type;
+          enriched.coupon_discount_value = coupon.discount_value;
+          enriched.coupon_valid_until = coupon.valid_until;
+          enriched.coupon_is_vip = coupon.is_vip;
+          
+          // Calcular preço final com cupom
+          try {
+            let finalPrice = product.current_price;
+            const currentPrice = parseFloat(product.current_price) || 0;
+            const discountValue = parseFloat(coupon.discount_value) || 0;
+
+            if (coupon.discount_type === 'percentage') {
+              // Desconto percentual
+              finalPrice = currentPrice - (currentPrice * (discountValue / 100));
+            } else {
+              // Desconto fixo
+              finalPrice = Math.max(0, currentPrice - discountValue);
+            }
+
+            // Aplicar limite máximo de desconto se existir
+            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+              const discountAmount = currentPrice - finalPrice;
+              if (discountAmount > coupon.max_discount_value) {
+                finalPrice = currentPrice - coupon.max_discount_value;
+              }
+            }
+
+            enriched.final_price = parseFloat(finalPrice.toFixed(2));
+            enriched.price_with_coupon = parseFloat(finalPrice.toFixed(2));
+          } catch (e) {
+            logger.warn(`Erro ao calcular preço final para produto ${product.id}: ${e.message}`);
+          }
+        }
+
+        return enriched;
+      });
+
+      return {
+        products: enrichedProducts,
+        total: totalPending,
+        page,
+        limit,
+        totalPages: Math.ceil(totalPending / limit)
+      };
+    } catch (error) {
+      logger.error('❌ Erro em findPending:', error);
+      logger.error('   Mensagem:', error.message);
+      logger.error('   Stack:', error.stack);
+      logger.error('   Detalhes:', JSON.stringify(error, null, 2));
+      
+      // Se o erro for sobre a coluna status não existir, retornar array vazio
+      const isStatusColumnError = 
+        (error.message && (
+          error.message.includes('column') && 
+          (error.message.includes('status') || error.message.toLowerCase().includes('does not exist'))
+        )) ||
+        (error.code && (
+          error.code === '42703' || // PostgreSQL: column does not exist
+          error.code === 'PGRST116' || // Supabase: column not found
+          error.code === 'PGRST202' || // Supabase: column not found (outro código)
+          String(error.code).includes('42703') || // Pode vir como string
+          String(error.code).includes('PGRST')
+        ));
+      
+      if (isStatusColumnError) {
+        logger.warn('⚠️ Coluna status não encontrada (catch). Execute o SQL: SIMPLE_FIX_STATUS.sql');
+        return {
+          products: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0
+        };
+      }
+      
+      throw error;
+    }
+  }
+
+  // Aprovar e atualizar produto com link de afiliado e cupom
+  static async approve(id, affiliateLink, additionalData = {}) {
+    const updateData = {
+      status: 'approved',
+      affiliate_link: affiliateLink,
+      updated_at: new Date().toISOString(),
+      ...additionalData
+    };
+
+    const { data, error } = await supabase
+      .from('products')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  // Estatísticas de produtos
+  static async getStats() {
+    try {
+      // Total de produtos
+      const { count: totalProducts, error: totalError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+
+      if (totalError) throw totalError;
+
+      // Produtos por status (se a coluna existir)
+      let statusStats = {};
+      try {
+        const { data: statusData, error: statusError } = await supabase
+          .from('products')
+          .select('status')
+          .eq('is_active', true);
+
+        if (!statusError && statusData) {
+          statusStats = statusData.reduce((acc, product) => {
+            const status = product.status || 'published';
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+          }, {});
+        }
+      } catch (e) {
+        logger.debug('Erro ao buscar estatísticas por status:', e.message);
+      }
+
+      // Produtos por plataforma
+      const { data: platformData, error: platformError } = await supabase
+        .from('products')
+        .select('platform')
+        .eq('is_active', true);
+
+      let platformStats = {};
+      if (!platformError && platformData) {
+        platformStats = platformData.reduce((acc, product) => {
+          acc[product.platform] = (acc[product.platform] || 0) + 1;
+          return acc;
+        }, {});
+      }
+
+      // Produtos com desconto
+      const { count: productsWithDiscount, error: discountError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .gt('discount_percentage', 0);
+
+      // Média de desconto
+      const { data: discountData, error: avgDiscountError } = await supabase
+        .from('products')
+        .select('discount_percentage')
+        .eq('is_active', true)
+        .gt('discount_percentage', 0);
+
+      let avgDiscount = 0;
+      if (!avgDiscountError && discountData && discountData.length > 0) {
+        const sum = discountData.reduce((acc, p) => acc + (p.discount_percentage || 0), 0);
+        avgDiscount = Math.round((sum / discountData.length) * 100) / 100;
+      }
+
+      return {
+        total: totalProducts || 0,
+        withDiscount: productsWithDiscount || 0,
+        averageDiscount: avgDiscount,
+        byStatus: statusStats,
+        byPlatform: platformStats,
+        lastUpdated: new Date().toISOString()
+      };
+    } catch (error) {
+      logger.error(`Erro ao buscar estatísticas: ${error.message}`);
+      throw error;
+    }
   }
 }
 

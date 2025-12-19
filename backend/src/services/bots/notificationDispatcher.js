@@ -111,17 +111,16 @@ class NotificationDispatcher {
       const message = await this.formatMessage(channel.platform, eventType, data);
 
       // Enviar mensagem
+      // IMPORTANTE: A mensagem já vem formatada corretamente do templateRenderer
+      // Não converter novamente para preservar o template configurado no painel admin
       let result;
       if (channel.platform === 'whatsapp') {
-        // Converter formatação para WhatsApp
-        const convertedMessage = templateRenderer.convertBoldFormatting(message, 'whatsapp');
-        result = await whatsappService.sendMessage(channel.identifier, convertedMessage);
+        // Mensagem já está formatada para WhatsApp pelo templateRenderer
+        result = await whatsappService.sendMessage(channel.identifier, message);
       } else if (channel.platform === 'telegram') {
-          const parseMode = await this.getTelegramParseMode();
-          
-          // Converter formatação baseado no parse_mode do Telegram
-          const convertedMessage = templateRenderer.convertBoldFormatting(message, 'telegram', parseMode);
-        result = await telegramService.sendMessage(channel.identifier, convertedMessage, {
+        const parseMode = await this.getTelegramParseMode();
+        // Mensagem já está formatada para Telegram pelo templateRenderer
+        result = await telegramService.sendMessage(channel.identifier, message, {
           parse_mode: parseMode
         });
       } else {
@@ -179,7 +178,16 @@ class NotificationDispatcher {
 
       switch (eventType) {
         case 'promotion_new':
-          templateType = 'new_promotion';
+          // IMPORTANTE: Escolher template baseado se tem cupom ou não
+          // Se produto tem cupom vinculado, usar template 'promotion_with_coupon'
+          // Se não tem cupom, usar template 'new_promotion' (sem cupom)
+          if (data.coupon_id) {
+            templateType = 'promotion_with_coupon';
+            logger.info(`📋 Produto tem cupom vinculado (${data.coupon_id}), usando template 'promotion_with_coupon'`);
+          } else {
+            templateType = 'new_promotion';
+            logger.info(`📋 Produto sem cupom, usando template 'new_promotion'`);
+          }
           // Preparar variáveis para template de promoção
           variables = await templateRenderer.preparePromotionVariables(data);
           break;
@@ -200,31 +208,30 @@ class NotificationDispatcher {
           throw new Error(`Tipo de evento não suportado: ${eventType}`);
       }
 
-      // Renderizar template usando templates ativos do painel admin
-      const message = await templateRenderer.render(templateType, platform, variables);
+      // Preparar contextData para IA ADVANCED (se necessário)
+      const contextData = {};
+      if (eventType === 'promotion_new') {
+        contextData.product = data;
+      } else if (eventType === 'coupon_new' || eventType === 'coupon_expired') {
+        contextData.coupon = data;
+      }
+
+      // Renderizar template usando templates ativos do painel admin ou IA ADVANCED
+      const message = await templateRenderer.render(templateType, platform, variables, contextData);
       
+      if (!message || message.trim().length === 0) {
+        throw new Error(`Template renderizado está vazio para ${templateType} (${platform})`);
+      }
+      
+      logger.debug(`✅ Mensagem renderizada usando template do painel admin (${message.length} chars, ${(message.match(/\n/g) || []).length} quebras de linha)`);
       return message;
     } catch (error) {
-      logger.error(`Erro ao formatar mensagem com template: ${error.message}`);
-      logger.error(`Stack: ${error.stack}`);
+      logger.error(`❌ ERRO CRÍTICO ao formatar mensagem com template: ${error.message}`);
+      logger.error(`   Tipo: ${eventType}, Plataforma: ${platform}`);
+      logger.error(`   Stack: ${error.stack}`);
       
-      // Fallback para métodos antigos se template falhar
-      logger.warn(`⚠️ Usando formatação de fallback para ${eventType}`);
-      const service = platform === 'whatsapp' ? whatsappService : telegramService;
-
-      switch (eventType) {
-        case 'promotion_new':
-          return await service.formatPromotionMessage(data);
-        
-        case 'coupon_new':
-          return service.formatCouponMessage(data);
-        
-        case 'coupon_expired':
-          return service.formatExpiredCouponMessage(data);
-        
-        default:
-          throw new Error(`Tipo de evento não suportado: ${eventType}`);
-      }
+      // NÃO usar fallback - template do painel admin é obrigatório
+      throw new Error(`Falha ao renderizar template do painel admin para ${eventType} (${platform}): ${error.message}. Configure um template ativo no painel admin.`);
     }
   }
 
@@ -294,13 +301,15 @@ class NotificationDispatcher {
           logger.info(`   Enviando para canal ${channel.id} (chat: ${channel.identifier})`);
           const parseMode = await this.getTelegramParseMode();
           
-          // Converter formatação antes de enviar
-          const convertedMessage = templateRenderer.convertBoldFormatting(message, 'telegram', parseMode);
+          // A mensagem já vem formatada corretamente do templateRenderer
+          // Não converter novamente para manter a formatação do template configurado
+          // Apenas garantir que o parse_mode seja passado corretamente
+          logger.debug(`📝 Usando mensagem do template (${message.length} caracteres) com parse_mode: ${parseMode}`);
           
           const result = await telegramService.sendMessageWithPhoto(
             channel.identifier,
             imagePath,
-            convertedMessage,
+            message, // Usar mensagem original do template
             { parse_mode: parseMode }
           );
           
@@ -538,20 +547,15 @@ class NotificationDispatcher {
 
           log = await NotificationLog.create(logData);
 
-          // Converter formatação baseado no parse_mode do Telegram
+          // Obter parse_mode configurado
           let parseMode = await this.getTelegramParseMode();
           
-          // Se a mensagem contém texto riscado (~~texto~~) e parse_mode é 'Markdown' (legado),
-          // usar MarkdownV2 que suporta riscado
-          if (parseMode === 'Markdown' && /~~[^~]+~~/.test(message)) {
-            logger.info('📝 Detectado texto riscado, usando MarkdownV2 em vez de Markdown (legado)');
-            parseMode = 'MarkdownV2';
-          }
+          // IMPORTANTE: A mensagem já vem formatada corretamente do templateRenderer
+          // Não converter novamente para preservar o template configurado no painel admin
+          // Apenas garantir que o parse_mode seja passado corretamente
+          logger.debug(`📝 Usando mensagem do template (${message.length} caracteres) com parse_mode: ${parseMode}`);
           
-          // Converter formatação antes de enviar
-          const convertedMessage = templateRenderer.convertBoldFormatting(message, 'telegram', parseMode);
-          
-          const result = await telegramService.sendMessage(channel.identifier, convertedMessage, {
+          const result = await telegramService.sendMessage(channel.identifier, message, {
             parse_mode: parseMode
           });
           
@@ -815,22 +819,12 @@ class NotificationDispatcher {
         try {
           let result;
           if (channel.platform === 'whatsapp') {
-            // Converter formatação para WhatsApp
-            const convertedMessage = templateRenderer.convertBoldFormatting(message, channel.platform);
-            result = await whatsappService.sendMessage(channel.identifier, convertedMessage);
+            // Mensagem já está formatada para WhatsApp pelo templateRenderer
+            result = await whatsappService.sendMessage(channel.identifier, message);
           } else if (channel.platform === 'telegram') {
-            let parseMode = await this.getTelegramParseMode();
-            
-            // Se a mensagem contém texto riscado (~~texto~~) e parse_mode é 'Markdown' (legado),
-            // usar MarkdownV2 que suporta riscado
-            if (parseMode === 'Markdown' && /~~[^~]+~~/.test(message)) {
-              logger.info('📝 Detectado texto riscado, usando MarkdownV2 em vez de Markdown (legado)');
-              parseMode = 'MarkdownV2';
-            }
-            
-            // Converter formatação baseado no parse_mode do Telegram
-            const convertedMessage = templateRenderer.convertBoldFormatting(message, channel.platform, parseMode);
-            result = await telegramService.sendMessage(channel.identifier, convertedMessage, {
+            const parseMode = await this.getTelegramParseMode();
+            // Mensagem já está formatada para Telegram pelo templateRenderer
+            result = await telegramService.sendMessage(channel.identifier, message, {
               parse_mode: parseMode
             });
           } else {

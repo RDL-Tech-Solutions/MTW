@@ -117,7 +117,27 @@ class MeliCouponCaptureV2 {
 
       for (const search of searches) {
         try {
-          // Usar endpoint público de busca (sem autenticação)
+          // IMPORTANTE: Sempre tentar enviar token mesmo em endpoints públicos (recomendação de segurança)
+          let token = this.accessToken;
+          if (!token) {
+            try {
+              const meliAuth = (await import('../autoSync/meliAuth.js')).default;
+              if (meliAuth.isConfigured()) {
+                token = await meliAuth.getAccessToken();
+              }
+            } catch (e) {
+              // Continuar sem token se não disponível
+            }
+          }
+
+          const headers = {
+            'Accept': 'application/json'
+          };
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+
+          // Usar endpoint público de busca (com token se disponível)
           const results = await axios.get(`${this.baseUrl}/sites/MLB/search`, {
             params: {
               q: search.q,
@@ -128,6 +148,7 @@ class MeliCouponCaptureV2 {
               'shipping.free': 'yes', // Frete grátis
               condition: 'new' // Apenas novos
             },
+            headers,
             timeout: 30000
           });
 
@@ -178,12 +199,33 @@ class MeliCouponCaptureV2 {
 
       for (const category of categories) {
         try {
+          // IMPORTANTE: Sempre tentar enviar token mesmo em endpoints públicos
+          let token = this.accessToken;
+          if (!token) {
+            try {
+              const meliAuth = (await import('../autoSync/meliAuth.js')).default;
+              if (meliAuth.isConfigured()) {
+                token = await meliAuth.getAccessToken();
+              }
+            } catch (e) {
+              // Continuar sem token se não disponível
+            }
+          }
+
+          const headers = {
+            'Accept': 'application/json'
+          };
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+
           const results = await axios.get(`${this.baseUrl}/sites/MLB/search`, {
             params: {
               category,
               sort: 'sold_quantity_desc', // Mais vendidos
               limit: 30
             },
+            headers,
             timeout: 30000
           });
 
@@ -412,7 +454,28 @@ class MeliCouponCaptureV2 {
       // Buscar produto pelo ID extraído do código
       const productId = coupon.code.replace('MELI-', '');
       
+      // IMPORTANTE: Sempre tentar enviar token mesmo em endpoints públicos
+      let token = this.accessToken;
+      if (!token) {
+        try {
+          const meliAuth = (await import('../autoSync/meliAuth.js')).default;
+          if (meliAuth.isConfigured()) {
+            token = await meliAuth.getAccessToken();
+          }
+        } catch (e) {
+          // Continuar sem token se não disponível
+        }
+      }
+
+      const headers = {
+        'Accept': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const product = await axios.get(`${this.baseUrl}/items/${productId}`, {
+        headers,
         timeout: 10000
       });
 
