@@ -316,38 +316,76 @@ class LinkAnalyzer {
         console.log(`   🔍 Configurações Shopee do banco: Partner ID ${config.partnerId ? '✅ configurado' : '❌ não configurado'}, Partner Key ${config.partnerKey ? '✅ configurado' : '❌ não configurado'}`);
         
         if (config.partnerId && config.partnerKey) {
-          console.log('   🔄 Tentando API oficial da Shopee...');
+          console.log('   🔄 Tentando API oficial da Shopee (productOfferV2)...');
           // Forçar recarregamento das configurações no shopeeService
           await shopeeService.loadSettings();
-          const productDetails = await shopeeService.getProductDetails(parseInt(ids.itemId));
+          // Passar shopId e itemId para melhor precisão
+          const productDetails = await shopeeService.getProductDetails(
+            parseInt(ids.itemId),
+            ids.shopId ? parseInt(ids.shopId) : null
+          );
           
-          // A API pode retornar em diferentes formatos
+          // A API retorna { item: {...} }
           let item = null;
           if (productDetails && productDetails.item) {
             item = productDetails.item;
           } else if (productDetails && productDetails.data && productDetails.data.item) {
             item = productDetails.data.item;
-          } else if (productDetails && Array.isArray(productDetails) && productDetails[0]) {
-            item = productDetails[0];
           }
           
-          if (item) {
+          if (item && item.name) {
             const name = item.name || '';
             const description = item.description || '';
-            // Preços podem vir em diferentes formatos
-            const currentPrice = item.price ? (typeof item.price === 'number' ? item.price / 100000 : parseFloat(item.price) / 100000) : 0;
-            const oldPrice = item.price_before_discount 
-              ? (typeof item.price_before_discount === 'number' ? item.price_before_discount / 100000 : parseFloat(item.price_before_discount) / 100000)
-              : 0;
-            const imageUrl = item.images && item.images.length > 0 
-              ? `https://cf.shopee.com.br/file/${item.images[0]}` 
-              : (item.image ? `https://cf.shopee.com.br/file/${item.image}` : '');
+            
+            // Preços: productOfferV2 retorna em reais, mas getProductDetails converte para centavos de milhão
+            // Então precisamos dividir por 100000 para obter o valor em reais
+            let currentPrice = 0;
+            if (item.price) {
+              currentPrice = typeof item.price === 'number' ? item.price / 100000 : parseFloat(item.price) / 100000;
+            } else if (item.priceMin && item.priceMax) {
+              // Se não tiver price, usar média de priceMin e priceMax
+              currentPrice = (parseFloat(item.priceMin) + parseFloat(item.priceMax)) / 2;
+            } else if (item.priceMin) {
+              currentPrice = parseFloat(item.priceMin);
+            } else if (item.priceMax) {
+              currentPrice = parseFloat(item.priceMax);
+            }
+            
+            let oldPrice = 0;
+            if (item.price_before_discount) {
+              oldPrice = typeof item.price_before_discount === 'number' 
+                ? item.price_before_discount / 100000 
+                : parseFloat(item.price_before_discount) / 100000;
+            } else if (item.priceMax && item.priceMin) {
+              // Usar priceMax como preço original se não tiver price_before_discount
+              oldPrice = parseFloat(item.priceMax);
+            }
+            
+            // Imagem: productOfferV2 retorna imageUrl completo ou relativo
+            let imageUrl = '';
+            if (item.images && item.images.length > 0) {
+              const img = item.images[0];
+              if (img.startsWith('http')) {
+                imageUrl = img;
+              } else {
+                imageUrl = `https://cf.shopee.com.br/file/${img}`;
+              }
+            } else if (item.image) {
+              if (item.image.startsWith('http')) {
+                imageUrl = item.image;
+              } else {
+                imageUrl = `https://cf.shopee.com.br/file/${item.image}`;
+              }
+            }
 
-            console.log('✅ Dados obtidos via API oficial da Shopee!');
+            console.log('✅ Dados obtidos via API oficial da Shopee (productOfferV2)!');
             console.log('   Nome:', name?.substring(0, 50));
             console.log('   Preço Atual:', currentPrice);
             console.log('   Preço Original:', oldPrice);
             console.log('   Imagem:', imageUrl ? 'Sim' : 'Não');
+            console.log('   Avaliação:', item.rating_star || 'N/A');
+            console.log('   Vendas:', item.sales || 0);
+            console.log('   Desconto:', item.discount_percentage ? `${item.discount_percentage}%` : 'N/A');
 
             return {
               name: name,
@@ -356,12 +394,24 @@ class LinkAnalyzer {
               currentPrice: currentPrice,
               oldPrice: oldPrice > currentPrice ? oldPrice : 0,
               platform: 'shopee',
-              affiliateLink: url
+              affiliateLink: url,
+              // Campos adicionais do productOfferV2
+              rating: item.rating_star || null,
+              sales: item.sales || 0,
+              discountPercentage: item.discount_percentage || 0,
+              commissionRate: item.commission_rate || null
             };
+          } else {
+            console.log('   ⚠️ API retornou dados vazios ou inválidos');
+            console.log('   ℹ️ Isso pode acontecer se o produto não tem oferta ativa na API de afiliados');
+            console.log('   ℹ️ Tentando fallback para API pública ou scraping...');
           }
+        } else {
+          console.log('   ⚠️ Shopee não configurado no banco de dados');
         }
       } catch (officialApiError) {
         console.log('   ⚠️ API oficial não disponível ou falhou, tentando API pública:', officialApiError.message);
+        console.log('   ℹ️ Erro detalhado:', officialApiError.stack?.substring(0, 200));
       }
 
       // FALLBACK: API pública da Shopee (pode retornar 403)
@@ -622,6 +672,43 @@ class LinkAnalyzer {
         }
       });
 
+      // PRIORIDADE 2.5: Buscar dados diretamente em meta tags e structured data
+      if (!name || currentPrice === 0) {
+        // Buscar em meta tags
+        const metaTitle = $('meta[property="og:title"]').attr('content') || 
+                         $('meta[name="twitter:title"]').attr('content') ||
+                         $('title').text();
+        if (metaTitle && !name && metaTitle.length > 10 && !metaTitle.toLowerCase().includes('shopee')) {
+          name = metaTitle.replace(/\s*-\s*Shopee.*$/i, '').trim();
+          console.log(`   ✅ Nome encontrado em meta tag: ${name.substring(0, 50)}`);
+        }
+
+        // Buscar em structured data (JSON-LD)
+        $('script[type="application/ld+json"]').each((i, el) => {
+          try {
+            const jsonLd = JSON.parse($(el).html());
+            if (jsonLd['@type'] === 'Product' || jsonLd['@type'] === 'http://schema.org/Product') {
+              if (!name && jsonLd.name && jsonLd.name.length > 10) {
+                name = jsonLd.name.trim();
+                console.log(`   ✅ Nome encontrado em JSON-LD: ${name.substring(0, 50)}`);
+              }
+              if (currentPrice === 0 && jsonLd.offers) {
+                const offer = Array.isArray(jsonLd.offers) ? jsonLd.offers[0] : jsonLd.offers;
+                if (offer.price) {
+                  let price = parseFloat(offer.price);
+                  if (price > 0 && price < 100000) {
+                    currentPrice = price;
+                    console.log(`   ✅ Preço encontrado em JSON-LD: ${currentPrice}`);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Continuar
+          }
+        });
+      }
+
       // PRIORIDADE 3: Seletores CSS da Shopee (atualizados)
       // Seletores modernos da Shopee 2024
       const shopeeSelectors = {
@@ -836,15 +923,60 @@ class LinkAnalyzer {
             
             // Padrão 2: Buscar window.__INITIAL_STATE__, __NEXT_DATA__, ou _shopee (mais lento, fazer por último)
             // ESTRATÉGIA AVANÇADA: Buscar com múltiplos padrões e tamanhos maiores
-            const initialStateMatch = scriptContent.match(/window\.__INITIAL_STATE__\s*=\s*({[\s\S]{0,1000000}});/);
-            const nextDataMatch = scriptContent.match(/window\.__NEXT_DATA__\s*=\s*({[\s\S]{0,1000000}});/);
-            const shopeeDataMatch = scriptContent.match(/window\._shopee\s*=\s*({[\s\S]{0,1000000}});/);
-            const shopeeAppMatch = scriptContent.match(/window\.__SHOPEE_APP__\s*=\s*({[\s\S]{0,1000000}});/);
-            const jsonMatch = initialStateMatch || nextDataMatch || shopeeDataMatch || shopeeAppMatch;
+            // Adicionar mais padrões comuns da Shopee
+            const initialStateMatch = scriptContent.match(/window\.__INITIAL_STATE__\s*=\s*({[\s\S]{0,2000000}});/);
+            const nextDataMatch = scriptContent.match(/window\.__NEXT_DATA__\s*=\s*({[\s\S]{0,2000000}});/);
+            const shopeeDataMatch = scriptContent.match(/window\._shopee\s*=\s*({[\s\S]{0,2000000}});/);
+            const shopeeAppMatch = scriptContent.match(/window\.__SHOPEE_APP__\s*=\s*({[\s\S]{0,2000000}});/);
+            // Novos padrões: buscar por JSON.parse ou estruturas JSON diretas
+            const jsonParseMatch = scriptContent.match(/JSON\.parse\(["']({[\s\S]{0,500000}})["']\)/);
+            const jsonDataMatch = scriptContent.match(/["']__NEXT_DATA__["']\s*:\s*({[\s\S]{0,2000000}})/);
+            const shopeeItemMatch = scriptContent.match(/["']item["']\s*:\s*({[\s\S]{0,500000}})/);
+            const shopeeProductMatch = scriptContent.match(/["']product["']\s*:\s*({[\s\S]{0,500000}})/);
+            const jsonMatch = initialStateMatch || nextDataMatch || shopeeDataMatch || shopeeAppMatch || 
+                             jsonParseMatch || jsonDataMatch || shopeeItemMatch || shopeeProductMatch;
             
-            if (jsonMatch && jsonMatch[1].length < 1000000) { // Aumentar limite para 1MB
+            if (jsonMatch && jsonMatch[1].length < 2000000) { // Aumentar limite para 2MB
               try {
-                const jsonData = JSON.parse(jsonMatch[1]);
+                let jsonData;
+                // Tentar parse direto primeiro
+                try {
+                  jsonData = JSON.parse(jsonMatch[1]);
+                } catch (parseError) {
+                  // Se falhar, tentar limpar o JSON (remover escapes, etc)
+                  try {
+                    const cleaned = jsonMatch[1]
+                      .replace(/\\"/g, '"')
+                      .replace(/\\'/g, "'")
+                      .replace(/\\n/g, ' ')
+                      .replace(/\\t/g, ' ');
+                    jsonData = JSON.parse(cleaned);
+                  } catch (cleanError) {
+                    // Se ainda falhar, tentar extrair apenas a parte relevante
+                    console.log(`   ⚠️ Erro ao fazer parse do JSON: ${parseError.message}`);
+                    // Tentar buscar dados diretamente no texto sem parse completo
+                    const directNameMatch = jsonMatch[1].match(/"name"\s*:\s*"([^"]{15,200})"/);
+                    const directPriceMatch = jsonMatch[1].match(/"price"\s*:\s*(\d{4,10})/);
+                    if (directNameMatch && !name) {
+                      name = directNameMatch[1].trim();
+                      console.log(`   ✅ Nome encontrado via busca direta: ${name.substring(0, 50)}`);
+                    }
+                    if (directPriceMatch && currentPrice === 0) {
+                      const priceValue = parseInt(directPriceMatch[1]);
+                      if (priceValue > 100000) {
+                        currentPrice = priceValue / 100000;
+                      } else if (priceValue > 1000) {
+                        currentPrice = priceValue / 100;
+                      } else {
+                        currentPrice = priceValue;
+                      }
+                      if (currentPrice > 0 && currentPrice < 100000) {
+                        console.log(`   ✅ Preço encontrado via busca direta: ${currentPrice}`);
+                      }
+                    }
+                    continue; // Pular para próximo script
+                  }
+                }
                 
                 // ESTRATÉGIA AVANÇADA: Buscar em estruturas específicas da Shopee primeiro
                 // Shopee geralmente tem estruturas como: product.item, item, productInfo, etc.
@@ -861,7 +993,16 @@ class LinkAnalyzer {
                   jsonData.pageProps?.product?.item,
                   jsonData.pageProps?.item,
                   jsonData.initialState?.product?.item,
-                  jsonData.initialState?.item
+                  jsonData.initialState?.item,
+                  jsonData.props?.pageProps?.product?.item,
+                  jsonData.props?.pageProps?.item,
+                  jsonData.query?.item,
+                  jsonData.query?.product,
+                  // Buscar recursivamente em estruturas aninhadas
+                  ...(jsonData.product ? [jsonData.product] : []),
+                  ...(jsonData.data ? [jsonData.data] : []),
+                  ...(jsonData.pageProps ? [jsonData.pageProps] : []),
+                  ...(jsonData.initialState ? [jsonData.initialState] : [])
                 ];
                 
                 for (const item of shopeePaths) {

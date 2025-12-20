@@ -49,26 +49,23 @@ class ProductController {
   // Criar produto (admin)
   static async create(req, res, next) {
     try {
-      const product = await Product.create(req.body);
+      // Garantir que produtos criados manualmente sejam salvos como 'pending'
+      const productData = {
+        ...req.body,
+        status: 'pending' // Sempre criar como pendente para revisão manual
+      };
+      
+      const product = await Product.create(productData);
       await cacheDelByPattern('products:*');
       await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
-      logger.info(`Produto criado: ${product.id}`);
+      logger.info(`📦 Produto criado (pendente): ${product.id} - ${product.name}`);
+      logger.info(`   Status: ${product.status} (aguardando aprovação manual)`);
 
-      // Enviar notificação automática via bots (apenas se for promoção com desconto)
-      if (product.discount_percentage && product.discount_percentage > 0) {
-        try {
-          // Buscar dados completos do produto para notificação
-          const fullProduct = await Product.findById(product.id);
-          await notificationDispatcher.notifyNewPromotion(fullProduct);
-          logger.info(`Notificação de nova promoção enviada: ${product.name}`);
-        } catch (notifError) {
-          logger.error(`Erro ao enviar notificação de promoção: ${notifError.message}`);
-          // Não falhar a criação do produto se a notificação falhar
-        }
-      }
+      // NÃO enviar notificação automática - produto fica pendente para aprovação manual
+      // A publicação só acontece quando o produto for aprovado em /pending-products
 
-      res.status(201).json(successResponse(product, 'Produto criado com sucesso'));
+      res.status(201).json(successResponse(product, 'Produto criado com sucesso (pendente de aprovação)'));
     } catch (error) {
       next(error);
     }

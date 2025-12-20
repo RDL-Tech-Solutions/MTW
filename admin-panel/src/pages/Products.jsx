@@ -44,6 +44,24 @@ export default function Products() {
     coupon_id: '',
     platform: 'shopee'
   });
+  
+  // Filtrar cupons ativos da plataforma selecionada
+  // Usar useMemo para recalcular apenas quando coupons ou formData.platform mudarem
+  const filteredCoupons = coupons.filter(coupon => {
+    // Verificar se está ativo
+    if (!coupon.is_active) return false;
+    
+    // Verificar se não expirou
+    if (coupon.valid_until) {
+      const validUntil = new Date(coupon.valid_until);
+      const now = new Date();
+      if (validUntil < now) return false;
+    }
+    
+    // Verificar se é da plataforma selecionada ou geral
+    const selectedPlatform = formData.platform || 'shopee';
+    return coupon.platform === selectedPlatform || coupon.platform === 'general';
+  });
 
   const [templateModes, setTemplateModes] = useState({
     new_promotion: 'custom',
@@ -56,6 +74,21 @@ export default function Products() {
     fetchCoupons();
     loadTemplateModes();
   }, []);
+
+  // Limpar cupom selecionado quando a plataforma mudar e o cupom não for compatível
+  useEffect(() => {
+    if (formData.coupon_id && formData.platform) {
+      const selectedCoupon = coupons.find(c => c.id === formData.coupon_id);
+      if (selectedCoupon) {
+        const isCompatible = selectedCoupon.platform === formData.platform || selectedCoupon.platform === 'general';
+        const isActive = selectedCoupon.is_active && (!selectedCoupon.valid_until || new Date(selectedCoupon.valid_until) > new Date());
+        
+        if (!isCompatible || !isActive) {
+          setFormData(prev => ({ ...prev, coupon_id: '' }));
+        }
+      }
+    }
+  }, [formData.platform, coupons, formData.coupon_id]);
 
   const loadTemplateModes = async () => {
     try {
@@ -98,6 +131,9 @@ export default function Products() {
       }
       if (categoryFilter && categoryFilter !== 'all') {
         params.category = categoryFilter;
+      }
+      if (statusFilter && statusFilter !== 'all') {
+        params.status = statusFilter;
       }
 
       const response = await api.get('/products', { params });
@@ -655,10 +691,32 @@ export default function Products() {
                     <Label htmlFor="coupon_id">Cupom (Opcional)</Label>
                     <select id="coupon_id" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.coupon_id} onChange={(e) => setFormData({ ...formData, coupon_id: e.target.value })}>
                       <option value="">Nenhum cupom</option>
-                      {coupons.map(coupon => (
-                        <option key={coupon.id} value={coupon.id}>{coupon.code} - {coupon.discount_percentage}% OFF</option>
-                      ))}
+                      {filteredCoupons.length > 0 ? (
+                        filteredCoupons.map(coupon => {
+                          // Calcular desconto para exibição
+                          let discountText = '';
+                          if (coupon.discount_type === 'percentage') {
+                            discountText = `${coupon.discount_value}% OFF`;
+                          } else {
+                            discountText = `R$ ${parseFloat(coupon.discount_value || 0).toFixed(2)} OFF`;
+                          }
+                          
+                          return (
+                            <option key={coupon.id} value={coupon.id}>
+                              {coupon.code} - {discountText}
+                              {coupon.platform === 'general' ? ' (Geral)' : ''}
+                            </option>
+                          );
+                        })
+                      ) : (
+                        <option value="" disabled>Nenhum cupom ativo disponível para {formData.platform || 'esta plataforma'}</option>
+                      )}
                     </select>
+                    {filteredCoupons.length === 0 && formData.platform && (
+                      <p className="text-xs text-muted-foreground">
+                        Não há cupons ativos para a plataforma "{formData.platform}". Selecione outra plataforma ou crie um novo cupom.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -746,9 +804,9 @@ export default function Products() {
                 className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="all">Todos os Status</option>
-                <option value="published">Publicados</option>
                 <option value="pending">Pendentes</option>
                 <option value="approved">Aprovados</option>
+                <option value="published">Publicados</option>
                 <option value="rejected">Rejeitados</option>
               </select>
             </div>

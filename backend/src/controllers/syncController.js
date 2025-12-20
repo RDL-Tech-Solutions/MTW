@@ -442,27 +442,27 @@ class SyncController {
 
       results.total = promotions.length;
 
-      // 3. Salvar e publicar cada promoção
+      // 3. Processar cada promoção (salvar como pendente, não publicar automaticamente)
       for (const promo of promotions) {
         try {
-          // Salvar no banco
+          // Salvar no banco (já salva com status 'pending')
           const { product, isNew } = await shopeeSync.saveShopeeToDatabase(promo, Product);
 
           if (isNew) {
             results.new++;
 
-            // Publicar no app e enviar para bots
-            const publishResult = await publishService.publishAll(product);
-
-            // Registrar log
+            // Log (produto salvo como pendente, não publicado automaticamente)
+            // Seguindo a mesma estratégia do AliExpress e do autoSyncCron
             await SyncLog.create({
               platform: 'shopee',
               product_name: product.name,
               product_id: product.id,
               discount_percentage: product.discount_percentage,
               is_new_product: true,
-              sent_to_bots: publishResult.success
+              sent_to_bots: false // Não enviar automaticamente, fica em /pending-products
             });
+
+            logger.info(`📦 Novo produto salvo (pendente): ${product.name} (${product.discount_percentage}% OFF)`);
           } else {
             // Produto já existia
             await SyncLog.create({

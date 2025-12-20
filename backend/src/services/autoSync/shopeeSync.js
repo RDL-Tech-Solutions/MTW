@@ -28,126 +28,174 @@ class ShopeeSync {
         return [];
       }
 
-      logger.info(`🔍 Buscando ofertas Shopee para: ${keywordsArray.length > 0 ? keywordsArray.join(', ') : 'todas as ofertas'}`);
+      logger.info(`🔍 Buscando produtos Shopee usando productOfferV2: ${keywordsArray.length > 0 ? keywordsArray.join(', ') : 'produtos top performing'}`);
 
       const allProducts = [];
       const processedOfferIds = new Set(); // Para evitar duplicatas
 
-      // 1. Buscar ofertas gerais da Shopee (shopeeOfferV2)
-      // Sem keyword para pegar todas as ofertas disponíveis
+      // 1. Buscar produtos usando productOfferV2 (TOP_PERFORMING)
+      // Esta query retorna produtos individuais com preços, avaliações, vendas, etc.
       try {
-        logger.info(`📦 Buscando ofertas gerais da Shopee...`);
-        const offers = await shopeeService.getShopeeOffers({
-          keyword: null, // Sem keyword para pegar todas as ofertas
-          sortType: 2, // Maior comissão (melhores ofertas)
+        logger.info(`📦 Buscando produtos da Shopee (productOfferV2 - TOP_PERFORMING)...`);
+        const productOffers = await shopeeService.getProductOffers({
+          listType: 2, // TOP_PERFORMING = 2
+          sortType: 2, // ITEM_SOLD_DESC = 2 (mais vendidos)
           page: 1,
           limit: limit
         });
 
-        if (offers.nodes && offers.nodes.length > 0) {
-          logger.info(`   ✅ ${offers.nodes.length} ofertas encontradas na Shopee`);
+        if (productOffers.nodes && productOffers.nodes.length > 0) {
+          logger.info(`   ✅ ${productOffers.nodes.length} produtos encontrados na Shopee`);
 
-          for (const offer of offers.nodes) {
+          for (const productOffer of productOffers.nodes) {
             try {
-              // Criar ID único para evitar duplicatas
-              const offerId = `${offer.offerType}-${offer.collectionId || offer.categoryId || 'unknown'}`;
+              // Usar itemId como identificador único
+              const offerId = `product-${productOffer.itemId}`;
               
               if (processedOfferIds.has(offerId)) {
                 continue; // Já processado
               }
               processedOfferIds.add(offerId);
 
-              // Converter oferta em formato de produto
-              // A API retorna offerLink que já é um link de afiliado com tracking
-              const affiliateLink = offer.offerLink || offer.originalLink;
+              // Usar offerLink (link de afiliado) ou productLink (link original)
+              const affiliateLink = productOffer.offerLink || productOffer.productLink;
+              const originalLink = productOffer.productLink || productOffer.offerLink;
               
-              logger.debug(`   📦 Oferta: ${offer.offerName}`);
+              // Calcular preço médio se tiver priceMax e priceMin
+              let price = 0;
+              if (productOffer.priceMin && productOffer.priceMax) {
+                price = (parseFloat(productOffer.priceMin) + parseFloat(productOffer.priceMax)) / 2;
+              } else if (productOffer.priceMin) {
+                price = parseFloat(productOffer.priceMin);
+              } else if (productOffer.priceMax) {
+                price = parseFloat(productOffer.priceMax);
+              }
+
+              logger.debug(`   📦 Produto: ${productOffer.productName}`);
               logger.debug(`   🔗 Link de afiliado: ${affiliateLink?.substring(0, 60)}...`);
-              logger.debug(`   💰 Comissão: ${(parseFloat(offer.commissionRate || 0) * 100).toFixed(2)}%`);
+              logger.debug(`   💰 Preço: R$ ${price.toFixed(2)}`);
+              logger.debug(`   ⭐ Avaliação: ${productOffer.ratingStar || 'N/A'}`);
+              logger.debug(`   💵 Comissão: ${(parseFloat(productOffer.commissionRate || 0) * 100).toFixed(2)}%`);
 
               const product = {
                 id: offerId,
-                title: offer.offerName,
-                permalink: offer.originalLink || affiliateLink, // Link original sem tracking
-                thumbnail: offer.imageUrl || '',
-                price: 0, // API de afiliados não retorna preço diretamente
-                original_price: null,
+                title: productOffer.productName,
+                permalink: originalLink,
+                thumbnail: productOffer.imageUrl || '',
+                price: price,
+                original_price: productOffer.priceMax ? parseFloat(productOffer.priceMax) : null,
                 available_quantity: 0,
-                shop_id: null,
+                shop_id: productOffer.shopId ? String(productOffer.shopId) : null,
                 category_id: null, // Será detectado automaticamente pelo categoryDetector
-                shopee_category_id: offer.categoryId || null, // ID numérico da Shopee (para referência)
-                collection_id: offer.collectionId || null,
-                offer_type: offer.offerType, // 1: Collection, 2: Category
-                commission_rate: parseFloat(offer.commissionRate || 0),
-                period_start: offer.periodStartTime ? new Date(offer.periodStartTime * 1000) : null,
-                period_end: offer.periodEndTime ? new Date(offer.periodEndTime * 1000) : null,
+                shopee_category_id: productOffer.productCatIds && productOffer.productCatIds.length > 0 
+                  ? productOffer.productCatIds[0] 
+                  : null, // ID da categoria nível 1
+                shopee_category_ids: productOffer.productCatIds || [], // Todos os níveis de categoria
+                shop_name: productOffer.shopName || null,
+                shop_type: productOffer.shopType || null,
+                item_id: productOffer.itemId ? String(productOffer.itemId) : null,
+                commission_rate: parseFloat(productOffer.commissionRate || 0),
+                seller_commission_rate: productOffer.sellerCommissionRate ? parseFloat(productOffer.sellerCommissionRate) : null,
+                shopee_commission_rate: productOffer.shopeeCommissionRate ? parseFloat(productOffer.shopeeCommissionRate) : null,
+                commission_amount: productOffer.commission ? parseFloat(productOffer.commission) : null,
+                sales_count: productOffer.sales || 0,
+                rating_star: productOffer.ratingStar ? parseFloat(productOffer.ratingStar) : null,
+                discount_percentage: productOffer.priceDiscountRate || 0,
+                period_start: productOffer.periodStartTime ? new Date(productOffer.periodStartTime * 1000) : null,
+                period_end: productOffer.periodEndTime ? new Date(productOffer.periodEndTime * 1000) : null,
                 affiliate_link: affiliateLink // Link de afiliado com tracking
               };
 
               allProducts.push(product);
             } catch (error) {
-              logger.warn(`   ⚠️ Erro ao processar oferta ${offer.offerName}: ${error.message}`);
+              logger.warn(`   ⚠️ Erro ao processar produto ${productOffer.productName}: ${error.message}`);
             }
           }
         }
       } catch (error) {
-        logger.error(`❌ Erro ao buscar ofertas Shopee: ${error.message}`);
+        logger.error(`❌ Erro ao buscar produtos Shopee: ${error.message}`);
       }
 
-      // 2. Se houver keywords, buscar ofertas específicas por palavra-chave
+      // 2. Se houver keywords, buscar mais produtos usando productOfferV2
+      // Nota: productOfferV2 não suporta keyword diretamente, mas podemos buscar mais páginas
+      // ou usar diferentes listTypes para obter mais variedade
       if (keywordsArray.length > 0) {
-        for (const keyword of keywordsArray.slice(0, 3)) { // Limitar a 3 keywords para não exceder limite
-          try {
-            logger.info(`   🔍 Buscando ofertas para: ${keyword}`);
-            const keywordOffers = await shopeeService.getShopeeOffers({
-              keyword: keyword,
-              sortType: 2, // Maior comissão
-              page: 1,
-              limit: Math.floor(limit / keywordsArray.length) // Dividir limite entre keywords
-            });
+        try {
+          logger.info(`   🔍 Buscando mais produtos da Shopee (productOfferV2 - página 2)...`);
+          const additionalProducts = await shopeeService.getProductOffers({
+            listType: 2, // TOP_PERFORMING = 2
+            sortType: 2, // ITEM_SOLD_DESC = 2
+            page: 2, // Segunda página para mais produtos
+            limit: Math.floor(limit / 2)
+          });
 
-            if (keywordOffers.nodes && keywordOffers.nodes.length > 0) {
-              for (const offer of keywordOffers.nodes) {
-                const offerId = `${offer.offerType}-${offer.collectionId || offer.categoryId || 'unknown'}`;
+          if (additionalProducts.nodes && additionalProducts.nodes.length > 0) {
+            logger.info(`   ✅ ${additionalProducts.nodes.length} produtos adicionais encontrados`);
+            
+            for (const productOffer of additionalProducts.nodes) {
+              try {
+                const offerId = `product-${productOffer.itemId}`;
                 
                 if (!processedOfferIds.has(offerId)) {
                   processedOfferIds.add(offerId);
 
-                  const affiliateLink = offer.offerLink || offer.originalLink;
+                  const affiliateLink = productOffer.offerLink || productOffer.productLink;
+                  const originalLink = productOffer.productLink || productOffer.offerLink;
                   
+                  let price = 0;
+                  if (productOffer.priceMin && productOffer.priceMax) {
+                    price = (parseFloat(productOffer.priceMin) + parseFloat(productOffer.priceMax)) / 2;
+                  } else if (productOffer.priceMin) {
+                    price = parseFloat(productOffer.priceMin);
+                  } else if (productOffer.priceMax) {
+                    price = parseFloat(productOffer.priceMax);
+                  }
+
                   const product = {
                     id: offerId,
-                    title: offer.offerName,
-                    permalink: offer.originalLink || affiliateLink,
-                    thumbnail: offer.imageUrl || '',
-                    price: 0,
-                    original_price: null,
+                    title: productOffer.productName,
+                    permalink: originalLink,
+                    thumbnail: productOffer.imageUrl || '',
+                    price: price,
+                    original_price: productOffer.priceMax ? parseFloat(productOffer.priceMax) : null,
                     available_quantity: 0,
-                    shop_id: null,
-                    category_id: null, // Será detectado automaticamente pelo categoryDetector
-                    shopee_category_id: offer.categoryId || null, // ID numérico da Shopee (para referência)
-                    collection_id: offer.collectionId || null,
-                    offer_type: offer.offerType,
-                    commission_rate: parseFloat(offer.commissionRate || 0),
-                    period_start: offer.periodStartTime ? new Date(offer.periodStartTime * 1000) : null,
-                    period_end: offer.periodEndTime ? new Date(offer.periodEndTime * 1000) : null,
-                    affiliate_link: affiliateLink // Link de afiliado com tracking
+                    shop_id: productOffer.shopId ? String(productOffer.shopId) : null,
+                    category_id: null,
+                    shopee_category_id: productOffer.productCatIds && productOffer.productCatIds.length > 0 
+                      ? productOffer.productCatIds[0] 
+                      : null,
+                    shopee_category_ids: productOffer.productCatIds || [],
+                    shop_name: productOffer.shopName || null,
+                    shop_type: productOffer.shopType || null,
+                    item_id: productOffer.itemId ? String(productOffer.itemId) : null,
+                    commission_rate: parseFloat(productOffer.commissionRate || 0),
+                    seller_commission_rate: productOffer.sellerCommissionRate ? parseFloat(productOffer.sellerCommissionRate) : null,
+                    shopee_commission_rate: productOffer.shopeeCommissionRate ? parseFloat(productOffer.shopeeCommissionRate) : null,
+                    commission_amount: productOffer.commission ? parseFloat(productOffer.commission) : null,
+                    sales_count: productOffer.sales || 0,
+                    rating_star: productOffer.ratingStar ? parseFloat(productOffer.ratingStar) : null,
+                    discount_percentage: productOffer.priceDiscountRate || 0,
+                    period_start: productOffer.periodStartTime ? new Date(productOffer.periodStartTime * 1000) : null,
+                    period_end: productOffer.periodEndTime ? new Date(productOffer.periodEndTime * 1000) : null,
+                    affiliate_link: affiliateLink
                   };
 
                   allProducts.push(product);
                 }
+              } catch (error) {
+                logger.warn(`   ⚠️ Erro ao processar produto: ${error.message}`);
               }
             }
-
-            // Aguardar entre requisições para não exceder rate limit
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } catch (error) {
-            logger.warn(`   ⚠️ Erro ao buscar ofertas para "${keyword}": ${error.message}`);
           }
+          
+          // Aguardar entre requisições para não exceder rate limit
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+          logger.warn(`   ⚠️ Erro ao buscar produtos adicionais: ${error.message}`);
         }
       }
 
-      logger.info(`✅ Total de ${allProducts.length} ofertas Shopee processadas`);
+      logger.info(`✅ Total de ${allProducts.length} produtos Shopee processados`);
       return allProducts;
     } catch (error) {
       logger.error(`❌ Erro ao buscar produtos na Shopee: ${error.message}`);

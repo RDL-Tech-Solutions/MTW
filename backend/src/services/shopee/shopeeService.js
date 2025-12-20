@@ -148,6 +148,12 @@ class ShopeeService {
       
       const payloadString = JSON.stringify(payload);
       
+      // Log detalhado do payload antes de enviar
+      logger.debug(`📤 Payload GraphQL completo:`);
+      logger.debug(`   Query: ${query.substring(0, 200)}...`);
+      logger.debug(`   Variables: ${JSON.stringify(variables, null, 2)}`);
+      logger.debug(`   Payload string: ${payloadString.substring(0, 500)}...`);
+      
       // Gerar assinatura
       const signature = this.generateSignature(timestamp, payloadString);
       
@@ -236,18 +242,23 @@ class ShopeeService {
 
   /**
    * Buscar ofertas da Shopee (shopeeOfferV2)
-   * Query principal para listar ofertas disponíveis
+   * Query principal para listar ofertas disponíveis (coleções/categorias)
+   * Documentação: https://affiliate.shopee.com.br/open_api/document?type=overview
+   * 
+   * sortType:
+   * - LATEST_DESC = 1 (Sort offers by latest update time)
+   * - HIGHEST_COMMISSION_DESC = 2 (Sort offers by commission rate from high to low)
    */
   async getShopeeOffers(options = {}) {
     const {
       keyword = null,
-      sortType = 1, // 1: Mais recentes, 2: Maior comissão
+      sortType = 1, // LATEST_DESC = 1, HIGHEST_COMMISSION_DESC = 2
       page = 1,
       limit = 50
     } = options;
 
     const query = `
-      query ShopeeOfferV2($keyword: String, $sortType: Int, $page: Int, $limit: Int) {
+      query ShopeeOfferV2($keyword: String, $sortType: Int!, $page: Int!, $limit: Int!) {
         shopeeOfferV2(keyword: $keyword, sortType: $sortType, page: $page, limit: $limit) {
           nodes {
             commissionRate
@@ -262,19 +273,32 @@ class ShopeeService {
             periodEndTime
           }
           pageInfo {
+            page
+            limit
             hasNextPage
           }
         }
       }
     `;
+    
+    logger.debug(`📝 Query shopeeOfferV2: keyword="${keyword}", sortType=${sortType}, page=${page}, limit=${limit}`);
 
     try {
-      const response = await this.makeGraphQLRequest(query, {
-        keyword,
-        sortType,
-        page,
-        limit
-      }, 'ShopeeOfferV2');
+      // Construir variáveis - sortType, page e limit são obrigatórios
+      const variables = {
+        sortType: sortType !== null && sortType !== undefined ? sortType : 1,
+        page: page !== null && page !== undefined ? page : 1,
+        limit: limit !== null && limit !== undefined ? limit : 50
+      };
+      
+      // keyword é opcional
+      if (keyword !== null && keyword !== undefined && keyword.trim()) {
+        variables.keyword = keyword.trim();
+      }
+      
+      logger.debug(`📝 Variáveis enviadas para shopeeOfferV2: ${JSON.stringify(variables, null, 2)}`);
+      
+      const response = await this.makeGraphQLRequest(query, variables, 'ShopeeOfferV2');
 
       if (response.errors) {
         logger.error(`Erro ao buscar ofertas Shopee: ${response.errors[0].message}`);
@@ -290,32 +314,73 @@ class ShopeeService {
 
   /**
    * Buscar ofertas de lojas (shopOfferV2)
+   * Documentação: https://affiliate.shopee.com.br/open_api/document?type=overview
+   * 
+   * sortType:
+   * - SHOP_LIST_SORT_TYPE_LATEST_DESC = 1 (Sort by last update time)
+   * - SHOP_LIST_SORT_TYPE_HIGHEST_COMMISSION_DESC = 2 (Sort by commission rate from high to low)
+   * - SHOP_LIST_SORT_TYPE_POPULAR_SHOP_DESC = 3 (Sort by Popular shop from high to low)
    */
   async getShopOffers(options = {}) {
     const {
       shopId = null,
       keyword = null,
-      sortType = 1,
+      shopType = null, // [Int] - OFFICIAL_SHOP = 1, PREFERRED_SHOP = 2, PREFERRED_PLUS_SHOP = 4
+      isKeySeller = null, // Bool
+      sortType = 1, // SHOP_LIST_SORT_TYPE_LATEST_DESC = 1
+      sellerCommCoveRatio = null, // String - e.g. "0.123"
       page = 1,
       limit = 50
     } = options;
 
     const query = `
-      query ShopOfferV2($shopId: Int64, $keyword: String, $sortType: Int, $page: Int, $limit: Int) {
-        shopOfferV2(shopId: $shopId, keyword: $keyword, sortType: $sortType, page: $page, limit: $limit) {
+      query ShopOfferV2(
+        $shopId: Int64,
+        $keyword: String,
+        $shopType: [Int!],
+        $isKeySeller: Boolean,
+        $sortType: Int!,
+        $sellerCommCoveRatio: String,
+        $page: Int!,
+        $limit: Int!
+      ) {
+        shopOfferV2(
+          shopId: $shopId
+          keyword: $keyword
+          shopType: $shopType
+          isKeySeller: $isKeySeller
+          sortType: $sortType
+          sellerCommCoveRatio: $sellerCommCoveRatio
+          page: $page
+          limit: $limit
+        ) {
           nodes {
             commissionRate
             imageUrl
             offerLink
             originalLink
-            offerName
-            offerType
-            categoryId
-            collectionId
+            shopId
+            shopName
+            ratingStar
+            shopType
+            remainingBudget
             periodStartTime
             periodEndTime
+            sellerCommCoveRatio
+            bannerInfo {
+              count
+              banners {
+                fileName
+                imageUrl
+                imageSize
+                imageWidth
+                imageHeight
+              }
+            }
           }
           pageInfo {
+            page
+            limit
             hasNextPage
           }
         }
@@ -323,13 +388,24 @@ class ShopeeService {
     `;
 
     try {
-      const response = await this.makeGraphQLRequest(query, {
-        shopId,
-        keyword,
-        sortType,
-        page,
-        limit
-      }, 'ShopOfferV2');
+      // Construir variáveis apenas com valores não-nulos
+      const variables = {
+        sortType: sortType !== null && sortType !== undefined ? sortType : 1,
+        page: page !== null && page !== undefined ? page : 1,
+        limit: limit !== null && limit !== undefined ? limit : 50
+      };
+      
+      if (shopId !== null && shopId !== undefined) variables.shopId = shopId;
+      if (keyword !== null && keyword !== undefined && keyword.trim()) variables.keyword = keyword.trim();
+      if (shopType !== null && shopType !== undefined) variables.shopType = Array.isArray(shopType) ? shopType : [shopType];
+      if (isKeySeller !== null && isKeySeller !== undefined) variables.isKeySeller = isKeySeller;
+      if (sellerCommCoveRatio !== null && sellerCommCoveRatio !== undefined && sellerCommCoveRatio.trim()) {
+        variables.sellerCommCoveRatio = sellerCommCoveRatio.trim();
+      }
+      
+      logger.debug(`📝 Variáveis enviadas para shopOfferV2: ${JSON.stringify(variables, null, 2)}`);
+      
+      const response = await this.makeGraphQLRequest(query, variables, 'ShopOfferV2');
 
       if (response.errors) {
         logger.error(`Erro ao buscar ofertas de lojas: ${response.errors[0].message}`);
@@ -345,35 +421,126 @@ class ShopeeService {
 
   /**
    * Buscar ofertas de produtos (productOfferV2)
-   * Nota: productOffer v1 está deprecado, usando shopeeOfferV2 como alternativa
-   * A API de afiliados retorna ofertas que podem ser coleções ou categorias
+   * Query: productOfferV2
+   * Documentação: https://affiliate.shopee.com.br/open_api/document?type=overview
    */
   async getProductOffers(options = {}) {
     const {
+      shopId = null,
+      itemId = null,
+      productCatId = null,
+      listType = null,
+      matchId = null,
       keyword = null,
+      sortType = 2, // ITEM_SOLD_DESC = 2 (padrão: mais vendidos)
       page = 1,
-      limit = 50
+      limit = 50,
+      isAMSOffer = null,
+      isKeySeller = null
     } = options;
 
-    // Usar shopeeOfferV2 que funciona e retorna ofertas
-    // Na API de afiliados, as ofertas podem representar produtos, categorias ou coleções
-    try {
-      const offers = await this.getShopeeOffers({
-        keyword,
-        sortType: 1,
-        page,
-        limit
-      });
+    const query = `
+      query ProductOfferV2(
+        $shopId: Int64,
+        $itemId: Int64,
+        $productCatId: Int,
+        $listType: Int,
+        $matchId: Int64,
+        $keyword: String,
+        $sortType: Int!,
+        $page: Int!,
+        $limit: Int!,
+        $isAMSOffer: Boolean,
+        $isKeySeller: Boolean
+      ) {
+        productOfferV2(
+          shopId: $shopId
+          itemId: $itemId
+          productCatId: $productCatId
+          listType: $listType
+          matchId: $matchId
+          keyword: $keyword
+          sortType: $sortType
+          page: $page
+          limit: $limit
+          isAMSOffer: $isAMSOffer
+          isKeySeller: $isKeySeller
+        ) {
+          nodes {
+            itemId
+            commissionRate
+            sellerCommissionRate
+            shopeeCommissionRate
+            commission
+            priceMax
+            priceMin
+            sales
+            productCatIds
+            ratingStar
+            priceDiscountRate
+            imageUrl
+            productName
+            shopId
+            shopName
+            shopType
+            productLink
+            offerLink
+            periodStartTime
+            periodEndTime
+          }
+          pageInfo {
+            page
+            limit
+            hasNextPage
+          }
+        }
+      }
+    `;
 
-      // Retornar todas as ofertas (a API não diferencia produtos individuais)
-      return {
-        nodes: offers.nodes.map(node => ({
-          ...node,
-          productName: node.offerName, // Mapear offerName para productName
-          productId: node.collectionId || node.categoryId || 0 // Usar ID disponível
-        })),
-        pageInfo: offers.pageInfo
-      };
+    try {
+      // Construir variáveis apenas com valores não-nulos
+      // IMPORTANTE: listType e matchId só podem ser usados juntos, não com outros parâmetros
+      // Conforme documentação: "listType can only be used as a query parameter with matchId, 
+      // can not be used as a query parameter with the rest of the input"
+      const variables = {};
+      
+      // Se listType está definido, só pode usar com matchId
+      if (listType !== null && listType !== undefined) {
+        variables.listType = listType;
+        if (matchId !== null && matchId !== undefined) {
+          variables.matchId = matchId;
+        }
+        // Não enviar outros parâmetros quando usar listType
+      } else {
+        // Caso contrário, pode usar os outros parâmetros
+        if (shopId !== null && shopId !== undefined) variables.shopId = shopId;
+        if (itemId !== null && itemId !== undefined) variables.itemId = itemId;
+        if (productCatId !== null && productCatId !== undefined) variables.productCatId = productCatId;
+        if (keyword !== null && keyword !== undefined && keyword.trim()) variables.keyword = keyword.trim();
+      }
+      
+      // sortType, page e limit são sempre enviados
+      variables.sortType = sortType !== null && sortType !== undefined ? sortType : 2;
+      variables.page = page !== null && page !== undefined ? page : 1;
+      variables.limit = limit !== null && limit !== undefined ? limit : 50;
+      
+      // isAMSOffer e isKeySeller podem ser usados com qualquer combinação
+      if (isAMSOffer !== null && isAMSOffer !== undefined) variables.isAMSOffer = isAMSOffer;
+      if (isKeySeller !== null && isKeySeller !== undefined) variables.isKeySeller = isKeySeller;
+      
+      logger.debug(`📝 Variáveis enviadas para productOfferV2: ${JSON.stringify(variables, null, 2)}`);
+
+      const response = await this.makeGraphQLRequest(query, variables, 'ProductOfferV2');
+
+      if (response.errors) {
+        logger.error(`Erro ao buscar ofertas de produtos: ${response.errors[0].message}`);
+        if (response.errors[0].extensions) {
+          logger.error(`   Código: ${response.errors[0].extensions.code || 'N/A'}`);
+        }
+        return { nodes: [], pageInfo: null };
+      }
+
+      return response.data?.productOfferV2 || { nodes: [], pageInfo: null };
     } catch (error) {
       logger.error(`Erro ao buscar ofertas de produtos: ${error.message}`);
       return { nodes: [], pageInfo: null };
@@ -655,36 +822,141 @@ class ShopeeService {
   }
 
   /**
-   * Buscar detalhes de produto (compatibilidade - limitado na API de afiliados)
+   * Buscar detalhes de produto usando productOfferV2
+   * Usa itemId e shopId (quando disponível) para buscar o produto específico
    */
-  async getProductDetails(itemId) {
+  async getProductDetails(itemId, shopId = null) {
     try {
-      // A API de afiliados não tem endpoint direto para detalhes
-      // Buscar nas ofertas de produtos
-      const offers = await this.getProductOffers({
-        keyword: itemId.toString(),
-        limit: 1
-      });
-
-      if (offers.nodes.length > 0) {
-        const node = offers.nodes[0];
-      return {
-        item: {
-          item_id: node.productId || itemId,
-          name: node.productName || node.offerName || '',
-          url: node.offerLink || node.originalLink || '',
-          images: node.imageUrl ? [node.imageUrl] : [],
-          price: node.price || 0,
-          price_before_discount: node.originalPrice || null,
-          commission_rate: parseFloat(node.commissionRate || 0),
-          shop_id: node.shopId || null
-        }
-      };
+      // Converter itemId para Int64 (número)
+      const itemIdNum = typeof itemId === 'string' ? parseInt(itemId, 10) : itemId;
+      
+      if (!itemIdNum || isNaN(itemIdNum)) {
+        logger.error(`❌ itemId inválido: ${itemId}`);
+        return null;
       }
 
+      // Converter shopId se fornecido
+      const shopIdNum = shopId ? (typeof shopId === 'string' ? parseInt(shopId, 10) : shopId) : null;
+
+      logger.info(`🔍 Buscando detalhes do produto Shopee itemId: ${itemIdNum}${shopIdNum ? `, shopId: ${shopIdNum}` : ''}`);
+
+      // Tentar primeiro com shopId + itemId (mais preciso)
+      let offers = null;
+      if (shopIdNum && !isNaN(shopIdNum)) {
+        try {
+          logger.debug(`   Tentando buscar com shopId + itemId...`);
+          offers = await this.getProductOffers({
+            shopId: shopIdNum,
+            itemId: itemIdNum,
+            sortType: 2,
+            page: 1,
+            limit: 1
+          });
+        } catch (error) {
+          logger.warn(`   ⚠️ Erro ao buscar com shopId + itemId: ${error.message}`);
+        }
+      }
+
+      // Se não encontrou ou não tinha shopId, tentar apenas com itemId
+      if (!offers || !offers.nodes || offers.nodes.length === 0) {
+        try {
+          logger.debug(`   Tentando buscar apenas com itemId...`);
+          offers = await this.getProductOffers({
+            itemId: itemIdNum,
+            sortType: 2,
+            page: 1,
+            limit: 1
+          });
+        } catch (error) {
+          logger.warn(`   ⚠️ Erro ao buscar apenas com itemId: ${error.message}`);
+        }
+      }
+
+      // Se ainda não encontrou, pode ser que o produto não tenha oferta ativa
+      // Tentar buscar em TOP_PERFORMING e filtrar por itemId
+      if (!offers || !offers.nodes || offers.nodes.length === 0) {
+        try {
+          logger.debug(`   Tentando buscar em TOP_PERFORMING e filtrar...`);
+          const topOffers = await this.getProductOffers({
+            listType: 2, // TOP_PERFORMING
+            sortType: 2,
+            page: 1,
+            limit: 50 // Buscar mais para aumentar chance de encontrar
+          });
+          
+          // Filtrar pelo itemId
+          if (topOffers.nodes && topOffers.nodes.length > 0) {
+            const found = topOffers.nodes.find(node => 
+              node.itemId && (String(node.itemId) === String(itemIdNum))
+            );
+            if (found) {
+              offers = { nodes: [found], pageInfo: topOffers.pageInfo };
+              logger.info(`   ✅ Produto encontrado em TOP_PERFORMING`);
+            }
+          }
+        } catch (error) {
+          logger.warn(`   ⚠️ Erro ao buscar em TOP_PERFORMING: ${error.message}`);
+        }
+      }
+
+      if (offers && offers.nodes && offers.nodes.length > 0) {
+        const node = offers.nodes[0];
+        
+        // Calcular preço médio se tiver priceMin e priceMax
+        let price = 0;
+        if (node.priceMin && node.priceMax) {
+          price = (parseFloat(node.priceMin) + parseFloat(node.priceMax)) / 2;
+        } else if (node.priceMin) {
+          price = parseFloat(node.priceMin);
+        } else if (node.priceMax) {
+          price = parseFloat(node.priceMax);
+        }
+
+        // Calcular preço original (usar priceMax como referência)
+        const priceBeforeDiscount = node.priceMax ? parseFloat(node.priceMax) : null;
+
+        logger.info(`✅ Produto encontrado: ${node.productName?.substring(0, 50)}`);
+        logger.info(`   Preço: R$ ${price.toFixed(2)}`);
+        logger.info(`   Preço Original: ${priceBeforeDiscount ? `R$ ${priceBeforeDiscount.toFixed(2)}` : 'N/A'}`);
+
+        return {
+          item: {
+            item_id: node.itemId ? String(node.itemId) : String(itemIdNum),
+            name: node.productName || '',
+            description: '', // productOfferV2 não retorna descrição
+            url: node.productLink || node.offerLink || '',
+            images: node.imageUrl ? [node.imageUrl] : [],
+            // Preços em centavos de milhão (multiplicar por 100000 para compatibilidade)
+            price: price * 100000,
+            price_before_discount: priceBeforeDiscount ? priceBeforeDiscount * 100000 : null,
+            commission_rate: parseFloat(node.commissionRate || 0),
+            seller_commission_rate: node.sellerCommissionRate ? parseFloat(node.sellerCommissionRate) : null,
+            shopee_commission_rate: node.shopeeCommissionRate ? parseFloat(node.shopeeCommissionRate) : null,
+            commission: node.commission ? parseFloat(node.commission) : null,
+            shop_id: node.shopId ? String(node.shopId) : null,
+            shop_name: node.shopName || null,
+            sales: node.sales || 0,
+            rating_star: node.ratingStar ? parseFloat(node.ratingStar) : null,
+            discount_percentage: node.priceDiscountRate || 0,
+            // Campos adicionais do productOfferV2
+            priceMin: node.priceMin ? parseFloat(node.priceMin) : null,
+            priceMax: node.priceMax ? parseFloat(node.priceMax) : null,
+            productCatIds: node.productCatIds || [],
+            periodStartTime: node.periodStartTime || null,
+            periodEndTime: node.periodEndTime || null
+          }
+        };
+      }
+
+      logger.warn(`⚠️ Produto não encontrado na API de afiliados: itemId ${itemIdNum}`);
+      logger.warn(`   Isso pode acontecer se:`);
+      logger.warn(`   - O produto não tem oferta ativa na API de afiliados`);
+      logger.warn(`   - O produto não está disponível para afiliados`);
+      logger.warn(`   - O itemId ou shopId estão incorretos`);
       return null;
     } catch (error) {
-      logger.error(`Erro ao buscar detalhes do produto: ${error.message}`);
+      logger.error(`❌ Erro ao buscar detalhes do produto: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
       return null;
     }
   }
