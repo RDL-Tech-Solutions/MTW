@@ -13,3 +13,4 @@ COMMENT ON COLUMN app_settings.aliexpress_product_origin IS 'Origem dos produtos
 UPDATE app_settings
 SET aliexpress_product_origin = 'both'
 WHERE aliexpress_product_origin IS NULL;
+

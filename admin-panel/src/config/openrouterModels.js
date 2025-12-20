@@ -221,3 +221,4 @@ export function getModelById(id) {
 export function getModelsWithJsonSupport() {
   return OPENROUTER_MODELS.filter(model => model.supportsJson === true);
 }
+

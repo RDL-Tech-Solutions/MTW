@@ -170,3 +170,4 @@ class QualityScorer {
 }
 
 export default new QualityScorer();
+

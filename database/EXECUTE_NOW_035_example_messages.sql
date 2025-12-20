@@ -29,3 +29,4 @@ ON telegram_channels USING GIN (example_messages);
 -- para melhorar a precisão da IA na captura de cupons
 -- ============================================
 
+

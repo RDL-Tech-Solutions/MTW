@@ -196,3 +196,4 @@ COMMENT ON COLUMN products.ai_detected_category_id IS 'Categoria detectada autom
 COMMENT ON COLUMN products.should_send_push IS 'Se deve enviar push notification (decisão da IA)';
 COMMENT ON COLUMN products.should_send_to_bots IS 'Se deve enviar para bots (decisão da IA)';
 COMMENT ON COLUMN products.is_featured_offer IS 'Se é "Oferta do Dia" (decisão da IA)';
+

@@ -12,3 +12,4 @@ ADD COLUMN IF NOT EXISTS aliexpress_tracking_id VARCHAR(255);
 COMMENT ON COLUMN app_settings.aliexpress_app_key IS 'App Key da API do AliExpress';
 COMMENT ON COLUMN app_settings.aliexpress_app_secret IS 'App Secret da API do AliExpress (sensível)';
 COMMENT ON COLUMN app_settings.aliexpress_tracking_id IS 'Tracking ID para links de afiliado do AliExpress';
+
