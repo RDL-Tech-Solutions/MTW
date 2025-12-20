@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain } from 'lucide-react';
+import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -25,6 +25,7 @@ export default function PendingProducts() {
   const [loadingCoupons, setLoadingCoupons] = useState(false);
   const [finalPrice, setFinalPrice] = useState(null);
   const [approving, setApproving] = useState(false);
+  const [shortening, setShortening] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -204,7 +205,7 @@ export default function PendingProducts() {
     }
   }, [selectedCouponId, selectedProduct, availableCoupons]);
 
-  const handleApprove = async () => {
+  const handleApprove = async (shouldShorten = false) => {
     if (!affiliateLink || !affiliateLink.trim()) {
       toast({
         title: "Erro",
@@ -226,10 +227,16 @@ export default function PendingProducts() {
       return;
     }
 
-    setApproving(true);
+    if (shouldShorten) {
+      setShortening(true);
+    } else {
+      setApproving(true);
+    }
+
     try {
       const payload = {
-        affiliate_link: affiliateLink.trim()
+        affiliate_link: affiliateLink.trim(),
+        shorten_link: shouldShorten
       };
 
       // Adicionar cupom se selecionado
@@ -237,11 +244,40 @@ export default function PendingProducts() {
         payload.coupon_id = selectedCouponId;
       }
 
+      console.log('📤 ========== ENVIANDO PAYLOAD ==========');
+      console.log('   Product ID:', selectedProduct?.id);
+      console.log('   Affiliate Link:', affiliateLink.substring(0, 80) + '...');
+      console.log('   shorten_link no payload:', payload.shorten_link, '(tipo:', typeof payload.shorten_link + ')');
+      console.log('   shouldShorten:', shouldShorten, '(tipo:', typeof shouldShorten + ')');
+      console.log('   Payload completo:', JSON.stringify(payload, null, 2));
+      console.log('==========================================');
+
+      if (shouldShorten) {
+        toast({
+          title: "Encurtando link...",
+          description: "Aguarde enquanto o link é encurtado e o produto é publicado.",
+        });
+      }
+
       const response = await api.post(`/products/pending/${selectedProduct.id}/approve`, payload);
+      
+      console.log('✅ ========== RESPOSTA RECEBIDA ==========');
+      console.log('   Status:', response.status);
+      console.log('   Data:', JSON.stringify(response.data, null, 2));
+      if (response.data?.data?.product?.affiliate_link) {
+        const savedLink = response.data.data.product.affiliate_link;
+        console.log('   Link salvo no produto:', savedLink);
+        console.log('   Link é encurtado:', savedLink !== affiliateLink.trim() ? 'SIM ✅' : 'NÃO ❌');
+        console.log('   Link original:', affiliateLink.substring(0, 80) + '...');
+        console.log('   Link salvo:', savedLink.substring(0, 80) + '...');
+      }
+      console.log('==========================================');
 
       toast({
         title: "Sucesso",
-        description: "Produto aprovado e publicado com sucesso!",
+        description: shouldShorten 
+          ? "Link encurtado e produto publicado com sucesso!" 
+          : "Produto aprovado e publicado com sucesso!",
       });
 
       // Recarregar lista
@@ -256,6 +292,7 @@ export default function PendingProducts() {
       });
     } finally {
       setApproving(false);
+      setShortening(false);
     }
   };
 
@@ -682,13 +719,21 @@ export default function PendingProducts() {
             <Button
               variant="outline"
               onClick={handleCloseApprovalDialog}
-              disabled={approving}
+              disabled={approving || shortening}
             >
               Cancelar
             </Button>
             <Button
-              onClick={handleApprove}
-              disabled={approving || !affiliateLink.trim()}
+              variant="outline"
+              onClick={() => handleApprove(true)}
+              disabled={approving || shortening || !affiliateLink.trim()}
+            >
+              <Link2 className="h-4 w-4 mr-2" />
+              {shortening ? 'Encurtando...' : 'Encurtar Link e Publicar'}
+            </Button>
+            <Button
+              onClick={() => handleApprove(false)}
+              disabled={approving || shortening || !affiliateLink.trim()}
             >
               {approving ? 'Aprovando...' : 'Aprovar e Publicar'}
             </Button>

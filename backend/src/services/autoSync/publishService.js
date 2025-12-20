@@ -425,6 +425,34 @@ class PublishService {
     };
 
     try {
+      // Log detalhado do produto recebido
+      logger.info(`📦 Publicando produto: ${product.name || product.id}`);
+      logger.info(`   Platform: ${product.platform}`);
+      logger.info(`   image_url presente: ${product.image_url ? 'SIM' : 'NÃO'}`);
+      logger.info(`   image_url valor: ${product.image_url || 'NÃO DEFINIDA'}`);
+      logger.info(`   image_url tipo: ${typeof product.image_url}`);
+      
+      // Verificar se image_url está presente e válida
+      if (!product.image_url || !product.image_url.startsWith('http')) {
+        logger.error(`❌ Produto ${product.name || product.id} SEM IMAGEM VÁLIDA para publicação!`);
+        logger.error(`   Campos do produto: ${JSON.stringify(Object.keys(product))}`);
+        logger.error(`   image_url: ${JSON.stringify(product.image_url)}`);
+        
+        // Tentar buscar do banco se não tiver
+        if (product.id) {
+          try {
+            const Product = (await import('../../models/Product.js')).default;
+            const dbProduct = await Product.findById(product.id);
+            if (dbProduct && dbProduct.image_url) {
+              product.image_url = dbProduct.image_url;
+              logger.info(`   ✅ Imagem recuperada do banco: ${dbProduct.image_url.substring(0, 80)}...`);
+            }
+          } catch (dbError) {
+            logger.error(`   ❌ Erro ao buscar produto do banco: ${dbError.message}`);
+          }
+        }
+      }
+
       // Publicar no app (já está no banco)
       results.app = await this.publishToApp(product);
 

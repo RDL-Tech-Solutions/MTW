@@ -16,6 +16,11 @@
     "setup": "node scripts/setup.js",
     "check": "node scripts/healthCheck.js",
     "db:migrate": "node scripts/runMigrations.js",
+    "test:aliexpress": "node scripts/test-aliexpress-api.js",
+    "test:url-shortener": "node scripts/test-url-shortener.js",
+    "test:approve-shorten": "node scripts/test-approve-with-shorten.js",
+    "test:approve-endpoint": "node scripts/test-approve-endpoint.js",
+    "test:approve-http": "node scripts/test-approve-http.js",
     "logs": "tail -f logs/app.log",
     "logs:error": "tail -f logs/app.log | grep ERROR"
   },

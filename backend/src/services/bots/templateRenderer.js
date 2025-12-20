@@ -227,6 +227,29 @@ class TemplateRenderer {
           }
         }
         
+        // IMPORTANTE: Se for min_purchase, garantir que seja apenas o valor (sem emoji/texto duplicado)
+        if (key === 'min_purchase' && replacement) {
+          // Remover qualquer emoji e texto "Compra mínima:" que possa estar na variável
+          // A variável deve conter apenas "R$ X.XX"
+          replacement = replacement
+            .replace(/💳\s*/g, '')
+            .replace(/\*\*/g, '')
+            .replace(/Compra\s+mínima:\s*/gi, '')
+            .replace(/<b>.*?<\/b>/gi, '')
+            .trim();
+          
+          // Se ainda não começa com R$, adicionar
+          if (replacement && !replacement.startsWith('R$')) {
+            // Tentar extrair apenas o número
+            const numberMatch = replacement.match(/[\d,]+\.?\d*/);
+            if (numberMatch) {
+              replacement = `R$ ${numberMatch[0]}`;
+            }
+          }
+          
+          logger.debug(`📝 min_purchase limpo: ${replacement}`);
+        }
+        
         // IMPORTANTE: Se for affiliate_link, garantir que seja um link válido
         if (key === 'affiliate_link') {
           if (!replacement || replacement === 'Link não disponível' || replacement.trim().length === 0) {
@@ -270,6 +293,61 @@ class TemplateRenderer {
           })
           .join('\n');
         logger.debug(`📝 Template após remoção de linhas com data de validade`);
+      }
+      
+      // IMPORTANTE: Corrigir duplicações de "Compra mínima" e tags HTML não renderizadas
+      // Isso deve acontecer APÓS a substituição de variáveis
+      if (templateType === 'new_coupon') {
+        // PRIMEIRO: Converter qualquer HTML restante para Markdown
+        // (caso a IA tenha gerado HTML após a conversão inicial)
+        if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
+          logger.warn(`⚠️ Detectadas tags HTML na mensagem após substituição, convertendo para Markdown...`);
+          message = message
+            // Proteger código dentro de backticks antes de converter
+            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
+            // Converter HTML para Markdown
+            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+            .replace(/<i>(.*?)<\/i>/gi, '_$1_')
+            .replace(/<em>(.*?)<\/em>/gi, '_$1_')
+            // Restaurar código protegido
+            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
+        }
+        
+        // SEGUNDO: Remover padrões duplicados de "Compra mínima" (múltiplas tentativas)
+        message = message
+          // Padrão 1: HTML com duplicação completa
+          .replace(/💳\s*Compra\s+mínima:\s*<b>💳\s*<\/b>Compra\s+mínima:<b>\s*/gi, '💳 **Compra mínima:** ')
+          // Padrão 2: Markdown com duplicação
+          .replace(/💳\s*Compra\s+mínima:\s*\*\*💳\s*\*\*\s*Compra\s+mínima:\s*\*\*\s*/gi, '💳 **Compra mínima:** ')
+          // Padrão 3: Duplicação simples sem tags
+          .replace(/💳\s*Compra\s+mínima:\s*💳\s*Compra\s+mínima:\s*/gi, '💳 **Compra mínima:** ')
+          // Padrão 4: Com espaços e tags misturadas
+          .replace(/💳\s*Compra\s+mínima:\s*<b>\s*💳\s*<\/b>\s*Compra\s+mínima:\s*<b>\s*/gi, '💳 **Compra mínima:** ')
+          // Padrão 5: Com texto "Compra mínima:" duplicado dentro de tags
+          .replace(/💳\s*Compra\s+mínima:\s*<b>\s*💳\s*Compra\s+mínima:\s*<\/b>\s*<b>\s*/gi, '💳 **Compra mínima:** ')
+          // Padrão 6: Com Markdown já convertido mas ainda duplicado
+          .replace(/(💳\s*\*\*Compra\s+mínima:\*\*\s*R\$\s*[\d,]+\.?\d*)\s*\n?\s*\1/gi, '$1');
+        
+        // TERCEIRO: Limpeza final - remover qualquer duplicação restante de "Compra mínima"
+        // Procurar por múltiplas ocorrências da linha completa
+        const minPurchaseLines = message.match(/💳\s*\*\*Compra\s+mínima:\*\*\s*R\$\s*[\d,]+\.?\d*/gi);
+        if (minPurchaseLines && minPurchaseLines.length > 1) {
+          logger.warn(`⚠️ Detectada ${minPurchaseLines.length} ocorrência(s) de "Compra mínima", removendo duplicatas...`);
+          // Manter apenas a primeira ocorrência
+          const firstOccurrence = minPurchaseLines[0];
+          let foundFirst = false;
+          message = message.replace(/💳\s*\*\*Compra\s+mínima:\*\*\s*R\$\s*[\d,]+\.?\d*/gi, (match) => {
+            if (!foundFirst && match === firstOccurrence) {
+              foundFirst = true;
+              return match;
+            }
+            return ''; // Remover duplicatas
+          });
+          // Limpar linhas vazias resultantes e espaços extras
+          message = message.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '');
+        }
       }
       
       // IMPORTANTE: Após substituir variáveis, garantir que código do cupom esteja formatado
@@ -404,9 +482,26 @@ class TemplateRenderer {
       
       logger.debug(`📋 Template análise: HTML=${hasHtmlTagsAfter}, Markdown=${hasMarkdownBold}, parseMode=${parseMode}, platform=${platform}`);
       
+      // IMPORTANTE: Verificação final ANTES da conversão - garantir que não há tags HTML não renderizadas
+      // Se ainda houver tags HTML, converter para Markdown primeiro
+      if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
+        logger.warn(`⚠️ Detectadas tags HTML não renderizadas na mensagem final, convertendo para Markdown...`);
+        message = message
+          // Proteger código dentro de backticks
+          .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
+          // Converter HTML para Markdown
+          .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+          .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+          .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+          .replace(/<i>(.*?)<\/i>/gi, '_$1_')
+          .replace(/<em>(.*?)<\/em>/gi, '_$1_')
+          // Restaurar código protegido
+          .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
+      }
+      
       // IMPORTANTE: Para Telegram com parse_mode HTML, SEMPRE converter Markdown para HTML
       if (platform === 'telegram' && parseMode === 'HTML') {
-        if (hasMarkdownBold) {
+        if (hasMarkdownBold || message.includes('**')) {
           // Template tem Markdown - converter OBRIGATORIAMENTE para HTML
           logger.info(`🔄 Convertendo Markdown (**texto**) para HTML (<b>texto</b>) para Telegram`);
           message = this.convertBoldFormatting(message, platform, parseMode);
@@ -420,6 +515,20 @@ class TemplateRenderer {
             .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
             .replace(/<code>(.*?)<\/code>/gi, '`$1`');
           // Agora converter Markdown para HTML
+          message = this.convertBoldFormatting(message, platform, parseMode);
+        }
+        
+        // IMPORTANTE: Verificação final - garantir que não há tags HTML não renderizadas
+        // Se ainda houver tags HTML após todas as conversões, converter para Markdown e depois para HTML
+        if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
+          logger.warn(`⚠️ Tags HTML ainda presentes após conversão, fazendo limpeza final...`);
+          message = message
+            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
+            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
+          // Converter novamente para HTML
           message = this.convertBoldFormatting(message, platform, parseMode);
         }
         
@@ -452,6 +561,24 @@ class TemplateRenderer {
       }
       // Para WhatsApp, manter formatação original (WhatsApp processa automaticamente)
 
+      // IMPORTANTE: Verificação final absoluta - garantir que não há tags HTML não renderizadas
+      // Esta é a última chance antes de retornar a mensagem
+      if (platform === 'telegram' && parseMode === 'HTML') {
+        if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
+          // Se ainda há tags HTML, pode ser que a conversão não funcionou
+          // Tentar converter uma última vez
+          logger.warn(`⚠️ Verificação final: tags HTML ainda presentes, convertendo...`);
+          message = message
+            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
+            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
+          // Converter para HTML novamente
+          message = this.convertBoldFormatting(message, platform, parseMode);
+        }
+      }
+      
       // IMPORTANTE: Preservar quebras de linha do template original
       // Não remover quebras de linha, apenas limpar linhas completamente vazias
       const lines = message.split('\n');
@@ -561,6 +688,9 @@ class TemplateRenderer {
    * @returns {Promise<Object>}
    */
   async preparePromotionVariables(product) {
+    // Log do affiliate_link que será usado
+    logger.info(`🔗 Preparando variáveis de template. affiliate_link: ${product.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
+    
     // Calcular preço final (com cupom se houver)
     let finalPrice = product.current_price;
     let priceWithCoupon = null;
@@ -663,6 +793,7 @@ class TemplateRenderer {
           }
           
           if (coupon.min_purchase > 0) {
+            // Para cupons de produtos, manter formato completo
             couponSection += `💳 **Compra mínima:** R$ ${coupon.min_purchase.toFixed(2)}\n`;
           }
           
@@ -786,9 +917,10 @@ class TemplateRenderer {
     // Verificar se é cupom capturado do Telegram
     const isTelegramCaptured = coupon.capture_source === 'telegram' || coupon.auto_captured === true;
     
-    // Compra mínima
+    // Compra mínima - IMPORTANTE: retornar apenas o valor formatado, sem emoji e texto
+    // A IA vai adicionar o emoji e texto "Compra mínima:" no template
     const minPurchase = coupon.min_purchase > 0
-      ? `💳 **Compra mínima:** R$ ${coupon.min_purchase.toFixed(2)}\n`
+      ? `R$ ${coupon.min_purchase.toFixed(2)}`
       : '';
 
     // Limite máximo de desconto
@@ -1488,11 +1620,8 @@ class TemplateRenderer {
         message += `**Plataforma:** ${variables.platform_name || 'N/A'}\n`;
         message += `**Desconto:** ${variables.discount_value || 'N/A'}\n`;
         if (variables.min_purchase) {
-          // Remover formatação markdown da variável min_purchase (já vem formatada)
-          const minPurchaseText = variables.min_purchase.replace(/\*\*/g, '').replace(/💳\s*/g, '').replace(/Compra mínima:\s*/gi, '').trim();
-          if (minPurchaseText) {
-            message += `**Compra mínima:** ${minPurchaseText}\n`;
-          }
+          // min_purchase agora contém apenas o valor (R$ X.XX), adicionar emoji e texto
+          message += `💳 **Compra mínima:** ${variables.min_purchase}\n`;
         }
         // IMPORTANTE: NÃO incluir aviso de expiração ou data de validade na mensagem do bot
         // message += `\n⚠️ **Sujeito à expiração**\n`;
@@ -1503,7 +1632,10 @@ class TemplateRenderer {
         fullMessage += `🏪 **Plataforma:** ${variables.platform_name || 'N/A'}\n`;
         fullMessage += `💬 **Código:** \`${variables.coupon_code || 'N/A'}\`\n`;
         fullMessage += `💰 **Desconto:** ${variables.discount_value || 'N/A'} OFF\n`;
-        if (variables.min_purchase) fullMessage += `${variables.min_purchase}`;
+        if (variables.min_purchase) {
+          // min_purchase agora contém apenas o valor (R$ X.XX), adicionar emoji e texto
+          fullMessage += `💳 **Compra mínima:** ${variables.min_purchase}\n`;
+        }
         if (variables.max_discount) fullMessage += `${variables.max_discount}`;
         if (variables.applicability) fullMessage += `\n${variables.applicability}\n`;
         if (variables.coupon_title) fullMessage += `\n📝 **${variables.coupon_title}**\n`;

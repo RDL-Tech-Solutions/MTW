@@ -187,14 +187,106 @@ class ProductController {
   // Aprovar e publicar produto com link de afiliado (admin)
   static async approve(req, res, next) {
     try {
+      logger.info(`📥 ========== REQUISIÇÃO RECEBIDA ==========`);
+      logger.info(`   Método: ${req.method}`);
+      logger.info(`   URL: ${req.url}`);
+      logger.info(`   Body completo: ${JSON.stringify(req.body, null, 2)}`);
+      logger.info(`   Parâmetros: ${JSON.stringify(req.params, null, 2)}`);
+      logger.info(`==========================================`);
+      
       const { id } = req.params;
-      const { affiliate_link, coupon_id } = req.body;
+      const { affiliate_link, coupon_id, shorten_link } = req.body;
+      
+      logger.info(`📝 Parâmetros extraídos do body:`);
+      logger.info(`   id: ${id}`);
+      logger.info(`   affiliate_link: ${affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
+      logger.info(`   coupon_id: ${coupon_id || 'NÃO DEFINIDO'}`);
+      logger.info(`   shorten_link: ${shorten_link} (tipo: ${typeof shorten_link})`);
 
       if (!affiliate_link || !affiliate_link.trim()) {
         return res.status(400).json(
           errorResponse('Link de afiliado é obrigatório', 'MISSING_AFFILIATE_LINK')
         );
       }
+
+      // Encurtar link se solicitado
+      let finalAffiliateLink = affiliate_link.trim();
+      
+      // Verificar se encurtamento foi solicitado (aceitar true, 'true', 1, '1')
+      const shouldShorten = shorten_link === true || 
+                           shorten_link === 'true' || 
+                           shorten_link === 1 || 
+                           shorten_link === '1' ||
+                           String(shorten_link).toLowerCase() === 'true';
+      
+      logger.info(`🔗 ========== PROCESSANDO ENCURTAMENTO ==========`);
+      logger.info(`   Parâmetro shorten_link recebido: ${JSON.stringify(shorten_link)}`);
+      logger.info(`   Tipo do parâmetro: ${typeof shorten_link}`);
+      logger.info(`   shouldShorten calculado: ${shouldShorten}`);
+      logger.info(`   Link original: ${affiliate_link.substring(0, 100)}...`);
+      logger.info(`===============================================`);
+      
+      if (shouldShorten) {
+        logger.info(`🔗 ✅ Encurtamento SOLICITADO. Iniciando processo...`);
+        logger.info(`   Link a encurtar: ${affiliate_link.substring(0, 100)}...`);
+        
+        try {
+          const urlShortener = (await import('../services/urlShortener.js')).default;
+          logger.info(`   📞 Chamando urlShortener.shorten()...`);
+          
+          const shortenedUrl = await urlShortener.shorten(affiliate_link.trim());
+          
+          logger.info(`   📥 Resposta do urlShortener: ${shortenedUrl}`);
+          logger.info(`   🔍 Comparando URLs:`);
+          logger.info(`      Original: ${affiliate_link.trim()}`);
+          logger.info(`      Encurtado: ${shortenedUrl}`);
+          logger.info(`      São diferentes: ${shortenedUrl !== affiliate_link.trim()}`);
+          
+          // Verificar se a URL foi realmente encurtada
+          // O serviço urlShortener já normaliza a URL (adiciona https:// se necessário)
+          if (shortenedUrl && shortenedUrl !== affiliate_link.trim()) {
+            // Validar se é uma URL válida
+            try {
+              new URL(shortenedUrl);
+              finalAffiliateLink = shortenedUrl;
+              logger.info(`✅ ✅ ✅ Link encurtado com SUCESSO!`);
+              logger.info(`   Original: ${affiliate_link.substring(0, 80)}...`);
+              logger.info(`   Encurtado: ${finalAffiliateLink}`);
+            } catch (e) {
+              logger.error(`❌ URL encurtada não é válida: ${shortenedUrl}`);
+              logger.error(`   Erro de validação: ${e.message}`);
+              logger.warn(`⚠️ Usando link original devido a URL inválida`);
+              finalAffiliateLink = affiliate_link.trim();
+            }
+          } else {
+            logger.warn(`⚠️ ⚠️ ⚠️ URL NÃO foi encurtada (retornou original ou vazio)`);
+            logger.warn(`   Original: ${affiliate_link.substring(0, 80)}...`);
+            logger.warn(`   Retornado: ${shortenedUrl || 'VAZIO'}`);
+            logger.warn(`   Motivo: ${!shortenedUrl ? 'Resposta vazia' : 'URL retornada é igual à original'}`);
+            finalAffiliateLink = affiliate_link.trim();
+          }
+        } catch (error) {
+          logger.error(`❌ ❌ ❌ ERRO ao encurtar link:`);
+          logger.error(`   Mensagem: ${error.message}`);
+          logger.error(`   Stack: ${error.stack}`);
+          if (error.response) {
+            logger.error(`   Status HTTP: ${error.response.status}`);
+            logger.error(`   Data: ${JSON.stringify(error.response.data)}`);
+          }
+          // Continuar com o link original se falhar
+          logger.warn(`⚠️ Usando link original devido ao erro no encurtamento`);
+          finalAffiliateLink = affiliate_link.trim();
+        }
+      } else {
+        logger.info(`ℹ️ Encurtamento NÃO solicitado`);
+        logger.info(`   shorten_link: ${shorten_link} (tipo: ${typeof shorten_link})`);
+        logger.info(`   shouldShorten: ${shouldShorten}`);
+      }
+      
+      logger.info(`🔗 ========== RESULTADO FINAL ==========`);
+      logger.info(`   finalAffiliateLink: ${finalAffiliateLink.substring(0, 100)}...`);
+      logger.info(`   É encurtado: ${finalAffiliateLink !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
+      logger.info(`========================================`);
 
       // Buscar produto
       const product = await Product.findById(id);
@@ -210,12 +302,18 @@ class ProductController {
         );
       }
 
+      // Log do link que será usado
+      logger.info(`📝 Link que será salvo no banco: ${finalAffiliateLink.substring(0, 100)}...`);
+      logger.info(`   É link encurtado: ${finalAffiliateLink !== affiliate_link.trim() ? 'SIM' : 'NÃO'}`);
+      
       // Calcular preço final com cupom se fornecido
       let finalPrice = product.current_price;
       let updateData = {
-        affiliate_link: affiliate_link.trim(),
+        affiliate_link: finalAffiliateLink, // IMPORTANTE: Usar link encurtado se aplicável
         status: 'approved'
       };
+      
+      logger.info(`📝 updateData.affiliate_link: ${updateData.affiliate_link.substring(0, 100)}...`);
 
       if (coupon_id) {
         // Buscar cupom
@@ -261,13 +359,30 @@ class ProductController {
       }
 
       // Aprovar produto com link de afiliado e cupom
-      const approvedProduct = await Product.approve(id, affiliate_link.trim(), updateData);
+      // IMPORTANTE: Passar finalAffiliateLink (link encurtado) como segundo parâmetro
+      logger.info(`📝 Chamando Product.approve com link: ${finalAffiliateLink.substring(0, 100)}...`);
+      const approvedProduct = await Product.approve(id, finalAffiliateLink, updateData);
+      logger.info(`✅ Produto aprovado. Link salvo: ${approvedProduct.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
 
       // Buscar produto completo para publicação
+      // IMPORTANTE: Aguardar um pouco para garantir que o banco foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const fullProduct = await Product.findById(id);
       
-      // Atualizar affiliate_link e final_price no objeto para publicação
-      fullProduct.affiliate_link = affiliate_link.trim();
+      // Log do link antes de atualizar
+      logger.info(`📝 Link no produto ANTES de atualizar (do banco): ${fullProduct.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
+      logger.info(`📝 Link que SERÁ usado na publicação (finalAffiliateLink): ${finalAffiliateLink.substring(0, 100)}...`);
+      logger.info(`📝 Link original recebido (affiliate_link): ${affiliate_link.substring(0, 100)}...`);
+      logger.info(`📝 Link é encurtado: ${finalAffiliateLink !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
+      
+      // IMPORTANTE: Sempre usar finalAffiliateLink (pode ser encurtado)
+      // Atualizar affiliate_link no objeto para publicação
+      fullProduct.affiliate_link = finalAffiliateLink;
+      
+      // Log após atualizar
+      logger.info(`📝 Link no produto APÓS atualizar (fullProduct.affiliate_link): ${fullProduct.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
+      logger.info(`📝 Confirmando: Link no fullProduct é encurtado: ${fullProduct.affiliate_link !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
       if (coupon_id && finalPrice !== product.current_price) {
         // Armazenar preço final calculado (será usado no bot e app)
         fullProduct.final_price = finalPrice;

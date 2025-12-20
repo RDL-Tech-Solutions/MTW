@@ -16,6 +16,9 @@ router.post('/config', SyncController.saveConfig);
 // POST /api/sync/run-now - Executar sincronização manual
 router.post('/run-now', SyncController.runNow);
 
+// POST /api/sync/run/:platform - Executar sincronização de plataforma específica
+router.post('/run/:platform', SyncController.runPlatform);
+
 // GET /api/sync/history - Histórico de sincronizações
 router.get('/history', SyncController.getHistory);
 

@@ -669,11 +669,15 @@ class Product {
 
   // Aprovar e atualizar produto com link de afiliado e cupom
   static async approve(id, affiliateLink, additionalData = {}) {
+    // IMPORTANTE: O affiliateLink do parâmetro tem prioridade sobre o do additionalData
+    // Isso garante que o link encurtado seja usado
+    // Fazer spread do additionalData primeiro, depois sobrescrever com affiliateLink do parâmetro
     const updateData = {
       status: 'approved',
-      affiliate_link: affiliateLink,
       updated_at: new Date().toISOString(),
-      ...additionalData
+      ...additionalData,
+      // IMPORTANTE: Definir affiliate_link DEPOIS do spread para garantir que o link encurtado seja usado
+      affiliate_link: affiliateLink
     };
 
     const { data, error } = await supabase

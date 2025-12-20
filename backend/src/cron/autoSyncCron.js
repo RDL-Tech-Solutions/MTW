@@ -328,8 +328,15 @@ class AutoSyncCron {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
-      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50);
+      // Obter configuração de origem de produtos do AliExpress
+      const AppSettings = (await import('../models/AppSettings.js')).default;
+      const aliExpressConfig = await AppSettings.getAliExpressConfig();
+      const productOrigin = aliExpressConfig.productOrigin || 'both';
+      
+      logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
+      
+      // 1. Buscar produtos com origem especificada
+      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50, productOrigin);
 
       // 2. Filtrar promoções
       const promotions = aliExpressSync.filterAliExpressPromotions(

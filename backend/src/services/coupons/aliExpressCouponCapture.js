@@ -1,25 +1,46 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import logger from '../../config/logger.js';
+import AppSettings from '../../models/AppSettings.js';
 import CouponSettings from '../../models/CouponSettings.js';
 
 class AliExpressCouponCapture {
   constructor() {
-    this.baseUrl = 'https://api-sg.aliexpress.com/rest';
+    // baseUrl será obtido de AppSettings.getAliExpressConfig()
+    this.defaultBaseUrl = 'https://api-sg.aliexpress.com/rest';
   }
 
   /**
    * Gerar assinatura para API AliExpress
+   * Conforme documentação: https://openservice.aliexpress.com/doc/doc.htm
+   * 
+   * Algoritmo:
+   * 1. Ordenar todos os parâmetros (exceto 'sign') por nome em ordem ASCII
+   * 2. Concatenar: key1value1key2value2...
+   * 3. Prepend o método da API à string concatenada
+   * 4. Gerar HMAC-SHA256 com app_secret
+   * 5. Converter para hexadecimal maiúsculo
    */
-  generateSignature(params, appSecret) {
-    const sortedParams = Object.keys(params)
-      .sort()
-      .map(key => `${key}${params[key]}`)
+  generateSignature(method, params, appSecret) {
+    // Remover 'sign' se existir
+    const paramsWithoutSign = { ...params };
+    delete paramsWithoutSign.sign;
+    
+    // Ordenar parâmetros por nome em ordem ASCII
+    const sortedKeys = Object.keys(paramsWithoutSign).sort();
+    
+    // Concatenar: key1value1key2value2...
+    const concatenatedParams = sortedKeys
+      .map(key => `${key}${paramsWithoutSign[key]}`)
       .join('');
-
+    
+    // Prepend o método da API conforme documentação
+    const stringToSign = `${method}${concatenatedParams}`;
+    
+    // Gerar HMAC-SHA256
     return crypto
       .createHmac('sha256', appSecret)
-      .update(sortedParams)
+      .update(stringToSign)
       .digest('hex')
       .toUpperCase();
   }
@@ -31,15 +52,16 @@ class AliExpressCouponCapture {
     try {
       logger.info('🛍️ Iniciando captura de cupons AliExpress...');
 
-      const settings = await CouponSettings.get();
+      const couponSettings = await CouponSettings.get();
+      const apiConfig = await AppSettings.getAliExpressConfig();
 
-      if (!settings.aliexpress_enabled) {
+      if (!couponSettings.aliexpress_enabled) {
         logger.info('⏸️ AliExpress desabilitado nas configurações');
         return [];
       }
 
-      if (!settings.aliexpress_app_key || !settings.aliexpress_app_secret) {
-        logger.warn('⚠️ Credenciais AliExpress não configuradas');
+      if (!apiConfig.appKey || !apiConfig.appSecret) {
+        logger.warn('⚠️ Credenciais AliExpress não configuradas - configure em /settings');
         return [];
       }
 
@@ -77,11 +99,17 @@ class AliExpressCouponCapture {
    */
   async makeRequest(method, params = {}) {
     try {
-      const settings = await CouponSettings.get();
+      const config = await AppSettings.getAliExpressConfig();
 
+      if (!config.appKey || !config.appSecret) {
+        throw new Error('AliExpress não configurado - configure App Key e App Secret em /settings');
+      }
+
+      // Timestamp no formato requerido pela API AliExpress: milissegundos desde epoch
       const timestamp = Date.now();
+      
       const requestParams = {
-        app_key: settings.aliexpress_app_key,
+        app_key: config.appKey,
         method,
         timestamp,
         sign_method: 'sha256',
@@ -90,11 +118,12 @@ class AliExpressCouponCapture {
         ...params
       };
 
-      // Gerar assinatura
-      const sign = this.generateSignature(requestParams, settings.aliexpress_app_secret);
+      // Gerar assinatura (passar o método como primeiro parâmetro)
+      const sign = this.generateSignature(method, requestParams, config.appSecret);
       requestParams.sign = sign;
 
-      const response = await axios.get(this.baseUrl, {
+      const baseUrl = config.apiUrl || this.defaultBaseUrl;
+      const response = await axios.get(baseUrl, {
         params: requestParams,
         timeout: 30000
       });
@@ -154,7 +183,7 @@ class AliExpressCouponCapture {
    */
   async processCoupon(item) {
     try {
-      const settings = await CouponSettings.get();
+      const config = await AppSettings.getAliExpressConfig();
 
       const coupon = {
         platform: 'aliexpress',
@@ -172,7 +201,7 @@ class AliExpressCouponCapture {
         campaign_name: item.promotion_name || 'AliExpress Deal',
         affiliate_link: this.generateAffiliateLink(
           item.promotion_link || item.product_detail_url,
-          settings.aliexpress_tracking_id
+          config.trackingId
         ),
         source_url: item.product_detail_url || item.promotion_link || '',
         auto_captured: true,

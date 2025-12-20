@@ -557,7 +557,7 @@ export default function Products() {
                     <Input
                       id="affiliate_url"
                       type="url"
-                      placeholder="https://shopee.com.br/... ou https://mercadolivre.com.br/..."
+                      placeholder="https://shopee.com.br/... ou https://mercadolivre.com.br/... ou https://aliexpress.com/..."
                       value={formData.affiliate_url}
                       onChange={(e) => setFormData({ ...formData, affiliate_url: e.target.value })}
                       className="flex-1"

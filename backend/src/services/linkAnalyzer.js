@@ -6,7 +6,12 @@ class LinkAnalyzer {
   detectPlatform(url) {
     const urlLower = url.toLowerCase();
 
-    if (urlLower.includes('shopee.com.br') || urlLower.includes('shp.ee')) {
+    // Shopee: múltiplos padrões de links
+    if (urlLower.includes('shopee.com.br') || 
+        urlLower.includes('shopee.com') ||
+        urlLower.includes('shp.ee') ||
+        urlLower.includes('s.shopee.com.br') ||
+        urlLower.includes('s.shopee.com')) {
       return 'shopee';
     }
     if (urlLower.includes('mercadolivre.com') ||
@@ -19,51 +24,232 @@ class LinkAnalyzer {
     if (urlLower.includes('amazon.com.br') || urlLower.includes('amzn.to')) {
       return 'amazon';
     }
+    if (urlLower.includes('aliexpress.com') || 
+        urlLower.includes('s.click.aliexpress.com') ||
+        urlLower.includes('alixpress.com')) {
+      return 'aliexpress';
+    }
     return 'unknown';
   }
 
-  // Seguir redirecionamentos para obter URL final
-  async followRedirects(url) {
+  // Seguir redirecionamentos para obter URL final (com suporte para múltiplos redirecionamentos e JavaScript)
+  async followRedirects(url, maxAttempts = 5) {
     try {
       console.log(`   🔄 Seguindo redirecionamentos de: ${url}`);
 
-      // Timeout para evitar travamento (15 segundos)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout ao seguir redirecionamentos')), 15000);
-      });
+      let currentUrl = url;
+      let finalUrl = url;
+      let productUrl = null; // Guardar URL de produto se detectada
+      let attempts = 0;
 
-      const followPromise = (async () => {
-        // Configurar para seguir redirecionamentos automaticamente (mais simples e rápido)
+      // Seguir redirecionamentos HTTP até encontrar a URL final
+      while (attempts < maxAttempts) {
+        attempts++;
+        console.log(`   🔄 Tentativa ${attempts}/${maxAttempts}: ${currentUrl.substring(0, 80)}...`);
+
         try {
-          const response = await axios.get(url, {
-            maxRedirects: 10,
+          const response = await axios.get(currentUrl, {
+            maxRedirects: 10, // Seguir até 10 redirecionamentos HTTP
             validateStatus: (status) => status >= 200 && status < 400,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
               'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-              'Referer': 'https://www.google.com/'
+              'Referer': 'https://www.google.com/',
+              'Accept-Encoding': 'gzip, deflate, br',
+              'Connection': 'keep-alive'
             },
-            timeout: 10000
+            timeout: 15000
           });
 
-          // Pegar URL final após redirecionamentos
-          const finalUrl = response.request?.res?.responseUrl || 
-                          response.config?.url || 
-                          url;
-          
-          console.log(`   ✅ URL final: ${finalUrl}`);
-            return finalUrl;
-        } catch (error) {
-          // Se falhar, retornar URL original
-          console.log(`   ⚠️ Erro ao seguir redirecionamentos (usando URL original): ${error.message}`);
-          return url;
-          }
-      })();
+          // Pegar URL final após redirecionamentos HTTP
+          const responseUrl = response.request?.res?.responseUrl || 
+                             response.request?.responseURL ||
+                             response.config?.url || 
+                             currentUrl;
 
-      // Usar Promise.race para aplicar timeout
-      return await Promise.race([followPromise, timeoutPromise]);
+          // Para AliExpress: se chegou em uma URL de produto válida, salvar e parar aqui
+          if (responseUrl.includes('aliexpress.com/item/') || responseUrl.includes('aliexpress.com/i/')) {
+            console.log(`   ✅ URL de produto AliExpress detectada: ${responseUrl.substring(0, 80)}...`);
+            productUrl = responseUrl; // Salvar URL do produto
+            finalUrl = responseUrl;
+            break; // Parar aqui, não seguir mais redirecionamentos
+          }
+
+          // Para Shopee: se ainda está em link encurtado, continuar
+          if (responseUrl !== currentUrl && !responseUrl.includes('s.shopee.com.br') && !responseUrl.includes('shp.ee')) {
+            // Verificar se não é uma página de login/erro
+            if (responseUrl.includes('/login') || responseUrl.includes('/error/') || responseUrl.includes('/404')) {
+              console.log(`   ⚠️ Redirecionamento para página de login/erro detectado`);
+              // Se temos uma URL de produto salva, usar ela
+              if (productUrl) {
+                console.log(`   💡 Usando URL de produto salva anteriormente`);
+                finalUrl = productUrl;
+                break;
+              }
+              console.log(`   ⚠️ Usando URL anterior`);
+              break; // Parar e usar a URL anterior
+            }
+            console.log(`   ✅ Redirecionamento HTTP detectado: ${responseUrl.substring(0, 80)}...`);
+            currentUrl = responseUrl;
+            finalUrl = responseUrl;
+            continue; // Continuar loop para seguir mais redirecionamentos
+          }
+
+          // Verificar se há redirecionamento JavaScript na página
+          // Links de afiliado da Shopee podem usar JavaScript para redirecionar
+          if (response.data && typeof response.data === 'string') {
+            // Buscar por meta refresh ou JavaScript redirect
+            const metaRefresh = response.data.match(/<meta[^>]*http-equiv=["']refresh["'][^>]*content=["']\d+;\s*url=([^"']+)["']/i);
+            const jsRedirect = response.data.match(/window\.location\s*=\s*["']([^"']+)["']/i) ||
+                              response.data.match(/location\.href\s*=\s*["']([^"']+)["']/i) ||
+                              response.data.match(/location\.replace\s*\(["']([^"']+)["']\)/i);
+
+            if (metaRefresh && metaRefresh[1]) {
+              let redirectUrl = metaRefresh[1];
+              if (!redirectUrl.startsWith('http')) {
+                redirectUrl = new URL(redirectUrl, currentUrl).toString();
+              }
+              
+              // Para AliExpress: se o redirect é para uma página de produto, usar e parar
+              if (redirectUrl.includes('aliexpress.com/item/') || redirectUrl.includes('aliexpress.com/i/')) {
+                console.log(`   ✅ URL de produto AliExpress detectada via meta refresh: ${redirectUrl.substring(0, 80)}...`);
+                finalUrl = redirectUrl;
+                break;
+              }
+              
+              // Evitar seguir para páginas de login/erro
+              if (redirectUrl.includes('/login') || redirectUrl.includes('/error/') || redirectUrl.includes('/404')) {
+                console.log(`   ⚠️ Meta refresh para página de login/erro, ignorando`);
+                break;
+              }
+              
+              console.log(`   🔄 Meta refresh detectado: ${redirectUrl.substring(0, 80)}...`);
+              currentUrl = redirectUrl;
+              finalUrl = redirectUrl;
+              continue;
+            }
+
+            if (jsRedirect && jsRedirect[1]) {
+              let redirectUrl = jsRedirect[1];
+              if (!redirectUrl.startsWith('http')) {
+                redirectUrl = new URL(redirectUrl, currentUrl).toString();
+              }
+              
+              // Para AliExpress: se o redirect é para uma página de produto, usar e parar
+              if (redirectUrl.includes('aliexpress.com/item/') || redirectUrl.includes('aliexpress.com/i/')) {
+                console.log(`   ✅ URL de produto AliExpress detectada via JS redirect: ${redirectUrl.substring(0, 80)}...`);
+                finalUrl = redirectUrl;
+                break;
+              }
+              
+              // Evitar seguir para páginas de login/erro
+              if (redirectUrl.includes('/login') || redirectUrl.includes('/error/') || redirectUrl.includes('/404')) {
+                console.log(`   ⚠️ JavaScript redirect para página de login/erro, ignorando`);
+                // Tentar extrair URL de produto da URL atual se possível
+                if (currentUrl.includes('aliexpress.com/item/') || currentUrl.includes('aliexpress.com/i/')) {
+                  console.log(`   💡 Usando URL atual que parece ser de produto`);
+                  finalUrl = currentUrl;
+                }
+                break;
+              }
+              
+              console.log(`   🔄 JavaScript redirect detectado: ${redirectUrl.substring(0, 80)}...`);
+              currentUrl = redirectUrl;
+              finalUrl = redirectUrl;
+              continue;
+            }
+
+            // Se ainda está em link encurtado, verificar se há redirecionamento no HTML
+            // Links de afiliado da Shopee podem ter redirecionamento em script ou iframe
+            if ((currentUrl.includes('s.shopee.com.br') || currentUrl.includes('shp.ee')) && attempts < maxAttempts) {
+              // Buscar por mais padrões de redirecionamento no HTML
+              const redirectPatterns = [
+                /href\s*=\s*["']([^"']*shopee[^"']*product[^"']*)["']/i,
+                /url\s*=\s*["']([^"']*shopee[^"']*product[^"']*)["']/i,
+                /redirect\s*:\s*["']([^"']*shopee[^"']*product[^"']*)["']/i,
+                /<a[^>]*href=["']([^"']*shopee[^"']*product[^"']*)["']/i
+              ];
+              
+              for (const pattern of redirectPatterns) {
+                const match = response.data.match(pattern);
+                if (match && match[1]) {
+                  let redirectUrl = match[1];
+                  if (!redirectUrl.startsWith('http')) {
+                    redirectUrl = new URL(redirectUrl, currentUrl).toString();
+                  }
+                  if (redirectUrl.includes('shopee.com.br') && redirectUrl.includes('product') && !redirectUrl.includes('s.shopee.com.br')) {
+                    console.log(`   🔄 URL de produto encontrada no HTML: ${redirectUrl.substring(0, 80)}...`);
+                    currentUrl = redirectUrl;
+                    finalUrl = redirectUrl;
+                    continue;
+                  }
+                }
+              }
+              
+              // Se não encontrou no HTML, aguardar e tentar novamente (pode ser redirecionamento JavaScript assíncrono)
+              if (currentUrl.includes('s.shopee.com.br') || currentUrl.includes('shp.ee')) {
+                console.log(`   ⏳ Aguardando 3 segundos para redirecionamento JavaScript (tentativa ${attempts})...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // Tentar fazer uma nova requisição após o delay
+                try {
+                  const delayedResponse = await axios.get(currentUrl, {
+                    maxRedirects: 10,
+                    validateStatus: (status) => status >= 200 && status < 400,
+                    headers: {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                      'Referer': currentUrl,
+                      'Accept-Encoding': 'gzip, deflate, br'
+                    },
+                    timeout: 15000
+                  });
+                  
+                  const delayedUrl = delayedResponse.request?.res?.responseUrl || 
+                                    delayedResponse.request?.responseURL ||
+                                    delayedResponse.config?.url || 
+                                    currentUrl;
+                  
+                  if (delayedUrl !== currentUrl && !delayedUrl.includes('s.shopee.com.br') && !delayedUrl.includes('shp.ee')) {
+                    console.log(`   ✅ URL após delay: ${delayedUrl.substring(0, 80)}...`);
+                    currentUrl = delayedUrl;
+                    finalUrl = delayedUrl;
+                    continue;
+                  }
+                } catch (e) {
+                  console.log(`   ⚠️ Erro ao verificar após delay: ${e.message}`);
+                }
+              }
+            }
+          }
+
+          // Se chegou aqui, não há mais redirecionamentos
+          finalUrl = responseUrl;
+          break;
+
         } catch (error) {
+          console.log(`   ⚠️ Erro na tentativa ${attempts}: ${error.message}`);
+          if (attempts >= maxAttempts) {
+            console.log(`   ⚠️ Máximo de tentativas atingido, usando última URL conhecida`);
+            break;
+          }
+          // Aguardar antes de tentar novamente
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      // Se temos uma URL de produto salva e a URL final é de erro/login, usar a URL do produto
+      if (productUrl && (finalUrl.includes('/error/') || finalUrl.includes('/404') || finalUrl.includes('/login'))) {
+        console.log(`   💡 URL final é erro/login, usando URL de produto detectada anteriormente`);
+        finalUrl = productUrl;
+      }
+      
+      console.log(`   ✅ URL final após ${attempts} tentativa(s): ${finalUrl.substring(0, 100)}...`);
+      return finalUrl;
+
+    } catch (error) {
       console.error(`   ❌ Erro ao seguir redirecionamentos: ${error.message}`);
       return url; // Retornar URL original em caso de erro
     }
@@ -71,15 +257,41 @@ class LinkAnalyzer {
 
   // Extrair IDs da URL da Shopee
   extractShopeeIds(url) {
-    // URL padrão: https://shopee.com.br/{shop_name}/{shop_id}/{item_id}
-    // Exemplo: https://shopee.com.br/opaanlp/1224363395/21998198201
-    const match = url.match(/shopee\.com\.br\/[^/]+\/(\d+)\/(\d+)/);
+    // Múltiplos padrões de URL da Shopee:
+    // 1. https://shopee.com.br/{shop_name}/{shop_id}/{item_id}
+    // 2. https://shopee.com.br/product/{shop_name}/{shop_id}/{item_id}
+    // 3. https://www.shopee.com.br/{shop_name}/{shop_id}/{item_id}
+    // 4. https://s.shopee.com.br/{code} (link encurtado - precisa seguir redirecionamento)
+    
+    // Padrão 1: URL padrão com shop_name
+    let match = url.match(/shopee\.com(?:\.br)?\/[^/]+\/(\d+)\/(\d+)/);
     if (match) {
       return {
         shopId: match[1],
         itemId: match[2]
       };
     }
+    
+    // Padrão 2: URL com /product/
+    match = url.match(/shopee\.com(?:\.br)?\/product\/[^/]+\/(\d+)\/(\d+)/);
+    if (match) {
+      return {
+        shopId: match[1],
+        itemId: match[2]
+      };
+    }
+    
+    // Padrão 3: Tentar extrair apenas item_id (menos confiável, mas pode funcionar)
+    match = url.match(/[?&]item[_-]?id=(\d+)/i);
+    if (match) {
+      // Tentar encontrar shop_id também
+      const shopMatch = url.match(/[?&]shop[_-]?id=(\d+)/i);
+      return {
+        shopId: shopMatch ? shopMatch[1] : '0', // Shop ID pode ser 0 para alguns casos
+        itemId: match[1]
+      };
+    }
+    
     return null;
   }
 
@@ -233,9 +445,30 @@ class LinkAnalyzer {
 
       // Sempre seguir redirecionamentos para garantir que chegamos na URL final
       // Links encurtados (s.shopee.com.br, shp.ee) e links normais podem ter redirecionamentos
+      // Links de afiliado podem ter múltiplos redirecionamentos e JavaScript
       console.log('   🔄 Seguindo redirecionamentos para obter URL final...');
-      finalUrl = await this.followRedirects(url);
+      finalUrl = await this.followRedirects(url, 5); // Até 5 tentativas
       console.log('   ✅ URL final após redirecionamento(s):', finalUrl);
+      
+      // IMPORTANTE: Para links de afiliado da Shopee, aguardar 10 segundos
+      // para permitir que redirecionamentos JavaScript aconteçam antes de extrair dados
+      if (url.includes('s.shopee.com.br') || url.includes('shp.ee') || finalUrl.includes('s.shopee.com.br') || finalUrl.includes('shp.ee')) {
+        console.log('   ⏳ Aguardando 10 segundos para redirecionamentos JavaScript completarem...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        // Tentar seguir redirecionamentos novamente após o delay de 10 segundos
+        console.log('   🔄 Verificando URL final após delay de 10 segundos...');
+        const delayedUrl = await this.followRedirects(finalUrl, 3);
+        if (delayedUrl !== finalUrl && !delayedUrl.includes('s.shopee.com.br') && !delayedUrl.includes('shp.ee')) {
+          console.log('   ✅ URL final após delay de 10 segundos:', delayedUrl);
+          finalUrl = delayedUrl;
+        } else if (delayedUrl !== finalUrl) {
+          console.log('   ⚠️ URL mudou mas ainda parece encurtada:', delayedUrl);
+          finalUrl = delayedUrl;
+        } else {
+          console.log('   ℹ️ URL não mudou após delay, usando:', finalUrl);
+        }
+      }
 
       // TENTAR API DA SHOPEE PRIMEIRO (mais confiável)
       try {
@@ -254,36 +487,101 @@ class LinkAnalyzer {
         // Continuar mesmo assim, pode ser um link de afiliado válido
       }
 
-      const response = await axios.get(finalUrl, {
+      // IMPORTANTE: Remover parâmetros mobile e outros que podem limitar o conteúdo
+      // A versão desktop tem mais dados disponíveis
+      let cleanUrl = finalUrl;
+      try {
+        const urlObj = new URL(finalUrl);
+        // Remover parâmetros que podem causar versão mobile ou limitada
+        urlObj.searchParams.delete('__mobile__');
+        urlObj.searchParams.delete('mobile');
+        urlObj.searchParams.delete('m');
+        // Manter apenas parâmetros essenciais de tracking (se necessário)
+        cleanUrl = urlObj.toString();
+        if (cleanUrl !== finalUrl) {
+          console.log(`   🔄 URL limpa (removidos parâmetros mobile): ${cleanUrl.substring(0, 100)}...`);
+        }
+      } catch (e) {
+        console.log(`   ⚠️ Não foi possível limpar URL: ${e.message}`);
+        cleanUrl = finalUrl;
+      }
+
+      // Fazer requisição com headers completos para simular navegador real
+      const response = await axios.get(cleanUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
           'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
           'Accept-Encoding': 'gzip, deflate, br',
           'Referer': 'https://shopee.com.br/',
           'Sec-Fetch-Dest': 'document',
           'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none'
+          'Sec-Fetch-Site': 'same-origin',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+          'Cache-Control': 'max-age=0',
+          'Connection': 'keep-alive'
         },
-        timeout: 15000,
-        maxRedirects: 5
+        timeout: 20000, // Aumentar timeout para páginas mais pesadas
+        maxRedirects: 5,
+        validateStatus: (status) => status >= 200 && status < 400
       });
 
+      // Verificar se a resposta contém HTML válido
+      if (!response.data || typeof response.data !== 'string') {
+        console.error('   ❌ Resposta não contém HTML válido');
+        return {
+          error: 'A página da Shopee não retornou HTML válido. O produto pode estar indisponível ou a página pode estar bloqueando o acesso.',
+          platform: 'shopee',
+          affiliateLink: cleanUrl
+        };
+      }
+
+      // Verificar se a página está bloqueando (captcha, erro, etc)
+      if (response.data.includes('captcha') || 
+          response.data.includes('Access Denied') ||
+          response.data.includes('blocked') ||
+          response.data.length < 1000) {
+        console.warn('   ⚠️ Página pode estar bloqueada ou com erro (tamanho:', response.data.length, 'chars)');
+        // Continuar mesmo assim, pode ser que ainda tenha dados
+      }
+
+      console.log(`   📄 Tamanho do HTML recebido: ${(response.data.length / 1024).toFixed(2)} KB`);
+      
       const $ = cheerio.load(response.data);
       
       // Extrair todos os scripts de uma vez para usar em múltiplos lugares
       const scriptMatches = response.data.match(/<script[^>]*>(.*?)<\/script>/gs);
+      console.log(`   📜 Scripts encontrados: ${scriptMatches ? scriptMatches.length : 0}`);
 
+      // PRIORIDADE 0: Buscar diretamente no HTML bruto (antes do cheerio processar)
+      // A Shopee pode ter dados em atributos data-* ou em estruturas específicas
+      let name = '';
+      
+      // Tentar extrair do HTML bruto primeiro (mais rápido)
+      const titleMatch = response.data.match(/<title[^>]*>(.*?)<\/title>/i);
+      if (titleMatch && titleMatch[1]) {
+        name = titleMatch[1]
+          .replace(/\s*[|-\u2013\u2014]\s*Shopee.*$/i, '')
+          .replace(/\s*-\s*Shopee.*$/i, '')
+          .trim();
+        if (name.length > 10) {
+          console.log(`   ✅ Nome encontrado no título HTML bruto: ${name.substring(0, 50)}`);
+        }
+      }
+      
       // PRIORIDADE 1: Meta tags Open Graph (mais confiável)
-      let name = $('meta[property="og:title"]').attr('content') ||
-        $('meta[name="og:title"]').attr('content') ||
-        $('meta[property="twitter:title"]').attr('content') ||
-        $('meta[name="title"]').attr('content') ||
-        $('title').text().split('|')[0].split('-')[0].trim();
+      if (!name || name.length < 5) {
+        name = $('meta[property="og:title"]').attr('content') ||
+          $('meta[name="og:title"]').attr('content') ||
+          $('meta[property="twitter:title"]').attr('content') ||
+          $('meta[name="title"]').attr('content') ||
+          $('title').text().split('|')[0].split('-')[0].trim();
 
-      // Limpar nome de caracteres especiais da Shopee
-      if (name) {
-        name = name.replace(/\s*-\s*Shopee\s*$/i, '').replace(/\s*\|.*$/i, '').trim();
+        // Limpar nome de caracteres especiais da Shopee
+        if (name) {
+          name = name.replace(/\s*-\s*Shopee\s*$/i, '').replace(/\s*\|.*$/i, '').trim();
+        }
       }
 
       let description = $('meta[property="og:description"]').attr('content') ||
@@ -432,16 +730,60 @@ class LinkAnalyzer {
       let oldPrice = 0;
 
       // PRIORIDADE 0: Buscar dados em scripts JSON da Shopee (mais confiável)
-      // A Shopee usa window.__INITIAL_STATE__ ou window.__NEXT_DATA__ para hidratação
-      // LIMITAR: Processar apenas scripts menores para evitar travamento
+      // A Shopee usa window.__INITIAL_STATE__, window.__NEXT_DATA__, ou window._shopee para hidratação
+      // ESTRATÉGIA AVANÇADA: Buscar em scripts grandes também, mas com limites de iteração
       if (scriptMatches) {
-        const MAX_SCRIPT_SIZE = 500000; // Limitar tamanho do script (500KB)
+        const MAX_SCRIPT_SIZE = 2000000; // Aumentar limite para 2MB (Shopee tem scripts grandes)
         let processedScripts = 0;
-        const MAX_SCRIPTS = 20; // Limitar número de scripts processados
+        const MAX_SCRIPTS = 30; // Aumentar número de scripts processados
         
-        for (const scriptContent of scriptMatches) {
+        // PRIORIDADE: Processar scripts menores primeiro (mais rápidos)
+        const sortedScripts = [...scriptMatches].sort((a, b) => a.length - b.length);
+        
+        for (const scriptContent of sortedScripts) {
           if (processedScripts >= MAX_SCRIPTS) break;
-          if (scriptContent.length > MAX_SCRIPT_SIZE) continue; // Pular scripts muito grandes
+          if (scriptContent.length > MAX_SCRIPT_SIZE) {
+            // Para scripts muito grandes, tentar apenas padrões específicos
+            console.log(`   ⚠️ Script muito grande (${(scriptContent.length / 1024).toFixed(0)}KB), usando busca limitada`);
+            
+            // Buscar apenas padrões específicos da Shopee em scripts grandes
+            const shopeePatterns = [
+              /"item_name"\s*:\s*"([^"]{15,200})"/,
+              /"name"\s*:\s*"([^"]{15,200})"[\s\S]{0,2000}"price"\s*:\s*(\d+)/,
+              /"price"\s*:\s*(\d+)[\s\S]{0,2000}"item_name"\s*:\s*"([^"]{15,200})"/,
+              /"current_price"\s*:\s*(\d+)/,
+              /"sale_price"\s*:\s*(\d+)/
+            ];
+            
+            for (const pattern of shopeePatterns) {
+              const match = scriptContent.match(pattern);
+              if (match) {
+                if (match[1] && !name) {
+                  const candidate = match[1].trim();
+                  if (candidate.length > 10 && candidate.length < 200 && !candidate.includes('__') && candidate.includes(' ')) {
+                    name = candidate;
+                    console.log(`   ✅ Nome encontrado em script grande via padrão: ${name.substring(0, 50)}`);
+                  }
+                }
+                if (match[2] || match[1] && !isNaN(parseFloat(match[1]))) {
+                  const priceValue = parseFloat(match[2] || match[1]);
+                  if (priceValue > 0 && priceValue < 10000000) {
+                    let candidatePrice = priceValue;
+                    if (candidatePrice > 1000000) candidatePrice = candidatePrice / 100000;
+                    else if (candidatePrice > 1000 && candidatePrice < 100000) candidatePrice = candidatePrice / 100;
+                    if (candidatePrice > 0 && candidatePrice < 100000 && currentPrice === 0) {
+                      currentPrice = candidatePrice;
+                      console.log(`   ✅ Preço encontrado em script grande via padrão: ${currentPrice}`);
+                    }
+                  }
+                }
+                if (name && name.length > 10 && currentPrice > 0) break;
+              }
+            }
+            
+            processedScripts++;
+            continue; // Pular processamento completo de scripts muito grandes
+          }
           
           processedScripts++;
           
@@ -492,114 +834,200 @@ class LinkAnalyzer {
               }
             }
             
-            // Padrão 2: Buscar window.__INITIAL_STATE__ ou __NEXT_DATA__ (mais lento, fazer por último)
-            // Limitar tamanho do match para evitar travamento
-            const initialStateMatch = scriptContent.match(/window\.__INITIAL_STATE__\s*=\s*({[\s\S]{0,200000}});/);
-            const nextDataMatch = scriptContent.match(/window\.__NEXT_DATA__\s*=\s*({[\s\S]{0,200000}});/);
-            const shopeeDataMatch = scriptContent.match(/window\._shopee\s*=\s*({[\s\S]{0,200000}});/);
-            const jsonMatch = initialStateMatch || nextDataMatch || shopeeDataMatch;
+            // Padrão 2: Buscar window.__INITIAL_STATE__, __NEXT_DATA__, ou _shopee (mais lento, fazer por último)
+            // ESTRATÉGIA AVANÇADA: Buscar com múltiplos padrões e tamanhos maiores
+            const initialStateMatch = scriptContent.match(/window\.__INITIAL_STATE__\s*=\s*({[\s\S]{0,1000000}});/);
+            const nextDataMatch = scriptContent.match(/window\.__NEXT_DATA__\s*=\s*({[\s\S]{0,1000000}});/);
+            const shopeeDataMatch = scriptContent.match(/window\._shopee\s*=\s*({[\s\S]{0,1000000}});/);
+            const shopeeAppMatch = scriptContent.match(/window\.__SHOPEE_APP__\s*=\s*({[\s\S]{0,1000000}});/);
+            const jsonMatch = initialStateMatch || nextDataMatch || shopeeDataMatch || shopeeAppMatch;
             
-            if (jsonMatch && jsonMatch[1].length < 200000) { // Aumentar limite para 200KB
+            if (jsonMatch && jsonMatch[1].length < 1000000) { // Aumentar limite para 1MB
               try {
                 const jsonData = JSON.parse(jsonMatch[1]);
                 
-                // Função recursiva otimizada com limite de iterações
-                let iterations = 0;
-                const MAX_ITERATIONS = 2000; // Aumentar limite de iterações
+                // ESTRATÉGIA AVANÇADA: Buscar em estruturas específicas da Shopee primeiro
+                // Shopee geralmente tem estruturas como: product.item, item, productInfo, etc.
+                const shopeePaths = [
+                  jsonData.product?.item,
+                  jsonData.item,
+                  jsonData.productInfo,
+                  jsonData.product?.item_basic,
+                  jsonData.item_basic,
+                  jsonData.product?.item_detail,
+                  jsonData.item_detail,
+                  jsonData.data?.item,
+                  jsonData.data?.product,
+                  jsonData.pageProps?.product?.item,
+                  jsonData.pageProps?.item,
+                  jsonData.initialState?.product?.item,
+                  jsonData.initialState?.item
+                ];
                 
-                const findPriceInData = (obj, depth = 0) => {
-                  if (depth > 6 || iterations++ > MAX_ITERATIONS) return null; // Aumentar profundidade
-                  if (typeof obj !== 'object' || obj === null) return null;
-                  
-                  // Priorizar chaves comuns primeiro
-                  const priorityKeys = ['price', 'currentPrice', 'salePrice', 'amount', 'value', 'price_min', 'price_max', 'min_price', 'max_price'];
-                  for (const priorityKey of priorityKeys) {
-                    if (obj[priorityKey] && typeof obj[priorityKey] === 'number' && obj[priorityKey] > 0) {
-                      const value = obj[priorityKey];
-                      // Shopee pode usar valores em centavos de milhão (100000)
-                      if (value > 1000000) return value / 100000;
-                      if (value > 100000 && value < 10000000) return value / 100000; // Valores entre 100k e 10M
-                      if (value > 1000 && value < 100000) return value / 100; // Centavos
-                      if (value < 100000 && value > 1) return value; // Valores diretos
+                for (const item of shopeePaths) {
+                  if (item && typeof item === 'object') {
+                    // Buscar nome
+                    if (!name && item.name && typeof item.name === 'string' && item.name.length > 10) {
+                      name = item.name.trim();
+                      console.log(`   ✅ Nome encontrado em estrutura Shopee: ${name.substring(0, 50)}`);
                     }
-                  }
-                  
-                  // Buscar em até 30 chaves (aumentar)
-                  const entries = Object.entries(obj).slice(0, 30);
-                  for (const [key, value] of entries) {
-                    const keyLower = key.toLowerCase();
-                    if ((keyLower.includes('price') || keyLower.includes('amount') || keyLower.includes('value')) && typeof value === 'number' && value > 0) {
-                      // Shopee pode usar valores em centavos de milhão
-                      if (value > 1000000) return value / 100000;
-                      if (value > 100000 && value < 10000000) return value / 100000;
-                      if (value > 1000 && value < 100000) return value / 100;
-                      if (value < 100000 && value > 1) return value;
-                    }
-                    if (typeof value === 'object' && depth < 4) {
-                      const found = findPriceInData(value, depth + 1);
-                      if (found) return found;
-                    }
-                  }
-                  return null;
-                };
-                
-                const findNameInData = (obj, depth = 0) => {
-                  if (depth > 6 || iterations++ > MAX_ITERATIONS) return null;
-                  if (typeof obj !== 'object' || obj === null) return null;
-                  
-                  // Priorizar chaves comuns
-                  const priorityKeys = ['name', 'title', 'productName', 'itemName', 'item_name', 'product_name', 'displayName', 'display_name'];
-                  for (const priorityKey of priorityKeys) {
-                    if (obj[priorityKey] && typeof obj[priorityKey] === 'string') {
-                      const value = obj[priorityKey];
-                      // Validação mais flexível: aceitar nomes de 5+ caracteres
-                      if (value.length > 5 && value.length < 300 && !value.includes('__') && !value.includes('shopee__') && value !== 'Produto Shopee') {
-                        // Verificar se tem pelo menos uma palavra com mais de 3 caracteres
-                        const words = value.trim().split(/\s+/);
-                        if (words.some(w => w.length > 3)) {
-                          return value.trim();
+                    
+                    // Buscar preço
+                    if (currentPrice === 0) {
+                      const priceFields = ['price', 'current_price', 'sale_price', 'price_min', 'price_max'];
+                      for (const field of priceFields) {
+                        if (item[field] && typeof item[field] === 'number' && item[field] > 0) {
+                          let price = item[field];
+                          if (price > 1000000) price = price / 100000;
+                          else if (price > 100000 && price < 10000000) price = price / 100000;
+                          else if (price > 1000 && price < 100000) price = price / 100;
+                          if (price > 0 && price < 100000) {
+                            currentPrice = price;
+                            console.log(`   ✅ Preço encontrado em estrutura Shopee: ${currentPrice}`);
+                            break;
+                          }
                         }
                       }
                     }
-                  }
-                  
-                  const entries = Object.entries(obj).slice(0, 30);
-                  for (const [key, value] of entries) {
-                    if (key.includes('__') || key.includes('setting') || key.includes('config')) continue;
-                    const keyLower = key.toLowerCase();
-                    if ((keyLower.includes('name') || keyLower.includes('title') || keyLower.includes('product')) && typeof value === 'string') {
-                      if (value.length > 5 && value.length < 300 && !value.includes('__') && !value.includes('shopee__') && value !== 'Produto Shopee') {
-                        const words = value.trim().split(/\s+/);
-                        if (words.some(w => w.length > 3)) {
-                          return value.trim();
+                    
+                    // Buscar preço original
+                    if (oldPrice === 0 && currentPrice > 0) {
+                      const oldPriceFields = ['price_before_discount', 'original_price', 'list_price', 'price_max'];
+                      for (const field of oldPriceFields) {
+                        if (item[field] && typeof item[field] === 'number' && item[field] > currentPrice) {
+                          let price = item[field];
+                          if (price > 1000000) price = price / 100000;
+                          else if (price > 100000 && price < 10000000) price = price / 100000;
+                          else if (price > 1000 && price < 100000) price = price / 100;
+                          if (price > currentPrice) {
+                            oldPrice = price;
+                            console.log(`   ✅ Preço original encontrado em estrutura Shopee: ${oldPrice}`);
+                            break;
+                          }
                         }
                       }
                     }
-                    if (typeof value === 'object' && depth < 4) {
-                      const found = findNameInData(value, depth + 1);
-                      if (found) return found;
+                    
+                    // Buscar imagem
+                    if (!imageUrl && item.image) {
+                      const img = Array.isArray(item.image) ? item.image[0] : item.image;
+                      if (typeof img === 'string' && img.startsWith('http')) {
+                        imageUrl = img;
+                      } else if (typeof img === 'string') {
+                        imageUrl = `https://cf.shopee.com.br/file/${img}`;
+                      }
                     }
-                  }
-                  return null;
-                };
-                
-                // Buscar preço
-                if (currentPrice === 0) {
-                  iterations = 0;
-                  const foundPrice = findPriceInData(jsonData);
-                  if (foundPrice && foundPrice > 0 && foundPrice < 100000) {
-                    currentPrice = foundPrice;
-                    console.log(`   ✅ Preço encontrado em __INITIAL_STATE__: ${currentPrice}`);
+                    
+                    if (name && name.length > 10 && currentPrice > 0) {
+                      break; // Encontrou dados suficientes
+                    }
                   }
                 }
                 
-                // Buscar nome se ainda não encontrou
-                if (!name || name.length < 5) {
-                  iterations = 0;
-                  const foundName = findNameInData(jsonData);
-                  if (foundName) {
-                    name = foundName;
-                    console.log(`   ✅ Nome encontrado em __INITIAL_STATE__: ${name.substring(0, 50)}`);
+                // Se ainda não encontrou, fazer busca recursiva genérica
+                let foundInShopeePaths = false;
+                if (name && name.length > 10 && currentPrice > 0) {
+                  foundInShopeePaths = true;
+                }
+                
+                if (!foundInShopeePaths && ((!name || name.length < 5) || currentPrice === 0)) {
+                  let iterations = 0;
+                  const MAX_ITERATIONS = 5000; // Aumentar limite de iterações para scripts grandes
+                  
+                  const findPriceInData = (obj, depth = 0) => {
+                    if (depth > 8 || iterations++ > MAX_ITERATIONS) return null; // Aumentar profundidade
+                    if (typeof obj !== 'object' || obj === null) return null;
+                    
+                    // Priorizar chaves comuns primeiro
+                    const priorityKeys = ['price', 'currentPrice', 'salePrice', 'amount', 'value', 'price_min', 'price_max', 'min_price', 'max_price', 'price_before_discount'];
+                    for (const priorityKey of priorityKeys) {
+                      if (obj[priorityKey] && typeof obj[priorityKey] === 'number' && obj[priorityKey] > 0) {
+                        const value = obj[priorityKey];
+                        // Shopee pode usar valores em centavos de milhão (100000)
+                        if (value > 1000000) return value / 100000;
+                        if (value > 100000 && value < 10000000) return value / 100000; // Valores entre 100k e 10M
+                        if (value > 1000 && value < 100000) return value / 100; // Centavos
+                        if (value < 100000 && value > 1) return value; // Valores diretos
+                      }
+                    }
+                    
+                    // Buscar em até 50 chaves (aumentar)
+                    const entries = Object.entries(obj).slice(0, 50);
+                    for (const [key, value] of entries) {
+                      const keyLower = key.toLowerCase();
+                      if ((keyLower.includes('price') || keyLower.includes('amount') || keyLower.includes('value')) && typeof value === 'number' && value > 0) {
+                        // Shopee pode usar valores em centavos de milhão
+                        if (value > 1000000) return value / 100000;
+                        if (value > 100000 && value < 10000000) return value / 100000;
+                        if (value > 1000 && value < 100000) return value / 100;
+                        if (value < 100000 && value > 1) return value;
+                      }
+                      if (typeof value === 'object' && depth < 6) {
+                        const found = findPriceInData(value, depth + 1);
+                        if (found) return found;
+                      }
+                    }
+                    return null;
+                  };
+                  
+                  const findNameInData = (obj, depth = 0) => {
+                    if (depth > 6 || iterations++ > MAX_ITERATIONS) return null;
+                    if (typeof obj !== 'object' || obj === null) return null;
+                    
+                    // Priorizar chaves comuns
+                    const priorityKeys = ['name', 'title', 'productName', 'itemName', 'item_name', 'product_name', 'displayName', 'display_name'];
+                    for (const priorityKey of priorityKeys) {
+                      if (obj[priorityKey] && typeof obj[priorityKey] === 'string') {
+                        const value = obj[priorityKey];
+                        // Validação mais flexível: aceitar nomes de 5+ caracteres
+                        if (value.length > 5 && value.length < 300 && !value.includes('__') && !value.includes('shopee__') && value !== 'Produto Shopee') {
+                          // Verificar se tem pelo menos uma palavra com mais de 3 caracteres
+                          const words = value.trim().split(/\s+/);
+                          if (words.some(w => w.length > 3)) {
+                            return value.trim();
+                          }
+                        }
+                      }
+                    }
+                    
+                    const entries = Object.entries(obj).slice(0, 30);
+                    for (const [key, value] of entries) {
+                      if (key.includes('__') || key.includes('setting') || key.includes('config')) continue;
+                      const keyLower = key.toLowerCase();
+                      if ((keyLower.includes('name') || keyLower.includes('title') || keyLower.includes('product')) && typeof value === 'string') {
+                        if (value.length > 5 && value.length < 300 && !value.includes('__') && !value.includes('shopee__') && value !== 'Produto Shopee') {
+                          const words = value.trim().split(/\s+/);
+                          if (words.some(w => w.length > 3)) {
+                            return value.trim();
+                          }
+                        }
+                      }
+                      if (typeof value === 'object' && depth < 4) {
+                        const found = findNameInData(value, depth + 1);
+                        if (found) return found;
+                      }
+                    }
+                    return null;
+                  };
+                  
+                  // Buscar preço
+                  if (currentPrice === 0) {
+                    iterations = 0;
+                    const foundPrice = findPriceInData(jsonData);
+                    if (foundPrice && foundPrice > 0 && foundPrice < 100000) {
+                      currentPrice = foundPrice;
+                      console.log(`   ✅ Preço encontrado em busca recursiva: ${currentPrice}`);
+                    }
+                  }
+                  
+                  // Buscar nome se ainda não encontrou
+                  if (!name || name.length < 5) {
+                    iterations = 0;
+                    const foundName = findNameInData(jsonData);
+                    if (foundName) {
+                      name = foundName;
+                      console.log(`   ✅ Nome encontrado em busca recursiva: ${name.substring(0, 50)}`);
+                    }
                   }
                 }
                 
@@ -655,21 +1083,55 @@ class LinkAnalyzer {
         
         // Última tentativa: buscar qualquer número que pareça preço no HTML
         if (currentPrice === 0) {
-          const allText = $('body').text();
-          // Buscar padrões como R$ 99,90 ou 99.90
-          const pricePatterns = [
-            /R\$\s*(\d{1,3}(?:[.,]\d{2})?)/,
-            /(\d{1,3}(?:[.,]\d{2})?)\s*reais?/i
+          // Primeiro tentar no HTML bruto (mais completo)
+          const pricePatternsRaw = [
+            /"price"\s*:\s*"?(\d+(?:[.,]\d+)?)"?/gi,
+            /"current_price"\s*:\s*"?(\d+(?:[.,]\d+)?)"?/gi,
+            /"sale_price"\s*:\s*"?(\d+(?:[.,]\d+)?)"?/gi,
+            /price["\s:]*["']?(\d+(?:[.,]\d+)?)["']?/gi
           ];
           
-          for (const pattern of pricePatterns) {
-            const matches = allText.match(pattern);
-            if (matches && matches[1]) {
-              const priceValue = parseFloat(matches[1].replace(',', '.'));
-              if (priceValue > 1 && priceValue < 100000) {
-                currentPrice = priceValue;
-                console.log(`   ✅ Preço encontrado via padrão de texto: ${currentPrice}`);
-                break;
+          for (const pattern of pricePatternsRaw) {
+            const matches = response.data.match(pattern);
+            if (matches) {
+              for (const match of matches.slice(0, 10)) { // Limitar a 10 matches
+                const priceMatch = match.match(/(\d+(?:[.,]\d+)?)/);
+                if (priceMatch) {
+                  let priceValue = parseFloat(priceMatch[1].replace(',', '.'));
+                  // Shopee pode usar valores grandes (centavos de milhão)
+                  if (priceValue > 1000000) priceValue = priceValue / 100000;
+                  else if (priceValue > 100000 && priceValue < 10000000) priceValue = priceValue / 100000;
+                  else if (priceValue > 1000 && priceValue < 100000) priceValue = priceValue / 100;
+                  
+                  if (priceValue > 1 && priceValue < 100000) {
+                    currentPrice = priceValue;
+                    console.log(`   ✅ Preço encontrado via padrão no HTML bruto: ${currentPrice}`);
+                    break;
+                  }
+                }
+              }
+              if (currentPrice > 0) break;
+            }
+          }
+          
+          // Se ainda não encontrou, tentar no texto processado
+          if (currentPrice === 0) {
+            const allText = $('body').text();
+            // Buscar padrões como R$ 99,90 ou 99.90
+            const pricePatterns = [
+              /R\$\s*(\d{1,3}(?:[.,]\d{2})?)/,
+              /(\d{1,3}(?:[.,]\d{2})?)\s*reais?/i
+            ];
+            
+            for (const pattern of pricePatterns) {
+              const matches = allText.match(pattern);
+              if (matches && matches[1]) {
+                const priceValue = parseFloat(matches[1].replace(',', '.'));
+                if (priceValue > 1 && priceValue < 100000) {
+                  currentPrice = priceValue;
+                  console.log(`   ✅ Preço encontrado via padrão de texto: ${currentPrice}`);
+                  break;
+                }
               }
             }
           }
@@ -990,9 +1452,22 @@ class LinkAnalyzer {
       // Validar se extraímos pelo menos algum dado útil
       if (!name || name.trim().length === 0) {
         console.warn('⚠️ Nome do produto não foi extraído');
+        console.warn('   📋 Debug: Verificando HTML...');
+        // Debug: verificar se há algum texto na página
+        const bodyText = $('body').text();
+        console.warn(`   📋 Tamanho do texto do body: ${bodyText.length} caracteres`);
+        if (bodyText.length < 100) {
+          console.error('   ❌ Body muito pequeno, página pode estar vazia ou bloqueada');
+        }
       }
       if (currentPrice === 0) {
         console.warn('⚠️ Preço do produto não foi extraído');
+        // Debug: verificar se há números que parecem preços
+        const allText = $('body').text();
+        const priceMatches = allText.match(/R\$\s*[\d.,]+/g);
+        if (priceMatches) {
+          console.warn(`   📋 Preços encontrados no texto (mas não extraídos): ${priceMatches.slice(0, 5).join(', ')}`);
+        }
       }
 
       const result = {
@@ -1055,15 +1530,51 @@ class LinkAnalyzer {
           }
         }
         
-        // Se ainda não tiver nome válido, retornar erro
+        // Se ainda não tiver nome válido, tentar uma última busca agressiva no HTML bruto
         if (!name || name.trim().length < 5 || name === 'Produto Shopee' || name === 'opaanlp') {
-          console.error('❌ Falha na extração: Nome e preço não foram encontrados');
-          return {
-            error: 'Não foi possível extrair informações do produto. O link pode estar inválido, o produto pode não estar mais disponível, ou a API da Shopee pode estar com problemas de autenticação.',
-            platform: 'shopee',
-            affiliateLink: finalUrl,
-            warning: 'Verifique se o Partner ID e Partner Key da Shopee estão corretos no banco de dados. O Partner ID atual está sendo rejeitado pela API (erro: invalid_partner_id).'
-          };
+          console.warn('   ⚠️ Última tentativa: busca agressiva no HTML bruto...');
+          
+          // Buscar qualquer padrão que pareça nome de produto no HTML
+          const namePatterns = [
+            /"name"\s*:\s*"([^"]{15,200})"/i,
+            /"item_name"\s*:\s*"([^"]{15,200})"/i,
+            /"product_name"\s*:\s*"([^"]{15,200})"/i,
+            /"title"\s*:\s*"([^"]{15,200})"/i,
+            /<h1[^>]*>([^<]{15,200})<\/h1>/i,
+            /data-name=["']([^"']{15,200})["']/i
+          ];
+          
+          for (const pattern of namePatterns) {
+            const matches = response.data.match(pattern);
+            if (matches && matches[1]) {
+              const candidate = matches[1].trim();
+              if (candidate.length > 10 && candidate.length < 200 && 
+                  !candidate.includes('__') && 
+                  !candidate.includes('shopee__') &&
+                  candidate !== 'Produto Shopee' &&
+                  candidate !== 'opaanlp' &&
+                  candidate.includes(' ')) {
+                name = candidate;
+                console.log(`   💡 Nome encontrado em busca agressiva: ${name.substring(0, 50)}`);
+                break;
+              }
+            }
+          }
+          
+          // Se ainda não encontrou, retornar erro
+          if (!name || name.trim().length < 5 || name === 'Produto Shopee' || name === 'opaanlp') {
+            console.error('❌ Falha na extração: Nome e preço não foram encontrados');
+            console.error(`   📋 Debug: Tamanho do HTML: ${response.data.length} chars`);
+            console.error(`   📋 Debug: Scripts encontrados: ${scriptMatches ? scriptMatches.length : 0}`);
+            console.error(`   📋 Debug: URL final: ${cleanUrl}`);
+            
+            return {
+              error: 'Não foi possível extrair informações do produto. O link pode estar inválido, o produto pode não estar mais disponível, ou a página pode estar bloqueando o acesso.',
+              platform: 'shopee',
+              affiliateLink: finalUrl,
+              warning: 'A página da Shopee pode estar bloqueando o acesso ou retornando HTML diferente do esperado. Verifique se o link está correto e se o produto ainda está disponível.'
+            };
+          }
         }
         
         // Atualizar resultado com nome encontrado
@@ -1616,37 +2127,94 @@ class LinkAnalyzer {
 
     // Converter para string e limpar espaços
     let text = String(priceText).trim();
+    const originalText = text; // Guardar para debug
 
-    // Se já for numérico mascarado de string ("123.45"), tentar parse direto se não tiver vírgula
-    if (!text.includes(',') && !isNaN(parseFloat(text)) && text.includes('.')) {
-      // Pode ser formato US, mas no contexto BR é arriscado. 
-      // Vamos assumir formato BR (1.000 é mil).
-    }
-
-    // Remover "R$" ou outros prefixos
+    // Remover "R$" ou outros prefixos, mas manter números, pontos e vírgulas
     text = text.replace(/[^\d.,]/g, '');
 
-    // Caso especial: apenas números (ex: "1200") -> 1200
+    // Se não sobrou nada, retornar 0
+    if (!text || text.length === 0) return 0;
+
+    // Caso especial: apenas números inteiros (ex: "1200", "18465", "3183")
     if (/^\d+$/.test(text)) {
-      return parseFloat(text);
+      const numValue = parseFloat(text);
+      
+      // Se for um número entre 100 e 100000, pode estar em centavos
+      // Exemplos: 18465 centavos = R$ 184,65 | 3183 centavos = R$ 31,83
+      if (numValue >= 100 && numValue < 100000) {
+        const priceInReais = numValue / 100;
+        // Validar se faz sentido (entre R$ 1 e R$ 10000)
+        if (priceInReais >= 1 && priceInReais <= 10000) {
+          console.log(`   💡 parsePrice: Convertendo centavos "${originalText}" (${numValue}) -> R$ ${priceInReais.toFixed(2)}`);
+          return priceInReais;
+        }
+      }
+      
+      // Se for muito grande (> 100000), definitivamente está em centavos
+      if (numValue >= 100000 && numValue < 10000000) {
+        const priceInReais = numValue / 100;
+        if (priceInReais >= 1 && priceInReais <= 10000) {
+          console.log(`   💡 parsePrice: Convertendo centavos (grande) "${originalText}" (${numValue}) -> R$ ${priceInReais.toFixed(2)}`);
+          return priceInReais;
+        }
+      }
+      
+      // Se não, retornar o valor direto (pode ser um preço pequeno já em reais)
+      return numValue;
     }
 
-    // Caso BRL: "1.200,50" -> remover ponto, trocar virgula por ponto
-    // ou "1200,50"
+    // Caso BRL: "1.200,50" ou "1200,50" ou "184,65" ou "184.65"
     if (text.includes(',')) {
-      // Remove pontos de milhar
+      // Remove pontos de milhar (ex: "1.200,50" -> "1200,50")
       text = text.replace(/\./g, '');
-      // Troca vírgula decimal por ponto
+      // Troca vírgula decimal por ponto (ex: "1200,50" -> "1200.50")
       text = text.replace(',', '.');
-    } else {
-      // Se não tem vírgula, mas tem ponto: "1.200" (mil e duzentos) ou "10.90" (dez e noventa - raro em scraping pt-br puro, mas possível em meta tag)
-      // Se tiver apenas 1 ponto e for no final (ex 12.90), pode ser US.
-      // Mas no padrão BR, ponto é milhar. Então "1.200" vira 1200.
-      // "50.00" vira 5000? Sim, em pt-br. Se for 50 reais, seria 50,00.
-      text = text.replace(/\./g, '');
+    } else if (text.includes('.')) {
+      // Se tem ponto mas não vírgula, pode ser:
+      // - Formato US: "184.65" (184 dólares e 65 centavos) -> 184.65
+      // - Formato BR: "1.200" (mil e duzentos) -> 1200
+      
+      // Contar quantos pontos existem
+      const dotCount = (text.match(/\./g) || []).length;
+      
+      if (dotCount === 1) {
+        // Um ponto: pode ser decimal US ou número BR pequeno
+        // Se o que vem depois do ponto tem 2 dígitos, provavelmente é decimal
+        const parts = text.split('.');
+        if (parts[1] && parts[1].length === 2 && parseInt(parts[1]) < 100) {
+          // Provavelmente formato decimal (ex: "184.65")
+          const price = parseFloat(text);
+          // Se o preço parseado for muito grande, pode estar em centavos
+          if (price > 100 && price < 100000) {
+            const priceInReais = price / 100;
+            if (priceInReais >= 1 && priceInReais <= 10000) {
+              console.log(`   💡 parsePrice: Convertendo centavos (ponto) "${originalText}" (${price}) -> R$ ${priceInReais.toFixed(2)}`);
+              return priceInReais;
+            }
+          }
+          return price;
+        } else {
+          // Provavelmente número BR sem vírgula (ex: "1200")
+          return parseFloat(text.replace('.', ''));
+        }
+      } else {
+        // Múltiplos pontos: formato BR de milhar (ex: "1.200.50")
+        // Remover todos os pontos
+        text = text.replace(/\./g, '');
+      }
     }
 
     const price = parseFloat(text);
+    
+    // Validação final: se o preço parseado for muito grande (> 100), pode estar em centavos
+    if (!isNaN(price) && price >= 100 && price < 100000) {
+      const priceInReais = price / 100;
+      if (priceInReais >= 1 && priceInReais <= 10000) {
+        console.log(`   💡 parsePrice: Convertendo centavos (final) "${originalText}" (${price}) -> R$ ${priceInReais.toFixed(2)}`);
+        return priceInReais;
+      }
+    }
+    
     return isNaN(price) ? 0 : price;
   }
 
@@ -2149,6 +2717,922 @@ class LinkAnalyzer {
     }
   }
 
+  // Extrair informações da Amazon via web scraping
+  async extractAmazonInfo(url) {
+    try {
+      console.log('🔍 Iniciando extração de informações da Amazon:', url);
+
+      // Se for link encurtado (amzn.to) ou qualquer link da Amazon, SEMPRE seguir redirecionamentos primeiro
+      // Links encurtados da Amazon não contêm o ASIN diretamente
+      if (url.includes('amzn.to') || url.includes('amazon.com.br/gp/') || !url.match(/(?:dp|gp\/product|product)\/([A-Z0-9]{10})/i)) {
+        console.log('   🔄 Link encurtado ou sem ASIN detectado, seguindo redirecionamentos...');
+        try {
+          const finalUrl = await this.followRedirects(url);
+          if (finalUrl !== url) {
+            console.log(`   ✅ URL final obtida: ${finalUrl}`);
+            url = finalUrl;
+          } else {
+            console.log('   ⚠️ URL não mudou após seguir redirecionamentos');
+          }
+        } catch (e) {
+          console.warn(`   ⚠️ Falha ao seguir redirecionamento: ${e.message}`);
+          // Continuar tentando extrair ASIN da URL original
+        }
+      }
+
+      // Extrair ASIN da URL (após redirecionamentos)
+      const asinMatch = url.match(/(?:dp|gp\/product|product)\/([A-Z0-9]{10})/i);
+      const asin = asinMatch ? asinMatch[1] : null;
+
+      if (!asin) {
+        console.log('⚠️ ASIN não encontrado na URL');
+        return {
+          error: 'Não foi possível identificar o produto (ASIN não encontrado na URL). Certifique-se de que o link é válido e aponta para um produto da Amazon.',
+          platform: 'amazon',
+          affiliateLink: url
+        };
+      }
+
+      console.log(`   ✅ ASIN identificado: ${asin}`);
+
+      // Fazer requisição à página do produto
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Referer': 'https://www.amazon.com.br/',
+          'Connection': 'keep-alive'
+        },
+        timeout: 15000,
+        maxRedirects: 5
+      });
+
+      const $ = cheerio.load(response.data);
+
+      // Extrair nome do produto
+      let name = '';
+      const nameSelectors = [
+        '#productTitle',
+        'h1.a-size-large',
+        'h1[data-automation-id="title"]',
+        '#title',
+        'span#productTitle'
+      ];
+
+      for (const selector of nameSelectors) {
+        const nameElement = $(selector).first();
+        if (nameElement.length) {
+          name = nameElement.text().trim();
+          if (name && name.length > 5) {
+            console.log(`   ✅ Nome encontrado: ${name.substring(0, 50)}...`);
+            break;
+          }
+        }
+      }
+
+      // Fallback: buscar em JSON-LD ou scripts
+      if (!name || name.length < 5) {
+        const scripts = $('script[type="application/ld+json"]');
+        scripts.each((i, script) => {
+          try {
+            const jsonData = JSON.parse($(script).html());
+            if (jsonData.name && jsonData.name.length > 5) {
+              name = jsonData.name.trim();
+              console.log(`   💡 Nome encontrado em JSON-LD: ${name.substring(0, 50)}...`);
+              return false; // break
+            }
+          } catch (e) {
+            // Continuar tentando
+          }
+        });
+      }
+
+      // Extrair preços
+      let currentPrice = 0;
+      let oldPrice = 0;
+
+      // Seletor para preço atual
+      const priceSelectors = [
+        '.a-price .a-offscreen',
+        '#priceblock_ourprice',
+        '#priceblock_dealprice',
+        '.a-price-whole',
+        'span.a-price[data-a-color="base"] .a-offscreen',
+        '[data-a-color="price"] .a-offscreen'
+      ];
+
+      for (const selector of priceSelectors) {
+        const priceElement = $(selector).first();
+        if (priceElement.length) {
+          const priceText = priceElement.text().trim();
+          const price = this.parsePrice(priceText);
+          if (price > 0) {
+            currentPrice = price;
+            console.log(`   ✅ Preço atual encontrado: R$ ${currentPrice.toFixed(2)}`);
+            break;
+          }
+        }
+      }
+
+      // Preço original (riscado)
+      const oldPriceSelectors = [
+        '.a-price.a-text-price .a-offscreen',
+        '#priceblock_saleprice',
+        '.basisPrice .a-offscreen',
+        'span.a-price.a-text-price[data-a-strike="true"] .a-offscreen'
+      ];
+
+      for (const selector of oldPriceSelectors) {
+        const priceElement = $(selector).first();
+        if (priceElement.length) {
+          const priceText = priceElement.text().trim();
+          const price = this.parsePrice(priceText);
+          if (price > 0 && price > currentPrice) {
+            oldPrice = price;
+            console.log(`   ✅ Preço original encontrado: R$ ${oldPrice.toFixed(2)}`);
+            break;
+          }
+        }
+      }
+
+      // Extrair imagem
+      let imageUrl = '';
+      const imageSelectors = [
+        '#landingImage',
+        '#imgBlkFront',
+        '#main-image',
+        '#imageBlock_feature_div img',
+        '#product-image img',
+        'img[data-old-hires]'
+      ];
+
+      for (const selector of imageSelectors) {
+        const imgElement = $(selector).first();
+        if (imgElement.length) {
+          imageUrl = imgElement.attr('src') || imgElement.attr('data-src') || imgElement.attr('data-old-hires');
+          if (imageUrl && imageUrl.startsWith('http')) {
+            console.log(`   ✅ Imagem encontrada`);
+            break;
+          }
+        }
+      }
+
+      // Gerar link de afiliado (se tiver partner tag configurado)
+      let affiliateLink = url;
+      try {
+        const AppSettings = (await import('../models/AppSettings.js')).default;
+        const config = await AppSettings.getAmazonConfig();
+        if (config.partnerTag) {
+          const urlObj = new URL(url);
+          urlObj.searchParams.set('tag', config.partnerTag);
+          affiliateLink = urlObj.toString();
+          console.log(`   ✅ Link de afiliado gerado`);
+        }
+      } catch (e) {
+        console.log(`   ⚠️ Não foi possível gerar link de afiliado: ${e.message}`);
+      }
+
+      // Validar dados mínimos
+      if (!name || name.length < 5) {
+        return {
+          error: 'Não foi possível extrair o nome do produto',
+          platform: 'amazon',
+          affiliateLink: affiliateLink
+        };
+      }
+
+      if (currentPrice <= 0) {
+        return {
+          error: 'Não foi possível extrair o preço do produto',
+          platform: 'amazon',
+          name: name,
+          affiliateLink: affiliateLink,
+          imageUrl: imageUrl
+        };
+      }
+
+      console.log(`✅ Extração Amazon concluída: ${name.substring(0, 30)}... - R$ ${currentPrice.toFixed(2)}`);
+
+      return {
+        platform: 'amazon',
+        name: name,
+        currentPrice: currentPrice,
+        oldPrice: oldPrice > currentPrice ? oldPrice : null,
+        imageUrl: imageUrl,
+        affiliateLink: affiliateLink,
+        asin: asin
+      };
+    } catch (error) {
+      console.error('❌ Erro ao extrair informações da Amazon:', error.message);
+      throw error;
+    }
+  }
+
+  // Extrair informações do AliExpress via web scraping
+  async extractAliExpressInfo(url) {
+    try {
+      console.log('🔍 Iniciando extração de informações do AliExpress:', url);
+
+      // Se for link encurtado, seguir redirecionamentos primeiro
+      if (url.includes('s.click.aliexpress.com') || url.includes('aliexpress.com/e/_')) {
+        console.log('   🔄 Link encurtado detectado, seguindo redirecionamentos...');
+        try {
+          const finalUrl = await this.followRedirects(url, 3); // Limitar a 3 tentativas para AliExpress
+          
+          // Verificar se a URL final é válida (não é página de erro/login)
+          if (finalUrl.includes('/error/') || finalUrl.includes('/404') || finalUrl.includes('/login')) {
+            console.warn(`   ⚠️ URL final é página de erro/login, tentando extrair URL de produto da URL original`);
+            
+            // Tentar extrair ID do produto da URL original ou de algum redirecionamento anterior
+            // Se a URL original tinha parâmetros que indicam produto, tentar construir URL direta
+            const productIdMatch = url.match(/[?&]item[_-]?id=(\d+)/i) || 
+                                  finalUrl.match(/item\/(\d+)/) ||
+                                  url.match(/\/e\/_([a-zA-Z0-9]+)/);
+            
+            if (productIdMatch && productIdMatch[1]) {
+              // Se encontrou ID, construir URL direta do produto
+              const productId = productIdMatch[1];
+              url = `https://pt.aliexpress.com/item/${productId}.html`;
+              console.log(`   💡 Construída URL direta do produto: ${url}`);
+            } else {
+              // Se não conseguiu, usar a URL original e tentar extrair mesmo assim
+              console.warn(`   ⚠️ Não foi possível extrair ID do produto, usando URL original`);
+              url = url; // Manter URL original
+            }
+          } else if (finalUrl !== url) {
+            console.log(`   ✅ URL final obtida: ${finalUrl}`);
+            url = finalUrl;
+          }
+        } catch (e) {
+          console.warn(`   ⚠️ Falha ao seguir redirecionamento: ${e.message}`);
+          // Tentar extrair ID do produto da URL original
+          const productIdMatch = url.match(/[?&]item[_-]?id=(\d+)/i);
+          if (productIdMatch && productIdMatch[1]) {
+            url = `https://pt.aliexpress.com/item/${productIdMatch[1]}.html`;
+            console.log(`   💡 Construída URL direta do produto após erro: ${url}`);
+          }
+        }
+      }
+      
+      // Garantir que a URL é uma URL de produto válida
+      if (!url.includes('aliexpress.com/item/') && !url.includes('aliexpress.com/i/')) {
+        // Tentar extrair ID do produto de parâmetros da URL
+        const productIdMatch = url.match(/[?&]item[_-]?id=(\d+)/i) || url.match(/\/(\d{10,})\.html/);
+        if (productIdMatch && productIdMatch[1]) {
+          url = `https://pt.aliexpress.com/item/${productIdMatch[1]}.html`;
+          console.log(`   💡 URL reconstruída para produto: ${url}`);
+        } else {
+          throw new Error('URL não parece ser de um produto AliExpress válido');
+        }
+      }
+      
+      // Tentar extrair preço dos parâmetros da URL (pdp_npi pode conter preços codificados)
+      // NOTA: O pdp_npi pode conter valores em diferentes formatos, então vamos usar apenas como fallback
+      // e priorizar a extração do HTML da página
+      let priceFromUrl = null;
+      let oldPriceFromUrl = null;
+      try {
+        const urlObj = new URL(url);
+        const pdpNpi = urlObj.searchParams.get('pdp_npi');
+        if (pdpNpi) {
+          // pdp_npi parece ser: 4@dis!BRL!535.07!190.65!!89.32!31.83
+          // Decodificar e extrair preços
+          const decoded = decodeURIComponent(pdpNpi);
+          console.log(`   🔍 Parâmetro pdp_npi encontrado: ${decoded.substring(0, 100)}...`);
+          
+          // O formato parece ser: 4@dis!BRL!preco1!preco2!!preco3!preco4
+          // Separar por ! e buscar valores numéricos que parecem preços (com decimais)
+          const parts = decoded.split('!');
+          const prices = [];
+          
+          for (const part of parts) {
+            // Ignorar partes que não são números ou que são muito pequenas
+            if (part.length < 3) continue;
+            
+            // Buscar padrões de preço: números com ponto ou vírgula (ex: "535.07", "190.65")
+            const priceMatch = part.match(/(\d+[.,]\d{2})/);
+            if (priceMatch) {
+              const price = this.parsePrice(priceMatch[1]);
+              // Validar: preços devem estar entre R$ 1 e R$ 10000
+              if (price > 0 && price >= 1 && price <= 10000) {
+                prices.push(price);
+              }
+            }
+          }
+          
+          if (prices.length > 0) {
+            // Remover duplicatas
+            const uniquePrices = [...new Set(prices)];
+            // Ordenar preços
+            uniquePrices.sort((a, b) => a - b);
+            
+            // O menor preço é provavelmente o preço atual
+            priceFromUrl = uniquePrices[0];
+            // Se houver mais de um preço e o segundo for maior, é o preço original
+            if (uniquePrices.length > 1 && uniquePrices[1] > priceFromUrl) {
+              oldPriceFromUrl = uniquePrices[1];
+            }
+            console.log(`   💡 Preços extraídos da URL (pdp_npi): Atual R$ ${priceFromUrl.toFixed(2)}${oldPriceFromUrl ? `, Original R$ ${oldPriceFromUrl.toFixed(2)}` : ''} (de ${uniquePrices.length} preços únicos: ${uniquePrices.map(p => p.toFixed(2)).join(', ')})`);
+          }
+        }
+      } catch (e) {
+        console.log(`   ⚠️ Erro ao extrair preço da URL: ${e.message}`);
+      }
+
+      // Fazer requisição à página do produto
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Referer': 'https://www.aliexpress.com/',
+          'Connection': 'keep-alive'
+        },
+        timeout: 20000,
+        maxRedirects: 5
+      });
+
+      const $ = cheerio.load(response.data);
+
+      // Extrair nome do produto
+      let name = '';
+      const nameSelectors = [
+        'h1[data-pl="product-title"]',
+        'h1.product-title-text',
+        'span.product-title-text',
+        'h1[class*="product-title"]',
+        '[data-pl="product-title"]',
+        'meta[property="og:title"]',
+        'meta[name="twitter:title"]',
+        'title'
+      ];
+
+      for (const selector of nameSelectors) {
+        const nameElement = $(selector).first();
+        if (nameElement.length) {
+          if (selector.startsWith('meta') || selector === 'title') {
+            name = nameElement.attr('content') || nameElement.text() || '';
+          } else {
+            name = nameElement.text().trim();
+          }
+          
+          // Limpar nome - remover "AliExpress" e outros termos comuns
+          if (name) {
+            name = name
+              .replace(/^AliExpress\s*[-|]\s*/i, '')
+              .replace(/\s*[-|]\s*AliExpress.*$/i, '')
+              .replace(/\s*[-|]\s*Buy.*$/i, '')
+              .trim();
+          }
+          
+          if (name && name.length > 5 && !name.toLowerCase().includes('aliexpress')) {
+            console.log(`   ✅ Nome encontrado: ${name.substring(0, 50)}...`);
+            break;
+          }
+        }
+      }
+      
+      // Buscar nome em scripts JavaScript (window.runParams, __NEXT_DATA__, etc)
+      if (!name || name.length < 5 || name.toLowerCase().includes('aliexpress')) {
+        const scripts = $('script').toArray();
+        for (const script of scripts) {
+          const scriptText = $(script).html() || '';
+          if (scriptText.length > 100 && scriptText.length < 500000) {
+            // Buscar padrões comuns de nome de produto em scripts
+            const namePatterns = [
+              /"subject"\s*:\s*"([^"]+)"/i,
+              /"productTitle"\s*:\s*"([^"]+)"/i,
+              /"title"\s*:\s*"([^"]+)"/i,
+              /productTitle["\s]*[:=]\s*["']([^"']+)["']/i,
+              /subject["\s]*[:=]\s*["']([^"']+)["']/i
+            ];
+            
+            for (const pattern of namePatterns) {
+              const match = scriptText.match(pattern);
+              if (match && match[1] && match[1].length > 10) {
+                name = match[1].trim();
+                // Limpar nome
+                name = name
+                  .replace(/^AliExpress\s*[-|]\s*/i, '')
+                  .replace(/\s*[-|]\s*AliExpress.*$/i, '')
+                  .trim();
+                if (name.length > 5 && !name.toLowerCase().includes('aliexpress')) {
+                  console.log(`   💡 Nome encontrado em script: ${name.substring(0, 50)}...`);
+                  break;
+                }
+              }
+            }
+            if (name && name.length > 5 && !name.toLowerCase().includes('aliexpress')) {
+              break;
+            }
+          }
+        }
+      }
+
+      // Fallback: buscar em JSON-LD
+      if (!name || name.length < 5) {
+        const scripts = $('script[type="application/ld+json"]');
+        scripts.each((i, script) => {
+          try {
+            const jsonData = JSON.parse($(script).html());
+            if (jsonData.name && jsonData.name.length > 5) {
+              name = jsonData.name.trim();
+              console.log(`   💡 Nome encontrado em JSON-LD: ${name.substring(0, 50)}...`);
+              return false; // break
+            }
+          } catch (e) {
+            // Continuar tentando
+          }
+        });
+      }
+
+      // Extrair preços
+      let currentPrice = priceFromUrl || 0; // Usar preço da URL se encontrado
+      let oldPrice = oldPriceFromUrl || 0;
+      
+      if (currentPrice > 0) {
+        console.log(`   ✅ Usando preço extraído da URL: R$ ${currentPrice.toFixed(2)}${oldPrice > 0 ? ` (Original: R$ ${oldPrice.toFixed(2)})` : ''}`);
+      } else {
+        console.log(`   🔍 Preço não encontrado na URL, buscando no HTML...`);
+      }
+
+      // Seletores específicos do AliExpress para preço atual
+      const priceSelectors = [
+        // Seletores principais do AliExpress
+        '[data-pl="product-price"] .notranslate',
+        '.product-price-value.notranslate',
+        '.product-price-value',
+        '[class*="price-current"] .notranslate',
+        '[class*="price-current"]',
+        '[class*="price-value"]',
+        '[data-pl="product-price"]',
+        // Seletores genéricos
+        '[class*="product-price"]',
+        'meta[property="product:price:amount"]',
+        'meta[property="product:price:currency"]',
+        // Seletores adicionais do AliExpress
+        '.price-current',
+        '.price-value',
+        '[data-spm*="price"]',
+        '.notranslate[data-pl="product-price"]'
+      ];
+
+      for (const selector of priceSelectors) {
+        const priceElement = $(selector).first();
+        if (priceElement.length) {
+          let priceText = '';
+          if (selector.startsWith('meta')) {
+            priceText = priceElement.attr('content') || '';
+          } else {
+            // Pegar texto direto do elemento e também de elementos filhos
+            priceText = priceElement.text().trim();
+            // Se não encontrou, tentar pegar do atributo data-value ou similar
+            if (!priceText || priceText.length === 0) {
+              priceText = priceElement.attr('data-value') || 
+                         priceElement.attr('data-price') ||
+                         priceElement.attr('data-amount') ||
+                         '';
+            }
+          }
+          
+          if (priceText) {
+            // Limpar texto de preço (remover espaços extras, quebras de linha, etc)
+            priceText = priceText.replace(/\s+/g, ' ').trim();
+            console.log(`   🔍 Tentando parsear preço do seletor "${selector}": "${priceText}"`);
+            
+            const price = this.parsePrice(priceText);
+            
+            // Validar preço: deve estar entre R$ 1 e R$ 10000
+            if (price > 0 && price >= 1 && price <= 10000) {
+              currentPrice = price;
+              console.log(`   ✅ Preço atual encontrado via seletor "${selector}": R$ ${currentPrice.toFixed(2)} (texto original: "${priceText}")`);
+              break;
+            } else if (price > 0) {
+              console.log(`   ⚠️ Preço fora do range válido: R$ ${price.toFixed(2)} (texto: "${priceText}") - será ignorado`);
+            } else {
+              console.log(`   ⚠️ Não foi possível parsear preço do texto: "${priceText}"`);
+            }
+          }
+        }
+      }
+      
+      // Buscar preço em scripts JavaScript se não encontrou (ou se preço da URL é 0)
+      if (currentPrice === 0) {
+        console.log(`   🔍 Buscando preço em scripts JavaScript...`);
+        const scripts = $('script').toArray();
+        for (const script of scripts) {
+          const scriptText = $(script).html() || '';
+          if (scriptText.length > 100 && scriptText.length < 500000) {
+            // Buscar padrões de preço em scripts (mais agressivo)
+            const pricePatterns = [
+              /"actSkuCalPrice"\s*:\s*"([^"]+)"/i,
+              /"skuCalPrice"\s*:\s*"([^"]+)"/i,
+              /"price"\s*:\s*"([^"]+)"/i,
+              /"salePrice"\s*:\s*"([^"]+)"/i,
+              /"currentPrice"\s*:\s*"([^"]+)"/i,
+              /"skuPrice"\s*:\s*"([^"]+)"/i,
+              /"actSkuPrice"\s*:\s*"([^"]+)"/i,
+              /"priceAmount"\s*:\s*"([^"]+)"/i,
+              /actSkuCalPrice["\s]*[:=]\s*["']([^"']+)["']/i,
+              /skuCalPrice["\s]*[:=]\s*["']([^"']+)["']/i,
+              /skuPrice["\s]*[:=]\s*["']([^"']+)["']/i,
+              // Buscar valores numéricos que parecem preços (formato BRL)
+              /"price"\s*:\s*\{[^}]*"value"\s*:\s*"([^"]+)"/i,
+              /"price"\s*:\s*\{[^}]*"amount"\s*:\s*"([^"]+)"/i
+            ];
+            
+            for (const pattern of pricePatterns) {
+              const match = scriptText.match(pattern);
+              if (match && match[1]) {
+                const rawValue = match[1];
+                console.log(`   🔍 Tentando parsear preço de script: "${rawValue}" (padrão: ${pattern.source.substring(0, 30)}...)`);
+                const price = this.parsePrice(rawValue);
+                if (price > 0 && price >= 1 && price <= 10000) {
+                  currentPrice = price;
+                  console.log(`   💡 Preço encontrado em script: R$ ${currentPrice.toFixed(2)} (valor original: "${rawValue}")`);
+                  break;
+                } else if (price > 0) {
+                  console.log(`   ⚠️ Preço de script fora do range: R$ ${price.toFixed(2)} (valor original: "${rawValue}")`);
+                }
+              }
+            }
+            
+            // Se ainda não encontrou, tentar buscar valores numéricos próximos a "price" ou "BRL"
+            if (currentPrice === 0) {
+              const priceContextMatches = scriptText.match(/(?:price|BRL|R\$)[^"']*["']([\d.,]+)["']/gi);
+              if (priceContextMatches) {
+                for (const match of priceContextMatches) {
+                  const priceMatch = match.match(/([\d.,]+)/);
+                  if (priceMatch && priceMatch[1]) {
+                    const price = this.parsePrice(priceMatch[1]);
+                    if (price > 0 && price >= 1 && price <= 10000) {
+                      currentPrice = price;
+                      console.log(`   💡 Preço encontrado em contexto de script: R$ ${currentPrice.toFixed(2)}`);
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (currentPrice > 0) {
+              break;
+            }
+          }
+        }
+      }
+      
+      // Buscar preço em elementos com atributos data-* relacionados a preço
+      if (currentPrice === 0) {
+        const priceDataElements = $('[data-price], [data-amount], [data-value], [data-pl*="price"]');
+        priceDataElements.each((i, el) => {
+          if (currentPrice > 0) return false; // break
+          const priceAttr = $(el).attr('data-price') || 
+                           $(el).attr('data-amount') || 
+                           $(el).attr('data-value') ||
+                           $(el).text().trim();
+          const price = this.parsePrice(priceAttr);
+          if (price > 0 && price >= 1 && price <= 10000) {
+            currentPrice = price;
+            console.log(`   💡 Preço encontrado em atributo data-*: R$ ${currentPrice.toFixed(2)}`);
+            return false; // break
+          }
+        });
+      }
+      
+      // Buscar preço em todos os elementos que contenham números (último recurso agressivo)
+      if (currentPrice === 0) {
+        console.log(`   🔍 Buscando preço em elementos com classes relacionadas...`);
+        // Buscar em elementos com classes que contenham "price", "amount", "value"
+        const priceLikeElements = $('[class*="price"], [class*="Price"], [class*="amount"], [class*="Amount"], [class*="value"], [class*="Value"]');
+        const foundPrices = [];
+        
+        priceLikeElements.each((i, el) => {
+          const text = $(el).text().trim();
+          if (text && text.length < 50) { // Ignorar textos muito longos
+            const price = this.parsePrice(text);
+            if (price > 0 && price >= 1 && price <= 10000) {
+              foundPrices.push(price);
+            }
+          }
+        });
+        
+        if (foundPrices.length > 0) {
+          // Pegar o menor preço (provavelmente é o preço atual)
+          currentPrice = Math.min(...foundPrices);
+          console.log(`   💡 Preço encontrado em elementos com classe relacionada: R$ ${currentPrice.toFixed(2)}`);
+        }
+      }
+      
+      // Buscar preço em texto da página (último recurso)
+      // Focar em padrões específicos do AliExpress: "R$ 184,65" ou "184,65"
+      if (currentPrice === 0) {
+        console.log(`   🔍 Buscando preço em texto da página...`);
+        
+        // Buscar em elementos específicos primeiro (mais confiável)
+        const priceElements = $('[class*="price"], [data-pl*="price"], [class*="Price"]');
+        const foundPrices = [];
+        
+        priceElements.each((i, el) => {
+          if (foundPrices.length >= 10) return false; // Limitar busca
+          const text = $(el).text().trim();
+          if (text && text.length < 100) { // Ignorar textos muito longos
+            // Buscar padrões de preço no texto
+            const priceMatches = text.match(/(?:R\$\s*)?([\d.,]+)/g);
+            if (priceMatches) {
+              for (const match of priceMatches) {
+                const price = this.parsePrice(match);
+                if (price > 0 && price >= 1 && price <= 10000) {
+                  foundPrices.push(price);
+                }
+              }
+            }
+          }
+        });
+        
+        // Se não encontrou em elementos específicos, buscar no body
+        if (foundPrices.length === 0) {
+          const bodyText = $('body').text();
+          // Buscar padrões mais específicos do AliExpress
+          const pricePatterns = [
+            /R\$\s*(\d{1,3}(?:[.,]\d{2})?)/g,  // R$ 184,65 ou R$ 184.65
+            /(\d{1,3}[.,]\d{2})\s*R\$/g,        // 184,65 R$
+            /price[:\s]+([\d.,]+)/gi
+          ];
+          
+          for (const pattern of pricePatterns) {
+            const matches = [...bodyText.matchAll(pattern)];
+            for (const match of matches) {
+              const price = this.parsePrice(match[1] || match[0]);
+              if (price > 0 && price >= 1 && price <= 10000) {
+                foundPrices.push(price);
+              }
+            }
+          }
+        }
+        
+        if (foundPrices.length > 0) {
+          // Remover duplicatas e ordenar
+          const uniquePrices = [...new Set(foundPrices)].sort((a, b) => a - b);
+          // Pegar o menor preço (provavelmente é o preço atual)
+          currentPrice = uniquePrices[0];
+          console.log(`   💡 Preço encontrado em texto da página: R$ ${currentPrice.toFixed(2)} (de ${uniquePrices.length} preços encontrados: ${uniquePrices.slice(0, 5).map(p => p.toFixed(2)).join(', ')})`);
+        }
+      }
+
+      // Preço original (se houver desconto) - Seletores específicos do AliExpress
+      const oldPriceSelectors = [
+        // Seletores principais do AliExpress para preço original
+        '[class*="price-original"] .notranslate',
+        '[class*="price-before"] .notranslate',
+        '[data-pl="product-price-original"]',
+        '[class*="original-price"]',
+        '[class*="list-price"]',
+        // Seletores genéricos
+        '[class*="price-original"]',
+        '[class*="price-before"]',
+        // Seletores adicionais do AliExpress
+        '.price-original',
+        '.price-before',
+        's[class*="price"]', // Elementos com <s> (strikethrough) geralmente são preços antigos
+        '[style*="text-decoration: line-through"]',
+        '[style*="text-decoration:line-through"]'
+      ];
+
+      for (const selector of oldPriceSelectors) {
+        const priceElement = $(selector).first();
+        if (priceElement.length) {
+          let priceText = priceElement.text().trim();
+          // Se não encontrou, tentar pegar do atributo
+          if (!priceText || priceText.length === 0) {
+            priceText = priceElement.attr('data-value') || 
+                       priceElement.attr('data-price') ||
+                       priceElement.attr('data-amount') ||
+                       '';
+          }
+          
+          if (priceText) {
+            priceText = priceText.replace(/\s+/g, ' ').trim();
+            const price = this.parsePrice(priceText);
+            
+            // Validar: preço original deve ser maior que o atual
+            if (price > 0 && price > currentPrice && price <= 10000) {
+              oldPrice = price;
+              console.log(`   ✅ Preço original encontrado via seletor "${selector}": R$ ${oldPrice.toFixed(2)} (texto: "${priceText}")`);
+              break;
+            }
+          }
+        }
+      }
+      
+      // Buscar preço original em scripts também
+      if (oldPrice === 0 && currentPrice > 0) {
+        const scripts = $('script').toArray();
+        for (const script of scripts) {
+          const scriptText = $(script).html() || '';
+          if (scriptText.length > 100 && scriptText.length < 500000) {
+            const oldPricePatterns = [
+              /"originalPrice"\s*:\s*"([^"]+)"/i,
+              /"listPrice"\s*:\s*"([^"]+)"/i,
+              /"priceBefore"\s*:\s*"([^"]+)"/i,
+              /originalPrice["\s]*[:=]\s*["']([^"']+)["']/i
+            ];
+            
+            for (const pattern of oldPricePatterns) {
+              const match = scriptText.match(pattern);
+              if (match && match[1]) {
+                const price = this.parsePrice(match[1]);
+                if (price > 0 && price > currentPrice) {
+                  oldPrice = price;
+                  console.log(`   💡 Preço original encontrado em script: R$ ${oldPrice.toFixed(2)}`);
+                  break;
+                }
+              }
+            }
+            if (oldPrice > 0) {
+              break;
+            }
+          }
+        }
+      }
+
+      // Extrair imagem
+      let imageUrl = '';
+      const imageSelectors = [
+        'meta[property="og:image"]',
+        'meta[name="twitter:image"]',
+        '[class*="product-image"] img',
+        '[data-pl="product-image"] img',
+        '.images-view-item img'
+      ];
+
+      for (const selector of imageSelectors) {
+        const imgElement = $(selector).first();
+        if (imgElement.length) {
+          if (selector.startsWith('meta')) {
+            imageUrl = imgElement.attr('content') || '';
+          } else {
+            imageUrl = imgElement.attr('src') || imgElement.attr('data-src') || '';
+          }
+          if (imageUrl && imageUrl.startsWith('http')) {
+            console.log(`   ✅ Imagem encontrada`);
+            break;
+          }
+        }
+      }
+
+      // Validar dados mínimos
+      if (!name || name.length < 5) {
+        return {
+          error: 'Não foi possível extrair o nome do produto',
+          platform: 'aliexpress',
+          affiliateLink: url
+        };
+      }
+
+      // Se ainda não encontrou preço, tentar uma última vez com busca mais agressiva em todo o HTML
+      if (currentPrice <= 0) {
+        console.log(`   ⚠️ Preço não encontrado, tentando busca agressiva em todo o HTML...`);
+        
+        // ESTRATÉGIA 1: Buscar em todos os elementos que contenham números e estejam próximos a palavras-chave de preço
+        const priceKeywords = ['price', 'preço', 'valor', 'amount', 'custo', 'R$', 'BRL'];
+        const allElements = $('*');
+        const candidatePrices = [];
+        
+        allElements.each((i, el) => {
+          if (candidatePrices.length > 50) return false; // Limitar para performance
+          
+          const $el = $(el);
+          const text = $el.text().trim();
+          const html = $el.html() || '';
+          
+          // Verificar se o elemento ou seus pais/irmãos contêm palavras-chave de preço
+          const parentText = $el.parent().text().toLowerCase();
+          const siblingText = $el.siblings().text().toLowerCase();
+          const hasPriceKeyword = priceKeywords.some(keyword => 
+            text.toLowerCase().includes(keyword) || 
+            parentText.includes(keyword) || 
+            siblingText.includes(keyword) ||
+            html.toLowerCase().includes(keyword)
+          );
+          
+          // Se tem palavra-chave de preço ou está em contexto de preço
+          if (hasPriceKeyword || $el.closest('[class*="price"], [class*="Price"], [class*="amount"]').length > 0) {
+            // Tentar extrair preço do texto
+            const priceMatch = text.match(/(?:R\$\s*)?([\d.,]+)/);
+            if (priceMatch) {
+              const price = this.parsePrice(priceMatch[1] || priceMatch[0]);
+              if (price > 0 && price >= 1 && price <= 10000) {
+                candidatePrices.push({ price, hasPriceKeyword, text: text.substring(0, 50) });
+              }
+            }
+          }
+        });
+        
+        if (candidatePrices.length > 0) {
+          // Priorizar preços que estão em contexto de palavra-chave
+          const contextualPrices = candidatePrices.filter(p => p.hasPriceKeyword);
+          if (contextualPrices.length > 0) {
+            currentPrice = Math.min(...contextualPrices.map(p => p.price));
+            console.log(`   💡 Preço encontrado em contexto de palavra-chave: R$ ${currentPrice.toFixed(2)}`);
+          } else {
+            // Se não há contexto, pegar o menor preço
+            currentPrice = Math.min(...candidatePrices.map(p => p.price));
+            console.log(`   💡 Preço encontrado (sem contexto específico): R$ ${currentPrice.toFixed(2)}`);
+          }
+        }
+        
+        // ESTRATÉGIA 2: Se ainda não encontrou, buscar todos os números no HTML e pegar os mais prováveis
+        if (currentPrice <= 0) {
+          console.log(`   🔍 Tentando extrair todos os números do HTML...`);
+          const bodyText = $('body').text();
+          const allNumbers = bodyText.match(/(?:R\$\s*)?([\d]{1,3}(?:[.,][\d]{2})?)/g);
+          
+          if (allNumbers && allNumbers.length > 0) {
+            const parsedPrices = allNumbers
+              .map(match => {
+                const numMatch = match.match(/([\d.,]+)/);
+                return numMatch ? this.parsePrice(numMatch[1]) : 0;
+              })
+              .filter(p => p > 0 && p >= 1 && p <= 10000)
+              .sort((a, b) => a - b); // Ordenar do menor para o maior
+            
+            if (parsedPrices.length > 0) {
+              // Pegar o menor preço que seja razoável (entre R$ 10 e R$ 5000)
+              const reasonablePrices = parsedPrices.filter(p => p >= 10 && p <= 5000);
+              if (reasonablePrices.length > 0) {
+                currentPrice = reasonablePrices[0]; // Menor preço razoável
+                console.log(`   💡 Preço encontrado em números do HTML: R$ ${currentPrice.toFixed(2)}`);
+              } else if (parsedPrices.length > 0) {
+                // Se não há preços razoáveis, pegar o menor mesmo assim
+                currentPrice = parsedPrices[0];
+                console.log(`   💡 Preço encontrado (fora do range ideal): R$ ${currentPrice.toFixed(2)}`);
+              }
+            }
+          }
+        }
+      }
+
+      if (currentPrice <= 0) {
+        // Log detalhado para debug
+        console.log(`   ❌ Preço não encontrado após todas as tentativas`);
+        console.log(`   📋 Debug: Verificando HTML...`);
+        const bodyText = $('body').text();
+        console.log(`   📋 Tamanho do texto do body: ${bodyText.length} caracteres`);
+        
+        // Tentar encontrar qualquer número que pareça preço
+        const allNumbers = bodyText.match(/[\d.,]{3,}/g);
+        if (allNumbers) {
+          console.log(`   📋 Números encontrados no texto (primeiros 10): ${allNumbers.slice(0, 10).join(', ')}`);
+        }
+        
+        return {
+          error: 'Não foi possível extrair o preço do produto. O produto pode estar indisponível ou a estrutura da página mudou.',
+          platform: 'aliexpress',
+          name: name,
+          affiliateLink: url,
+          imageUrl: imageUrl
+        };
+      }
+
+      // Validação final dos preços antes de retornar
+      // Se os preços parecem estar em centavos (muito grandes), converter
+      if (currentPrice > 100 && currentPrice < 100000) {
+        // Pode estar em centavos, tentar dividir por 100
+        const priceInReais = currentPrice / 100;
+        if (priceInReais >= 1 && priceInReais <= 10000) {
+          console.log(`   🔄 Convertendo preço de centavos: R$ ${currentPrice.toFixed(2)} -> R$ ${priceInReais.toFixed(2)}`);
+          currentPrice = priceInReais;
+        }
+      }
+      
+      if (oldPrice > 100 && oldPrice < 100000) {
+        const oldPriceInReais = oldPrice / 100;
+        if (oldPriceInReais >= 1 && oldPriceInReais <= 10000 && oldPriceInReais > currentPrice) {
+          console.log(`   🔄 Convertendo preço original de centavos: R$ ${oldPrice.toFixed(2)} -> R$ ${oldPriceInReais.toFixed(2)}`);
+          oldPrice = oldPriceInReais;
+        }
+      }
+
+      console.log(`✅ Extração AliExpress concluída: ${name.substring(0, 30)}... - R$ ${currentPrice.toFixed(2)}${oldPrice > currentPrice ? ` (Original: R$ ${oldPrice.toFixed(2)})` : ''}`);
+
+      return {
+        platform: 'aliexpress',
+        name: name,
+        currentPrice: currentPrice,
+        oldPrice: oldPrice > currentPrice ? oldPrice : null,
+        imageUrl: imageUrl,
+        affiliateLink: url
+      };
+    } catch (error) {
+      console.error('❌ Erro ao extrair informações do AliExpress:', error.message);
+      throw error;
+    }
+  }
+
   // Extrair informações básicas (fallback)
   extractBasicInfo(url, platform) {
     return {
@@ -2181,7 +3665,14 @@ class LinkAnalyzer {
 
       // Seguir redirecionamentos apenas se necessário
       let finalUrl = url;
-      const isShortLink = url.includes('shp.ee') || url.includes('s.shopee') || url.includes('/sec/');
+      const isShortLink = url.includes('shp.ee') || 
+                          url.includes('s.shopee') || 
+                          url.includes('/sec/') || 
+                          url.includes('amzn.to') ||
+                          url.includes('s.shopee.com.br') ||
+                          url.includes('s.shopee.com') ||
+                          url.includes('s.click.aliexpress.com') ||
+                          url.includes('aliexpress.com/e/_');
       
       if (isShortLink) {
         try {
@@ -2219,16 +3710,61 @@ class LinkAnalyzer {
           };
         }
       } else if (platform === 'amazon') {
-        return {
-          platform: 'amazon',
-          affiliateLink: finalUrl,
-          error: 'Suporte para Amazon em desenvolvimento. Use links da Shopee ou Mercado Livre.'
-        };
+        try {
+          return await this.extractAmazonInfo(finalUrl);
+        } catch (amazonError) {
+          console.error('❌ Erro ao extrair info Amazon:', amazonError.message);
+          return {
+            error: `Erro ao extrair informações da Amazon: ${amazonError.message}`,
+            platform: 'amazon',
+            affiliateLink: finalUrl
+          };
+        }
+      } else if (platform === 'aliexpress') {
+        try {
+          // Tentar usar API primeiro se tivermos o ID do produto
+          const productIdMatch = finalUrl.match(/\/item\/(\d+)/);
+          if (productIdMatch && productIdMatch[1]) {
+            const productId = productIdMatch[1];
+            console.log(`   🔍 Tentando obter detalhes via API AliExpress para produto ID: ${productId}`);
+            
+            try {
+              const aliExpressSync = (await import('./autoSync/aliExpressSync.js')).default;
+              const productDetails = await aliExpressSync.getProductDetails(productId);
+              
+              if (productDetails && productDetails.price > 0) {
+                console.log(`   ✅ Dados obtidos via API AliExpress!`);
+                return {
+                  platform: 'aliexpress',
+                  name: productDetails.title,
+                  currentPrice: productDetails.price,
+                  oldPrice: productDetails.original_price || null,
+                  imageUrl: productDetails.thumbnail,
+                  affiliateLink: productDetails.permalink || finalUrl
+                };
+              } else {
+                console.log(`   ⚠️ API não retornou dados completos, tentando web scraping...`);
+              }
+            } catch (apiError) {
+              console.log(`   ⚠️ Erro ao usar API AliExpress: ${apiError.message}, tentando web scraping...`);
+            }
+          }
+          
+          // Fallback para web scraping
+          return await this.extractAliExpressInfo(finalUrl);
+        } catch (aliexpressError) {
+          console.error('❌ Erro ao extrair info AliExpress:', aliexpressError.message);
+          return {
+            error: `Erro ao extrair informações do AliExpress: ${aliexpressError.message}`,
+            platform: 'aliexpress',
+            affiliateLink: finalUrl
+          };
+        }
       } else {
         return {
           platform: 'unknown',
           affiliateLink: finalUrl,
-          error: 'Plataforma não suportada. Use links da Shopee ou Mercado Livre.'
+          error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon ou AliExpress.'
         };
       }
     } catch (error) {

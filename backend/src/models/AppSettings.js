@@ -40,6 +40,9 @@ class AppSettings {
                 amazon_marketplace,
                 backend_url,
                 aliexpress_api_url,
+                aliexpress_app_key,
+                aliexpress_app_secret,
+                aliexpress_tracking_id,
                 telegram_collector_rate_limit_delay,
                 telegram_collector_max_retries,
                 telegram_collector_reconnect_delay,
@@ -291,6 +294,20 @@ class AppSettings {
       enabled: settings.openrouter_enabled !== undefined 
         ? settings.openrouter_enabled 
         : (process.env.OPENROUTER_ENABLED === 'true' || false)
+    };
+  }
+
+  /**
+   * Obter configurações do AliExpress
+   */
+  static async getAliExpressConfig() {
+    const settings = await this.get();
+    return {
+      apiUrl: settings.aliexpress_api_url || process.env.ALIEXPRESS_API_URL || 'https://api-sg.aliexpress.com/rest',
+      appKey: settings.aliexpress_app_key || process.env.ALIEXPRESS_APP_KEY,
+      appSecret: settings.aliexpress_app_secret || process.env.ALIEXPRESS_APP_SECRET,
+      trackingId: settings.aliexpress_tracking_id || process.env.ALIEXPRESS_TRACKING_ID,
+      productOrigin: settings.aliexpress_product_origin || 'both' // brazil, international, both
     };
   }
 }

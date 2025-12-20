@@ -14,6 +14,7 @@ export default function AutoSync() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [runningPlatform, setRunningPlatform] = useState(null);
   const [config, setConfig] = useState({
     shopee_enabled: false,
     mercadolivre_enabled: false,
@@ -113,6 +114,51 @@ export default function AutoSync() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRunPlatform = async (platform) => {
+    if (!config.keywords || config.keywords.trim() === '') {
+      toast({
+        title: "Atenção",
+        description: "Adicione palavras-chave para buscar produtos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setRunningPlatform(platform);
+
+      // Salvar configuração atual primeiro
+      await api.post('/sync/config', config);
+
+      toast({
+        title: "Sincronização iniciada",
+        description: `Buscando produtos do ${platform}...`,
+      });
+
+      // Executar sincronização da plataforma específica
+      const response = await api.post(`/sync/run/${platform}`);
+      const results = response.data.data;
+
+      toast({
+        title: "Sincronização concluída!",
+        description: `${results.new || 0} produtos novos de ${results.total || 0} encontrados no ${platform}.`,
+        variant: (results.new || 0) > 0 ? "default" : "secondary"
+      });
+
+      fetchHistory();
+      fetchStats();
+    } catch (error) {
+      console.error(`Erro ao executar sincronização do ${platform}:`, error);
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || `Erro ao executar sincronização do ${platform}.`,
+        variant: "destructive",
+      });
+    } finally {
+      setRunningPlatform(null);
     }
   };
 
@@ -636,6 +682,75 @@ export default function AutoSync() {
                 id="aliexpress"
               />
               <Label htmlFor="aliexpress" className="font-normal">AliExpress</Label>
+            </div>
+          </div>
+
+          {/* Botões de Sincronização Individual */}
+          <div className="space-y-3 pt-4 border-t">
+            <Label className="text-base">Sincronização Individual</Label>
+            <p className="text-sm text-muted-foreground">
+              Sincronize uma plataforma específica sem executar todas
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Button
+                onClick={() => handleRunPlatform('mercadolivre')}
+                disabled={runningPlatform !== null || !config.mercadolivre_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'mercadolivre' ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                Mercado Livre
+              </Button>
+
+              <Button
+                onClick={() => handleRunPlatform('shopee')}
+                disabled={runningPlatform !== null || !config.shopee_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'shopee' ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                Shopee
+              </Button>
+
+              <Button
+                onClick={() => handleRunPlatform('amazon')}
+                disabled={runningPlatform !== null || !config.amazon_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'amazon' ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                Amazon
+              </Button>
+
+              <Button
+                onClick={() => handleRunPlatform('aliexpress')}
+                disabled={runningPlatform !== null || !config.aliexpress_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'aliexpress' ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                AliExpress
+              </Button>
             </div>
           </div>
 

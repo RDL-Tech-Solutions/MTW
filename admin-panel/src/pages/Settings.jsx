@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
-import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -37,6 +37,10 @@ export default function Settings() {
     
     // AliExpress
     aliexpress_api_url: 'https://api-sg.aliexpress.com/rest',
+    aliexpress_app_key: '',
+    aliexpress_app_secret: '',
+    aliexpress_tracking_id: '',
+    aliexpress_product_origin: 'both',
     
     // Expo
     expo_access_token: '',
@@ -62,6 +66,7 @@ export default function Settings() {
     meli_refresh_token: false,
     shopee_partner_key: false,
     amazon_secret_key: false,
+    aliexpress_app_secret: false,
     expo_access_token: false,
     backend_api_key: false,
     openrouter_api_key: false
@@ -74,6 +79,7 @@ export default function Settings() {
     meli_refresh_token: false,
     shopee_partner_key: false,
     amazon_secret_key: false,
+    aliexpress_app_secret: false,
     expo_access_token: false,
     backend_api_key: false,
     openrouter_api_key: false
@@ -98,6 +104,7 @@ export default function Settings() {
           'meli_refresh_token',
           'shopee_partner_key',
           'amazon_secret_key',
+          'aliexpress_app_secret',
           'expo_access_token',
           'backend_api_key',
           'openrouter_api_key'
@@ -127,6 +134,7 @@ export default function Settings() {
           meli_refresh_token: data.meli_refresh_token === '***' || !!realValues.meli_refresh_token,
           shopee_partner_key: data.shopee_partner_key === '***' || !!realValues.shopee_partner_key,
           amazon_secret_key: data.amazon_secret_key === '***' || !!realValues.amazon_secret_key,
+          aliexpress_app_secret: data.aliexpress_app_secret === '***' || !!realValues.aliexpress_app_secret,
           expo_access_token: data.expo_access_token === '***' || !!realValues.expo_access_token,
           backend_api_key: data.backend_api_key === '***' || !!realValues.backend_api_key,
           openrouter_api_key: data.openrouter_api_key === '***' || !!realValues.openrouter_api_key
@@ -148,6 +156,9 @@ export default function Settings() {
           amazon_partner_tag: data.amazon_partner_tag || '',
           amazon_marketplace: data.amazon_marketplace || 'www.amazon.com.br',
           aliexpress_api_url: data.aliexpress_api_url || 'https://api-sg.aliexpress.com/rest',
+          aliexpress_app_key: data.aliexpress_app_key || '',
+          aliexpress_app_secret: realValues.aliexpress_app_secret || '',
+          aliexpress_tracking_id: data.aliexpress_tracking_id || '',
           expo_access_token: realValues.expo_access_token || '',
           telegram_collector_rate_limit_delay: data.telegram_collector_rate_limit_delay ?? 1.0,
           telegram_collector_max_retries: data.telegram_collector_max_retries ?? 3,
@@ -197,6 +208,9 @@ export default function Settings() {
       if (!dataToSend.amazon_secret_key || dataToSend.amazon_secret_key.trim() === '') {
         delete dataToSend.amazon_secret_key;
       }
+      if (!dataToSend.aliexpress_app_secret || dataToSend.aliexpress_app_secret.trim() === '') {
+        delete dataToSend.aliexpress_app_secret;
+      }
       if (!dataToSend.expo_access_token || dataToSend.expo_access_token.trim() === '') {
         delete dataToSend.expo_access_token;
       }
@@ -226,6 +240,7 @@ export default function Settings() {
           meli_refresh_token: dataToSend.meli_refresh_token ? true : prev.meli_refresh_token,
           shopee_partner_key: dataToSend.shopee_partner_key ? true : prev.shopee_partner_key,
           amazon_secret_key: dataToSend.amazon_secret_key ? true : prev.amazon_secret_key,
+          aliexpress_app_secret: dataToSend.aliexpress_app_secret ? true : prev.aliexpress_app_secret,
           expo_access_token: dataToSend.expo_access_token ? true : prev.expo_access_token,
           backend_api_key: dataToSend.backend_api_key ? true : prev.backend_api_key,
           openrouter_api_key: dataToSend.openrouter_api_key ? true : prev.openrouter_api_key
@@ -244,6 +259,9 @@ export default function Settings() {
           amazon_partner_tag: responseData.amazon_partner_tag !== undefined ? responseData.amazon_partner_tag : prev.amazon_partner_tag,
           amazon_marketplace: responseData.amazon_marketplace !== undefined ? responseData.amazon_marketplace : prev.amazon_marketplace,
           aliexpress_api_url: responseData.aliexpress_api_url !== undefined ? responseData.aliexpress_api_url : prev.aliexpress_api_url,
+          aliexpress_app_key: responseData.aliexpress_app_key !== undefined ? responseData.aliexpress_app_key : prev.aliexpress_app_key,
+          aliexpress_tracking_id: responseData.aliexpress_tracking_id !== undefined ? responseData.aliexpress_tracking_id : prev.aliexpress_tracking_id,
+          aliexpress_product_origin: responseData.aliexpress_product_origin !== undefined ? responseData.aliexpress_product_origin : prev.aliexpress_product_origin,
           telegram_collector_rate_limit_delay: responseData.telegram_collector_rate_limit_delay !== undefined ? responseData.telegram_collector_rate_limit_delay : prev.telegram_collector_rate_limit_delay,
           telegram_collector_max_retries: responseData.telegram_collector_max_retries !== undefined ? responseData.telegram_collector_max_retries : prev.telegram_collector_max_retries,
           telegram_collector_reconnect_delay: responseData.telegram_collector_reconnect_delay !== undefined ? responseData.telegram_collector_reconnect_delay : prev.telegram_collector_reconnect_delay,
@@ -255,6 +273,7 @@ export default function Settings() {
           meli_refresh_token: dataToSend.meli_refresh_token ? prev.meli_refresh_token : prev.meli_refresh_token,
           shopee_partner_key: dataToSend.shopee_partner_key ? prev.shopee_partner_key : prev.shopee_partner_key,
           amazon_secret_key: dataToSend.amazon_secret_key ? prev.amazon_secret_key : prev.amazon_secret_key,
+          aliexpress_app_secret: dataToSend.aliexpress_app_secret ? prev.aliexpress_app_secret : prev.aliexpress_app_secret,
           expo_access_token: dataToSend.expo_access_token ? prev.expo_access_token : prev.expo_access_token,
           backend_api_key: dataToSend.backend_api_key ? prev.backend_api_key : prev.backend_api_key,
           openrouter_api_key: dataToSend.openrouter_api_key ? prev.openrouter_api_key : prev.openrouter_api_key,
@@ -269,6 +288,7 @@ export default function Settings() {
         if (dataToSend.meli_refresh_token) sensitiveValues.meli_refresh_token = prev.meli_refresh_token;
         if (dataToSend.shopee_partner_key) sensitiveValues.shopee_partner_key = prev.shopee_partner_key;
         if (dataToSend.amazon_secret_key) sensitiveValues.amazon_secret_key = prev.amazon_secret_key;
+        if (dataToSend.aliexpress_app_secret) sensitiveValues.aliexpress_app_secret = prev.aliexpress_app_secret;
         if (dataToSend.expo_access_token) sensitiveValues.expo_access_token = prev.expo_access_token;
         if (dataToSend.backend_api_key) sensitiveValues.backend_api_key = prev.backend_api_key;
         if (dataToSend.openrouter_api_key) sensitiveValues.openrouter_api_key = prev.openrouter_api_key;
@@ -535,6 +555,10 @@ export default function Settings() {
           <TabsTrigger value="amazon">
             <Package className="h-4 w-4 mr-2" />
             Amazon
+          </TabsTrigger>
+          <TabsTrigger value="aliexpress">
+            <Globe className="h-4 w-4 mr-2" />
+            AliExpress
           </TabsTrigger>
           <TabsTrigger value="expo">
             <Bell className="h-4 w-4 mr-2" />
@@ -824,6 +848,105 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* AliExpress */}
+        <TabsContent value="aliexpress">
+          <Card>
+            <CardHeader>
+              <CardTitle>AliExpress</CardTitle>
+              <CardDescription>
+                Configure as credenciais da API do AliExpress
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="aliexpress_api_url">API URL</Label>
+                  <Input
+                    id="aliexpress_api_url"
+                    value={settings.aliexpress_api_url || 'https://api-sg.aliexpress.com/rest'}
+                    onChange={(e) => setSettings({...settings, aliexpress_api_url: e.target.value})}
+                    placeholder="https://api-sg.aliexpress.com/rest"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    URL base da API do AliExpress
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="aliexpress_app_key">App Key</Label>
+                  <Input
+                    id="aliexpress_app_key"
+                    value={settings.aliexpress_app_key || ''}
+                    onChange={(e) => setSettings({...settings, aliexpress_app_key: e.target.value})}
+                    placeholder="Sua App Key do AliExpress"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    App Key obtida no painel de desenvolvedor do AliExpress
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="aliexpress_app_secret">App Secret</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="aliexpress_app_secret"
+                      type={showSecrets.aliexpress_app_secret ? 'text' : 'password'}
+                      value={settings.aliexpress_app_secret || ''}
+                      onChange={(e) => setSettings({...settings, aliexpress_app_secret: e.target.value})}
+                      placeholder={hasSavedValue.aliexpress_app_secret ? "Valor salvo no banco de dados" : "Sua App Secret do AliExpress"}
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => toggleSecret('aliexpress_app_secret')}
+                    >
+                      {showSecrets.aliexpress_app_secret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    App Secret obtida no painel de desenvolvedor do AliExpress
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="aliexpress_tracking_id">Tracking ID</Label>
+                  <Input
+                    id="aliexpress_tracking_id"
+                    value={settings.aliexpress_tracking_id || ''}
+                    onChange={(e) => setSettings({...settings, aliexpress_tracking_id: e.target.value})}
+                    placeholder="Seu Tracking ID para links de afiliado"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tracking ID usado para gerar links de afiliado do AliExpress
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="aliexpress_product_origin">Origem dos Produtos</Label>
+                  <select
+                    id="aliexpress_product_origin"
+                    value={settings.aliexpress_product_origin || 'both'}
+                    onChange={(e) => setSettings({...settings, aliexpress_product_origin: e.target.value})}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                  >
+                    <option value="brazil">🇧🇷 Apenas Brasil</option>
+                    <option value="international">🌍 Apenas Internacional</option>
+                    <option value="both">🌎 Brasil + Internacional</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Escolha se deseja capturar produtos do Brasil, internacionais ou ambos no auto-sync
+                  </p>
+                </div>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <h4 className="font-semibold text-blue-900 mb-2">ℹ️ Como obter as credenciais</h4>
+                <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                  <li>Acesse o painel de desenvolvedor do AliExpress</li>
+                  <li>Crie uma aplicação para obter App Key e App Secret</li>
+                  <li>Configure o Tracking ID no programa de afiliados</li>
+                  <li>As credenciais são necessárias para usar a API do AliExpress</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Expo */}
         <TabsContent value="expo">
           <Card>
@@ -1032,15 +1155,6 @@ export default function Settings() {
                         {showSecrets.backend_api_key ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="aliexpress_api_url">AliExpress API URL</Label>
-                    <Input
-                      id="aliexpress_api_url"
-                      value={settings.aliexpress_api_url || 'https://api-sg.aliexpress.com/rest'}
-                      onChange={(e) => setSettings({...settings, aliexpress_api_url: e.target.value})}
-                      placeholder="https://api-sg.aliexpress.com/rest"
-                    />
                   </div>
                 </div>
               </CardContent>

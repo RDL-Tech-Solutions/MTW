@@ -332,7 +332,7 @@ VARIÁVEIS DISPONÍVEIS (use {nome_variavel}):
 - {platform_name} - Nome da plataforma
 - {coupon_code} - Código do cupom
 - {discount_value} - Valor do desconto formatado
-- {min_purchase} - Compra mínima (se houver)
+- {min_purchase} - Valor da compra mínima formatado (ex: "R$ 199.00") - Apenas o valor, sem emoji ou texto adicional
 - {coupon_title} - Título do cupom
 - {coupon_description} - Descrição do cupom
 - {affiliate_link} - Link de afiliado
@@ -343,8 +343,9 @@ REQUISITOS:
 1. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara'}
 2. **CRÍTICO**: O código do cupom DEVE aparecer formatado com backticks: \`{coupon_code}\` (exemplo: \`ADMLAYS\`). Isso permite cópia fácil no Telegram.
 3. **IMPORTANTE**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b> ou <strong>texto</strong>
-4. Enfatize o valor do desconto de forma clara e destacada
-5. **CRÍTICO**: NÃO inclua data de validade ou informações sobre quando o cupom expira. Apenas crie senso de urgência genérico se necessário.
+4. **CRÍTICO**: A variável {min_purchase} contém APENAS o valor formatado (ex: "R$ 199.00"). Você DEVE adicionar o emoji e texto completo: "💳 **Compra mínima:** {min_purchase}". NUNCA duplique "Compra mínima" ou adicione emoji dentro da variável.
+5. Enfatize o valor do desconto de forma clara e destacada
+6. **CRÍTICO**: NÃO inclua data de validade ou informações sobre quando o cupom expira. Apenas crie senso de urgência genérico se necessário.
 6. Use emojis relevantes (máximo 4-5 por mensagem, não exagere): 🎟️, 💰, 🔥, ⚡
 7. ${formatGuide}
 8. Seja conciso mas informativo (máximo 8-10 linhas)
@@ -361,7 +362,7 @@ EXEMPLO DE ESTRUTURA BOM (para cupons):
 🛒 {platform_name}
 💰 **{discount_value} OFF**
 
-${context.hasMinPurchase ? '💳 Compra mínima: {min_purchase}\n' : ''}🔑 Código: \`{coupon_code}\`
+${context.hasMinPurchase ? '💳 **Compra mínima:** {min_purchase}\n' : ''}🔑 **Código:** \`{coupon_code}\`
 
 🔗 {affiliate_link}
 
@@ -371,6 +372,8 @@ IMPORTANTE SOBRE FORMATAÇÃO:
 - O código DEVE estar entre backticks: \`{coupon_code}\`
 - Use **texto** para negrito (dois asteriscos)
 - NUNCA use <b>, <strong>, <code> ou outras tags HTML
+- NUNCA duplique texto como "Compra mínima: Compra mínima:"
+- A variável {min_purchase} contém APENAS o valor (ex: "R$ 199.00"), você deve adicionar o emoji e texto: "💳 **Compra mínima:** {min_purchase}"
 - Seja direto e impactante
 - Máximo 8-10 linhas
 

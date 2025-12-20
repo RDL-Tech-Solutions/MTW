@@ -20,6 +20,7 @@ class AppSettingsController {
         'meli_refresh_token',
         'shopee_partner_key',
         'amazon_secret_key',
+        'aliexpress_app_secret',
         'expo_access_token',
         'backend_api_key',
         'openrouter_api_key'
@@ -102,6 +103,7 @@ class AppSettingsController {
       if (logUpdates.meli_refresh_token) logUpdates.meli_refresh_token = '***';
       if (logUpdates.shopee_partner_key) logUpdates.shopee_partner_key = '***';
       if (logUpdates.amazon_secret_key) logUpdates.amazon_secret_key = '***';
+      if (logUpdates.aliexpress_app_secret) logUpdates.aliexpress_app_secret = '***';
       if (logUpdates.expo_access_token) logUpdates.expo_access_token = '***';
       if (logUpdates.backend_api_key) logUpdates.backend_api_key = '***';
       if (logUpdates.openrouter_api_key) logUpdates.openrouter_api_key = '***';
@@ -120,6 +122,7 @@ class AppSettingsController {
         meli_refresh_token: settings.meli_refresh_token ? '***' : null,
         shopee_partner_key: settings.shopee_partner_key ? '***' : null,
         amazon_secret_key: settings.amazon_secret_key ? '***' : null,
+        aliexpress_app_secret: settings.aliexpress_app_secret ? '***' : null,
         expo_access_token: settings.expo_access_token ? '***' : null,
         backend_api_key: settings.backend_api_key ? '***' : null,
         openrouter_api_key: settings.openrouter_api_key ? '***' : null
@@ -159,6 +162,9 @@ class AppSettingsController {
           break;
         case 'amazon':
           config = await AppSettings.getAmazonConfig();
+          break;
+        case 'aliexpress':
+          config = await AppSettings.getAliExpressConfig();
           break;
         case 'expo':
           config = await AppSettings.getExpoConfig();
@@ -476,6 +482,7 @@ class AppSettingsController {
         'meli_refresh_token',
         'shopee_partner_key',
         'amazon_secret_key',
+        'aliexpress_app_secret',
         'expo_access_token',
         'backend_api_key',
         'openrouter_api_key'

@@ -113,6 +113,17 @@ class SyncController {
         }
       }
 
+      // Sincronizar AliExpress
+      if (config.aliexpress_enabled) {
+        try {
+          const aliExpressResults = await SyncController.syncAliExpress(config);
+          results.aliexpress = aliExpressResults;
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização AliExpress: ${error.message}`);
+          results.aliexpress.errors++;
+        }
+      }
+
       logger.info('✅ Sincronização manual concluída', results);
 
       res.json(successResponse(results, 'Sincronização executada com sucesso'));
@@ -138,6 +149,60 @@ class SyncController {
    * GET /api/sync/stats
    * Estatísticas de sincronização
    */
+  /**
+   * POST /api/sync/run/:platform
+   * Executar sincronização de uma plataforma específica
+   */
+  static async runPlatform(req, res, next) {
+    try {
+      const { platform } = req.params;
+      const config = await SyncConfig.get();
+
+      logger.info(`🚀 Iniciando sincronização manual de ${platform}...`);
+
+      let results = { total: 0, new: 0, errors: 0 };
+
+      switch (platform.toLowerCase()) {
+        case 'mercadolivre':
+        case 'meli':
+          if (!config.mercadolivre_enabled) {
+            return res.status(400).json(errorResponse('Mercado Livre não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncMercadoLivre(config);
+          break;
+
+        case 'shopee':
+          if (!config.shopee_enabled) {
+            return res.status(400).json(errorResponse('Shopee não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncShopee(config);
+          break;
+
+        case 'amazon':
+          if (!config.amazon_enabled) {
+            return res.status(400).json(errorResponse('Amazon não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncAmazon(config);
+          break;
+
+        case 'aliexpress':
+          if (!config.aliexpress_enabled) {
+            return res.status(400).json(errorResponse('AliExpress não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncAliExpress(config);
+          break;
+
+        default:
+          return res.status(400).json(errorResponse(`Plataforma '${platform}' não reconhecida`, 'INVALID_PLATFORM'));
+      }
+
+      res.json(successResponse(results, `Sincronização de ${platform} concluída`));
+    } catch (error) {
+      logger.error(`❌ Erro ao sincronizar plataforma: ${error.message}`);
+      next(error);
+    }
+  }
+
   static async getStats(req, res, next) {
     try {
       const { days = 7 } = req.query;
@@ -299,8 +364,15 @@ class SyncController {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
-      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50);
+      // Obter configuração de origem de produtos do AliExpress
+      const AppSettings = (await import('../models/AppSettings.js')).default;
+      const aliExpressConfig = await AppSettings.getAliExpressConfig();
+      const productOrigin = aliExpressConfig.productOrigin || 'both';
+      
+      logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
+      
+      // 1. Buscar produtos com origem especificada
+      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50, productOrigin);
 
       // 2. Filtrar promoções
       const promotions = aliExpressSync.filterAliExpressPromotions(
@@ -310,27 +382,27 @@ class SyncController {
 
       results.total = promotions.length;
 
-      // 3. Salvar e publicar cada promoção
+      // 3. Processar cada promoção (salvar como pendente, não publicar automaticamente)
       for (const promo of promotions) {
         try {
-          // Salvar no banco
+          // Salvar no banco (já salva com status 'pending')
           const { product, isNew } = await aliExpressSync.saveAliExpressToDatabase(promo, Product);
 
           if (isNew) {
             results.new++;
 
-            // Publicar no app e enviar para bots
-            const publishResult = await publishService.publishAll(product);
-
-            // Registrar log
+            // Log (produto salvo como pendente, não publicado automaticamente)
+            // Seguindo a mesma estratégia do Mercado Livre
             await SyncLog.create({
               platform: 'aliexpress',
               product_name: product.name,
               product_id: product.id,
               discount_percentage: product.discount_percentage,
               is_new_product: true,
-              sent_to_bots: publishResult.success
+              sent_to_bots: false // Não enviar automaticamente, fica em /pending-products
             });
+
+            logger.info(`📦 Novo produto salvo (pendente): ${product.name} (${product.discount_percentage}% OFF)`);
           } else {
             // Produto já existia
             await SyncLog.create({

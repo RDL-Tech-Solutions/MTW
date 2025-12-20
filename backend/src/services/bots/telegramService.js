@@ -145,6 +145,47 @@ class TelegramService {
       // Validar e limpar caption
       caption = this.sanitizeMessage(caption);
       
+      // IMPORTANTE: Telegram tem limite de 1024 caracteres para caption de fotos
+      const TELEGRAM_CAPTION_MAX_LENGTH = 1024;
+      if (caption && caption.length > TELEGRAM_CAPTION_MAX_LENGTH) {
+        const originalLength = caption.length; // Salvar tamanho original antes de modificar
+        logger.warn(`⚠️ Caption muito longa (${originalLength} chars). Truncando para ${TELEGRAM_CAPTION_MAX_LENGTH} caracteres...`);
+        
+        // Estratégia de truncagem inteligente:
+        // 1. Tentar encontrar uma quebra de linha próxima ao limite (melhor para manter estrutura)
+        // 2. Se não encontrar, tentar encontrar um espaço próximo ao limite
+        // 3. Se não encontrar, truncar diretamente e adicionar indicador
+        
+        const truncatePoint = TELEGRAM_CAPTION_MAX_LENGTH - 30; // Deixar espaço para indicador
+        let truncated = caption.substring(0, truncatePoint);
+        
+        // Procurar última quebra de linha próxima ao ponto de truncagem (dentro de 100 chars)
+        const searchStart = Math.max(0, truncatePoint - 100);
+        const lastNewline = caption.lastIndexOf('\n', truncatePoint);
+        const lastSpace = caption.lastIndexOf(' ', truncatePoint);
+        
+        // Priorizar quebra de linha se estiver próxima
+        if (lastNewline > searchStart) {
+          truncated = caption.substring(0, lastNewline);
+        } 
+        // Se não, usar espaço se estiver próximo
+        else if (lastSpace > searchStart) {
+          truncated = caption.substring(0, lastSpace);
+        }
+        
+        // Adicionar indicador de truncagem
+        const truncateIndicator = '\n\n... (mensagem truncada)';
+        caption = truncated + truncateIndicator;
+        
+        // Garantir que não ultrapasse o limite mesmo com o indicador
+        if (caption.length > TELEGRAM_CAPTION_MAX_LENGTH) {
+          caption = caption.substring(0, TELEGRAM_CAPTION_MAX_LENGTH - truncateIndicator.length) + truncateIndicator;
+        }
+        
+        logger.info(`   ✅ Caption truncada de ${originalLength} para ${caption.length} caracteres`);
+        logger.debug(`   Últimos 100 chars da caption truncada: ${caption.substring(Math.max(0, caption.length - 100))}`);
+      }
+      
       // IMPORTANTE: Validar que a caption não está vazia
       if (!caption || caption.trim().length === 0) {
         logger.warn(`⚠️ Caption está vazia! A imagem será enviada sem texto.`);
@@ -338,7 +379,14 @@ class TelegramService {
         logger.error(`❌ ERRO CRÍTICO: Mensagem está vazia! Não é possível enviar imagem sem template.`);
         throw new Error('Mensagem (template) está vazia. Verifique se o template foi gerado corretamente.');
       }
-      
+
+      // Telegram tem limite de 1024 caracteres para caption de fotos
+      // A truncagem será feita no sendPhoto, mas vamos avisar aqui se for muito longa
+      const TELEGRAM_CAPTION_MAX_LENGTH = 1024;
+      if (message.length > TELEGRAM_CAPTION_MAX_LENGTH) {
+        logger.warn(`⚠️ Mensagem muito longa (${message.length} chars). Será truncada para ${TELEGRAM_CAPTION_MAX_LENGTH} caracteres na caption.`);
+      }
+
       logger.debug(`📝 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
       
       // Usar parse_mode das options ou da configuração, ou HTML como padrão (mais confiável)
