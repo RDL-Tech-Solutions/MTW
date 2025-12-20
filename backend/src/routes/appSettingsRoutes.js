@@ -19,6 +19,9 @@ router.post('/meli/authorize', appSettingsController.generateMeliAuthUrl);
 router.post('/meli/exchange-code', appSettingsController.exchangeMeliCode);
 router.post('/meli/refresh-token', appSettingsController.refreshMeliToken);
 
+// Rota para obter modelos OpenRouter disponíveis
+router.get('/openrouter-models', appSettingsController.getOpenRouterModels);
+
 export default router;
 
 

@@ -34,6 +34,12 @@ admin-panel/
 - **Rota**: `/coupons`
 - **Função**: Gerenciar cupons
 - **Recursos**: CRUD completo, aprovação, expiração
+- **Recursos de IA**:
+  - Visualização de **Confidence Score** (barra de progresso 0-1)
+  - Visualização de **Razão da Decisão da IA** (ai_decision_reason)
+  - Badge **"Pendente"** para cupons com score < threshold
+  - Botão **"Publicar"** para forçar publicação de cupons pendentes
+  - Histórico de análises da IA
 
 ### Categorias
 - **Rota**: `/categories`
@@ -125,6 +131,18 @@ Configure no painel em `/settings`:
 - Amazon (Access Key, Secret Key)
 - Expo (Access Token)
 - Backend (URL, API Key)
+- **🧠 IA / OpenRouter**:
+  - API Key do OpenRouter
+  - Seleção de modelo (gratuito ou pago)
+  - Threshold de confiança para publicação automática (padrão: 0.90)
+  - Habilitar/desabilitar publicação automática
+  - Habilitar/desabilitar edição de produtos
+  - Habilitar/desabilitar detecção de duplicados
+  - Habilitar/desabilitar score de qualidade
+- **📋 Modos de Template**:
+  - Padrão: Template fixo do sistema
+  - Customizado: Template editável pelo admin
+  - IA ADVANCED: Template gerado dinamicamente pela IA
 
 ## 🛠️ Tecnologias
 

@@ -66,6 +66,7 @@ docs/
 - [App Mobile](./03-modules/mobile-app/README.md)
 - [Sistema de Cupons](./03-modules/coupons/README.md)
 - [Auto Sync](./03-modules/auto-sync/README.md)
+- [🧠 Sistema de IA](./03-modules/ai-system/README.md) - **NOVO!**
 
 ### 04. Integrações
 - [Bots (WhatsApp & Telegram)](./04-integrations/bots/README.md)
@@ -105,8 +106,17 @@ docs/
 ## 📝 Última Atualização
 
 **Data**: Dezembro 2024  
-**Versão**: 2.0.0  
+**Versão**: 2.1.0  
 **Status**: ✅ Documentação Completa
+
+### Novidades na Versão 2.1.0
+
+- ✅ **Sistema de IA Completo**: Documentação completa do sistema de Inteligência Artificial
+- ✅ **Análise Inteligente de Cupons**: Score de confiança e publicação automática
+- ✅ **Editor de Produtos**: Otimização automática de títulos e descrições
+- ✅ **Score de Qualidade**: Sistema de pontuação de ofertas
+- ✅ **Templates IA ADVANCED**: Geração dinâmica de mensagens promocionais
+- ✅ **Segmentação Inteligente de Bots**: Filtros avançados para bots
 
 ---
 

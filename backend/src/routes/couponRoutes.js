@@ -82,5 +82,6 @@ router.post('/', authenticateToken, requireAdmin, createLimiterDefault, preproce
 router.put('/:id', authenticateToken, requireAdmin, preprocessCouponData, validate(updateCouponSchema), CouponController.update);
 router.delete('/:id', authenticateToken, requireAdmin, CouponController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, CouponController.batchDelete);
+router.post('/:id/force-publish', authenticateToken, requireAdmin, CouponController.forcePublish);
 
 export default router;

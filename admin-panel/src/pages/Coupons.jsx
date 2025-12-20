@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Copy, Calendar, Zap, Brain } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, Calendar, Zap, Brain, Send } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -748,7 +748,7 @@ export default function Coupons() {
                 <TableBody>
                   {coupons.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">
                         Nenhum cupom encontrado
                       </TableCell>
                     </TableRow>
@@ -815,6 +815,36 @@ export default function Coupons() {
                           </Badge>
                         </TableCell>
                         <TableCell>
+                          {coupon.confidence_score !== null && coupon.confidence_score !== undefined ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full ${
+                                      coupon.confidence_score >= 0.90
+                                        ? 'bg-green-500'
+                                        : coupon.confidence_score >= 0.75
+                                        ? 'bg-yellow-500'
+                                        : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${coupon.confidence_score * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {(coupon.confidence_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          )}
+                          {coupon.ai_decision_reason && (
+                            <div className="text-xs text-muted-foreground mt-1 max-w-xs truncate" title={coupon.ai_decision_reason}>
+                              {coupon.ai_decision_reason}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div className="text-sm">
                             {coupon.current_uses} / {coupon.max_uses || '∞'}
                           </div>
@@ -830,12 +860,37 @@ export default function Coupons() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={coupon.is_active ? 'success' : 'destructive'}>
-                            {coupon.is_active ? 'Ativo' : 'Inativo'}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            {coupon.is_pending_approval ? (
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                                ⏸️ Pendente
+                              </Badge>
+                            ) : (
+                              <Badge variant={coupon.is_active ? 'success' : 'destructive'}>
+                                {coupon.is_active ? 'Ativo' : 'Inativo'}
+                              </Badge>
+                            )}
+                            {coupon.is_pending_approval && coupon.confidence_score !== null && (
+                              <span className="text-xs text-muted-foreground">
+                                Confiança: {(coupon.confidence_score * 100).toFixed(0)}%
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {coupon.is_pending_approval && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleForcePublish(coupon)}
+                                className="bg-green-600 hover:bg-green-700"
+                                title="Forçar publicação e enviar aos bots"
+                              >
+                                <Send className="h-3 w-3 mr-1" />
+                                Publicar
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"

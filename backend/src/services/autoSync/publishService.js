@@ -149,7 +149,8 @@ class PublishService {
           const result = await notificationDispatcher.sendToTelegramWithImage(
             message,
             product.image_url,
-            'promotion_new'
+            'promotion_new',
+            product // Passar dados do produto para segmentação
           );
           
           logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
@@ -415,6 +416,7 @@ class PublishService {
 
   /**
    * Publicar e notificar tudo
+   * Agora com edição de IA e score de qualidade
    */
   async publishAll(product) {
     const results = {
@@ -425,9 +427,123 @@ class PublishService {
     };
 
     try {
+      // 1. Editar produto com IA (antes de publicar)
+      try {
+        const productEditor = (await import('../ai/productEditor.js')).default;
+        if (await productEditor.isEnabled()) {
+          logger.info(`🤖 Editando produto com IA antes da publicação...`);
+          const editedProduct = await productEditor.editProduct(product);
+          
+          // Aplicar edições ao produto
+          if (editedProduct.ai_optimized_title) {
+            product.ai_optimized_title = editedProduct.ai_optimized_title;
+          }
+          if (editedProduct.ai_generated_description) {
+            product.ai_generated_description = editedProduct.ai_generated_description;
+          }
+          if (editedProduct.ai_detected_category_id) {
+            product.ai_detected_category_id = editedProduct.ai_detected_category_id;
+            product.category_id = editedProduct.ai_detected_category_id; // Usar categoria detectada
+          }
+          if (editedProduct.offer_priority) {
+            product.offer_priority = editedProduct.offer_priority;
+          }
+          if (editedProduct.should_send_push !== undefined) {
+            product.should_send_push = editedProduct.should_send_push;
+          }
+          if (editedProduct.should_send_to_bots !== undefined) {
+            product.should_send_to_bots = editedProduct.should_send_to_bots;
+          }
+          if (editedProduct.is_featured_offer !== undefined) {
+            product.is_featured_offer = editedProduct.is_featured_offer;
+          }
+          if (editedProduct.ai_decision_reason) {
+            product.ai_decision_reason = editedProduct.ai_decision_reason;
+          }
+          if (editedProduct.ai_edit_history) {
+            product.ai_edit_history = editedProduct.ai_edit_history;
+          }
+          
+          // Atualizar no banco
+          if (product.id) {
+            await Product.update(product.id, {
+              ai_optimized_title: product.ai_optimized_title,
+              ai_generated_description: product.ai_generated_description,
+              ai_detected_category_id: product.ai_detected_category_id,
+              offer_priority: product.offer_priority,
+              should_send_push: product.should_send_push,
+              should_send_to_bots: product.should_send_to_bots,
+              is_featured_offer: product.is_featured_offer,
+              ai_decision_reason: product.ai_decision_reason,
+              ai_edit_history: product.ai_edit_history,
+              category_id: product.ai_detected_category_id || product.category_id // Atualizar categoria se detectada
+            });
+          }
+        }
+      } catch (editError) {
+        logger.warn(`⚠️ Erro ao editar produto com IA: ${editError.message}`);
+        // Continuar publicação mesmo se edição falhar
+      }
+
+      // 2. Calcular score de qualidade
+      try {
+        const qualityScorer = (await import('../services/qualityScorer.js')).default;
+        const scoreData = await qualityScorer.calculateOfferScore(product);
+        product.offer_score = scoreData.score;
+        
+        // Atualizar score no banco
+        if (product.id) {
+          await qualityScorer.updateProductScore(product.id, scoreData);
+        }
+        
+        logger.info(`📊 Score de qualidade: ${scoreData.score.toFixed(1)}/100`);
+      } catch (scoreError) {
+        logger.warn(`⚠️ Erro ao calcular score: ${scoreError.message}`);
+        // Continuar publicação mesmo se cálculo de score falhar
+      }
+
+      // 3. Detectar duplicados (antes de publicar)
+      try {
+        const duplicateDetector = (await import('../services/duplicateDetector.js')).default;
+        const duplicate = await duplicateDetector.detectDuplicate(product);
+        
+        if (duplicate && duplicate.canonical_id) {
+          logger.info(`🔄 Produto duplicado detectado. Usando produto canônico: ${duplicate.canonical_id}`);
+          
+          // Atualizar produto para apontar para o canônico
+          if (product.id) {
+            await Product.update(product.id, {
+              canonical_product_id: duplicate.canonical_id
+            });
+            product.canonical_product_id = duplicate.canonical_id;
+          }
+          
+          // Criar relação de duplicado
+          await duplicateDetector.createDuplicateRelation(
+            duplicate.canonical_id,
+            product.id,
+            duplicate.similarity_score
+          );
+          
+          // Se é duplicado, não publicar (evitar spam)
+          logger.info(`⏸️ Produto duplicado não será publicado para evitar spam`);
+          return {
+            success: false,
+            results,
+            reason: 'Produto duplicado detectado',
+            canonical_id: duplicate.canonical_id
+          };
+        }
+      } catch (dupError) {
+        logger.warn(`⚠️ Erro ao detectar duplicados: ${dupError.message}`);
+        // Continuar publicação mesmo se detecção falhar
+      }
+
       // Log detalhado do produto recebido
       logger.info(`📦 Publicando produto: ${product.name || product.id}`);
       logger.info(`   Platform: ${product.platform}`);
+      logger.info(`   Score: ${product.offer_score || 'N/A'}`);
+      logger.info(`   Prioridade: ${product.offer_priority || 'medium'}`);
       logger.info(`   image_url presente: ${product.image_url ? 'SIM' : 'NÃO'}`);
       logger.info(`   image_url valor: ${product.image_url || 'NÃO DEFINIDA'}`);
       logger.info(`   image_url tipo: ${typeof product.image_url}`);
@@ -456,14 +572,26 @@ class PublishService {
       // Publicar no app (já está no banco)
       results.app = await this.publishToApp(product);
 
-      // Push notification
-      results.push = await this.notifyPush(product);
+      // Push notification (apenas se should_send_push = true)
+      if (product.should_send_push !== false) {
+        results.push = await this.notifyPush(product);
+      } else {
+        logger.info(`⏸️ Push notification desabilitado pela IA para este produto`);
+      }
 
-      // Telegram
-      results.telegram = await this.notifyTelegramBot(product);
+      // Telegram (apenas se should_send_to_bots = true)
+      if (product.should_send_to_bots !== false) {
+        results.telegram = await this.notifyTelegramBot(product);
+      } else {
+        logger.info(`⏸️ Telegram desabilitado pela IA para este produto`);
+      }
 
-      // WhatsApp
-      results.whatsapp = await this.notifyWhatsAppBot(product);
+      // WhatsApp (apenas se should_send_to_bots = true)
+      if (product.should_send_to_bots !== false) {
+        results.whatsapp = await this.notifyWhatsAppBot(product);
+      } else {
+        logger.info(`⏸️ WhatsApp desabilitado pela IA para este produto`);
+      }
 
       const success = results.telegram || results.whatsapp;
       

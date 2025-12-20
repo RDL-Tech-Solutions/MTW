@@ -1,4 +1,5 @@
 import supabase from '../config/database.js';
+import logger from '../config/logger.js';
 
 class ClickTracking {
   // Registrar clique

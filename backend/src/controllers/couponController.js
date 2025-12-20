@@ -215,6 +215,44 @@ class CouponController {
       next(error);
     }
   }
+
+  // Forçar publicação de cupom (aprovar e notificar)
+  static async forcePublish(req, res, next) {
+    try {
+      const { id } = req.params;
+      const coupon = await Coupon.findById(id);
+
+      if (!coupon) {
+        return res.status(404).json(
+          errorResponse('Cupom não encontrado', ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      // Aprovar cupom
+      const approvedCoupon = await Coupon.approve(id, {
+        is_pending_approval: false,
+        ai_decision_reason: coupon.ai_decision_reason || 'Publicação forçada manualmente pelo admin'
+      });
+
+      // Notificar bots e app
+      try {
+        const CouponSettings = (await import('../models/CouponSettings.js')).default;
+        const settings = await CouponSettings.get();
+        
+        if (settings.notify_bots_on_new_coupon) {
+          await couponNotificationService.notifyNewCoupon(approvedCoupon);
+          logger.info(`✅ Cupom ${approvedCoupon.code} publicado e notificado com sucesso`);
+        }
+      } catch (notifyError) {
+        logger.warn(`⚠️ Erro ao notificar cupom: ${notifyError.message}`);
+        // Não falhar a aprovação por causa de erro de notificação
+      }
+
+      res.json(successResponse(approvedCoupon, 'Cupom publicado com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default CouponController;

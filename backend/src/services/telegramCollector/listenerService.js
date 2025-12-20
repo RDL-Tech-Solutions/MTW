@@ -51,6 +51,7 @@ class TelegramListenerService {
 
   /**
    * Salvar cupom no banco de dados
+   * Agora com suporte a confidence_score e publicação automática
    */
   async saveCoupon(couponData, messageHash) {
     try {
@@ -69,9 +70,32 @@ class TelegramListenerService {
       couponData.auto_captured = true;
       couponData.capture_source = 'telegram';
       
-      // IMPORTANTE: Garantir que cupons capturados do Telegram NÃO fiquem pendentes de aprovação
-      // para que sejam enviados imediatamente
-      couponData.is_pending_approval = false;
+      // Obter configurações de IA para determinar threshold de publicação automática
+      const AppSettings = (await import('../../models/AppSettings.js')).default;
+      const settings = await AppSettings.get();
+      const confidenceThreshold = settings.ai_auto_publish_confidence_threshold || 0.90;
+      const aiAutoPublishEnabled = settings.ai_enable_auto_publish !== false; // Default true
+      
+      // Determinar se deve publicar automaticamente baseado em confidence_score
+      const confidenceScore = couponData.confidence_score || couponData.confidence || 0.0;
+      const shouldAutoPublish = aiAutoPublishEnabled && confidenceScore >= confidenceThreshold;
+      
+      // Definir is_pending_approval baseado em confidence_score
+      couponData.is_pending_approval = !shouldAutoPublish;
+      
+      // Adicionar motivo da decisão da IA
+      if (confidenceScore >= confidenceThreshold) {
+        couponData.ai_decision_reason = `Confiança alta (${confidenceScore.toFixed(2)} >= ${confidenceThreshold}). Publicação automática.`;
+      } else {
+        couponData.ai_decision_reason = `Confiança abaixo do threshold (${confidenceScore.toFixed(2)} < ${confidenceThreshold}). Requer revisão manual.`;
+      }
+      
+      logger.info(`💾 Salvando cupom capturado: ${couponData.code} (${couponData.platform})`);
+      logger.info(`   Confidence Score: ${confidenceScore.toFixed(2)}`);
+      logger.info(`   Threshold: ${confidenceThreshold}`);
+      logger.info(`   Publicação Automática: ${shouldAutoPublish ? 'SIM ✅' : 'NÃO ⏸️'}`);
+      logger.info(`   Status: ${shouldAutoPublish ? 'Aprovado automaticamente' : 'Pendente de revisão'}`);
+      logger.debug(`   Motivo: ${couponData.ai_decision_reason}`);
 
       logger.info(`💾 Salvando cupom capturado: ${couponData.code} (${couponData.platform})`);
       logger.debug(`   Dados: ${JSON.stringify({
@@ -85,30 +109,42 @@ class TelegramListenerService {
       const coupon = await Coupon.create(couponData);
       logger.info(`✅ Cupom salvo: ${coupon.code} (${coupon.platform})`);
       logger.info(`   ID: ${coupon.id}`);
+      logger.info(`   Confidence Score: ${(coupon.confidence_score || 0).toFixed(2)}`);
       logger.info(`   is_pending_approval: ${coupon.is_pending_approval}`);
       logger.info(`   auto_captured: ${coupon.auto_captured}`);
 
-      // Notificar bots e app - cupons do Telegram devem ser enviados imediatamente
-      if (coupon) {
+      // Logar decisão da IA para observabilidade
+      try {
+        const AIDecisionLog = (await import('../../models/AIDecisionLog.js')).default;
+        await AIDecisionLog.create({
+          entity_type: 'coupon',
+          entity_id: coupon.id,
+          decision_type: 'extraction',
+          confidence_score: confidenceScore,
+          decision_reason: couponData.ai_decision_reason,
+          input_data: { message_hash: messageHash, platform: couponData.platform, message_preview: text.substring(0, 200) },
+          output_data: { code: coupon.code, platform: coupon.platform, is_pending_approval: coupon.is_pending_approval, confidence_score: confidenceScore },
+          success: true
+        });
+      } catch (logError) {
+        logger.warn(`⚠️ Erro ao salvar log de decisão da IA: ${logError.message}`);
+        // Não falhar o fluxo por causa de erro de log
+      }
+
+      // Notificar bots e app apenas se não estiver pendente de aprovação
+      if (coupon && !coupon.is_pending_approval) {
         try {
           // Verificar configuração de notificação
-          const settings = await CouponSettings.get();
-          logger.debug(`   Configuração notify_bots_on_new_coupon: ${settings.notify_bots_on_new_coupon}`);
+          const CouponSettings = (await import('../../models/CouponSettings.js')).default;
+          const couponSettings = await CouponSettings.get();
+          logger.debug(`   Configuração notify_bots_on_new_coupon: ${couponSettings.notify_bots_on_new_coupon}`);
           
-          if (settings.notify_bots_on_new_coupon) {
-            if (coupon.is_pending_approval) {
-              logger.warn(`⚠️ Cupom ${coupon.code} está pendente de aprovação, mas deveria ser enviado imediatamente`);
-              logger.warn(`   Forçando aprovação para enviar notificação...`);
-              // Aprovar o cupom automaticamente se estiver pendente
-              await Coupon.approve(coupon.id);
-              coupon.is_pending_approval = false;
-            }
-            
+          if (couponSettings.notify_bots_on_new_coupon) {
             logger.info(`📢 ========== INICIANDO ENVIO DE NOTIFICAÇÃO ==========`);
             logger.info(`   Cupom: ${coupon.code}`);
             logger.info(`   Plataforma: ${coupon.platform}`);
+            logger.info(`   Confidence: ${(coupon.confidence_score || 0).toFixed(2)}`);
             logger.info(`   ID: ${coupon.id}`);
-            logger.info(`   is_pending_approval: ${coupon.is_pending_approval}`);
             
             // Notificar via serviço de notificação de cupons (envia para bots, app e push notifications)
             const notifyResult = await couponNotificationService.notifyNewCoupon(coupon);
@@ -127,6 +163,9 @@ class TelegramListenerService {
           logger.error(`   Stack: ${notifyError.stack}`);
           // Não falhar o salvamento por causa de erro de notificação
         }
+      } else if (coupon && coupon.is_pending_approval) {
+        logger.info(`⏸️ Cupom ${coupon.code} salvo como PENDENTE (confidence: ${confidenceScore.toFixed(2)} < ${confidenceThreshold})`);
+        logger.info(`   Aguardando aprovação manual em /coupons`);
       } else {
         logger.error(`❌ Cupom não foi retornado após criação`);
       }
@@ -795,6 +834,7 @@ class TelegramListenerService {
             }
             
             // Preparar dados do cupom no formato esperado
+            // IMPORTANTE: confidence_score será usado em saveCoupon para decidir publicação automática
             couponData = {
               code: aiExtraction.code,
               platform: aiExtraction.platform,
@@ -810,7 +850,8 @@ class TelegramListenerService {
               origem: 'telegram',
               channel_origin: channel.username || channel.name,
               message_id: messageId,
-              is_pending_approval: false, // IA já valida, então não precisa aprovação
+              confidence_score: aiExtraction.confidence || 0.0, // Score de confiança da IA
+              // is_pending_approval será definido em saveCoupon baseado em confidence_score
               capture_source: 'telegram_ai',
               auto_captured: true
             };

@@ -521,6 +521,38 @@ class AppSettingsController {
       });
     }
   }
+
+  /**
+   * Obter lista de modelos OpenRouter disponíveis
+   * GET /api/settings/openrouter-models
+   */
+  async getOpenRouterModels(req, res) {
+    try {
+      const type = req.query.type; // 'free', 'paid', ou undefined para todos
+      
+      let models = OPENROUTER_MODELS;
+      if (type === 'free' || type === 'paid') {
+        models = getModelsByType(type);
+      }
+      
+      res.json({
+        success: true,
+        data: {
+          models: models,
+          total: models.length,
+          free: getModelsByType('free').length,
+          paid: getModelsByType('paid').length,
+          withJsonSupport: getModelsWithJsonSupport().length
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao obter modelos OpenRouter: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao obter lista de modelos'
+      });
+    }
+  }
 }
 
 export default new AppSettingsController();

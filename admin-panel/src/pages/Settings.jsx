@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
-import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { OPENROUTER_MODELS, getModelsByType } from '../config/openrouterModels.js';
 
 export default function Settings() {
   const { toast } = useToast();
@@ -57,7 +58,14 @@ export default function Settings() {
     // OpenRouter / IA
     openrouter_api_key: '',
     openrouter_model: 'mistralai/mistral-7b-instruct',
-    openrouter_enabled: false
+    openrouter_enabled: false,
+    
+    // Configurações de IA Avançadas
+    ai_auto_publish_confidence_threshold: 0.90,
+    ai_enable_auto_publish: true,
+    ai_enable_product_editing: true,
+    ai_enable_duplicate_detection: true,
+    ai_enable_quality_scoring: true
   });
 
   const [showSecrets, setShowSecrets] = useState({
@@ -167,7 +175,12 @@ export default function Settings() {
           backend_api_key: realValues.backend_api_key || '',
           openrouter_api_key: realValues.openrouter_api_key || '',
           openrouter_model: data.openrouter_model || 'mistralai/mistral-7b-instruct',
-          openrouter_enabled: data.openrouter_enabled ?? false
+          openrouter_enabled: data.openrouter_enabled ?? false,
+          ai_auto_publish_confidence_threshold: data.ai_auto_publish_confidence_threshold ?? 0.90,
+          ai_enable_auto_publish: data.ai_enable_auto_publish !== undefined ? data.ai_enable_auto_publish : true,
+          ai_enable_product_editing: data.ai_enable_product_editing !== undefined ? data.ai_enable_product_editing : true,
+          ai_enable_duplicate_detection: data.ai_enable_duplicate_detection !== undefined ? data.ai_enable_duplicate_detection : true,
+          ai_enable_quality_scoring: data.ai_enable_quality_scoring !== undefined ? data.ai_enable_quality_scoring : true
         });
 
         // Salvar valores sensíveis no sessionStorage para persistência
@@ -278,7 +291,12 @@ export default function Settings() {
           backend_api_key: dataToSend.backend_api_key ? prev.backend_api_key : prev.backend_api_key,
           openrouter_api_key: dataToSend.openrouter_api_key ? prev.openrouter_api_key : prev.openrouter_api_key,
           openrouter_model: responseData.openrouter_model !== undefined ? responseData.openrouter_model : prev.openrouter_model,
-          openrouter_enabled: responseData.openrouter_enabled !== undefined ? responseData.openrouter_enabled : prev.openrouter_enabled
+          openrouter_enabled: responseData.openrouter_enabled !== undefined ? responseData.openrouter_enabled : prev.openrouter_enabled,
+          ai_auto_publish_confidence_threshold: responseData.ai_auto_publish_confidence_threshold !== undefined ? responseData.ai_auto_publish_confidence_threshold : prev.ai_auto_publish_confidence_threshold,
+          ai_enable_auto_publish: responseData.ai_enable_auto_publish !== undefined ? responseData.ai_enable_auto_publish : prev.ai_enable_auto_publish,
+          ai_enable_product_editing: responseData.ai_enable_product_editing !== undefined ? responseData.ai_enable_product_editing : prev.ai_enable_product_editing,
+          ai_enable_duplicate_detection: responseData.ai_enable_duplicate_detection !== undefined ? responseData.ai_enable_duplicate_detection : prev.ai_enable_duplicate_detection,
+          ai_enable_quality_scoring: responseData.ai_enable_quality_scoring !== undefined ? responseData.ai_enable_quality_scoring : prev.ai_enable_quality_scoring
         }));
 
         // Salvar valores sensíveis no sessionStorage para persistir após recarregar
@@ -1049,14 +1067,49 @@ export default function Settings() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                     disabled={!settings.openrouter_enabled}
                   >
-                    <option value="mistralai/mistral-7b-instruct">Mistral 7B Instruct (Gratuito)</option>
-                    <option value="openchat/openchat-7b">OpenChat 7B (Gratuito)</option>
-                    <option value="mistralai/mixtral-8x7b-instruct">Mixtral 8x7B Instruct (Pago)</option>
-                    <option value="anthropic/claude-3-haiku">Claude 3 Haiku (Pago)</option>
-                    <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo (Pago)</option>
+                    <optgroup label="🆓 Modelos Gratuitos">
+                      {getModelsByType('free').map(model => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} ({model.provider}){model.supportsJson ? ' ✓ JSON' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="💳 Modelos Pagos">
+                      {getModelsByType('paid').map(model => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} ({model.provider}){model.supportsJson ? ' ✓ JSON' : ''} - {model.pricing || 'Custo variável'}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Modelos gratuitos têm limites de rate. Modelos pagos oferecem melhor qualidade mas consomem créditos.
+                  {settings.openrouter_model && (() => {
+                    const selectedModel = OPENROUTER_MODELS.find(m => m.id === settings.openrouter_model);
+                    if (selectedModel) {
+                      return (
+                        <div className="mt-2 p-3 bg-gray-50 rounded-md border border-gray-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            {selectedModel.type === 'free' ? (
+                              <Sparkles className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <DollarSign className="h-4 w-4 text-blue-600" />
+                            )}
+                            <span className="font-medium text-sm">{selectedModel.name}</span>
+                            {selectedModel.supportsJson && (
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Suporta JSON</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-600">{selectedModel.description}</p>
+                          {selectedModel.pricing && (
+                            <p className="text-xs text-blue-600 mt-1">💰 {selectedModel.pricing}</p>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  <p className="text-sm text-gray-500 mt-2">
+                    <strong>Gratuitos:</strong> Limites de rate (50 req/dia). <strong>Pagos:</strong> Melhor qualidade, consomem créditos.
+                    Modelos com ✓ JSON retornam respostas mais estruturadas.
                   </p>
                 </div>
 
@@ -1069,6 +1122,103 @@ export default function Settings() {
                     <li>Se a IA falhar ou não estiver habilitada, o sistema usa o método tradicional (Regex)</li>
                     <li>Cupons extraídos pela IA são publicados automaticamente no App e Bots</li>
                   </ul>
+                </div>
+
+                {/* Configurações Avançadas de IA */}
+                <div className="mt-6 pt-6 border-t">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    Configurações Avançadas de IA
+                  </h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="ai_auto_publish_confidence_threshold">
+                        Threshold de Confiança para Publicação Automática (0.0 - 1.0)
+                      </Label>
+                      <Input
+                        id="ai_auto_publish_confidence_threshold"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        value={settings.ai_auto_publish_confidence_threshold ?? 0.90}
+                        onChange={(e) => setSettings({...settings, ai_auto_publish_confidence_threshold: parseFloat(e.target.value) || 0.90})}
+                        disabled={!settings.openrouter_enabled}
+                      />
+                      <p className="text-sm text-gray-500 mt-1">
+                        Cupons com confidence_score &gt;= este valor serão publicados automaticamente. Padrão: 0.90 (90%)
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="ai_enable_auto_publish"
+                        checked={settings.ai_enable_auto_publish ?? true}
+                        onChange={(e) => setSettings({...settings, ai_enable_auto_publish: e.target.checked})}
+                        disabled={!settings.openrouter_enabled}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor="ai_enable_auto_publish" className="cursor-pointer">
+                        Publicação Automática de Cupons
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-500 ml-6">
+                      Publicar automaticamente cupons com confidence_score alto (sem revisão manual)
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="ai_enable_product_editing"
+                        checked={settings.ai_enable_product_editing ?? true}
+                        onChange={(e) => setSettings({...settings, ai_enable_product_editing: e.target.checked})}
+                        disabled={!settings.openrouter_enabled}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor="ai_enable_product_editing" className="cursor-pointer">
+                        Edição de Produtos com IA
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-500 ml-6">
+                      Reescrever títulos, gerar descrições e classificar categorias automaticamente
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="ai_enable_duplicate_detection"
+                        checked={settings.ai_enable_duplicate_detection ?? true}
+                        onChange={(e) => setSettings({...settings, ai_enable_duplicate_detection: e.target.checked})}
+                        disabled={!settings.openrouter_enabled}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor="ai_enable_duplicate_detection" className="cursor-pointer">
+                        Detecção de Produtos Duplicados
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-500 ml-6">
+                      Identificar e evitar publicar o mesmo produto de diferentes plataformas
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="ai_enable_quality_scoring"
+                        checked={settings.ai_enable_quality_scoring ?? true}
+                        onChange={(e) => setSettings({...settings, ai_enable_quality_scoring: e.target.checked})}
+                        disabled={!settings.openrouter_enabled}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor="ai_enable_quality_scoring" className="cursor-pointer">
+                        Score de Qualidade de Ofertas
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-500 ml-6">
+                      Calcular score baseado em desconto, histórico, popularidade e CTR
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>

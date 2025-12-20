@@ -34,12 +34,15 @@ ${validExamples.map((example, index) => `${index + 1}. ${example}`).join('\n\n')
       }
     }
 
-    return `Você é um sistema profissional de extração de cupons de desconto de e-commerce.
+    return `Você é um sistema automatizado de extração de dados. Sua ÚNICA função é retornar um objeto JSON válido. NÃO responda com texto livre, NÃO explique, NÃO adicione comentários. Retorne APENAS o JSON.
 
-Analise a mensagem abaixo e extraia TODAS as informações disponíveis sobre o cupom.
+TAREFA: Analisar a mensagem abaixo e extrair informações sobre cupom de desconto. Retornar APENAS um objeto JSON válido.
+
 ${examplesSection}
 Mensagem a analisar:
 ${message}
+
+RETORNE APENAS O JSON ABAIXO (sem markdown, sem comentários, sem explicações):
 
 INSTRUÇÕES DETALHADAS:
 
@@ -123,12 +126,15 @@ Resposta: {"platform": "Shopee", "coupon_code": "SHOPEE20", "discount": "20%", "
 Mensagem: "🔥 Oferta imperdível! Produto em promoção"
 Resposta: {"platform": "Desconhecido", "coupon_code": null, "discount": null, "min_purchase": null, "usage_limit": null, "expiration_date": null, "is_valid_coupon": false, "confidence": 0.1}
 
-IMPORTANTE:
-- Retorne SOMENTE o JSON válido
-- Não inclua markdown (três backticks ou blocos de código)
-- Não inclua comentários ou explicações
+⚠️ REGRAS OBRIGATÓRIAS:
+- Retorne SOMENTE o JSON válido (começando com { e terminando com })
+- NÃO inclua markdown (três backticks ou blocos de código)
+- NÃO inclua comentários ou explicações
+- NÃO responda com texto livre
 - Se não tiver certeza sobre algum campo, use null
-- Seja preciso e detalhado na extração`;
+- Seja preciso e detalhado na extração
+
+Lembre-se: Sua resposta DEVE ser APENAS um objeto JSON válido, nada mais, nada menos.`;
   }
 
   /**

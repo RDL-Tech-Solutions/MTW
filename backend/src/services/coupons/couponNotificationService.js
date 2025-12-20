@@ -149,9 +149,9 @@ ${coupon.affiliate_link || 'Link não disponível'}
         // SEMPRE tentar usar logo da plataforma primeiro (similar ao produto)
         // Caminho correto: __dirname = backend/src/services/coupons
         // Logo está em: backend/assets/logos
-        // Então: ../../assets/logos (sobe 2 níveis de src/services/coupons para backend, depois assets/logos)
+        // Então: ../../../assets/logos (sobe 3 níveis: coupons -> services -> src -> backend, depois assets/logos)
         // IMPORTANTE: Usar path.resolve() para garantir caminho absoluto
-        const logoPath = path.join(__dirname, '../../assets/logos', logoFileName);
+        const logoPath = path.join(__dirname, '../../../assets/logos', logoFileName);
         // Resolver para caminho absoluto (resolve .. corretamente)
         const absoluteLogoPath = path.resolve(logoPath);
         
@@ -404,7 +404,8 @@ ${coupon.affiliate_link || 'Link não disponível'}
             telegramResult = await notificationDispatcher.sendToTelegramWithImage(
               telegramMessage,
               finalImagePath,
-              'coupon_new'
+              'coupon_new',
+              coupon // Passar dados do cupom para segmentação
             );
           } catch (accessError) {
             logger.error(`   ❌ Arquivo não acessível: ${accessError.message}`);

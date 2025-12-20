@@ -298,6 +298,20 @@ class AppSettings {
   }
 
   /**
+   * Obter configurações de IA
+   */
+  static async getAIConfig() {
+    const settings = await this.get();
+    return {
+      auto_publish_confidence_threshold: settings.ai_auto_publish_confidence_threshold || 0.90,
+      enable_auto_publish: settings.ai_enable_auto_publish !== false, // Default true
+      enable_product_editing: settings.ai_enable_product_editing !== false, // Default true
+      enable_duplicate_detection: settings.ai_enable_duplicate_detection !== false, // Default true
+      enable_quality_scoring: settings.ai_enable_quality_scoring !== false // Default true
+    };
+  }
+
+  /**
    * Obter configurações do AliExpress
    */
   static async getAliExpressConfig() {

@@ -31,7 +31,8 @@ docs/
 │   ├── admin-panel/            # Painel Admin
 │   ├── mobile-app/             # App Mobile
 │   ├── coupons/                # Sistema de Cupons
-│   └── auto-sync/              # Auto Sync
+│   ├── auto-sync/              # Auto Sync
+│   └── ai-system/              # 🧠 Sistema de IA (NOVO!)
 │
 ├── 04-integrations/             # Integrações
 │   ├── README.md               # Visão geral
@@ -68,12 +69,13 @@ docs/
 - ✅ Checklist
 - ✅ Teste Rápido
 
-### Módulos (6 documentos)
+### Módulos (7 documentos)
 - ✅ Backend API
 - ✅ Admin Panel
 - ✅ Mobile App
 - ✅ Sistema de Cupons
 - ✅ Auto Sync
+- ✅ Sistema de IA (NOVO!)
 - ✅ Visão Geral
 
 ### Integrações (7 documentos)
@@ -104,6 +106,9 @@ docs/
 - ✅ Guias passo a passo
 - ✅ Referências atualizadas
 - ✅ Estrutura clara e navegável
+- ✅ **Sistema de IA**: Documentação completa do sistema de Inteligência Artificial
+- ✅ **Templates IA ADVANCED**: Documentação de geração dinâmica de templates
+- ✅ **Segmentação Inteligente**: Documentação de filtros avançados para bots
 
 ### Atualizado
 - ✅ README principal
@@ -121,9 +126,16 @@ docs/
 
 ✅ **Documentação 100% Completa e Atualizada**
 
+### Versão 2.1.0 - Novidades
+
+- ✅ Sistema de IA completamente documentado
+- ✅ Templates IA ADVANCED documentados
+- ✅ Segmentação inteligente de bots documentada
+- ✅ Todas as funcionalidades de IA adicionadas à documentação
+
 ---
 
-**Última atualização**: Dezembro 2024
+**Última atualização**: Dezembro 2024 (Versão 2.1.0)
 
 
 

@@ -225,9 +225,9 @@ ${context.hasCoupon ? '8. **CRÍTICO**: Destaque a ECONOMIA DUPLA (desconto do p
 13. Crie senso de urgência se o desconto for alto (${context.discount}%)
 ${context.hasCoupon ? '14. **CRÍTICO**: Enfatize o valor final com cupom aplicado e SEMPRE mostre o código do cupom formatado com backticks' : '14. Enfatize o preço com desconto'}
 15. Use quebras de linha para organizar (uma linha em branco entre seções principais)
-16. ${context.hasOldPrice ? 'Para preço antigo, use ~~{old_price}~~ (dois tildes) para riscar o preço antigo' : ''}
+16. ${context.hasOldPrice ? '**CRÍTICO**: A variável {old_price} JÁ VEM FORMATADA com os tildes (ex: " ~~R$ 44,88~~"). Use APENAS {old_price} diretamente, SEM adicionar "(de" antes ou tildes extras. Exemplo correto: "💰 **Preço especial: {current_price}** {old_price}"' : ''}
 17. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown (**texto** para negrito, ~~texto~~ para riscado, \`código\` para código)
-18. **CRÍTICO**: Para riscar preço antigo, use ~~texto~~ (dois tildes), NÃO use ~~~~ ou <s>
+18. **CRÍTICO**: Para preço antigo, use APENAS a variável {old_price} que já vem formatada corretamente. NÃO adicione "(de" antes ou tildes extras.
 19. **CRÍTICO**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b>
 20. **CRÍTICO**: Para código do cupom, use \`{coupon_code}\` (backticks), NÃO use <code> ou tags HTML
 21. **CRÍTICO**: NUNCA escreva "[Link de afiliado]" ou qualquer texto literal para o link - use APENAS {affiliate_link}
@@ -243,7 +243,7 @@ EXEMPLO DE ESTRUTURA BOM (para produtos - MENSAGEM COMPLETA E ELABORADA):
 
 💡 [AQUI: Crie uma descrição persuasiva do produto baseada no título fornecido, destacando características principais, benefícios e por que vale a pena comprar. Seja específico e convincente, usando 3-5 linhas. Esta é uma seção SEPARADA do título - o título já foi mostrado acima usando {product_name}.]
 
-💰 **Preço especial: {current_price}** ${context.hasOldPrice ? '(de {old_price})' : ''}
+💰 **Preço especial: {current_price}**${context.hasOldPrice ? ' {old_price}' : ''}
 🏷️ **${context.discount}% OFF - Economize R$ ${Math.round((product.old_price || product.current_price) - (product.current_price || 0))}!** 🏷️
 
 ${context.hasCoupon ? `🎟️ **CUPOM INCLUSO!** Aproveite ainda mais desconto!
@@ -270,7 +270,7 @@ ${context.hasCoupon ? `- **CRÍTICO**: Use {coupon_code} para o código do cupom
 
 IMPORTANTE SOBRE FORMATAÇÃO:
 - Use **texto** para negrito (dois asteriscos)
-- Use ~~texto~~ para riscar preço antigo (dois tildes, NÃO quatro)
+- **IMPORTANTE**: A variável {old_price} JÁ VEM FORMATADA com os tildes. Use APENAS {old_price} diretamente, SEM adicionar "(de" ou tildes extras. Exemplo: "💰 **Preço especial: {current_price}** {old_price}"
 - Use \`código\` para código (backticks)
 - NUNCA use <b>, <strong>, <s>, <code> ou outras tags HTML
 - Seja detalhado, persuasivo e completo (mínimo 10-15 linhas)
@@ -552,7 +552,25 @@ Título otimizado:`;
     // IMPORTANTE: Não afetar ~~texto~~ válido
     template = template.replace(/(?<!~)~{3,}(?!~)/g, '~~');
     
-    // 4. Restaurar código protegido
+    // 3.5. Corrigir padrões mal formatados de preço antigo como "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)"
+    // A variável {old_price} já vem formatada como " ~~R$ 44,88~~", então quando a IA adiciona "(de" antes, fica errado
+    template = template.replace(/\(de\s+~~\s*([^~]+?)~~\)/g, (match, price) => {
+      // Remover o "(de" e manter apenas o preço formatado
+      return ` ~~${price.trim()}~~`;
+    });
+    
+    // Corrigir também casos onde há espaço entre ~~ e o preço: "(de ~~ R$ 44,88)"
+    template = template.replace(/\(de\s+~~\s+([^~]+?)~~\)/g, (match, price) => {
+      return ` ~~${price.trim()}~~`;
+    });
+    
+    // 4. Remover texto "mensagem truncada" ou "... (mensagem truncada)" que a IA pode adicionar
+    template = template.replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '');
+    template = template.replace(/\s*\(mensagem\s+truncada\)/gi, '');
+    template = template.replace(/\s*\.\.\.\s*\(truncada\)/gi, '');
+    template = template.replace(/\s*\(truncada\)/gi, '');
+    
+    // 5. Restaurar código protegido
     codePlaceholders.forEach(({ placeholder, content }) => {
       template = template.replace(placeholder, content);
     });

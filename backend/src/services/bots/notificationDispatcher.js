@@ -1,5 +1,6 @@
 import BotChannel from '../../models/BotChannel.js';
 import NotificationLog from '../../models/NotificationLog.js';
+import BotSendLog from '../../models/BotSendLog.js';
 import whatsappService from './whatsappService.js';
 import telegramService from './telegramService.js';
 import templateRenderer from './templateRenderer.js';
@@ -32,6 +33,7 @@ class NotificationDispatcher {
 
   /**
    * Enviar notificação para todos os canais ativos
+   * Agora com segmentação inteligente (categoria, horários, duplicação)
    * @param {string} eventType - Tipo do evento (promotion_new, coupon_new, coupon_expired)
    * @param {Object} data - Dados do evento
    * @returns {Promise<Object>}
@@ -41,27 +43,54 @@ class NotificationDispatcher {
       logger.info(`📤 Disparando notificação: ${eventType}`);
 
       // Buscar todos os canais ativos
-      const channels = await BotChannel.findActive();
+      const allChannels = await BotChannel.findActive();
 
-      if (!channels || channels.length === 0) {
+      if (!allChannels || allChannels.length === 0) {
         logger.warn('⚠️ Nenhum canal de bot ativo encontrado');
         return { success: false, message: 'Nenhum canal ativo' };
       }
+
+      // Filtrar canais usando segmentação inteligente
+      const channels = await this.filterChannelsBySegmentation(allChannels, eventType, data);
+
+      if (channels.length === 0) {
+        logger.info(`⏸️ Nenhum canal passou nos filtros de segmentação`);
+        return { success: false, message: 'Nenhum canal passou nos filtros', filtered: allChannels.length };
+      }
+
+      logger.info(`📊 Canais filtrados: ${channels.length}/${allChannels.length} passaram na segmentação`);
 
       const results = {
         total: channels.length,
         sent: 0,
         failed: 0,
+        filtered: allChannels.length - channels.length,
         details: []
       };
 
-      // Enviar para cada canal
+      // Enviar para cada canal filtrado
       for (const channel of channels) {
         try {
+          // Verificar duplicação antes de enviar
+          const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data);
+          if (isDuplicate) {
+            logger.debug(`⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
+            results.details.push({
+              channelId: channel.id,
+              platform: channel.platform,
+              success: false,
+              skipped: true,
+              reason: 'Duplicado (enviado recentemente)'
+            });
+            continue;
+          }
+
           const result = await this.sendToChannel(channel, eventType, data);
           
           if (result.success) {
             results.sent++;
+            // Registrar envio para controle de duplicação
+            await this.logSend(channel.id, eventType, data);
           } else {
             results.failed++;
           }
@@ -79,11 +108,125 @@ class NotificationDispatcher {
         }
       }
 
-      logger.info(`✅ Notificação enviada: ${results.sent} sucesso, ${results.failed} falhas`);
+      logger.info(`✅ Notificação enviada: ${results.sent} sucesso, ${results.failed} falhas, ${results.filtered} filtrados`);
       return results;
     } catch (error) {
       logger.error(`❌ Erro no dispatcher: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Filtrar canais por segmentação inteligente
+   * Respeita categoria, horários, score mínimo
+   */
+  async filterChannelsBySegmentation(channels, eventType, data) {
+    const filtered = [];
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+
+    for (const channel of channels) {
+      // 1. Filtro de categoria (se produto)
+      if (eventType === 'promotion_new' && data.category_id) {
+        if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
+          if (!channel.category_filter.includes(data.category_id)) {
+            logger.debug(`   🚫 Canal ${channel.id} não aceita categoria ${data.category_id}`);
+            continue;
+          }
+        }
+      }
+
+      // 2. Filtro de plataforma
+      if (data.platform) {
+        if (channel.platform_filter && Array.isArray(channel.platform_filter) && channel.platform_filter.length > 0) {
+          if (!channel.platform_filter.includes(data.platform)) {
+            logger.debug(`   🚫 Canal ${channel.id} não aceita plataforma ${data.platform}`);
+            continue;
+          }
+        }
+      }
+
+      // 3. Filtro de horário (schedule)
+      if (channel.schedule_start && channel.schedule_end) {
+        const startTime = channel.schedule_start;
+        const endTime = channel.schedule_end;
+        
+        let isWithinSchedule = false;
+        if (endTime < startTime) {
+          // Cruza meia-noite
+          isWithinSchedule = currentTime >= startTime || currentTime <= endTime;
+        } else {
+          isWithinSchedule = currentTime >= startTime && currentTime <= endTime;
+        }
+        
+        if (!isWithinSchedule) {
+          logger.debug(`   🚫 Canal ${channel.id} fora do horário (${startTime}-${endTime})`);
+          continue;
+        }
+      }
+
+      // 4. Filtro de score mínimo (se produto)
+      if (eventType === 'promotion_new' && data.offer_score !== undefined) {
+        const minScore = channel.min_offer_score || 0;
+        if (data.offer_score < minScore) {
+          logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, produto tem ${data.offer_score}`);
+          continue;
+        }
+      }
+
+      filtered.push(channel);
+    }
+
+    return filtered;
+  }
+
+  /**
+   * Verificar se já foi enviado recentemente (evitar duplicação)
+   */
+  async checkDuplicateSend(channelId, eventType, data) {
+    try {
+      const entityId = data.id || data.product_id || data.coupon_id;
+      if (!entityId) return false;
+
+      const BotSendLog = (await import('../../models/BotSendLog.js')).default;
+      const channel = await BotChannel.findById(channelId);
+      
+      if (!channel || !channel.avoid_duplicates_hours) {
+        return false; // Sem controle de duplicação
+      }
+
+      const hoursAgo = channel.avoid_duplicates_hours;
+      const since = new Date();
+      since.setHours(since.getHours() - hoursAgo);
+
+      const wasSent = await BotSendLog.wasSentRecently(channelId, eventType, entityId, since);
+      return wasSent;
+
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao verificar duplicação: ${error.message}`);
+      return false; // Em caso de erro, permitir envio
+    }
+  }
+
+  /**
+   * Registrar envio para controle de duplicação
+   */
+  async logSend(channelId, eventType, data) {
+    try {
+      const entityId = data.id || data.product_id || data.coupon_id;
+      if (!entityId) return;
+
+      const BotSendLog = (await import('../../models/BotSendLog.js')).default;
+      await BotSendLog.create({
+        channel_id: channelId,
+        entity_type: eventType === 'promotion_new' ? 'product' : 'coupon',
+        entity_id: entityId
+      });
+    } catch (error) {
+      logger.warn(`⚠️ Erro ao registrar envio: ${error.message}`);
+      // Não falhar o envio por causa de erro no log
     }
   }
 
@@ -277,26 +420,49 @@ class NotificationDispatcher {
   /**
    * Enviar mensagem com imagem para Telegram
    */
-  async sendToTelegramWithImage(message, imagePath, eventType = 'general') {
+  async sendToTelegramWithImage(message, imagePath, eventType = 'general', data = null) {
     try {
       logger.info(`📤 [NotificationDispatcher] Enviando imagem para Telegram`);
       logger.info(`   imagePath: ${imagePath}`);
       logger.info(`   message length: ${message?.length || 0}`);
       logger.info(`   eventType: ${eventType}`);
       
-      const channels = await BotChannel.findActive('telegram');
+      const allChannels = await BotChannel.findActive('telegram');
       
-      if (!channels || channels.length === 0) {
+      if (!allChannels || allChannels.length === 0) {
         logger.warn('⚠️ Nenhum canal Telegram ativo encontrado');
         return { success: false, sent: 0, total: 0 };
       }
 
-      logger.info(`   Canais encontrados: ${channels.length}`);
+      // Filtrar canais usando segmentação inteligente (se data for fornecido)
+      const channels = data 
+        ? await this.filterChannelsBySegmentation(allChannels, eventType, { ...data, id: data.product_id || data.coupon_id || data.id })
+        : allChannels;
+
+      if (channels.length === 0) {
+        logger.info(`⏸️ Nenhum canal Telegram passou nos filtros de segmentação`);
+        return { success: false, sent: 0, total: 0, filtered: allChannels.length };
+      }
+
+      logger.info(`   Canais encontrados: ${channels.length}/${allChannels.length} (${allChannels.length - channels.length} filtrados)`);
 
       let sent = 0;
       const results = [];
 
       for (const channel of channels) {
+        // Verificar duplicação antes de enviar
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id });
+        if (isDuplicate) {
+          logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
+          results.push({
+            channelId: channel.id,
+            chatId: channel.identifier,
+            success: false,
+            skipped: true,
+            reason: 'Duplicado (enviado recentemente)'
+          });
+          continue;
+        }
         try {
           logger.info(`   Enviando para canal ${channel.id} (chat: ${channel.identifier})`);
           const parseMode = await this.getTelegramParseMode();
@@ -338,6 +504,11 @@ class NotificationDispatcher {
             success: true,
             logId: log?.id || null
           });
+
+          // Registrar envio para controle de duplicação (se data for fornecido)
+          if (data) {
+            await this.logSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id });
+          }
 
           logger.info(`✅ Mensagem com imagem Telegram enviada para canal ${channel.id} (chat: ${channel.identifier})`);
 

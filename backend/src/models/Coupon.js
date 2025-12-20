@@ -28,7 +28,10 @@ class Coupon {
       origem = null,
       channel_origin = null,
       message_id = null,
-      message_hash = null
+      message_hash = null,
+      confidence_score = null,
+      ai_decision_reason = null,
+      ai_edit_history = null
     } = couponData;
 
     // Preparar dados para inserção
@@ -54,7 +57,10 @@ class Coupon {
       origem: origem || null,
       channel_origin: channel_origin || null,
       message_id: message_id || null,
-      message_hash: message_hash || null
+      message_hash: message_hash || null,
+      confidence_score: confidence_score !== null && confidence_score !== undefined ? confidence_score : null,
+      ai_decision_reason: ai_decision_reason || null,
+      ai_edit_history: ai_edit_history || null
     };
 
     // Adicionar campos opcionais se fornecidos

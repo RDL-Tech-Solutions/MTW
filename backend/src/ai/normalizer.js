@@ -23,7 +23,8 @@ class Normalizer {
         valid_until: this.normalizeExpirationDate(extraction.expiration_date),
         usage_limit: this.normalizeUsageLimit(extraction.usage_limit),
         is_valid_coupon: extraction.is_valid_coupon === true,
-        confidence: extraction.confidence || 0.0
+        confidence: extraction.confidence || 0.0,
+        confidence_score: extraction.confidence || 0.0 // Alias para compatibilidade
       };
 
       // Normalizar desconto

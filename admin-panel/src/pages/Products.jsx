@@ -834,6 +834,7 @@ export default function Products() {
                     <TableHead>Plataforma</TableHead>
                     <TableHead>Preço</TableHead>
                     <TableHead>Desconto</TableHead>
+                    <TableHead>Score IA</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -865,11 +866,38 @@ export default function Products() {
                               />
                             )}
                             <div>
-                              <div className="font-medium">{product.name}</div>
+                              <div className="font-medium">
+                                {product.ai_optimized_title || product.name}
+                                {product.ai_optimized_title && (
+                                  <Badge variant="outline" className="ml-2 text-xs bg-purple-50 text-purple-700">
+                                    <Brain className="h-3 w-3 inline mr-1" />
+                                    IA
+                                  </Badge>
+                                )}
+                              </div>
+                              {product.ai_optimized_title && (
+                                <div className="text-xs text-muted-foreground line-through">
+                                  {product.name}
+                                </div>
+                              )}
                               {product.description && (
                                 <div className="text-sm text-muted-foreground line-clamp-1">
-                                  {product.description}
+                                  {product.ai_generated_description || product.description}
                                 </div>
+                              )}
+                              {product.offer_priority && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`mt-1 text-xs ${
+                                    product.offer_priority === 'high' ? 'bg-red-100 text-red-800' :
+                                    product.offer_priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}
+                                >
+                                  {product.offer_priority === 'high' ? '🔥 Alta' :
+                                   product.offer_priority === 'medium' ? '⚡ Média' :
+                                   '📌 Baixa'}
+                                </Badge>
                               )}
                             </div>
                           </div>
@@ -929,6 +957,36 @@ export default function Products() {
                           {product.discount_percentage > 0 && (
                             <Badge variant="success">
                               -{product.discount_percentage}%
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {product.offer_score !== null && product.offer_score !== undefined ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full ${
+                                      product.offer_score >= 70
+                                        ? 'bg-green-500'
+                                        : product.offer_score >= 50
+                                        ? 'bg-yellow-500'
+                                        : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${product.offer_score}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {product.offer_score.toFixed(0)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          )}
+                          {product.is_featured_offer && (
+                            <Badge variant="default" className="mt-1 text-xs bg-yellow-500 hover:bg-yellow-600">
+                              ⭐ Oferta do Dia
                             </Badge>
                           )}
                         </TableCell>

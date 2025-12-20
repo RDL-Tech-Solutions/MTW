@@ -17,6 +17,13 @@ backend/
 │   ├── routes/          # Rotas da API
 │   ├── middleware/      # Middlewares (Auth, Validation, etc)
 │   ├── services/        # Serviços de negócio
+│   ├── ai/              # 🧠 Sistema de IA
+│   │   ├── openrouterClient.js      # Cliente OpenRouter
+│   │   ├── couponAnalyzer.js        # Analisador de cupons
+│   │   ├── confidenceValidator.js   # Validador de confiança
+│   │   ├── productEditor.js         # Editor de produtos
+│   │   ├── advancedTemplateGenerator.js  # Gerador de templates IA
+│   │   └── ...                      # Outros serviços de IA
 │   ├── cron/            # Jobs agendados
 │   ├── utils/           # Utilitários
 │   └── server.js        # Entry point
@@ -43,6 +50,7 @@ backend/
 - `POST /api/coupons` - Criar cupom (admin)
 - `PUT /api/coupons/:id` - Atualizar cupom (admin)
 - `DELETE /api/coupons/:id` - Deletar cupom (admin)
+- `POST /api/coupons/:id/force-publish` - Forçar publicação de cupom pendente (admin)
 
 ### Categorias
 - `GET /api/categories` - Listar categorias
@@ -67,6 +75,47 @@ backend/
 - `POST /api/telegram-collector/listener/start` - Iniciar listener
 
 Veja [API Reference](../05-api-reference/README.md) para documentação completa.
+
+## 🧠 Sistema de IA
+
+O backend inclui um sistema completo de Inteligência Artificial para análise, edição e otimização de produtos e cupons.
+
+### Serviços de IA Disponíveis
+
+#### Análise de Cupons
+- **couponAnalyzer.js**: Analisa mensagens do Telegram e extrai detalhes de cupons
+- **confidenceValidator.js**: Valida o score de confiança da análise (0-1)
+- **couponQualityAnalyzer.js**: Avalia qualidade de cupons
+- **couponIntelligentFilter.js**: Filtra cupons por qualidade
+
+#### Edição de Produtos
+- **productEditor.js**: Edita produtos com IA (títulos, descrições, categorias)
+- **productAnalyzer.js**: Analisa qualidade e relevância de produtos
+- **descriptionOptimizer.js**: Otimiza descrições de produtos
+- **keywordOptimizer.js**: Otimiza palavras-chave
+
+#### Score e Qualidade
+- **qualityScorer.js**: Calcula score de qualidade de ofertas
+- **duplicateDetector.js**: Detecta produtos duplicados
+- **categoryDetector.js**: Detecta categoria automaticamente
+
+#### Templates
+- **advancedTemplateGenerator.js**: Gera templates dinamicamente com IA
+- **templateGenerator.js**: Gera templates básicos
+
+#### Cliente OpenRouter
+- **openrouterClient.js**: Cliente para comunicação com OpenRouter API
+- Suporte a múltiplos modelos (gratuitos e pagos)
+- Modo JSON e modo texto
+- Rate limiting e fallback automático
+
+### Configuração
+
+Configure a IA em `/settings` no admin panel:
+- API Key do OpenRouter
+- Modelo selecionado
+- Threshold de confiança (padrão: 0.90)
+- Habilitar/desabilitar funcionalidades
 
 ## 🔄 Cron Jobs
 

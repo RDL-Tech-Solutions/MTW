@@ -20,7 +20,8 @@ class ConfidenceValidator {
         };
       }
 
-      // Verificar confiança mínima (0.75)
+      // Verificar confiança mínima (configurável, padrão 0.75)
+      // Para publicação automática, usamos 0.90 (definido em saveCoupon)
       const minConfidence = 0.75;
       if (extraction.confidence < minConfidence) {
         logger.debug(`❌ Confiança insuficiente: ${extraction.confidence} < ${minConfidence}`);
@@ -70,7 +71,8 @@ class ConfidenceValidator {
       
       return {
         valid: true,
-        reason: 'Extração validada com sucesso'
+        reason: 'Extração validada com sucesso',
+        confidence_score: extraction.confidence
       };
 
     } catch (error) {

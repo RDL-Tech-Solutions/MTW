@@ -4,6 +4,7 @@
 import axios from 'axios';
 import logger from '../config/logger.js';
 import AppSettings from '../models/AppSettings.js';
+import { getModelById } from '../config/openrouterModels.js';
 
 class OpenRouterClient {
   constructor() {
@@ -121,30 +122,36 @@ class OpenRouterClient {
       }
 
       // Preparar payload da requisição
+      // Usar system message para reforçar instruções de JSON (se não estiver em modo texto)
+      const messages = [];
+      if (!options.forceTextMode) {
+        // Adicionar system message para reforçar que deve retornar apenas JSON
+        messages.push({
+          role: 'system',
+          content: 'Você é um sistema automatizado que retorna APENAS objetos JSON válidos. NUNCA responda com texto livre. NUNCA explique. NUNCA adicione comentários. Retorne SOMENTE o JSON solicitado.'
+        });
+      }
+      messages.push({
+        role: 'user',
+        content: prompt
+      });
+      
       const requestPayload = {
         model: config.model,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
+        messages: messages,
         temperature: 0.3, // Baixa temperatura para respostas mais determinísticas
-        max_tokens: options.forceTextMode ? 1000 : 800 // Aumentado para evitar truncamento de JSON
+        max_tokens: options.forceTextMode ? 2000 : 1500 // Aumentado para evitar truncamento (2000 para textos longos, 1500 para JSON)
       };
 
       // Adicionar response_format apenas se o modelo suportar e não estiver em modo texto
-      // Modelos gratuitos podem não suportar, então vamos tentar sem primeiro
+      // Verificar na lista de modelos se o modelo atual suporta JSON
       if (!options.forceTextMode) {
-        const modelsWithJsonSupport = [
-          'mistralai/mixtral-8x7b-instruct',
-          'anthropic/claude-3-haiku',
-          'openai/gpt-3.5-turbo',
-          'openai/gpt-4'
-        ];
-        
-        if (modelsWithJsonSupport.some(m => config.model.includes(m))) {
+        const modelInfo = getModelById(config.model);
+        if (modelInfo && modelInfo.supportsJson) {
+          logger.debug(`   ✅ Modelo ${config.model} suporta JSON mode, ativando response_format`);
           requestPayload.response_format = { type: 'json_object' };
+        } else {
+          logger.debug(`   ⚠️ Modelo ${config.model} não suporta JSON mode ou não está na lista, tentando sem response_format`);
         }
       }
 
@@ -204,6 +211,26 @@ class OpenRouterClient {
       // Modo JSON: tentar parsear JSON
       let parsedResponse;
       try {
+        // Verificar se o conteúdo parece ser texto livre ao invés de JSON
+        const trimmedContent = content.trim();
+        if (!trimmedContent.startsWith('{') && !trimmedContent.startsWith('[')) {
+          // Se não começa com { ou [, provavelmente é texto livre
+          // Tentar remover tokens especiais e verificar novamente
+          const cleanedForCheck = trimmedContent
+            .replace(/^<s>\s*/g, '')
+            .replace(/^\[OUT\]\s*/g, '')
+            .replace(/<\|.*?\|>/g, '')
+            .trim();
+          
+          if (!cleanedForCheck.startsWith('{') && !cleanedForCheck.startsWith('[')) {
+            logger.error(`❌ Resposta da IA não é JSON - parece ser texto livre`);
+            logger.error(`   Conteúdo: ${cleanedForCheck.substring(0, 200)}`);
+            logger.error(`   💡 O modelo não seguiu as instruções de retornar apenas JSON.`);
+            logger.error(`   💡 Tente usar um modelo diferente ou verificar as configurações do prompt.`);
+            throw new Error(`Resposta da IA não é JSON válido. O modelo retornou texto livre ao invés de JSON. Conteúdo: ${cleanedForCheck.substring(0, 100)}...`);
+          }
+        }
+        
         // Primeiro, tentar extrair JSON diretamente (mais robusto)
         // Procurar por padrão { ... } no conteúdo (incluindo quebras de linha)
         const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -241,11 +268,38 @@ class OpenRouterClient {
           
           if (firstBrace === -1) {
             logger.error(`   ❌ Nenhum caractere '{' encontrado no conteúdo`);
+            
+            // Limpar tokens especiais para verificar melhor
+            const contentTrimmed = content
+              .replace(/^<s>\s*/g, '')
+              .replace(/^\[OUT\]\s*/g, '')
+              .replace(/<\|.*?\|>/g, '')
+              .trim();
+            
+            // Se o conteúdo é apenas markdown vazio, é um erro de truncamento
+            if (contentTrimmed === '```' || (contentTrimmed.startsWith('```') && contentTrimmed.length < 20)) {
+              throw new Error(`Resposta da IA está incompleta (apenas início de markdown). A resposta foi truncada antes de completar. Tente aumentar max_tokens ou usar um modelo diferente.`);
+            }
+            
+            // Se não começa com { ou [, é texto livre (modelo não seguiu instruções)
+            if (!contentTrimmed.startsWith('{') && !contentTrimmed.startsWith('[')) {
+              logger.error(`   ⚠️ Resposta parece ser texto livre ao invés de JSON`);
+              logger.error(`   💡 O modelo não seguiu as instruções de retornar apenas JSON.`);
+              logger.error(`   💡 Tente usar um modelo diferente ou verificar as configurações do prompt.`);
+              throw new Error(`Resposta da IA não é JSON válido. O modelo retornou texto livre ao invés de JSON. Conteúdo: ${contentTrimmed.substring(0, 100)}...`);
+            }
+            
             throw new Error(`Resposta da IA não contém JSON válido. Conteúdo: ${content.substring(0, 100)}...`);
           }
           
           if (lastBrace === -1 || lastBrace <= firstBrace) {
             logger.error(`   ❌ JSON incompleto ou malformado (firstBrace: ${firstBrace}, lastBrace: ${lastBrace})`);
+            
+            // Se encontrou { mas não }, a resposta foi truncada
+            if (finishReason === 'length') {
+              throw new Error(`Resposta da IA foi truncada (finish_reason: length). JSON incompleto. Aumente max_tokens na configuração.`);
+            }
+            
             throw new Error(`Resposta da IA contém JSON incompleto ou malformado. Possível truncamento.`);
           }
           
@@ -257,11 +311,18 @@ class OpenRouterClient {
         } catch (secondParseError) {
           logger.error(`❌ Falha na segunda tentativa de parsing: ${secondParseError.message}`);
           logger.error(`   Conteúdo completo (para debug): ${content}`);
+          logger.error(`   Finish reason: ${finishReason}`);
           
           // Se o conteúdo está vazio ou muito curto, pode ser que a resposta foi truncada
           // ou o modelo não retornou nada útil
           if (content.length < 10) {
             logger.error(`   ⚠️ Conteúdo extremamente curto (${content.length} chars). Possível erro na API ou modelo.`);
+            logger.error(`   💡 Dica: Verifique se o modelo está funcionando corretamente ou se há problemas de conectividade.`);
+          }
+          
+          // Se finish_reason é 'length', a resposta foi truncada
+          if (finishReason === 'length') {
+            throw new Error(`Resposta da IA foi truncada (finish_reason: length). Aumente max_tokens na configuração do OpenRouter. Conteúdo recebido: ${content.substring(0, 200)}...`);
           }
           
           throw new Error(`Resposta da IA não é um JSON válido: ${parseError.message}. Conteúdo recebido: ${content.substring(0, 200)}...`);

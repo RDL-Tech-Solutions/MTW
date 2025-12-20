@@ -71,6 +71,14 @@ class TemplateRenderer {
             .replace(/<br\s*\/?>/gi, '\n')
             // Corrigir tildes múltiplos incorretos (~~~~ → ~~)
             .replace(/~{3,}/g, '~~')
+            // Corrigir padrões mal formatados como "(de ~~ R$ 44,88)" - remover "(de" e manter apenas o preço formatado
+            .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
+            .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+            // Remover texto "mensagem truncada" que a IA pode adicionar
+            .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
+            .replace(/\s*\(mensagem\s+truncada\)/gi, '')
+            .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
+            .replace(/\s*\(truncada\)/gi, '')
             // Restaurar código protegido
             .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
           
@@ -196,6 +204,20 @@ class TemplateRenderer {
       
       logger.debug(`📋 Template original (primeiros 200 chars): ${message.substring(0, 200)}...`);
       logger.debug(`📋 Template original tem ${(message.match(/\n/g) || []).length} quebras de linha`);
+      
+      // IMPORTANTE: Corrigir padrões mal formatados ANTES de substituir variáveis (especialmente para IA ADVANCED)
+      // Corrigir "(de ~~ R$ 44,88)" que pode ser gerado pela IA
+      if (templateMode === 'ai_advanced') {
+        message = message
+          // Corrigir padrão "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)" - remover "(de" e manter apenas o preço
+          .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
+          .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+          // Remover texto "mensagem truncada" que a IA pode adicionar
+          .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
+          .replace(/\s*\(mensagem\s+truncada\)/gi, '')
+          .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
+          .replace(/\s*\(truncada\)/gi, '');
+      }
       
       // Primeiro, substituir todas as variáveis (mesmo as vazias)
       // IMPORTANTE: Preservar quebras de linha durante substituição
@@ -439,6 +461,18 @@ class TemplateRenderer {
       // IMPORTANTE: Preservar o template exatamente como configurado no painel admin
       // O template já deve estar no formato correto quando salvo no painel
       // Apenas fazer validação mínima necessária, sem alterar a estrutura
+      
+      // IMPORTANTE: Corrigir padrões mal formatados de preço antigo como "(de ~~ R$ 44,88)"
+      // Isso pode acontecer quando a IA gera "(de {old_price})" e a variável já vem com tildes
+      message = message
+        // Corrigir padrão "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)" - remover "(de" e manter apenas o preço
+        .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
+        .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+        // Remover texto "mensagem truncada" que a IA pode adicionar
+        .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
+        .replace(/\s*\(mensagem\s+truncada\)/gi, '')
+        .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
+        .replace(/\s*\(truncada\)/gi, '');
       
       // IMPORTANTE: Limpar tildes múltiplos incorretos antes de processar
       // Corrigir ~~~~ ou mais tildes para ~~ (strikethrough correto)
@@ -1144,7 +1178,8 @@ class TemplateRenderer {
         });
         
         // Padrão 2: "(de  ~~R$ 252,00~~)" - com espaço extra entre "de" e "~~"
-        message = message.replace(/(\(de\s+)(\s*~~)([^~]+?)(~~\))/g, (match, prefix, spacesAndTildes, price, suffix) => {
+        // Também corrigir "(de ~~ R$ 44,88)" (com espaço entre ~~ e preço)
+        message = message.replace(/(\(de\s+)(\s*~~\s*)([^~]+?)(~~\))/g, (match, prefix, spacesAndTildes, price, suffix) => {
           if (price.includes('<') || price.includes('>')) {
             return match;
           }

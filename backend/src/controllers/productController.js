@@ -396,7 +396,7 @@ class ProductController {
         fullProduct.price_with_coupon = finalPrice;
       }
 
-      // Publicar e notificar
+      // Publicar e notificar (agora com edição de IA, score e detecção de duplicados)
       const publishResult = await publishService.publishAll(fullProduct);
 
       // Atualizar status para 'published'

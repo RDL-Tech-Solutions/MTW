@@ -15,6 +15,7 @@ API REST completa construída com Node.js e Express.
 - Sistema de bots
 - Analytics
 - Cron jobs
+- **🧠 Sistema de IA completo** (análise, edição, otimização)
 
 ## 👨‍💼 Painel Administrativo
 
@@ -63,6 +64,20 @@ Sistema de sincronização automática de produtos.
 - Sincronização automática
 - Múltiplas plataformas
 - Logs e histórico
+
+## 🧠 Sistema de IA
+
+Sistema completo de Inteligência Artificial para análise, edição e otimização.
+
+**Documentação**: [Sistema de IA](./ai-system/README.md)
+
+**Principais funcionalidades:**
+- Análise inteligente de cupons com score de confiança
+- Editor de produtos com otimização automática
+- Score de qualidade de ofertas
+- Detecção automática de duplicados
+- Segmentação inteligente de bots
+- Templates IA ADVANCED
 
 ---
 

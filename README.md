@@ -148,6 +148,14 @@ docs/
 - ✅ **Logs e estatísticas** - Monitoramento completo
 - ✅ **Telegram Collector** - Captura automática de cupons de canais públicos
 - ✅ **Templates de mensagem** - Personalização de notificações
+- ✅ **🧠 Sistema de IA Completo**:
+  - Análise inteligente de cupons com score de confiança
+  - Editor de produtos com otimização automática de títulos e descrições
+  - Score de qualidade de ofertas baseado em múltiplos fatores
+  - Detecção automática de produtos duplicados
+  - Segmentação inteligente de bots por categoria, horário e score
+  - Templates IA ADVANCED - Geração dinâmica de mensagens promocionais
+  - Suporte a múltiplos modelos OpenRouter (gratuitos e pagos)
 
 ## 🛠️ Stack Tecnológico
 
@@ -236,6 +244,23 @@ docs/
 - Apple App Store
 
 ## 📝 Changelog
+
+### Versão 2.1.0 (Dezembro 2024)
+- ✅ **Sistema de IA Completo**:
+  - Análise inteligente de cupons com score de confiança (0-1)
+  - Publicação automática quando confidence_score >= 0.90
+  - Editor de produtos com otimização automática de títulos e descrições
+  - Score de qualidade de ofertas (discount, price history, popularity, CTR, AI confidence)
+  - Detecção automática de produtos duplicados com normalização de nomes
+  - Segmentação inteligente de bots (categoria, horário, score mínimo, anti-duplicação)
+  - Templates IA ADVANCED - Geração dinâmica de mensagens promocionais
+  - Suporte a múltiplos modelos OpenRouter (gratuitos e pagos)
+  - Logs estruturados de decisões da IA para observabilidade
+- ✅ Melhorias no painel admin:
+  - Visualização de confidence_score e score de qualidade
+  - Histórico de edições da IA
+  - Botão "Forçar Publicação" para cupons pendentes
+  - Seletor de modelos OpenRouter com informações detalhadas
 
 ### Versão 2.0.0 (Dezembro 2024)
 - ✅ Migração completa do Telegram Collector para Node.js (sem Python)
