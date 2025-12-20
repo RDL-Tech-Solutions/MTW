@@ -49,23 +49,33 @@ class ProductController {
   // Criar produto (admin)
   static async create(req, res, next) {
     try {
-      // Garantir que produtos criados manualmente sejam salvos como 'pending'
-      const productData = {
-        ...req.body,
-        status: 'pending' // Sempre criar como pendente para revisão manual
-      };
-      
-      const product = await Product.create(productData);
+      // Criar produto (status padrão é 'pending' no modelo)
+      const product = await Product.create(req.body);
       await cacheDelByPattern('products:*');
       await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
-      logger.info(`📦 Produto criado (pendente): ${product.id} - ${product.name}`);
-      logger.info(`   Status: ${product.status} (aguardando aprovação manual)`);
+      logger.info(`Produto criado: ${product.id}`);
 
-      // NÃO enviar notificação automática - produto fica pendente para aprovação manual
-      // A publicação só acontece quando o produto for aprovado em /pending-products
+      // Buscar dados completos do produto para publicação
+      const fullProduct = await Product.findById(product.id);
 
-      res.status(201).json(successResponse(product, 'Produto criado com sucesso (pendente de aprovação)'));
+      // Publicar e notificar automaticamente (como era antes)
+      const publishResult = await publishService.publishAll(fullProduct);
+
+      // Atualizar status para 'published' após publicação bem-sucedida
+      if (publishResult.success) {
+        await Product.update(product.id, { status: 'published' });
+        logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
+      } else {
+        // Se a publicação falhou, manter como 'approved' (aprovado mas não publicado)
+        await Product.update(product.id, { status: 'approved' });
+        logger.warn(`⚠️ Produto aprovado mas publicação falhou: ${product.name}`);
+      }
+
+      // Buscar produto atualizado para retornar
+      const updatedProduct = await Product.findById(product.id);
+
+      res.status(201).json(successResponse(updatedProduct, 'Produto criado e publicado com sucesso'));
     } catch (error) {
       next(error);
     }
