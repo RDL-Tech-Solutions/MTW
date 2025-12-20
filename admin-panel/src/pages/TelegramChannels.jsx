@@ -25,11 +25,13 @@ export default function TelegramChannels() {
   const [channelForm, setChannelForm] = useState({
     name: '',
     username: '',
+    channel_id: '',
     is_active: true,
     capture_schedule_start: '',
     capture_schedule_end: '',
     capture_mode: 'new_only',
-    platform_filter: 'all'
+    platform_filter: 'all',
+    example_messages: []
   });
   
   // Dialog de configuração de captura
@@ -430,20 +432,24 @@ export default function TelegramChannels() {
   const handleSaveChannel = async (e) => {
     e.preventDefault();
     try {
-      if (!channelForm.name || !channelForm.username) {
+      if (!channelForm.name || (!channelForm.username && !channelForm.channel_id)) {
         toast({
           title: "Erro",
-          description: "Nome e username são obrigatórios",
+          description: "Nome e username ou ID do canal são obrigatórios",
           variant: "destructive"
         });
         return;
       }
 
       // Converter strings vazias para null nos campos TIME
+      // Filtrar mensagens de exemplo vazias
       const formToSave = {
         ...channelForm,
         capture_schedule_start: channelForm.capture_schedule_start === '' ? null : channelForm.capture_schedule_start,
-        capture_schedule_end: channelForm.capture_schedule_end === '' ? null : channelForm.capture_schedule_end
+        capture_schedule_end: channelForm.capture_schedule_end === '' ? null : channelForm.capture_schedule_end,
+        example_messages: Array.isArray(channelForm.example_messages) 
+          ? channelForm.example_messages.filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
+          : []
       };
 
       if (editingChannel) {
@@ -466,12 +472,14 @@ export default function TelegramChannels() {
       setEditingChannel(null);
       setChannelForm({ 
         name: '', 
-        username: '', 
+        username: '',
+        channel_id: '',
         is_active: true,
         capture_schedule_start: '',
         capture_schedule_end: '',
         capture_mode: 'new_only',
-        platform_filter: 'all'
+        platform_filter: 'all',
+        example_messages: []
       });
       loadChannels();
     } catch (error) {
@@ -507,12 +515,14 @@ export default function TelegramChannels() {
     setEditingChannel(channel);
     setChannelForm({
       name: channel.name,
-      username: channel.username,
+      username: channel.username || '',
+      channel_id: channel.channel_id || '',
       is_active: channel.is_active,
       capture_schedule_start: channel.capture_schedule_start || '',
       capture_schedule_end: channel.capture_schedule_end || '',
       capture_mode: channel.capture_mode || 'new_only',
-      platform_filter: channel.platform_filter || 'all'
+      platform_filter: channel.platform_filter || 'all',
+      example_messages: Array.isArray(channel.example_messages) ? channel.example_messages : []
     });
     setIsDialogOpen(true);
   };
@@ -619,17 +629,17 @@ export default function TelegramChannels() {
             <DialogTrigger asChild>
               <Button onClick={() => {
                 setEditingChannel(null);
-                setChannelForm({ name: '', username: '', is_active: true });
+                setChannelForm({ name: '', username: '', channel_id: '', is_active: true });
               }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Canal
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
                 <DialogDescription>
-                  Adicione um canal público do Telegram para monitoramento
+                  Adicione um canal do Telegram para monitoramento (público por username ou privado por ID)
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSaveChannel} className="space-y-4">
@@ -645,16 +655,30 @@ export default function TelegramChannels() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="username">Username do Canal *</Label>
+                  <Label htmlFor="username">Username do Canal (Público)</Label>
                   <Input
                     id="username"
                     value={channelForm.username}
                     onChange={(e) => setChannelForm({...channelForm, username: e.target.value})}
                     placeholder="@canaldecupons ou canaldecupons"
-                    required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Digite o username do canal (com ou sem @)
+                    Para canais públicos: digite o username (com ou sem @)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="channel_id">ID do Canal (Privado) *</Label>
+                  <Input
+                    id="channel_id"
+                    value={channelForm.channel_id}
+                    onChange={(e) => setChannelForm({...channelForm, channel_id: e.target.value})}
+                    placeholder="-1001234567890"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Para canais privados: digite o ID do canal (formato: -1001234567890). 
+                    <br />
+                    <strong>Obrigatório se não informar username.</strong>
                   </p>
                 </div>
 
@@ -739,6 +763,80 @@ export default function TelegramChannels() {
                   </div>
                 </div>
 
+                <div className="border-t pt-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold text-sm">Mensagens de Exemplo (IA)</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Adicione mensagens reais que este canal costuma enviar. A IA usará essas mensagens como referência para melhorar a captura de cupons, aprendendo os padrões específicos de formatação deste canal.
+                  </p>
+                  {channelForm.example_messages.length > 0 && (
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded text-xs text-blue-800 dark:text-blue-200">
+                      <strong>💡 Dica:</strong> Quanto mais exemplos você adicionar, melhor a IA entenderá o formato deste canal.
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2">
+                    {channelForm.example_messages.length === 0 ? (
+                      <div className="p-3 border-2 border-dashed rounded-lg text-center text-muted-foreground">
+                        <Brain className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                        <p className="text-sm">Nenhuma mensagem de exemplo adicionada</p>
+                        <p className="text-xs mt-1">Adicione mensagens reais do canal para melhorar a precisão da IA</p>
+                      </div>
+                    ) : (
+                      channelForm.example_messages.map((msg, index) => (
+                        <div key={index} className="flex gap-2 items-start">
+                          <div className="flex-1">
+                            <textarea
+                              value={msg}
+                              onChange={(e) => {
+                                const newMessages = [...channelForm.example_messages];
+                                newMessages[index] = e.target.value;
+                                setChannelForm({...channelForm, example_messages: newMessages});
+                              }}
+                              className="w-full px-3 py-2 border rounded-md bg-background text-sm resize-y"
+                              rows="3"
+                              placeholder="Cole aqui uma mensagem de exemplo do canal..."
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Exemplo {index + 1} de {channelForm.example_messages.length}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const newMessages = channelForm.example_messages.filter((_, i) => i !== index);
+                              setChannelForm({...channelForm, example_messages: newMessages});
+                            }}
+                            className="mt-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                    
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setChannelForm({
+                          ...channelForm,
+                          example_messages: [...channelForm.example_messages, '']
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar Mensagem de Exemplo
+                    </Button>
+                  </div>
+                </div>
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
@@ -751,7 +849,7 @@ export default function TelegramChannels() {
           
           {/* Dialog de Configuração de Captura */}
           <Dialog open={captureConfigDialog} onOpenChange={setCaptureConfigDialog}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Configurações de Captura</DialogTitle>
                 <DialogDescription>
@@ -759,7 +857,7 @@ export default function TelegramChannels() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSaveCaptureConfig} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="config_capture_schedule_start">Horário Início</Label>
                     <Input
@@ -1391,15 +1489,23 @@ export default function TelegramChannels() {
                   <TableRow key={channel.id}>
                     <TableCell className="font-medium">{channel.name}</TableCell>
                     <TableCell>
-                      <a
-                        href={`https://t.me/${channel.username}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline flex items-center gap-1"
-                      >
-                        @{channel.username}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                      {channel.username ? (
+                        <a
+                          href={`https://t.me/${channel.username}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 hover:underline flex items-center gap-1"
+                        >
+                          @{channel.username}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : channel.channel_id ? (
+                        <span className="text-muted-foreground text-xs font-mono">
+                          ID: {channel.channel_id}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={channel.is_active ? 'success' : 'destructive'}>
@@ -1424,6 +1530,12 @@ export default function TelegramChannels() {
                           <span className="text-muted-foreground">
                             {channel.capture_schedule_start} - {channel.capture_schedule_end}
                           </span>
+                        )}
+                        {channel.example_messages && Array.isArray(channel.example_messages) && channel.example_messages.length > 0 && (
+                          <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                            <Brain className="inline mr-1 h-3 w-3" />
+                            {channel.example_messages.length} exemplo{channel.example_messages.length > 1 ? 's' : ''} IA
+                          </Badge>
                         )}
                       </div>
                     </TableCell>

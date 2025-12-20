@@ -180,3 +180,5 @@ ON CONFLICT DO NOTHING;
 --
 -- Templates são escolhidos automaticamente baseado em product.coupon_id
 
+
+

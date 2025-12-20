@@ -131,3 +131,5 @@ O template é **automático** - não requer configuração adicional. O sistema 
 3. **Fallback**: Se não houver template customizado, usa o template padrão específico para Shopee
 
 
+
+

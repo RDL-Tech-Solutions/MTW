@@ -202,3 +202,5 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
 export default new CouponQualityAnalyzer();
 
 
+
+

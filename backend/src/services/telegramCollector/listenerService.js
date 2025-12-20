@@ -775,7 +775,12 @@ class TelegramListenerService {
       if (aiEnabled && (!multipleCoupons || multipleCoupons.length === 0)) {
         try {
           logger.info(`   🤖 Tentando extrair cupom via IA...`);
-          const aiExtraction = await couponAnalyzer.analyze(text);
+          // Obter mensagens de exemplo do canal se disponíveis
+          const exampleMessages = channel.example_messages && Array.isArray(channel.example_messages) 
+            ? channel.example_messages.filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
+            : [];
+          
+          const aiExtraction = await couponAnalyzer.analyze(text, exampleMessages);
           
           if (aiExtraction && aiExtraction.code) {
             logger.info(`   ✅ IA extraiu cupom: ${aiExtraction.code} - ${aiExtraction.platform}`);
@@ -1555,10 +1560,10 @@ class TelegramListenerService {
 
       if (this.monitoredChannels.size === 0) {
         logger.warn('⚠️ Nenhum canal ativo encontrado após resolução');
-        logger.warn('   Verifique se os canais estão ativos e têm username válido');
+        logger.warn('   Verifique se os canais estão ativos e têm username (público) ou channel_id (privado) válido');
         // Não marcar como running se não há canais
         this.isRunning = false;
-        throw new Error('Nenhum canal ativo encontrado. Adicione canais e certifique-se de que têm username válido.');
+        throw new Error('Nenhum canal ativo encontrado. Adicione canais e certifique-se de que têm username (público) ou channel_id (privado) válido.');
       }
 
       // IMPORTANTE: Garantir que estamos inscritos nos canais para receber mensagens

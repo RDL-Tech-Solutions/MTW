@@ -325,3 +325,5 @@ Retorne SOMENTE o JSON.`;
 export default new CouponIntelligentFilter();
 
 
+
+

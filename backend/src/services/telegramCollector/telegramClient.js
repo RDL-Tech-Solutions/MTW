@@ -1121,15 +1121,36 @@ class TelegramClientService {
           setTimeout(() => reject(new Error('Timeout ao conectar')), 10000);
         });
         
-        await Promise.race([connectPromise, timeoutPromise]);
+        try {
+          await Promise.race([connectPromise, timeoutPromise]);
+        } catch (connectError) {
+          // Tratar erros de conexão (incluindo 502 Bad Gateway)
+          const errorMessage = connectError.message || String(connectError);
+          if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway') || errorMessage.includes('<html>')) {
+            logger.warn(`⚠️ Erro de rede ao conectar (502 Bad Gateway). Problema temporário com servidores do Telegram.`);
+            throw new Error('Erro de rede temporário (502 Bad Gateway)');
+          }
+          throw connectError;
+        }
         
         // Timeout de 5 segundos para verificação de autorização
-        const checkAuthPromise = this.client.checkAuthorization();
-        const checkTimeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout ao verificar autorização')), 5000);
-        });
-        
-        const isAuth = await Promise.race([checkAuthPromise, checkTimeoutPromise]);
+        let isAuth = false;
+        try {
+          const checkAuthPromise = this.client.checkAuthorization();
+          const checkTimeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Timeout ao verificar autorização')), 5000);
+          });
+          
+          isAuth = await Promise.race([checkAuthPromise, checkTimeoutPromise]);
+        } catch (checkError) {
+          // Tratar erros de rede/502 especificamente no checkAuthorization
+          const errorMessage = checkError.message || String(checkError);
+          if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway') || errorMessage.includes('<html>')) {
+            logger.warn(`⚠️ Erro de rede ao verificar autorização (502 Bad Gateway). Problema temporário.`);
+            throw new Error('Erro de rede temporário (502 Bad Gateway)');
+          }
+          throw checkError;
+        }
         
         if (isAuth) {
           await TelegramCollectorConfig.setAuthenticated(true);
@@ -1140,6 +1161,45 @@ class TelegramClientService {
         this.lastAuthCheckTime = Date.now();
         
         return isAuth;
+      } catch (authError) {
+        // Tratar erros de rede/502 Bad Gateway especificamente
+        const errorMessage = authError.message || String(authError);
+        const isNetworkError = errorMessage.includes('502') || 
+                              errorMessage.includes('Bad Gateway') ||
+                              errorMessage.includes('<html>') ||
+                              errorMessage.includes('cloudflare') ||
+                              errorMessage.includes('ECONNREFUSED') ||
+                              errorMessage.includes('ETIMEDOUT') ||
+                              errorMessage.includes('ENOTFOUND') ||
+                              errorMessage.includes('Timeout');
+        
+        if (isNetworkError) {
+          logger.warn(`⚠️ Erro de rede ao verificar autenticação: ${errorMessage.substring(0, 100)}`);
+          logger.warn(`   Isso geralmente indica problemas temporários de conexão com os servidores do Telegram.`);
+          logger.warn(`   Usando status em cache ou assumindo que ainda está autenticado.`);
+          
+          // Se temos um resultado em cache recente (menos de 5 minutos), usar ele
+          if (this.lastAuthCheck !== null && (Date.now() - this.lastAuthCheckTime) < 300000) {
+            logger.debug(`   Usando resultado em cache: ${this.lastAuthCheck}`);
+            return this.lastAuthCheck;
+          }
+          
+          // Se não tem cache, assumir que está autenticado se estava marcado como tal no banco
+          // (para evitar desconectar o usuário por problemas temporários de rede)
+          const config = await TelegramCollectorConfig.get();
+          if (config.is_authenticated) {
+            logger.debug(`   Assumindo autenticado baseado no banco de dados (problema de rede temporário)`);
+            return true;
+          }
+          
+          return false;
+        }
+        
+        // Para outros erros, logar e retornar false
+        logger.warn(`⚠️ Erro ao verificar autenticação: ${errorMessage.substring(0, 200)}`);
+        this.lastAuthCheck = false;
+        this.lastAuthCheckTime = Date.now();
+        return false;
       } finally {
         // Só desconectar se o listener não estiver ativo
         // Se o listener estiver rodando, manter a conexão aberta
@@ -1159,7 +1219,32 @@ class TelegramClientService {
         this.isCheckingAuth = false;
       }
     } catch (error) {
-      logger.error(`Erro ao verificar autenticação: ${error.message}`);
+      // Tratar erros de rede/502 especificamente no catch externo também
+      const errorMessage = error.message || String(error);
+      const isNetworkError = errorMessage.includes('502') || 
+                            errorMessage.includes('Bad Gateway') ||
+                            errorMessage.includes('<html>') ||
+                            errorMessage.includes('cloudflare');
+      
+      if (isNetworkError) {
+        logger.warn(`⚠️ Erro de rede ao verificar autenticação (catch externo): ${errorMessage.substring(0, 100)}`);
+        // Usar cache se disponível
+        if (this.lastAuthCheck !== null && (Date.now() - this.lastAuthCheckTime) < 300000) {
+          return this.lastAuthCheck;
+        }
+        // Assumir autenticado se estava no banco (problema temporário)
+        try {
+          const config = await TelegramCollectorConfig.get();
+          if (config.is_authenticated) {
+            return true;
+          }
+        } catch (configError) {
+          // Ignorar erro ao buscar config
+        }
+      } else {
+        logger.error(`Erro ao verificar autenticação: ${errorMessage.substring(0, 200)}`);
+      }
+      
       this.isCheckingAuth = false;
       this.lastAuthCheck = false;
       this.lastAuthCheckTime = Date.now();

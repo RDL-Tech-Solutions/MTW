@@ -13,9 +13,10 @@ class CouponAnalyzer {
   /**
    * Analisar mensagem e extrair dados do cupom
    * @param {string} message - Mensagem bruta capturada do Telegram
+   * @param {Array<string>} exampleMessages - Mensagens de exemplo do canal (opcional)
    * @returns {Promise<Object|null>} - Dados do cupom normalizados ou null se inválido
    */
-  async analyze(message) {
+  async analyze(message, exampleMessages = []) {
     try {
       if (!message || typeof message !== 'string' || message.trim().length < 3) {
         logger.debug(`⚠️ Mensagem muito curta ou vazia para análise`);
@@ -33,9 +34,12 @@ class CouponAnalyzer {
 
       logger.info(`🤖 Iniciando análise de cupom via IA...`);
       logger.debug(`   Mensagem: ${message.substring(0, 100)}...`);
+      if (exampleMessages && exampleMessages.length > 0) {
+        logger.debug(`   Usando ${exampleMessages.length} mensagem(ns) de exemplo do canal`);
+      }
 
-      // Gerar prompt
-      const prompt = couponPrompt.generatePrompt(message);
+      // Gerar prompt com mensagens de exemplo se fornecidas
+      const prompt = couponPrompt.generatePrompt(message, exampleMessages);
 
       // Fazer requisição para OpenRouter
       const rawExtraction = await openrouterClient.makeRequest(prompt);
@@ -74,6 +78,12 @@ class CouponAnalyzer {
       logger.error(`❌ Erro ao analisar cupom: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
       
+      // Se o erro for relacionado a JSON inválido ou resposta vazia, logar mais detalhes
+      if (error.message.includes('JSON') || error.message.includes('vazia') || error.message.includes('truncado')) {
+        logger.error(`   ⚠️ Erro crítico na resposta da IA. Verifique se o modelo está funcionando corretamente.`);
+        logger.error(`   💡 Dica: Tente aumentar max_tokens ou verificar se o modelo suporta JSON mode.`);
+      }
+      
       // Não lançar erro - retornar null para que o sistema continue funcionando
       // mesmo se a IA falhar
       return null;
@@ -104,5 +114,7 @@ class CouponAnalyzer {
 }
 
 export default new CouponAnalyzer();
+
+
 
 

@@ -27,3 +27,5 @@ SET
   template_mode_expired_coupon = 'custom'
 WHERE id = '00000000-0000-0000-0000-000000000001';
 
+
+

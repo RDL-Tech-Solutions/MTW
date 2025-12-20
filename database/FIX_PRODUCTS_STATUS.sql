@@ -126,3 +126,5 @@ BEGIN
     RAISE NOTICE '  - Índice idx_products_status existe: %', index_exists;
 END $$;
 
+
+

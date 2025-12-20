@@ -119,3 +119,5 @@ A implementação técnica está **correta**:
 O problema é com o **AppID/Partner ID** que está sendo rejeitado pela Shopee. Isso indica um problema na **configuração da conta** ou **status da aplicação** na plataforma Shopee, não um problema técnico no código.
 
 
+
+

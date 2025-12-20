@@ -189,3 +189,5 @@ node scripts/test-shopee-graphql.js
 4. Adicionar retry logic para requisições falhadas
 
 
+
+

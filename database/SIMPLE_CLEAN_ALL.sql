@@ -66,3 +66,5 @@ SELECT
     (SELECT COUNT(*) FROM price_history) as historico_precos,
     (SELECT COUNT(*) FROM click_tracking) as rastreamento_cliques;
 
+
+

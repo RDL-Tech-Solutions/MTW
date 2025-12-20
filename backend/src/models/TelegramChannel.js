@@ -8,15 +8,20 @@ class TelegramChannel {
     const {
       name,
       username,
+      channel_id,
       is_active = true,
       capture_schedule_start = null,
       capture_schedule_end = null,
       capture_mode = 'new_only',
-      platform_filter = 'all'
+      platform_filter = 'all',
+      example_messages = []
     } = channelData;
 
-    // Remover @ se houver
-    const cleanUsername = username.replace('@', '').trim();
+    // Remover @ se houver (apenas se username for fornecido)
+    const cleanUsername = username ? username.replace('@', '').trim() : null;
+
+    // Limpar channel_id (remover espaços)
+    const cleanChannelId = channel_id ? channel_id.trim() : null;
 
     // Converter strings vazias para null nos campos TIME
     const cleanScheduleStart = capture_schedule_start === '' ? null : capture_schedule_start;
@@ -27,11 +32,13 @@ class TelegramChannel {
       .insert([{
         name,
         username: cleanUsername,
+        channel_id: cleanChannelId,
         is_active,
         capture_schedule_start: cleanScheduleStart,
         capture_schedule_end: cleanScheduleEnd,
         capture_mode,
-        platform_filter
+        platform_filter,
+        example_messages: Array.isArray(example_messages) ? example_messages : []
       }])
       .select()
       .single();
@@ -58,12 +65,32 @@ class TelegramChannel {
    * Buscar canal por username
    */
   static async findByUsername(username) {
+    if (!username || username.trim() === '') {
+      return null;
+    }
+    
     const cleanUsername = username.replace('@', '').trim();
     
     const { data, error } = await supabase
       .from('telegram_channels')
       .select('*')
       .eq('username', cleanUsername)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  }
+
+  /**
+   * Buscar canal por channel_id
+   */
+  static async findByChannelId(channelId) {
+    const cleanChannelId = channelId.trim();
+    
+    const { data, error } = await supabase
+      .from('telegram_channels')
+      .select('*')
+      .eq('channel_id', cleanChannelId)
       .single();
 
     if (error && error.code !== 'PGRST116') throw error;
@@ -117,8 +144,25 @@ class TelegramChannel {
    */
   static async update(id, updates) {
     // Limpar username se fornecido
-    if (updates.username) {
-      updates.username = updates.username.replace('@', '').trim();
+    if (updates.username !== undefined) {
+      updates.username = updates.username ? updates.username.replace('@', '').trim() : null;
+    }
+
+    // Limpar channel_id se fornecido
+    if (updates.channel_id !== undefined) {
+      updates.channel_id = updates.channel_id ? updates.channel_id.trim() : null;
+    }
+
+    // Processar example_messages se fornecido
+    if (updates.example_messages !== undefined) {
+      if (Array.isArray(updates.example_messages)) {
+        // Filtrar apenas strings válidas e não vazias
+        updates.example_messages = updates.example_messages
+          .filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
+          .map(msg => msg.trim());
+      } else {
+        updates.example_messages = [];
+      }
     }
 
     // Preparar atualização - remover campos undefined/null desnecessários

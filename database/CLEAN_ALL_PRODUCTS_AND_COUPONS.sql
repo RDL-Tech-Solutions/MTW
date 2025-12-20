@@ -257,3 +257,5 @@ SELECT
     COUNT(*) as total
 FROM sync_logs;
 
+
+

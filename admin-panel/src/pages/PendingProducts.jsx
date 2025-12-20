@@ -493,7 +493,7 @@ export default function PendingProducts() {
 
       {/* Modal de Aprovação */}
       <Dialog open={isApprovalDialogOpen} onOpenChange={setIsApprovalDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Aprovar Produto</DialogTitle>
             <DialogDescription>
@@ -504,7 +504,7 @@ export default function PendingProducts() {
           {selectedProduct && (
             <div className="space-y-4">
               {/* Informações do Produto */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <img
                     src={selectedProduct.image_url || 'https://via.placeholder.com/300'}
@@ -698,7 +698,7 @@ export default function PendingProducts() {
 
       {/* Modal de Rejeição */}
       <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Rejeitar Produto</DialogTitle>
             <DialogDescription>
@@ -759,5 +759,6 @@ export default function PendingProducts() {
     </div>
   );
 }
+
 
 

@@ -184,7 +184,7 @@ export default function Users() {
               Novo Usuário
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingUser ? 'Editar Usuário' : 'Novo Usuário'}

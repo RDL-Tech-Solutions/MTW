@@ -49,3 +49,5 @@ COMMENT ON COLUMN products.status IS 'Status do produto: pending (aguardando apr
 COMMENT ON COLUMN products.original_link IS 'Link original do produto antes da conversão para link de afiliado';
 
 
+
+

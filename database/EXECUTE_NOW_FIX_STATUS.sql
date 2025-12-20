@@ -62,3 +62,5 @@ WHERE table_name = 'products'
   AND column_name IN ('status', 'original_link')
 ORDER BY column_name;
 
+
+

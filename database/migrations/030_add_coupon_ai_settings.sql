@@ -16,3 +16,5 @@ COMMENT ON COLUMN coupon_settings.ai_min_price_score IS 'Score mínimo de preço
 COMMENT ON COLUMN coupon_settings.ai_require_good_deal IS 'Requerer que seja uma boa oportunidade';
 
 
+
+

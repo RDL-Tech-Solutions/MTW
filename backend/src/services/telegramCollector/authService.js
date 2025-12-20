@@ -127,9 +127,25 @@ class TelegramAuthService {
             });
             isAuthenticated = await Promise.race([authPromise, timeoutPromise]);
           } catch (error) {
-            // Se der timeout ou erro, assumir que não está autenticado
-            logger.warn(`Aviso ao verificar autenticação: ${error.message}`);
-            isAuthenticated = false;
+            // Tratar erros de rede/502 especificamente
+            const errorMessage = error.message || String(error);
+            const isNetworkError = errorMessage.includes('502') || 
+                                  errorMessage.includes('Bad Gateway') ||
+                                  errorMessage.includes('<html>') ||
+                                  errorMessage.includes('cloudflare') ||
+                                  errorMessage.includes('Timeout');
+            
+            if (isNetworkError) {
+              // Para erros de rede, não logar como erro crítico
+              logger.debug(`⚠️ Problema de rede ao verificar autenticação (pode ser temporário): ${errorMessage.substring(0, 100)}`);
+              // Se estava marcado como autenticado no banco, manter esse status
+              // para evitar desconectar o usuário por problemas temporários
+              isAuthenticated = config.is_authenticated;
+            } else {
+              // Para outros erros, logar como aviso
+              logger.warn(`Aviso ao verificar autenticação: ${errorMessage.substring(0, 200)}`);
+              isAuthenticated = false;
+            }
           }
         }
       }
@@ -140,12 +156,39 @@ class TelegramAuthService {
         has_session: isAuthenticated
       };
     } catch (error) {
-      logger.error(`Erro ao verificar status de autenticação: ${error.message}`);
-      return {
-        is_authenticated: false,
-        has_credentials: false,
-        has_session: false
-      };
+      // Tratar erros de rede/502 especificamente
+      const errorMessage = error.message || String(error);
+      const isNetworkError = errorMessage.includes('502') || 
+                            errorMessage.includes('Bad Gateway') ||
+                            errorMessage.includes('<html>') ||
+                            errorMessage.includes('cloudflare');
+      
+      if (isNetworkError) {
+        logger.warn(`⚠️ Erro de rede ao verificar status (pode ser temporário): ${errorMessage.substring(0, 100)}`);
+        // Retornar status baseado no banco de dados se disponível
+        try {
+          const config = await TelegramCollectorConfig.get();
+          return {
+            is_authenticated: config.is_authenticated || false,
+            has_credentials: !!(config.api_id && config.api_hash && config.phone),
+            has_session: config.is_authenticated || false
+          };
+        } catch (configError) {
+          // Se não conseguir buscar config, retornar false
+          return {
+            is_authenticated: false,
+            has_credentials: false,
+            has_session: false
+          };
+        }
+      } else {
+        logger.error(`Erro ao verificar status de autenticação: ${errorMessage.substring(0, 200)}`);
+        return {
+          is_authenticated: false,
+          has_credentials: false,
+          has_session: false
+        };
+      }
     }
   }
 }

@@ -766,7 +766,7 @@ export default function Bots() {
                   Novo Canal
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
                   <DialogDescription>Configure um canal para receber notificações</DialogDescription>

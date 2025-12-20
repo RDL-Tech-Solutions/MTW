@@ -31,3 +31,5 @@ WHERE id = '00000000-0000-0000-0000-000000000001';
 -- - custom: Usa template salvo no painel admin
 -- - ai_advanced: IA gera template automaticamente baseado no produto/cupom
 
+
+

@@ -7,14 +7,38 @@ class CouponPrompt {
   /**
    * Gerar prompt completo para a IA
    * @param {string} message - Mensagem bruta capturada do Telegram
+   * @param {Array<string>} exampleMessages - Mensagens de exemplo do canal (opcional)
    * @returns {string} - Prompt formatado para a IA
    */
-  generatePrompt(message) {
+  generatePrompt(message, exampleMessages = []) {
+    // Construir seção de exemplos do canal se fornecido
+    let examplesSection = '';
+    if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
+      const validExamples = exampleMessages.filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0);
+      if (validExamples.length > 0) {
+        examplesSection = `
+
+═══════════════════════════════════════════════════════════════
+📋 MENSAGENS DE EXEMPLO DESTE CANAL (PADRÕES DE FORMATAÇÃO):
+═══════════════════════════════════════════════════════════════
+
+Estas são mensagens reais que este canal costuma enviar. Use-as como referência para entender o formato e padrões específicos deste canal:
+
+${validExamples.map((example, index) => `${index + 1}. ${example}`).join('\n\n')}
+
+═══════════════════════════════════════════════════════════════
+💡 IMPORTANTE: Analise os padrões acima e use-os como referência para extrair informações da mensagem atual. Este canal tem um formato específico de mensagem que você deve seguir.
+═══════════════════════════════════════════════════════════════
+
+`;
+      }
+    }
+
     return `Você é um sistema profissional de extração de cupons de desconto de e-commerce.
 
 Analise a mensagem abaixo e extraia TODAS as informações disponíveis sobre o cupom.
-
-Mensagem:
+${examplesSection}
+Mensagem a analisar:
 ${message}
 
 INSTRUÇÕES DETALHADAS:
@@ -164,5 +188,6 @@ IMPORTANTE:
 }
 
 export default new CouponPrompt();
+
 
 

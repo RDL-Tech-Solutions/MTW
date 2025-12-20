@@ -440,7 +440,7 @@ export default function Coupons() {
                 Novo Cupom
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingCoupon ? 'Editar Cupom' : 'Novo Cupom'}

@@ -106,7 +106,19 @@ class OpenRouterClient {
         throw new Error('OpenRouter API Key não configurada. Configure no painel admin.');
       }
 
+      // Validar tamanho do prompt
+      if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        throw new Error('Prompt vazio ou inválido');
+      }
+      
+      // Log do tamanho do prompt para debug
       logger.debug(`🤖 Enviando requisição para OpenRouter (modelo: ${config.model})...`);
+      logger.debug(`   Tamanho do prompt: ${prompt.length} caracteres`);
+      
+      // Se o prompt for muito longo, avisar (mas não bloquear)
+      if (prompt.length > 10000) {
+        logger.warn(`⚠️ Prompt muito longo (${prompt.length} caracteres). Pode causar problemas.`);
+      }
 
       // Preparar payload da requisição
       const requestPayload = {
@@ -118,7 +130,7 @@ class OpenRouterClient {
           }
         ],
         temperature: 0.3, // Baixa temperatura para respostas mais determinísticas
-        max_tokens: options.forceTextMode ? 1000 : 500 // Mais tokens para templates (texto), menos para JSON
+        max_tokens: options.forceTextMode ? 1000 : 800 // Aumentado para evitar truncamento de JSON
       };
 
       // Adicionar response_format apenas se o modelo suportar e não estiver em modo texto
@@ -151,12 +163,29 @@ class OpenRouterClient {
       );
 
       if (!response.data || !response.data.choices || !response.data.choices[0]) {
+        logger.error(`❌ Resposta inválida da API OpenRouter`);
+        logger.error(`   Response data: ${JSON.stringify(response.data)}`);
         throw new Error('Resposta inválida da API OpenRouter');
       }
 
-      const content = response.data.choices[0].message.content;
+      const choice = response.data.choices[0];
+      const content = choice.message?.content;
+      const finishReason = choice.finish_reason;
       
-      logger.debug(`✅ Resposta recebida da OpenRouter (${content.length} caracteres)`);
+      // Verificar se a resposta foi truncada
+      if (finishReason === 'length') {
+        logger.warn(`⚠️ Resposta da IA foi truncada (finish_reason: length). Aumente max_tokens se necessário.`);
+      }
+      
+      // Verificar se o conteúdo está vazio
+      if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        logger.error(`❌ Resposta da IA está vazia`);
+        logger.error(`   Finish reason: ${finishReason}`);
+        logger.error(`   Choice completo: ${JSON.stringify(choice)}`);
+        throw new Error('Resposta da IA está vazia ou inválida');
+      }
+      
+      logger.debug(`✅ Resposta recebida da OpenRouter (${content.length} caracteres, finish_reason: ${finishReason})`);
 
       // Se está em modo texto, retornar string diretamente
       if (options.forceTextMode) {
@@ -194,24 +223,55 @@ class OpenRouterClient {
 
         parsedResponse = JSON.parse(cleanedContent);
       } catch (parseError) {
-        logger.error(`Erro ao parsear JSON da resposta: ${parseError.message}`);
-        logger.error(`Conteúdo recebido: ${content.substring(0, 200)}...`);
+        logger.error(`❌ Erro ao parsear JSON da resposta: ${parseError.message}`);
+        logger.error(`   Conteúdo recebido (primeiros 500 chars): ${content.substring(0, 500)}`);
+        logger.error(`   Conteúdo recebido (últimos 200 chars): ${content.substring(Math.max(0, content.length - 200))}`);
+        logger.error(`   Tamanho total: ${content.length} caracteres`);
+        
+        // Verificar se o conteúdo está muito curto (possível truncamento)
+        if (content.length < 50) {
+          logger.error(`   ⚠️ Conteúdo muito curto, possível truncamento ou resposta incompleta`);
+        }
         
         // Tentar uma última vez com uma limpeza mais agressiva
         try {
           // Remover tudo antes do primeiro { e depois do último }
           const firstBrace = content.indexOf('{');
           const lastBrace = content.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-            const extractedJson = content.substring(firstBrace, lastBrace + 1);
-            parsedResponse = JSON.parse(extractedJson);
-            logger.debug(`✅ JSON extraído com sucesso após limpeza agressiva`);
-          } else {
-            throw parseError;
+          
+          if (firstBrace === -1) {
+            logger.error(`   ❌ Nenhum caractere '{' encontrado no conteúdo`);
+            throw new Error(`Resposta da IA não contém JSON válido. Conteúdo: ${content.substring(0, 100)}...`);
           }
+          
+          if (lastBrace === -1 || lastBrace <= firstBrace) {
+            logger.error(`   ❌ JSON incompleto ou malformado (firstBrace: ${firstBrace}, lastBrace: ${lastBrace})`);
+            throw new Error(`Resposta da IA contém JSON incompleto ou malformado. Possível truncamento.`);
+          }
+          
+          const extractedJson = content.substring(firstBrace, lastBrace + 1);
+          logger.debug(`   🔍 Tentando extrair JSON: ${extractedJson.substring(0, 200)}...`);
+          
+          parsedResponse = JSON.parse(extractedJson);
+          logger.debug(`✅ JSON extraído com sucesso após limpeza agressiva`);
         } catch (secondParseError) {
-          throw new Error(`Resposta da IA não é um JSON válido: ${parseError.message}`);
+          logger.error(`❌ Falha na segunda tentativa de parsing: ${secondParseError.message}`);
+          logger.error(`   Conteúdo completo (para debug): ${content}`);
+          
+          // Se o conteúdo está vazio ou muito curto, pode ser que a resposta foi truncada
+          // ou o modelo não retornou nada útil
+          if (content.length < 10) {
+            logger.error(`   ⚠️ Conteúdo extremamente curto (${content.length} chars). Possível erro na API ou modelo.`);
+          }
+          
+          throw new Error(`Resposta da IA não é um JSON válido: ${parseError.message}. Conteúdo recebido: ${content.substring(0, 200)}...`);
         }
+      }
+
+      // Validar que o JSON parseado tem a estrutura esperada
+      if (!parsedResponse || typeof parsedResponse !== 'object') {
+        logger.error(`❌ JSON parseado não é um objeto válido`);
+        throw new Error('Resposta da IA não retornou um objeto JSON válido');
       }
 
       return parsedResponse;
@@ -252,5 +312,7 @@ class OpenRouterClient {
 }
 
 export default new OpenRouterClient();
+
+
 
 

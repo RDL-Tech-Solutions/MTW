@@ -188,3 +188,5 @@ ON CONFLICT DO NOTHING;
 -- - discount_percentage, platform_name, affiliate_link
 -- - coupon_section, coupon_code, coupon_discount, price_with_coupon
 
+
+

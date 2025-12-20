@@ -108,31 +108,58 @@ class TelegramChannelController {
    */
   async create(req, res) {
     try {
-      const { name, username, is_active } = req.body;
+      const { name, username, channel_id, is_active, example_messages, capture_schedule_start, capture_schedule_end, capture_mode, platform_filter } = req.body;
 
-      if (!name || !username) {
+      if (!name) {
         return res.status(400).json({
           success: false,
-          message: 'Nome e username são obrigatórios'
+          message: 'Nome é obrigatório'
         });
       }
 
-      // Verificar se já existe
-      const existing = await TelegramChannel.findByUsername(username);
-      if (existing) {
+      // Validar que pelo menos username ou channel_id seja fornecido
+      if (!username && !channel_id) {
         return res.status(400).json({
           success: false,
-          message: 'Canal já cadastrado'
+          message: 'Username ou ID do canal são obrigatórios. Para canais públicos use username, para canais privados use channel_id'
         });
+      }
+
+      // Verificar se já existe por username (se fornecido)
+      if (username) {
+        const existing = await TelegramChannel.findByUsername(username);
+        if (existing) {
+          return res.status(400).json({
+            success: false,
+            message: 'Canal já cadastrado com este username'
+          });
+        }
+      }
+
+      // Verificar se já existe por channel_id (se fornecido)
+      if (channel_id) {
+        const existing = await TelegramChannel.findByChannelId(channel_id);
+        if (existing) {
+          return res.status(400).json({
+            success: false,
+            message: 'Canal já cadastrado com este ID'
+          });
+        }
       }
 
       const channel = await TelegramChannel.create({
         name,
-        username,
-        is_active: is_active !== undefined ? is_active : true
+        username: username || null,
+        channel_id: channel_id || null,
+        is_active: is_active !== undefined ? is_active : true,
+        example_messages: Array.isArray(example_messages) ? example_messages.filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0) : [],
+        capture_schedule_start: capture_schedule_start || null,
+        capture_schedule_end: capture_schedule_end || null,
+        capture_mode: capture_mode || 'new_only',
+        platform_filter: platform_filter || 'all'
       });
 
-      logger.info(`✅ Canal Telegram criado: @${channel.username}`);
+      logger.info(`✅ Canal Telegram criado: ${channel.username ? `@${channel.username}` : `ID: ${channel.channel_id}`}`);
 
       res.status(201).json({
         success: true,
@@ -157,6 +184,49 @@ class TelegramChannelController {
     try {
       const { id } = req.params;
       const updates = req.body;
+
+      // Buscar canal atual para verificar se tem username ou channel_id
+      const currentChannel = await TelegramChannel.findById(id);
+      if (!currentChannel) {
+        return res.status(404).json({
+          success: false,
+          message: 'Canal não encontrado'
+        });
+      }
+
+      // Se estiver atualizando username ou channel_id, validar que pelo menos um dos dois seja mantido
+      const newUsername = updates.username !== undefined ? updates.username : currentChannel.username;
+      const newChannelId = updates.channel_id !== undefined ? updates.channel_id : currentChannel.channel_id;
+
+      // Validar que pelo menos um dos dois seja fornecido
+      if (!newUsername && !newChannelId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username ou ID do canal são obrigatórios. Pelo menos um dos dois deve ser mantido ou fornecido.'
+        });
+      }
+
+      // Verificar duplicatas se estiver atualizando username
+      if (updates.username && updates.username !== currentChannel.username) {
+        const existing = await TelegramChannel.findByUsername(updates.username);
+        if (existing && existing.id !== id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Canal já cadastrado com este username'
+          });
+        }
+      }
+
+      // Verificar duplicatas se estiver atualizando channel_id
+      if (updates.channel_id && updates.channel_id !== currentChannel.channel_id) {
+        const existing = await TelegramChannel.findByChannelId(updates.channel_id);
+        if (existing && existing.id !== id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Canal já cadastrado com este ID'
+          });
+        }
+      }
 
       const channel = await TelegramChannel.update(id, updates);
 

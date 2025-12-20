@@ -30,3 +30,5 @@ FROM products p
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN coupons cp ON p.coupon_id = cp.id;
 
+
+

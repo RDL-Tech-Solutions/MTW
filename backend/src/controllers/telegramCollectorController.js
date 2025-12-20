@@ -229,12 +229,34 @@ class TelegramCollectorController {
         data: status
       });
     } catch (error) {
-      logger.error(`Erro ao verificar status: ${error.message}`);
-      res.status(500).json({
-        success: false,
-        message: 'Erro ao verificar status',
-        error: error.message
-      });
+      // Tratar erros de rede/502 especificamente
+      const errorMessage = error.message || String(error);
+      const isNetworkError = errorMessage.includes('502') || 
+                            errorMessage.includes('Bad Gateway') ||
+                            errorMessage.includes('<html>') ||
+                            errorMessage.includes('cloudflare');
+      
+      if (isNetworkError) {
+        logger.warn(`⚠️ Erro de rede ao verificar status (pode ser temporário): ${errorMessage.substring(0, 100)}`);
+        // Retornar status básico mesmo com erro de rede
+        res.json({
+          success: true,
+          data: {
+            is_authenticated: false,
+            has_credentials: false,
+            has_session: false,
+            network_error: true,
+            message: 'Erro temporário de conexão com servidores do Telegram'
+          }
+        });
+      } else {
+        logger.error(`Erro ao verificar status: ${errorMessage.substring(0, 200)}`);
+        res.status(500).json({
+          success: false,
+          message: 'Erro ao verificar status',
+          error: errorMessage.substring(0, 200)
+        });
+      }
     }
   }
 

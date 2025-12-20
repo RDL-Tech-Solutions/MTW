@@ -216,3 +216,5 @@ class CouponBatchAnalyzer {
 export default new CouponBatchAnalyzer();
 
 
+
+

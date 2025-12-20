@@ -713,7 +713,7 @@ export default function BotTemplates() {
               Novo Template
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Criar Novo Template</DialogTitle>
               <DialogDescription>
@@ -1023,7 +1023,7 @@ export default function BotTemplates() {
 
       {/* Dialog de Preview */}
       <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Preview do Template</DialogTitle>
             <DialogDescription>
@@ -1056,7 +1056,7 @@ export default function BotTemplates() {
 
       {/* Dialog de Teste */}
       <Dialog open={isTestDialogOpen} onOpenChange={setIsTestDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Testar Template</DialogTitle>
             <DialogDescription>
