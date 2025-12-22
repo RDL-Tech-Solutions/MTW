@@ -8,13 +8,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useProductStore } from '../../stores/productStore';
+import { useThemeStore } from '../../theme/theme';
 import ProductCard from '../../components/common/ProductCard';
 import EmptyState from '../../components/common/EmptyState';
 import { SCREEN_NAMES } from '../../utils/constants';
-import colors from '../../theme/colors';
 
 export default function FavoritesScreen({ navigation }) {
   const { favorites, fetchFavorites, removeFavorite, registerClick } = useProductStore();
+  const { colors } = useThemeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -43,10 +44,12 @@ export default function FavoritesScreen({ navigation }) {
     navigation.navigate(SCREEN_NAMES.PRODUCT_DETAILS, { product });
   };
 
+  const dynamicStyles = createStyles(colors);
+
   const renderHeader = () => (
-    <View style={styles.header}>
-      <Text style={styles.title}>Favoritos</Text>
-      <Text style={styles.subtitle}>
+    <View style={dynamicStyles.header}>
+      <Text style={dynamicStyles.title}>Favoritos</Text>
+      <Text style={dynamicStyles.subtitle}>
         {favorites.length} {favorites.length === 1 ? 'produto salvo' : 'produtos salvos'}
       </Text>
     </View>
@@ -63,15 +66,15 @@ export default function FavoritesScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={dynamicStyles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Carregando favoritos...</Text>
+        <Text style={dynamicStyles.loadingText}>Carregando favoritos...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       <FlatList
         data={favorites}
         keyExtractor={(item) => item.id}
@@ -85,7 +88,7 @@ export default function FavoritesScreen({ navigation }) {
         )}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={dynamicStyles.list}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -100,7 +103,7 @@ export default function FavoritesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

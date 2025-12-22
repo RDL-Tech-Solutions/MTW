@@ -65,32 +65,45 @@ class TemplateRenderer {
             message = await advancedTemplateGenerator.generateCouponTemplate(contextData.coupon || contextData, platform);
             
             // IMPORTANTE: Remover qualquer menção à data de validade que a IA possa ter incluído
-            // Remover padrões comuns de data de validade
+            // Remover padrões comuns de data de validade (mais abrangente)
             message = message
+              // Padrões com emojis e formatação
               .replace(/\n?📅\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
               .replace(/\n?📅\s*\*\*?Válido até\*\*?:\s*[^\n]*\n?/gi, '')
               .replace(/\n?📅\s*Válido até:\s*[^\n]*\n?/gi, '')
               .replace(/\n?⏰\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
+              .replace(/\n?⏳\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
               .replace(/\n?📅\s*\{valid_until\}[^\n]*\n?/gi, '')
-              .replace(/\n?.*válido até.*\n?/gi, '')
-              .replace(/\n?.*Válido até.*\n?/gi, '')
-              .replace(/\n?.*valid_until.*\n?/gi, '');
+              // Padrões sem emoji
+              .replace(/\n?.*[Vv]álido\s+até.*\n?/gi, '')
+              .replace(/\n?.*valid_until.*\n?/gi, '')
+              .replace(/\n?.*[Ee]xpira.*\n?/gi, '')
+              .replace(/\n?.*[Vv]alidade.*\n?/gi, '')
+              // Limpar linhas vazias resultantes
+              .replace(/\n{3,}/g, '\n\n');
             
             // IMPORTANTE: Remover menções à plataforma (nome da plataforma) já que a imagem será enviada
             const coupon = contextData.coupon || contextData;
             if (coupon && coupon.platform) {
               const platformNames = [
                 'Mercado Livre', 'MercadoLivre', 'Mercado Livre',
-                'Shopee', 'Shopee',
-                'Amazon', 'Amazon',
+                'Shopee',
+                'Amazon',
                 'AliExpress', 'AliExpress', 'Ali Express'
               ];
               platformNames.forEach(name => {
-                const regex = new RegExp(`\\b${name}\\b`, 'gi');
+                // Remover nome da plataforma (case-insensitive, palavra completa)
+                const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
                 message = message.replace(regex, '');
               });
-              // Remover linhas que contenham apenas o nome da plataforma
-              message = message.replace(/^.*(Mercado Livre|Shopee|Amazon|AliExpress).*$/gmi, '');
+              // Remover linhas que contenham apenas o nome da plataforma ou padrões relacionados
+              message = message
+                .replace(/^.*(Mercado\s+Livre|Shopee|Amazon|AliExpress).*$/gmi, '')
+                .replace(/^.*[Dd]isponível\s+no\s+(Mercado\s+Livre|Shopee|Amazon|AliExpress).*$/gmi, '')
+                .replace(/^.*[Pp]lataforma:\s*(Mercado\s+Livre|Shopee|Amazon|AliExpress).*$/gmi, '')
+                // Limpar linhas vazias resultantes
+                .replace(/\n{3,}/g, '\n\n');
             }
             
             logger.debug(`📝 Template de cupom após remoção de data de validade e plataforma: ${message.length} chars`);
@@ -145,6 +158,20 @@ class TemplateRenderer {
             .replace(/\s*\(mensagem\s+truncada\)/gi, '')
             .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
             .replace(/\s*\(truncada\)/gi, '')
+            .replace(/\s*\[continua\s+na\s+próxima\s+mensagem\]/gi, '')
+            .replace(/\s*\(continua\s+na\s+próxima\s+mensagem\)/gi, '')
+            .replace(/\s*\[\.\.\.\s+continua\]/gi, '')
+            .replace(/\s*\(ver\s+mais\)/gi, '')
+            .replace(/\s*\[ver\s+mais\]/gi, '')
+            // Remover explicações ou comentários que a IA pode adicionar
+            .replace(/\n\s*\/\/.*$/gm, '')
+            .replace(/\n\s*<!--.*?-->/g, '')
+            .replace(/\n\s*Nota:.*$/gmi, '')
+            .replace(/\n\s*Observação:.*$/gmi, '')
+            .replace(/\n\s*Importante:.*$/gmi, '')
+            .replace(/\n\s*Lembre-se:.*$/gmi, '')
+            // Remover tags HTML não convertidas (última tentativa)
+            .replace(/<[^>]+>/g, '')
             // Restaurar código protegido
             .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
           
@@ -171,33 +198,36 @@ class TemplateRenderer {
           // Verificar se a IA gerou uma descrição longa no lugar do título
           // Se a primeira linha após o cabeçalho é muito longa (> 100 chars) e não contém o título, pode ser uma descrição
           const lines = message.split('\n');
-          const headerLineIndex = lines.findIndex(line => line.includes('🔥') && line.includes('**'));
+          const headerLineIndex = lines.findIndex(line => (line.includes('🔥') || line.includes('⚡') || line.includes('🎯')) && line.includes('**'));
           if (headerLineIndex >= 0 && headerLineIndex + 1 < lines.length) {
             const lineAfterHeader = lines[headerLineIndex + 1].trim();
             // Se a linha após o cabeçalho é muito longa e não contém o título, pode ser uma descrição no lugar do título
             if (lineAfterHeader.length > 100 && !lineAfterHeader.includes(productName) && !lineAfterHeader.includes('{product_name}')) {
               logger.warn(`⚠️ Detectada possível descrição longa no lugar do título, corrigindo...`);
               // Adicionar o título antes dessa linha longa
-              lines[headerLineIndex + 1] = `📦 **${productName}**\n\n${lineAfterHeader}`;
+              lines[headerLineIndex + 1] = `📦 **{product_name}**\n\n${lineAfterHeader}`;
               message = lines.join('\n');
               logger.info(`✅ Título do produto adicionado antes da descrição: "${productName}"`);
             }
           }
           
-          if (!message.includes('{product_name}') && !message.includes(productName)) {
+          // Verificar se {product_name} está presente (como variável ou já substituído)
+          const hasProductNameVar = message.includes('{product_name}');
+          const hasProductNameText = message.includes(productName);
+          
+          if (!hasProductNameVar && !hasProductNameText) {
             logger.warn(`⚠️ Título do produto não encontrado na mensagem da IA, adicionando...`);
             // Adicionar título após o cabeçalho da oferta
-            message = message.replace(
-              /(🔥\s*\*\*[^*]+\*\*\s*🔥)/,
-              `$1\n\n📦 **${productName}**`
-            );
-            // Se não encontrou o padrão, adicionar no início
-            if (!message.includes(`📦 **${productName}**`)) {
-              message = `📦 **${productName}**\n\n${message}`;
+            const headerPattern = /(🔥|⚡|🎯).*\*\*.*\*\*.*(🔥|⚡|🎯)/;
+            if (headerPattern.test(message)) {
+              message = message.replace(headerPattern, `$&\n\n📦 **{product_name}**`);
+            } else {
+              // Se não encontrou o padrão, adicionar no início
+              message = `📦 **{product_name}**\n\n${message}`;
             }
-            logger.info(`✅ Título do produto adicionado: "${productName}"`);
+            logger.info(`✅ Título do produto adicionado: "{product_name}"`);
           } else {
-            logger.debug(`✅ Título do produto encontrado na mensagem: "${productName}"`);
+            logger.debug(`✅ Título do produto encontrado na mensagem`);
           }
           
           // 3. IMPORTANTE: Garantir que coupon_code seja formatado com backticks para facilitar cópia no Telegram (sem duplicar)
@@ -245,23 +275,44 @@ class TemplateRenderer {
           }
         } catch (aiError) {
           logger.error(`❌ [IA ADVANCED] Erro ao gerar template: ${aiError.message}`);
-          logger.warn(`⚠️ Fallback para template customizado...`);
-          // Fallback para template customizado se IA falhar
-          const template = await BotMessageTemplate.findByType(templateType, platform);
-          if (!template || !template.is_active) {
-            throw new Error(`IA ADVANCED falhou e não há template customizado disponível: ${aiError.message}`);
+          logger.error(`   Stack: ${aiError.stack}`);
+          logger.warn(`⚠️ [IA ADVANCED] Fallback para template padrão devido ao erro...`);
+          
+          // IMPORTANTE: Usar template padrão quando IA ADVANCED falhar
+          // Isso garante que a publicação não seja bloqueada por erros da IA
+          try {
+            logger.info(`📋 [FALLBACK] Usando template padrão do sistema para ${templateType}`);
+            logger.debug(`📋 Variáveis disponíveis: ${JSON.stringify(Object.keys(variables))}`);
+            message = this.getDefaultTemplate(templateType, variables, platform);
+            logger.info(`✅ [FALLBACK] Template padrão gerado (${message.length} chars)`);
+            logger.debug(`📋 Template padrão gerado (primeiros 300 chars): ${message.substring(0, 300)}`);
+          } catch (fallbackError) {
+            logger.error(`❌ [FALLBACK] Erro ao gerar template padrão: ${fallbackError.message}`);
+            // Último recurso: tentar template customizado
+            logger.warn(`⚠️ Tentando template customizado como último recurso...`);
+            const template = await BotMessageTemplate.findByType(templateType, platform);
+            if (!template || !template.is_active) {
+              throw new Error(`IA ADVANCED falhou, template padrão falhou e não há template customizado disponível: ${aiError.message}`);
+            }
+            message = template.template;
+            logger.info(`✅ [FALLBACK] Usando template customizado como último recurso`);
           }
-          message = template.template;
         }
       } 
       // Modo DEFAULT: Usar template padrão do sistema
       else if (templateMode === 'default') {
-        logger.info(`📋 Usando template padrão do sistema para ${templateType}`);
+        logger.info(`📋 [MODO PADRÃO] Usando template padrão do sistema para ${templateType}`);
+        logger.debug(`📋 Variáveis disponíveis: ${JSON.stringify(Object.keys(variables))}`);
+        logger.debug(`📋 coupon_code: ${variables.coupon_code || 'N/A'}`);
+        logger.debug(`📋 original_price: ${variables.original_price || 'N/A'}`);
+        logger.debug(`📋 final_price: ${variables.final_price || 'N/A'}`);
         message = this.getDefaultTemplate(templateType, variables, platform);
+        logger.info(`✅ Template padrão gerado (${message.length} chars)`);
+        logger.debug(`📋 Template gerado (primeiros 300 chars): ${message.substring(0, 300)}`);
       }
       // Modo CUSTOM: Usar template salvo no painel admin
-      else {
-        logger.info(`📋 Usando template customizado do painel admin para ${templateType}`);
+      else if (templateMode === 'custom') {
+        logger.info(`📋 [MODO CUSTOMIZADO] Usando template customizado do painel admin para ${templateType}`);
         const template = await BotMessageTemplate.findByType(templateType, platform);
         
         if (!template) {
@@ -282,8 +333,20 @@ class TemplateRenderer {
           throw new Error(errorMsg);
         }
 
-        logger.info(`✅ Template encontrado e ativo: ${template.id} - ${template.template_type} para ${template.platform}`);
+        logger.info(`✅ Template customizado encontrado e ativo: ${template.id} - ${template.template_type} para ${template.platform}`);
         message = template.template;
+      }
+      // Fallback: Se o modo não for reconhecido, usar customizado
+      else {
+        logger.warn(`⚠️ Modo de template desconhecido: ${templateMode}, usando customizado como fallback`);
+        const template = await BotMessageTemplate.findByType(templateType, platform);
+        if (template && template.is_active && template.template) {
+          message = template.template;
+        } else {
+          // Se não houver template customizado, usar padrão
+          logger.warn(`⚠️ Template customizado não encontrado, usando padrão do sistema`);
+          message = this.getDefaultTemplate(templateType, variables, platform);
+        }
       }
       
       logger.debug(`📋 Template original (primeiros 200 chars): ${message.substring(0, 200)}...`);
@@ -302,6 +365,27 @@ class TemplateRenderer {
           .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
           .replace(/\s*\(truncada\)/gi, '');
       }
+      
+      // IMPORTANTE: Corrigir formatação de preços mal formatados APÓS substituição de variáveis
+      // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF" (tudo junto)
+      message = message
+        // Separar preço e emoji que estão juntos
+        .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)/g, '$1\n$2')
+        // Separar "Por:" que está junto com preço
+        .replace(/(R\$\s*[\d.,]+)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)/g, '$1\n$2 $3')
+        // Separar desconto que está junto com preço
+        .replace(/(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, '$1\n🏷️ **$2**')
+        // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
+        .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, 
+          '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
+        // Garantir que emojis de preço tenham espaço antes
+        .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
+        // Garantir que emojis de preço tenham espaço depois se não tiver quebra de linha
+        .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(?!\s|\n)/g, '$1 $2')
+        // Corrigir "🔗 Link:" que pode estar junto
+        .replace(/(🔗|👉)\s*(Link:|link:|LINK:)\s*(https?:\/\/[^\s]+)/gi, '$1 $3')
+        // Garantir quebra de linha antes de emojis de seção
+        .replace(/([^\n])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2');
       
       // Primeiro, substituir todas as variáveis (mesmo as vazias)
       // IMPORTANTE: Preservar quebras de linha durante substituição
@@ -397,6 +481,29 @@ class TemplateRenderer {
         } else if (!(key === 'platform_name' && templateMode === 'ai_advanced')) {
           message = message.replace(regex, replacement);
         }
+      }
+      
+      // IMPORTANTE: Corrigir formatação após substituição de variáveis (especialmente para IA ADVANCED)
+      // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF" que podem aparecer após substituição
+      if (templateMode === 'ai_advanced') {
+        message = message
+          // Separar preço e emoji que estão juntos após substituição
+          .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)/g, '$1\n$2')
+          // Separar "Por:" que está junto com preço
+          .replace(/(R\$\s*[\d.,]+)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)/g, '$1\n$2 $3')
+          // Separar desconto que está junto com preço
+          .replace(/(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, '$1\n🏷️ **$2**')
+          // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
+          .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, 
+            '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
+          // Garantir que emojis de preço tenham espaço antes
+          .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
+          // Corrigir "🔗 Link:" que pode estar junto
+          .replace(/(🔗|👉)\s*(Link:|link:|LINK:)\s*(https?:\/\/[^\s]+)/gi, '$1 $3')
+          // Garantir quebra de linha antes de emojis de seção importantes
+          .replace(/([^\n])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2')
+          // Limpar múltiplas quebras de linha
+          .replace(/\n{4,}/g, '\n\n\n');
       }
       
       // VALIDAÇÃO FINAL: Garantir que código do cupom esteja presente (especialmente para IA ADVANCED) - SEM DUPLICAR
@@ -684,8 +791,10 @@ class TemplateRenderer {
       const hasHtmlTagsAfter = /<[a-z][\s\S]*>/i.test(message);
       // Detectar Markdown: **texto** ou *texto* (mas não dentro de tags HTML)
       const hasMarkdownBold = (/\*\*[^*]+\*\*/.test(message) || /\*[^*\n<]+\*/.test(message)) && !hasHtmlTagsAfter;
+      // Detectar backticks que precisam ser convertidos
+      const hasBackticks = /`[^`]+`/.test(message);
       
-      logger.debug(`📋 Template análise: HTML=${hasHtmlTagsAfter}, Markdown=${hasMarkdownBold}, parseMode=${parseMode}, platform=${platform}`);
+      logger.debug(`📋 Template análise: HTML=${hasHtmlTagsAfter}, Markdown=${hasMarkdownBold}, Backticks=${hasBackticks}, parseMode=${parseMode}, platform=${platform}`);
       
       // IMPORTANTE: Verificação final ANTES da conversão - garantir que não há tags HTML não renderizadas
       // Se ainda houver tags HTML, converter para Markdown primeiro
@@ -706,11 +815,22 @@ class TemplateRenderer {
       
       // IMPORTANTE: Para Telegram com parse_mode HTML, SEMPRE converter Markdown para HTML
       if (platform === 'telegram' && parseMode === 'HTML') {
-        if (hasMarkdownBold || message.includes('**')) {
+        // Verificar se há backticks que precisam ser convertidos para <code>
+        const hasBackticks = /`[^`]+`/.test(message);
+        
+        if (hasMarkdownBold || message.includes('**') || hasBackticks) {
           // Template tem Markdown - converter OBRIGATORIAMENTE para HTML
-          logger.info(`🔄 Convertendo Markdown (**texto**) para HTML (<b>texto</b>) para Telegram`);
+          logger.info(`🔄 Convertendo Markdown (**texto**, \`código\`) para HTML (<b>texto</b>, <code>código</code>) para Telegram`);
           message = this.convertBoldFormatting(message, platform, parseMode);
           logger.debug(`📋 Mensagem após conversão (primeiros 200 chars): ${message.substring(0, 200)}`);
+          
+          // Verificar se backticks foram convertidos
+          const stillHasBackticks = /`[^`]+`/.test(message);
+          if (hasBackticks && stillHasBackticks) {
+            // Ainda há backticks, tentar converter novamente
+            logger.warn(`⚠️ Backticks ainda presentes após conversão, tentando novamente...`);
+            message = this.convertBoldFormatting(message, platform, parseMode);
+          }
         } else if (hasHtmlTagsAfter) {
           // Template ainda tem HTML - converter para Markdown primeiro, depois para HTML
           logger.warn(`⚠️ Template ainda contém HTML após processamento, convertendo...`);
@@ -720,6 +840,12 @@ class TemplateRenderer {
             .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
             .replace(/<code>(.*?)<\/code>/gi, '`$1`');
           // Agora converter Markdown para HTML
+          message = this.convertBoldFormatting(message, platform, parseMode);
+        }
+        
+        // IMPORTANTE: Verificação adicional - garantir que backticks sejam convertidos para <code>
+        if (message.includes('`') && !message.includes('<code>')) {
+          logger.warn(`⚠️ Detectados backticks não convertidos, convertendo para <code>...`);
           message = this.convertBoldFormatting(message, platform, parseMode);
         }
         
@@ -769,18 +895,73 @@ class TemplateRenderer {
       // IMPORTANTE: Verificação final absoluta - garantir que não há tags HTML não renderizadas
       // Esta é a última chance antes de retornar a mensagem
       if (platform === 'telegram' && parseMode === 'HTML') {
-        if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
-          // Se ainda há tags HTML, pode ser que a conversão não funcionou
-          // Tentar converter uma última vez
-          logger.warn(`⚠️ Verificação final: tags HTML ainda presentes, convertendo...`);
-          message = message
-            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
-            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
-          // Converter para HTML novamente
-          message = this.convertBoldFormatting(message, platform, parseMode);
+        try {
+          // CRÍTICO: Verificar se há backticks que não foram convertidos para <code>
+          const backtickPattern = /`([^`]+)`/g;
+          let backtickMatches;
+          try {
+            backtickMatches = message.match(backtickPattern);
+          } catch (regexError) {
+            logger.warn(`⚠️ Erro ao fazer match de backticks: ${regexError.message}`);
+            backtickMatches = null;
+          }
+          
+          if (backtickMatches && backtickMatches.length > 0) {
+            logger.warn(`⚠️ Verificação final: ${backtickMatches.length} backtick(s) detectado(s), convertendo para <code>...`);
+            // Converter cada backtick para <code>
+            try {
+              message = message.replace(backtickPattern, (match, content) => {
+                if (!content) return match; // Se não há conteúdo, manter original
+                const escaped = content
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+                return `<code>${escaped}</code>`;
+              });
+              logger.info(`✅ Backticks convertidos para <code> tags`);
+            } catch (replaceError) {
+              logger.error(`❌ Erro ao converter backticks: ${replaceError.message}`);
+              // Continuar mesmo com erro
+            }
+          }
+          
+          // Verificar se ainda há tags HTML que precisam ser processadas
+          if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
+            // Se ainda há tags HTML, pode ser que a conversão não funcionou
+            // Tentar converter uma última vez
+            logger.warn(`⚠️ Verificação final: tags HTML ainda presentes, convertendo...`);
+            try {
+              message = message
+                .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
+                .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+                .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+                .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+                .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
+              // Converter para HTML novamente
+              message = this.convertBoldFormatting(message, platform, parseMode);
+              
+              // Verificar novamente se ainda há backticks
+              const remainingBackticks = message.match(/`([^`]+)`/g);
+              if (remainingBackticks && remainingBackticks.length > 0) {
+                logger.warn(`⚠️ Ainda há ${remainingBackticks.length} backtick(s) após conversão, convertendo diretamente...`);
+                message = message.replace(/`([^`]+)`/g, (match, content) => {
+                  if (!content) return match;
+                  const escaped = content
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                  return `<code>${escaped}</code>`;
+                });
+              }
+            } catch (convertError) {
+              logger.error(`❌ Erro ao converter HTML final: ${convertError.message}`);
+              // Continuar mesmo com erro
+            }
+          }
+        } catch (finalError) {
+          logger.error(`❌ Erro na verificação final de formatação: ${finalError.message}`);
+          logger.error(`   Stack: ${finalError.stack}`);
+          // Continuar mesmo com erro - não bloquear publicação
         }
       }
       
@@ -837,8 +1018,15 @@ class TemplateRenderer {
       logger.debug(`📋 Mensagem final tem ${(message.match(/\n/g) || []).length} quebras de linha`);
       logger.debug(`📋 Mensagem final (primeiros 500 chars):\n${message.substring(0, 500).replace(/\n/g, '\\n')}`);
 
+      // VALIDAÇÃO: Garantir que a mensagem é uma string válida
+      if (!message || typeof message !== 'string') {
+        logger.error(`❌ Template renderizado é inválido (não é string) para ${templateType} (${platform})`);
+        logger.error(`   Tipo: ${typeof message}, Valor: ${JSON.stringify(message)}`);
+        throw new Error(`Template renderizado é inválido. Verifique se o template no painel admin tem conteúdo válido.`);
+      }
+      
       // VALIDAÇÃO: Garantir que a mensagem não está vazia
-      if (!message || message.trim().length === 0) {
+      if (message.trim().length === 0) {
         logger.error(`❌ Template renderizado está vazio para ${templateType} (${platform})`);
         throw new Error(`Template renderizado está vazio. Verifique se o template no painel admin tem conteúdo válido.`);
       }
@@ -846,8 +1034,120 @@ class TemplateRenderer {
       // VALIDAÇÃO: Verificar se todas as variáveis foram substituídas
       const remainingVariables = message.match(/\{[^}]+\}/g);
       if (remainingVariables && remainingVariables.length > 0) {
-        logger.warn(`⚠️ Variáveis não substituídas encontradas: ${remainingVariables.join(', ')}`);
-        // Não falhar - pode ser intencional no template
+        // Filtrar variáveis que são permitidas permanecer (como {product_name} se ainda não foi substituído)
+        const allowedVars = ['{product_name}', '{affiliate_link}', '{coupon_code}', '{applicability}'];
+        const unexpectedVars = remainingVariables.filter(v => !allowedVars.includes(v));
+        if (unexpectedVars.length > 0) {
+          logger.warn(`⚠️ Variáveis não substituídas encontradas: ${unexpectedVars.join(', ')}`);
+        }
+      }
+      
+      // VALIDAÇÃO ESPECIAL PARA IA ADVANCED: Garantir que variáveis obrigatórias estão presentes
+      // IMPORTANTE: Validações mais flexíveis para não bloquear publicação
+      if (templateMode === 'ai_advanced') {
+        // Para promoções: product_name e affiliate_link são obrigatórios
+        if ((templateType === 'new_promotion' || templateType === 'promotion_with_coupon')) {
+          const productName = variables.product_name || '';
+          const affiliateLink = variables.affiliate_link || '';
+          
+          // Verificar product_name de forma mais flexível
+          const hasProductName = productName && (
+            message.includes(productName) || 
+            message.includes('{product_name}') ||
+            message.toLowerCase().includes(productName.toLowerCase()) ||
+            productName.length > 0 // Se product_name existe nas variáveis, assumir que foi substituído
+          );
+          
+          // Verificar affiliate_link de forma mais flexível
+          const hasAffiliateLink = affiliateLink && (
+            message.includes(affiliateLink) || 
+            message.includes('{affiliate_link}') ||
+            message.includes('http://') || 
+            message.includes('https://') ||
+            affiliateLink.length > 0 // Se affiliate_link existe nas variáveis, assumir que foi substituído
+          );
+          
+          logger.debug(`🔍 [IA ADVANCED] Validação de variáveis:`);
+          logger.debug(`   product_name: ${productName ? `"${productName.substring(0, 50)}..."` : 'N/A'} - Presente: ${hasProductName}`);
+          logger.debug(`   affiliate_link: ${affiliateLink ? `"${affiliateLink.substring(0, 50)}..."` : 'N/A'} - Presente: ${hasAffiliateLink}`);
+          
+          if (!hasProductName && productName) {
+            logger.warn(`⚠️ [IA ADVANCED] Template de promoção pode não conter product_name, mas continuando...`);
+            logger.warn(`   product_name nas variáveis: "${productName.substring(0, 100)}"`);
+            logger.warn(`   Mensagem (primeiros 200 chars): "${message.substring(0, 200)}"`);
+            // NÃO bloquear - apenas avisar
+          }
+          
+          if (!hasAffiliateLink && affiliateLink) {
+            logger.warn(`⚠️ [IA ADVANCED] Template de promoção pode não conter affiliate_link, mas continuando...`);
+            logger.warn(`   affiliate_link nas variáveis: "${affiliateLink.substring(0, 100)}"`);
+            logger.warn(`   Mensagem (primeiros 200 chars): "${message.substring(0, 200)}"`);
+            // NÃO bloquear - apenas avisar
+          }
+          
+          // Para promoções com cupom: coupon_code também é obrigatório (apenas para IA ADVANCED)
+          // Para templates padrão/customizados, o código pode estar na variável {coupon_code} que será substituída
+          if (templateType === 'promotion_with_coupon' && variables.coupon_code && variables.coupon_code !== 'N/A') {
+            const couponCode = variables.coupon_code;
+            // Verificar de forma mais flexível
+            const hasCouponCode = message.includes(couponCode) || 
+                                 message.includes('{coupon_code}') ||
+                                 message.toLowerCase().includes(couponCode.toLowerCase()) ||
+                                 message.includes('CUPOM') || 
+                                 message.includes('cupom') ||
+                                 message.includes('Código') ||
+                                 message.includes('código');
+            
+            logger.debug(`   coupon_code: ${couponCode} - Presente: ${hasCouponCode}`);
+            
+            if (!hasCouponCode) {
+              logger.warn(`⚠️ [IA ADVANCED] Template de promoção com cupom pode não conter coupon_code, mas continuando...`);
+              logger.warn(`   coupon_code nas variáveis: "${couponCode}"`);
+              logger.warn(`   Mensagem (primeiros 200 chars): "${message.substring(0, 200)}"`);
+              // NÃO bloquear - apenas avisar e tentar adicionar o código
+              // Tentar adicionar o código se não estiver presente
+              if (!message.includes(couponCode) && !message.includes('{coupon_code}')) {
+                logger.info(`📝 Tentando adicionar código do cupom ao template...`);
+                const codeSection = `\n\n🎟️ CUPOM: \`${couponCode}\`\n\n`;
+                if (message.includes('{affiliate_link}') || message.includes(affiliateLink)) {
+                  message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+                } else {
+                  message += codeSection;
+                }
+                logger.info(`✅ Código do cupom adicionado ao template`);
+              }
+            }
+          }
+        }
+        
+        // Para cupons: coupon_code e affiliate_link são obrigatórios
+        if (templateType === 'new_coupon') {
+          const couponCode = variables.coupon_code || '';
+          const affiliateLink = variables.affiliate_link || '';
+          
+          const hasCouponCode = couponCode && (
+            message.includes(couponCode) || 
+            message.includes('{coupon_code}') ||
+            message.toLowerCase().includes(couponCode.toLowerCase())
+          );
+          
+          const hasAffiliateLink = affiliateLink && (
+            message.includes(affiliateLink) || 
+            message.includes('{affiliate_link}') ||
+            message.includes('http://') || 
+            message.includes('https://')
+          );
+          
+          if (!hasCouponCode && couponCode) {
+            logger.warn(`⚠️ [IA ADVANCED] Template de cupom pode não conter coupon_code, mas continuando...`);
+            // NÃO bloquear - apenas avisar
+          }
+          
+          if (!hasAffiliateLink && affiliateLink) {
+            logger.warn(`⚠️ [IA ADVANCED] Template de cupom pode não conter affiliate_link, mas continuando...`);
+            // NÃO bloquear - apenas avisar
+          }
+        }
       }
 
       // VALIDAÇÃO: Verificar quebra de linha preservada (apenas se não for IA ADVANCED)
@@ -944,12 +1244,14 @@ class TemplateRenderer {
       : null;
     
     // Preço original (antes do cupom) se houver cupom
+    // IMPORTANTE: original_price deve ser o preço ANTES do cupom (current_price)
+    // Se não houver cupom, usar current_price como original_price
     const originalPriceFormatted = (product.coupon_id && priceWithCoupon) 
       ? new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL'
         }).format(product.current_price)
-      : null;
+      : priceFormatted; // Se não houver cupom, usar o preço formatado atual
 
     const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 
                         product.platform === 'shopee' ? 'Shopee' :
@@ -1013,9 +1315,9 @@ class TemplateRenderer {
           }
           
           // Aplicabilidade
-          if (coupon.is_general) {
+          if (coupon.is_general === true) {
             couponSection += `✅ **Válido para todos os produtos**\n`;
-          } else {
+          } else if (coupon.is_general === false) {
             const productCount = coupon.applicable_products?.length || 0;
             if (productCount > 0) {
               couponSection += `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})\n`;
@@ -1088,7 +1390,7 @@ class TemplateRenderer {
     return {
       product_name: productName,
       current_price: priceFormatted, // Preço final (com cupom se houver)
-      original_price: originalPriceFormatted || priceFormatted, // Preço antes do cupom
+      original_price: originalPriceFormatted, // Preço antes do cupom (ou preço atual se não houver cupom)
       old_price: oldPriceFormatted ? ` ~~${oldPriceFormatted}~~` : '',
       discount_percentage: product.discount_percentage || 0,
       platform_name: platformName,
@@ -1097,7 +1399,12 @@ class TemplateRenderer {
       coupon_section: couponSection,
       shopee_offer_info: shopeeOfferInfo,
       is_shopee_offer: product.platform === 'shopee' ? 'true' : 'false',
-      final_price: priceFormatted, // Preço final com cupom aplicado
+      final_price: (product.coupon_id && priceWithCoupon) 
+        ? new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
+          }).format(priceWithCoupon)
+        : priceFormatted, // Preço final COM cupom aplicado (ou preço atual se não houver cupom)
       price_with_coupon: priceWithCoupon ? new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
@@ -1139,12 +1446,12 @@ class TemplateRenderer {
       : '';
 
     // Aplicabilidade - SEMPRE incluir quando houver informação (geral ou produtos selecionados)
-    // Se não houver produtos selecionados E não for geral, não incluir
+    // Se is_general for null, não incluir (deixar vazio)
     let applicability = '';
-    if (coupon.is_general) {
+    if (coupon.is_general === true) {
       // Cupom válido para todos os produtos
       applicability = '✅ **Válido para todos os produtos**';
-    } else {
+    } else if (coupon.is_general === false) {
       // Cupom para produtos selecionados
       const productCount = coupon.applicable_products?.length || 0;
       if (productCount > 0) {
@@ -1152,6 +1459,7 @@ class TemplateRenderer {
       }
       // Se productCount === 0 e não é geral, não incluir (deixar vazio)
     }
+    // Se is_general for null, applicability permanece vazio e a linha será removida do template
 
     // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
     // Sempre retornar vazio, independente de ter ou não data de expiração
@@ -1781,15 +2089,27 @@ class TemplateRenderer {
       
       // Mapear tipo de template para campo de configuração
       const modeMap = {
-        'new_promotion': settings.template_mode_promotion || 'custom',
-        'promotion_with_coupon': settings.template_mode_promotion_coupon || 'custom',
-        'new_coupon': settings.template_mode_coupon || 'custom',
-        'expired_coupon': settings.template_mode_expired_coupon || 'custom'
+        'new_promotion': settings.template_mode_promotion,
+        'promotion_with_coupon': settings.template_mode_promotion_coupon,
+        'new_coupon': settings.template_mode_coupon,
+        'expired_coupon': settings.template_mode_expired_coupon
       };
       
-      return modeMap[templateType] || 'custom';
+      const mode = modeMap[templateType];
+      
+      // Validar que o modo é um dos valores permitidos
+      const validModes = ['default', 'custom', 'ai_advanced'];
+      if (mode && validModes.includes(mode)) {
+        logger.debug(`📋 Modo de template para ${templateType}: ${mode} (do banco de dados)`);
+        return mode;
+      }
+      
+      // Se não for válido ou não existir, usar 'custom' como padrão
+      logger.warn(`⚠️ Modo de template inválido ou não configurado para ${templateType}: "${mode}", usando 'custom' como padrão`);
+      return 'custom';
     } catch (error) {
-      logger.warn(`Erro ao buscar modo de template, usando 'custom': ${error.message}`);
+      logger.error(`❌ Erro ao buscar modo de template: ${error.message}`);
+      logger.warn(`⚠️ Usando 'custom' como fallback`);
       return 'custom';
     }
   }
@@ -1813,7 +2133,8 @@ class TemplateRenderer {
       
       case 'promotion_with_coupon':
         // Template padrão para promoção COM CUPOM
-        return `🔥 **PROMOÇÃO + CUPOM!**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **Preço:** ${variables.original_price || variables.current_price || 'R$ 0,00'}\n🎟️ **Com Cupom:** ${variables.final_price || variables.current_price || 'R$ 0,00'}\n${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n${variables.coupon_section || ''}\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Economia dupla! Aproveite agora!`;
+        // IMPORTANTE: Usar backticks para o código do cupom para que seja convertido para <code> no Telegram
+        return `📦 ${variables.product_name || 'Produto'}\n\n💰 Preço: ${variables.original_price || variables.current_price || 'R$ 0,00'}\n🎟️ Com Cupom: ${variables.final_price || variables.current_price || 'R$ 0,00'}\n🏷️ ${variables.discount_percentage || 0}% OFF\n\n🎟️ CUPOM: \`${variables.coupon_code || 'N/A'}\`\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Economia dupla! Aproveite agora!`;
       
       case 'new_coupon':
         // Se não tem descrição nem data de validade, é cupom capturado do Telegram

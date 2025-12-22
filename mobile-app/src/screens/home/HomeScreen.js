@@ -25,22 +25,88 @@ export default function HomeScreen({ navigation }) {
   const { colors } = useThemeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [platformFilter, setPlatformFilter] = useState('all');
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 20,
+    totalPages: 1,
+    total: 0,
+    hasMore: true
+  });
 
   useEffect(() => {
-    loadProducts();
+    loadProducts(true);
   }, []);
 
-  const loadProducts = async () => {
-    setLoading(true);
-    await fetchProducts();
-    setLoading(false);
+  useEffect(() => {
+    // Resetar paginação quando filtros mudarem
+    const timer = setTimeout(() => {
+      loadProducts(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, platformFilter]);
+
+  const loadProducts = async (reset = false) => {
+    if (reset) {
+      setLoading(true);
+      setPagination(prev => ({ ...prev, page: 1, hasMore: true }));
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      const currentPage = reset ? 1 : pagination.page;
+      const filters = {
+        page: currentPage,
+        limit: pagination.limit,
+      };
+
+      if (searchQuery) {
+        filters.search = searchQuery;
+      }
+      if (platformFilter !== 'all') {
+        filters.platform = platformFilter;
+      }
+
+      const result = await fetchProducts(filters);
+      
+      if (result.success) {
+        if (reset) {
+          setPagination({
+            page: result.pagination.page,
+            limit: result.pagination.limit,
+            totalPages: result.pagination.totalPages,
+            total: result.pagination.total,
+            hasMore: result.pagination.page < result.pagination.totalPages
+          });
+        } else {
+          setPagination(prev => ({
+            ...prev,
+            page: result.pagination.page,
+            hasMore: result.pagination.page < result.pagination.totalPages
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar produtos:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (!loadingMore && pagination.hasMore) {
+      setPagination(prev => ({ ...prev, page: prev.page + 1 }));
+      loadProducts(false);
+    }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadProducts();
+    await loadProducts(true);
     setRefreshing(false);
   };
 
@@ -57,14 +123,10 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate(SCREEN_NAMES.PRODUCT_DETAILS, { product });
   };
 
+  // Aplicar apenas filtros locais (preferências do usuário)
+  // Os filtros de busca e plataforma já são aplicados no backend via loadProducts
   const filteredProducts = products.filter(p => {
-    // Filtro de busca
-    const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Filtro de plataforma (seleção manual)
-    const matchesPlatform = platformFilter === 'all' || p.platform === platformFilter;
-    
-    // Filtros das preferências do usuário
+    // Filtros das preferências do usuário (aplicados localmente)
     const homeFilters = preferences?.home_filters || {};
     
     // Filtro de plataformas (preferências)
@@ -77,7 +139,7 @@ export default function HomeScreen({ navigation }) {
     
     // Filtro de desconto mínimo
     const discount = p.discount_percentage || 
-      Math.round(((p.old_price - p.current_price) / p.old_price) * 100);
+      (p.old_price ? Math.round(((p.old_price - p.current_price) / p.old_price) * 100) : 0);
     const matchesMinDiscount = !homeFilters.min_discount || discount >= homeFilters.min_discount;
     
     // Filtro de preço máximo
@@ -86,8 +148,7 @@ export default function HomeScreen({ navigation }) {
     // Filtro de apenas com cupom
     const matchesCoupon = !homeFilters.only_with_coupon || !!p.coupon_id;
     
-    return matchesSearch && matchesPlatform && matchesPlatformFilter && 
-           matchesCategory && matchesMinDiscount && matchesMaxPrice && matchesCoupon;
+    return matchesPlatformFilter && matchesCategory && matchesMinDiscount && matchesMaxPrice && matchesCoupon;
   });
 
   const styles = dynamicStyles(colors);
@@ -183,6 +244,16 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.footerLoaderText}>Carregando mais produtos...</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -198,6 +269,7 @@ export default function HomeScreen({ navigation }) {
         )}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
+        ListFooterComponent={renderFooter}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl 
@@ -207,6 +279,8 @@ export default function HomeScreen({ navigation }) {
             tintColor={colors.primary}
           />
         }
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
         showsVerticalScrollIndicator={false}
         numColumns={1}
       />
@@ -337,5 +411,15 @@ const dynamicStyles = (colors) => StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     fontWeight: '500',
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerLoaderText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: colors.textMuted,
   },
 });

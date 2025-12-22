@@ -80,21 +80,52 @@ export default function BotTemplates() {
       };
 
       const field = fieldMap[templateType];
-      if (!field) return;
+      if (!field) {
+        toast({
+          title: "Erro",
+          description: "Tipo de template inválido",
+          variant: "destructive"
+        });
+        return;
+      }
 
-      await api.put('/settings', { [field]: mode });
+      // Validar que o modo é válido
+      const validModes = ['default', 'custom', 'ai_advanced'];
+      if (!validModes.includes(mode)) {
+        toast({
+          title: "Erro",
+          description: `Modo inválido: ${mode}`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log(`🔄 Salvando modo de template: ${field} = ${mode}`);
       
+      const response = await api.put('/settings', { [field]: mode });
+      
+      // Atualizar estado local imediatamente
       setTemplateModes(prev => ({ ...prev, [templateType]: mode }));
+      
+      // Recarregar modos do servidor para confirmar
+      await loadTemplateModes();
+      
+      const modeNames = {
+        'default': 'Padrão',
+        'custom': 'Customizado',
+        'ai_advanced': 'IA ADVANCED'
+      };
       
       toast({
         title: "Sucesso",
-        description: `Modo de template atualizado para ${mode === 'default' ? 'Padrão' : mode === 'custom' ? 'Customizado' : 'IA ADVANCED'}`,
+        description: `Modo de template atualizado para "${modeNames[mode]}"`,
         variant: "success"
       });
     } catch (error) {
+      console.error('Erro ao atualizar modo de template:', error);
       toast({
         title: "Erro",
-        description: error.response?.data?.message || "Falha ao atualizar modo de template",
+        description: error.response?.data?.message || error.message || "Falha ao atualizar modo de template",
         variant: "destructive"
       });
     }

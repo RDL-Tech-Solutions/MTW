@@ -47,7 +47,7 @@ export default function Coupons() {
     discount_value: '',
     min_purchase: '',
     max_discount_value: '',
-    is_general: true,
+    is_general: null, // null = não especificado, true = todos produtos, false = produtos selecionados
     applicable_products: [],
     max_uses: '',
     current_uses: 0,
@@ -143,7 +143,7 @@ export default function Coupons() {
                   discount_value: coupon.discount_value || '',
                   min_purchase: coupon.min_purchase || '',
                   max_discount_value: coupon.max_discount_value || '',
-                  is_general: coupon.is_general !== undefined ? coupon.is_general : true,
+                  is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
                   applicable_products: coupon.applicable_products || [],
                   max_uses: coupon.max_uses || '',
                   current_uses: coupon.current_uses || 0,
@@ -178,7 +178,7 @@ export default function Coupons() {
                   discount_value: coupon.discount_value || '',
                   min_purchase: coupon.min_purchase || '',
                   max_discount_value: coupon.max_discount_value || '',
-                  is_general: coupon.is_general !== undefined ? coupon.is_general : true,
+                  is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
                   applicable_products: coupon.applicable_products || [],
                   max_uses: coupon.max_uses || '',
                   current_uses: coupon.current_uses || 0,
@@ -538,7 +538,7 @@ export default function Coupons() {
       discount_value: coupon.discount_value,
       min_purchase: coupon.min_purchase || '',
       max_discount_value: coupon.max_discount_value || '',
-      is_general: coupon.is_general !== undefined ? coupon.is_general : true,
+      is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
       applicable_products: coupon.applicable_products || [],
       max_uses: coupon.max_uses || '',
       current_uses: coupon.current_uses || 0,
@@ -629,7 +629,7 @@ export default function Coupons() {
         discount_value: '',
         min_purchase: '',
         max_discount_value: '',
-        is_general: true,
+        is_general: null,
         applicable_products: [],
         max_uses: '',
         current_uses: 0,
@@ -775,7 +775,7 @@ export default function Coupons() {
                   discount_value: '',
                   min_purchase: '',
                   max_discount_value: '',
-                  is_general: true,
+                  is_general: null,
                   applicable_products: [],
                   max_uses: '',
                   current_uses: 0,
@@ -923,15 +923,28 @@ export default function Coupons() {
                   <select
                     id="is_general"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={formData.is_general ? 'true' : 'false'}
-                    onChange={(e) => setFormData({ ...formData, is_general: e.target.value === 'true' })}
+                    value={formData.is_general === null ? 'null' : formData.is_general ? 'true' : 'false'}
+                    onChange={(e) => {
+                      const value = e.target.value === 'null' ? null : e.target.value === 'true';
+                      setFormData({ 
+                        ...formData, 
+                        is_general: value,
+                        applicable_products: value === false ? formData.applicable_products : []
+                      });
+                    }}
                   >
+                    <option value="null">Não especificado</option>
                     <option value="true">Todos os Produtos</option>
                     <option value="false">Produtos Selecionados</option>
                   </select>
-                  {!formData.is_general && (
+                  {formData.is_general === false && (
                     <p className="text-sm text-muted-foreground mt-1">
                       ⚠️ Para produtos selecionados, você precisará associar os produtos após criar o cupom.
+                    </p>
+                  )}
+                  {formData.is_general === null && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      ℹ️ Quando não especificado, a informação de aplicabilidade não aparecerá no template do cupom.
                     </p>
                   )}
                 </div>

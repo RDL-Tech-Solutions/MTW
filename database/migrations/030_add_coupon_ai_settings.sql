@@ -20,3 +20,4 @@ COMMENT ON COLUMN coupon_settings.ai_require_good_deal IS 'Requerer que seja uma
 
 
 
+

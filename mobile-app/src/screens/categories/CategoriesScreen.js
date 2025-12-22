@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../stores/productStore';
+import { useThemeStore } from '../../theme/theme';
 import { SCREEN_NAMES } from '../../utils/constants';
-import colors from '../../theme/colors';
 
 const CATEGORY_ICONS = {
   'Eletrônicos': 'phone-portrait-outline',
@@ -26,6 +26,7 @@ const CATEGORY_ICONS = {
 
 export default function CategoriesScreen({ navigation }) {
   const { categories, fetchCategories, fetchProducts } = useProductStore();
+  const { colors } = useThemeStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,46 +49,50 @@ export default function CategoriesScreen({ navigation }) {
     const iconName = CATEGORY_ICONS[item.name] || 'pricetag-outline';
     const hasEmojiIcon = item.icon && item.icon.length <= 2; // Emoji geralmente tem 1-2 caracteres
     
+    const dynamicStyles = createStyles(colors);
+    
     return (
       <TouchableOpacity 
-        style={styles.categoryCard}
+        style={dynamicStyles.categoryCard}
         onPress={() => handleCategoryPress(item)}
         activeOpacity={0.7}
       >
-        <View style={styles.iconContainer}>
+        <View style={dynamicStyles.iconContainer}>
           {hasEmojiIcon ? (
-            <Text style={styles.emojiIcon}>{item.icon}</Text>
+            <Text style={dynamicStyles.emojiIcon}>{item.icon}</Text>
           ) : (
             <Ionicons name={iconName} size={32} color={colors.primary} />
           )}
         </View>
-        <Text style={styles.categoryName}>{item.name}</Text>
+        <Text style={dynamicStyles.categoryName}>{item.name}</Text>
         {item.description && (
-          <Text style={styles.categoryDescription} numberOfLines={2}>
+          <Text style={dynamicStyles.categoryDescription} numberOfLines={2}>
             {item.description}
           </Text>
         )}
-        <Text style={styles.productCount}>
+        <Text style={dynamicStyles.productCount}>
           {item.product_count || 0} produtos
         </Text>
       </TouchableOpacity>
     );
   };
 
+  const dynamicStyles = createStyles(colors);
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={dynamicStyles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Carregando categorias...</Text>
+        <Text style={dynamicStyles.loadingText}>Carregando categorias...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Categorias</Text>
-        <Text style={styles.subtitle}>Explore por categoria</Text>
+    <View style={dynamicStyles.container}>
+      <View style={dynamicStyles.header}>
+        <Text style={dynamicStyles.title}>Categorias</Text>
+        <Text style={dynamicStyles.subtitle}>Explore por categoria</Text>
       </View>
 
       <FlatList
@@ -95,14 +100,14 @@ export default function CategoriesScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderCategory}
         numColumns={2}
-        contentContainerStyle={styles.list}
-        columnWrapperStyle={styles.row}
+        contentContainerStyle={dynamicStyles.list}
+        columnWrapperStyle={dynamicStyles.row}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📂</Text>
-            <Text style={styles.emptyTitle}>Nenhuma categoria</Text>
-            <Text style={styles.emptyText}>Aguarde novas categorias</Text>
+          <View style={dynamicStyles.emptyContainer}>
+            <Text style={dynamicStyles.emptyIcon}>📂</Text>
+            <Text style={dynamicStyles.emptyTitle}>Nenhuma categoria</Text>
+            <Text style={dynamicStyles.emptyText}>Aguarde novas categorias</Text>
           </View>
         }
       />
@@ -110,7 +115,7 @@ export default function CategoriesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -138,7 +143,7 @@ const styles = StyleSheet.create({
   },
   categoryCard: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
@@ -146,7 +151,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    // Web: usar boxShadow, Mobile: usar elevation
     ...(Platform.OS === 'web' ? {
       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
     } : {

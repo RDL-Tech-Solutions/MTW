@@ -177,133 +177,86 @@ class AdvancedTemplateGenerator {
     let prompt = `Você é um especialista em marketing digital e criação de mensagens promocionais para e-commerce.
 
 CONTEXTO DO PRODUTO:
-- Nome original: ${context.originalTitle || product.name || 'Produto'}
-- Nome otimizado: ${context.optimizedTitle || product.name || 'Produto'} ${context.optimizedTitle ? '(USE ESTE TÍTULO EXATAMENTE na mensagem, sem modificações)' : ''}
-- **CRÍTICO**: O título otimizado acima já está curto e pronto para uso. Use EXATAMENTE a variável {product_name} sem criar um novo título ou descrição longa.
+- Nome do produto: ${context.optimizedTitle || product.name || 'Produto'}
 - Preço atual: R$ ${product.current_price || '0,00'}
-${context.hasOldPrice ? `- Preço antigo: R$ ${product.old_price} (use ~~R$ ${product.old_price}~~ para riscar)` : ''}
+${context.hasOldPrice ? `- Preço antigo: R$ ${product.old_price}` : ''}
 - Desconto: ${context.discount}% OFF
-${context.hasCoupon ? `- TEM CUPOM VINCULADO: Preço original R$ ${context.originalPrice}, Preço final com cupom R$ ${context.finalPrice}` : ''}
+${context.hasCoupon ? `- TEM CUPOM: Preço original R$ ${context.originalPrice}, Preço final R$ ${context.finalPrice}` : ''}
 - Plataforma: ${product.platform === 'mercadolivre' ? 'Mercado Livre' : product.platform === 'shopee' ? 'Shopee' : product.platform}
 - Urgência: ${this.getUrgencyText(context.urgencyLevel)}
 
-VARIÁVEIS DISPONÍVEIS (use {nome_variavel}):
+VARIÁVEIS DISPONÍVEIS (use {nome_variavel} - serão substituídas automaticamente):
 ${context.hasCoupon ? `
-- {product_name} - Nome do produto
+- {product_name} - Nome do produto (OBRIGATÓRIO)
 - {original_price} - Preço antes do cupom
 - {final_price} - Preço final com cupom
 - {current_price} - Preço final com cupom
-- {old_price} - Preço antigo formatado (se houver)
+- {old_price} - Preço antigo já formatado com ~~ (use diretamente)
 - {discount_percentage} - Percentual de desconto
-- {platform_name} - Nome da plataforma
-- {affiliate_link} - Link de afiliado
-- {coupon_section} - Seção completa do cupom
-- {coupon_code} - Código do cupom
+- {affiliate_link} - Link de afiliado (OBRIGATÓRIO)
+- {coupon_code} - Código do cupom (OBRIGATÓRIO - formatar com backticks: \`{coupon_code}\`)
 - {coupon_discount} - Desconto do cupom
-- {price_with_coupon} - Preço final formatado
 ` : `
-- {product_name} - Nome do produto
+- {product_name} - Nome do produto (OBRIGATÓRIO)
 - {current_price} - Preço atual formatado
-- {old_price} - Preço antigo formatado (se houver)
+- {old_price} - Preço antigo já formatado com ~~ (use diretamente)
 - {discount_percentage} - Percentual de desconto
-- {platform_name} - Nome da plataforma
-- {affiliate_link} - Link de afiliado
+- {affiliate_link} - Link de afiliado (OBRIGATÓRIO)
 `}
 
-REQUISITOS:
-1. **CRÍTICO**: O título do produto DEVE aparecer na mensagem usando EXATAMENTE a variável {product_name} SEM MODIFICAR. ${context.optimizedTitle ? 'USE O TÍTULO OTIMIZADO fornecido no contexto' : 'Use o nome do produto fornecido'} O título já está otimizado e curto, NÃO crie um novo título ou descrição longa no lugar do título.
-2. **CRÍTICO**: Crie uma mensagem COMPLETA e ELABORADA, não apenas um template básico
-3. **CRÍTICO**: O título do produto ({product_name}) DEVE aparecer logo após o cabeçalho da oferta, em uma linha separada e destacada, usando EXATAMENTE a variável {product_name} sem alterações
-4. **CRÍTICO**: Após o título, crie uma seção SEPARADA de descrição persuasiva destacando benefícios e características principais baseadas no título fornecido
-5. **CRÍTICO**: Use a variável {affiliate_link} para o link, NÃO escreva "[Link de afiliado]" ou texto literal. O link será substituído automaticamente.
-6. **CRÍTICO**: A mensagem DEVE ser enviada como caption de uma imagem, então seja direto e impactante
-${context.hasCoupon ? `7. **CRÍTICO**: O código do cupom DEVE aparecer na mensagem usando a variável {coupon_code} formatada com backticks: \`{coupon_code}\`. Isso permite cópia fácil no Telegram. O código do cupom é OBRIGATÓRIO quando há cupom vinculado.` : '7. Crie uma mensagem ' + (context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara')}
-${context.hasCoupon ? '' : '8. Crie uma mensagem ' + (context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara')}
-${context.hasCoupon ? '8. **CRÍTICO**: Destaque a ECONOMIA DUPLA (desconto do produto + cupom) e SEMPRE inclua o código do cupom formatado' : '9. Destaque o desconto e a oportunidade'}
-9. Use emojis relevantes e estratégicos (4-6 por mensagem para melhor visualização)
+REQUISITOS OBRIGATÓRIOS (CRÍTICO - SEGUIR EXATAMENTE):
+1. Use EXATAMENTE {product_name} para o título - NÃO modifique, NÃO crie descrição longa, NÃO substitua por texto próprio
+2. Use {affiliate_link} para o link - NÃO escreva "[Link de afiliado]", "[Link]", "link aqui" ou qualquer texto literal
+${context.hasCoupon ? '3. Use \`{coupon_code}\` para o código do cupom (OBRIGATÓRIO - sempre formatar com backticks)' : '3. Destaque o desconto e a oportunidade'}
+4. Use {old_price} diretamente - já vem formatado com ~~, NÃO adicione "(de", "De", "DE" ou tildes extras
+5. Use **texto** para negrito (dois asteriscos), NUNCA use <b>, <strong> ou tags HTML
+6. Use \`código\` para código (backticks), NUNCA use <code> ou tags HTML
+7. Use ~~texto~~ para riscado (dois tildes), NUNCA use <s>, <strike>, <del> ou tags HTML
+8. Crie mensagem completa (10-15 linhas) com: cabeçalho, título, descrição, preço, desconto${context.hasCoupon ? ', código do cupom' : ''}, link, urgência
+9. Use 4-6 emojis estratégicos
 10. ${formatGuide}
-11. Seja detalhado e persuasivo (mínimo 10-15 linhas para criar uma mensagem completa e atrativa)
-12. **IMPORTANTE**: Inclua uma seção descrevendo o produto baseado no título, destacando características, benefícios e por que vale a pena comprar
-13. Crie senso de urgência se o desconto for alto (${context.discount}%)
-${context.hasCoupon ? '14. **CRÍTICO**: Enfatize o valor final com cupom aplicado e SEMPRE mostre o código do cupom formatado com backticks' : '14. Enfatize o preço com desconto'}
-15. Use quebras de linha para organizar (uma linha em branco entre seções principais)
-16. ${context.hasOldPrice ? '**CRÍTICO**: A variável {old_price} JÁ VEM FORMATADA com os tildes (ex: " ~~R$ 44,88~~"). Use APENAS {old_price} diretamente, SEM adicionar "(de" antes ou tildes extras. Exemplo correto: "💰 **Preço especial: {current_price}** {old_price}"' : ''}
-17. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown (**texto** para negrito, ~~texto~~ para riscado, \`código\` para código)
-18. **CRÍTICO**: Para preço antigo, use APENAS a variável {old_price} que já vem formatada corretamente. NÃO adicione "(de" antes ou tildes extras.
-19. **CRÍTICO**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b>
-20. **CRÍTICO**: Para código do cupom, use \`{coupon_code}\` (backticks), NÃO use <code> ou tags HTML
-21. **CRÍTICO**: NUNCA escreva "[Link de afiliado]" ou qualquer texto literal para o link - use APENAS {affiliate_link}
-22. **CRÍTICO**: A mensagem DEVE incluir TODAS as seções: cabeçalho, título do produto, descrição, preço, desconto${context.hasCoupon ? ', código do cupom' : ''}, link e urgência
-23. NÃO invente variáveis que não foram listadas
-24. Retorne APENAS o template completo, sem explicações
+11. Seja persuasivo e crie senso de urgência
+12. NÃO invente variáveis não listadas acima
+13. NÃO adicione explicações, comentários ou notas após o template
+14. NÃO adicione texto como "Template:", "Mensagem:", "Aqui está:", etc.
+15. Retorne APENAS o template limpo, sem prefixos ou sufixos
+16. NÃO use tags HTML em nenhuma circunstância - apenas Markdown
+17. NÃO adicione texto "mensagem truncada", "continua", "[...]" ou similar
 
-EXEMPLO DE ESTRUTURA BOM (para produtos - MENSAGEM COMPLETA E ELABORADA):
+EXEMPLO DE ESTRUTURA (para produtos - SEGUIR ESTE FORMATO EXATO):
 🔥 **Oferta Imperdível!** 🔥
 
 📦 **{product_name}**
-[CRÍTICO: O título do produto DEVE aparecer aqui EXATAMENTE como fornecido, usando a variável {product_name}. NÃO modifique o título, NÃO crie uma descrição longa no lugar do título. O título já está otimizado e curto (exemplo: "🔥 Fonte Gigabyte GP-P650G PG5, 650W, 80 Plus Gold, PFC Ativo, PCIe 5.1, ATX 3.1, Preta"). Use EXATAMENTE a variável {product_name} sem alterações.]
 
-💡 [AQUI: Crie uma descrição persuasiva do produto baseada no título fornecido, destacando características principais, benefícios e por que vale a pena comprar. Seja específico e convincente, usando 3-5 linhas. Esta é uma seção SEPARADA do título - o título já foi mostrado acima usando {product_name}.]
+💡 [Descrição persuasiva do produto destacando características e benefícios - 3-5 linhas]
 
-💰 **Preço especial: {current_price}**${context.hasOldPrice ? ' {old_price}' : ''}
-🏷️ **${context.discount}% OFF - Economize R$ ${Math.round((product.old_price || product.current_price) - (product.current_price || 0))}!** 🏷️
+💰 **Preço:** {current_price}${context.hasOldPrice ? ' {old_price}' : ''}
+🏷️ **{discount_percentage}% OFF**
 
-${context.hasCoupon ? `🎟️ **CUPOM INCLUSO!** Aproveite ainda mais desconto!
+${context.hasCoupon ? `🎟️ **CUPOM INCLUSO!**
 
-🔑 **Código do Cupom:** \`{coupon_code}\`
-💰 **Desconto do Cupom:** {coupon_discount}
+🔑 **Código:** \`{coupon_code}\`
+💰 **Desconto:** {coupon_discount}
 
-` : ''}🛒 Disponível no {platform_name}
-
-👉 {affiliate_link}
-[CRÍTICO: Use {affiliate_link} aqui, NÃO escreva "[Link de afiliado]" ou qualquer texto literal. A variável será substituída pelo link real automaticamente.]
+` : ''}🔗 {affiliate_link}
 
 ⏳ **Aproveite antes que acabe!** ⏳
 
-IMPORTANTE SOBRE VARIÁVEIS:
-- **CRÍTICO**: Use {product_name} para o título - será substituído pelo título otimizado que já está curto e pronto. NÃO modifique, NÃO crie um novo título, NÃO substitua por uma descrição longa. Use EXATAMENTE a variável {product_name} sem alterações.
-- Use {affiliate_link} para o link (será substituído pelo link real)
-- Use {current_price} para o preço atual
-- Use {old_price} para o preço antigo (se houver)
-- Use {discount_percentage} para o desconto
-- Use {platform_name} para o nome da plataforma
-${context.hasCoupon ? `- **CRÍTICO**: Use {coupon_code} para o código do cupom - SEMPRE formatado com backticks: \`{coupon_code}\`\n- Use {coupon_discount} para o desconto do cupom\n- Use {coupon_section} para a seção completa do cupom (opcional, pode usar {coupon_code} diretamente)` : ''}
-- NUNCA escreva texto literal como "[Link de afiliado]" - use sempre as variáveis
+FORMATAÇÃO CRÍTICA:
+- SEMPRE coloque cada informação em uma linha separada
+- SEMPRE use quebras de linha (\n) entre seções
+- NÃO coloque preço, desconto e emoji na mesma linha sem quebra
+- Formato correto: "💰 **Preço:** {current_price}" (emoji, texto, variável em linhas separadas ou bem formatadas)
+- Formato ERRADO: "R$ 78,00💰 Por: R$ 48,00 38% OFF" (tudo junto)
 
-IMPORTANTE SOBRE FORMATAÇÃO:
-- Use **texto** para negrito (dois asteriscos)
-- **IMPORTANTE**: A variável {old_price} JÁ VEM FORMATADA com os tildes. Use APENAS {old_price} diretamente, SEM adicionar "(de" ou tildes extras. Exemplo: "💰 **Preço especial: {current_price}** {old_price}"
-- Use \`código\` para código (backticks)
-- NUNCA use <b>, <strong>, <s>, <code> ou outras tags HTML
-- Seja detalhado, persuasivo e completo (mínimo 10-15 linhas)
-- **CRÍTICO**: Substitua [AQUI: ...] por uma descrição real e elaborada do produto
-- **CRÍTICO**: A mensagem DEVE incluir TODAS as seções obrigatórias: cabeçalho, título do produto, descrição, preço, desconto, link e urgência
-- **CRÍTICO**: NUNCA retorne uma mensagem vazia ou incompleta
-
-ESTRUTURA OBRIGATÓRIA (todas as seções devem estar presentes):
-1. Cabeçalho com emojis e chamada de atenção
-2. **CRÍTICO**: Título do produto usando EXATAMENTE {product_name} - NÃO modifique, NÃO crie descrição longa no lugar. O título já está otimizado e curto.
-3. Descrição persuasiva do produto (3-5 linhas) - Esta é uma seção SEPARADA, após o título
-4. Preço e desconto formatados
-${context.hasCoupon ? '5. **OBRIGATÓRIO**: Código do cupom formatado com backticks: \\`{coupon_code}\\`\n6. Link de afiliado usando {affiliate_link}\n7. Mensagem de urgência final' : '5. Link de afiliado usando {affiliate_link}\n6. Mensagem de urgência final'}
-
-**ATENÇÃO ESPECIAL SOBRE O TÍTULO:**
-- O título do produto ({product_name}) já está otimizado e curto (exemplo: "🔥 Fonte Gigabyte GP-P650G PG5, 650W, 80 Plus Gold, PFC Ativo, PCIe 5.1, ATX 3.1, Preta")
-- Use EXATAMENTE a variável {product_name} sem modificações
-- NÃO substitua o título por uma descrição longa
-- NÃO crie um novo título baseado no título fornecido
-- O título deve aparecer curto e direto, exatamente como fornecido
-
-**EXEMPLO DO QUE NÃO FAZER (ERRADO):**
-❌ "💡 Transforme sua experiência de digitação com este teclado RGB de 69 teclas! Com 18 modos de luz de fundo personalizáveis..."
-   (Isso é uma descrição longa, NÃO é o título)
-
-**EXEMPLO DO QUE FAZER (CORRETO):**
-✅ 📦 **{product_name}**
-   (O título aparece curto e direto, usando a variável {product_name})
-
-💡 Transforme sua experiência de digitação com este teclado RGB de 69 teclas! Com 18 modos de luz de fundo personalizáveis...
-   (A descrição vem DEPOIS do título, em uma seção separada)
+REGRAS IMPORTANTES:
+- {product_name} = título exato do produto (NÃO modificar)
+- {old_price} = já vem com ~~, usar diretamente
+- {affiliate_link} = link real (NÃO escrever "[Link de afiliado]")
+${context.hasCoupon ? '- {coupon_code} = sempre formatar com backticks: \\`{coupon_code}\\`' : ''}
+- Use **texto** para negrito, \`código\` para código, ~~texto~~ para riscado
+- NUNCA use tags HTML (<b>, <code>, etc)
+- Mínimo 10-15 linhas, seja persuasivo
 
 Template:`;
 
@@ -324,79 +277,61 @@ Template:`;
 CONTEXTO DO CUPOM:
 - Código: ${coupon.code}
 - Desconto: ${context.discountValue}${context.discountType === 'percentage' ? '%' : ' R$'} OFF
-- Plataforma: ${coupon.platform === 'mercadolivre' ? 'Mercado Livre' : coupon.platform === 'shopee' ? 'Shopee' : coupon.platform}
 ${context.hasMinPurchase ? `- Compra mínima: R$ ${coupon.min_purchase.toFixed(2)}` : ''}
 ${context.hasMaxDiscount ? `- Limite de desconto: R$ ${coupon.max_discount_value.toFixed(2)}` : ''}
 - Urgência: ${this.getUrgencyText(context.urgencyLevel)}
-${context.isGeneral ? '- Válido para TODOS os produtos' : context.hasApplicableProducts ? `- Válido para produtos selecionados (${coupon.applicable_products?.length || 0} produto(s))` : '- Não há produtos selecionados (aplicabilidade não será mostrada)'}
+${context.isGeneral ? '- Válido para TODOS os produtos' : context.hasApplicableProducts ? `- Válido para produtos selecionados (${coupon.applicable_products?.length || 0} produto(s))` : '- Aplicabilidade não especificada (não mostrar)'}
 
-**IMPORTANTE**: A mensagem será enviada com uma imagem do logo da plataforma. NÃO mencione o nome da plataforma no texto, pois a imagem já identifica a plataforma.
+**IMPORTANTE**: A mensagem será enviada com uma imagem do logo da plataforma. NÃO mencione o nome da plataforma no texto.
 
-VARIÁVEIS DISPONÍVEIS (use {nome_variavel}):
-- {coupon_code} - Código do cupom (OBRIGATÓRIO - DEVE aparecer na mensagem)
+VARIÁVEIS DISPONÍVEIS (use {nome_variavel} - serão substituídas automaticamente):
+- {coupon_code} - Código do cupom (OBRIGATÓRIO - formatar com backticks: \`{coupon_code}\`)
 - {discount_value} - Valor do desconto formatado
-- {min_purchase} - Valor da compra mínima formatado (ex: "R$ 199.00") - Apenas o valor, sem emoji ou texto adicional
-- {applicability} - Aplicabilidade do cupom (ex: "✅ **Válido para todos os produtos**" ou "📦 **Em produtos selecionados** (X produtos)") - APENAS incluir se a variável não estiver vazia
+- {min_purchase} - Valor da compra mínima (ex: "R$ 199.00") - apenas o valor, você adiciona emoji e texto
+- {applicability} - Aplicabilidade (só usar se não estiver vazia)
 - {coupon_title} - Título do cupom (se disponível)
 - {coupon_description} - Descrição do cupom (se disponível)
-- {affiliate_link} - Link de afiliado
+- {affiliate_link} - Link de afiliado (OBRIGATÓRIO)
 
-**CRÍTICO**: NÃO inclua data de validade ({valid_until}) na mensagem. A data de validade não deve aparecer no template do bot.
-**CRÍTICO**: NÃO mencione o nome da plataforma no texto, pois a imagem do logo já identifica a plataforma.
+**IMPORTANTE**: 
+- NÃO inclua data de validade ({valid_until}) na mensagem
+- NÃO mencione o nome da plataforma no texto
 
-REQUISITOS:
-1. **CRÍTICO**: O código do cupom ({coupon_code}) DEVE aparecer OBRIGATORIAMENTE na mensagem, formatado com backticks: \`{coupon_code}\` (exemplo: \`ADMLAYS\`). Isso permite cópia fácil no Telegram. SEMPRE inclua o código do cupom.
-2. **CRÍTICO**: NÃO mencione o nome da plataforma no texto. A imagem do logo da plataforma será enviada junto com a mensagem, então não é necessário mencionar a plataforma.
-3. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara'}
-4. **IMPORTANTE**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b> ou <strong>texto</strong>
-5. **CRÍTICO**: A variável {min_purchase} contém APENAS o valor formatado (ex: "R$ 199.00"). Você DEVE adicionar o emoji e texto completo: "💳 **Compra mínima:** {min_purchase}". NUNCA duplique "Compra mínima" ou adicione emoji dentro da variável.
-6. Enfatize o valor do desconto de forma clara e destacada
-7. **CRÍTICO**: NÃO inclua data de validade ou informações sobre quando o cupom expira. Apenas crie senso de urgência genérico se necessário.
-8. Use emojis relevantes (máximo 4-5 por mensagem, não exagere): 🎟️, 💰, 🔥, ⚡
-9. ${formatGuide}
-10. Seja conciso mas informativo (máximo 8-10 linhas)
-11. Use quebras de linha para organizar (uma linha em branco entre seções)
-12. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown
-13. **CRÍTICO**: Para riscar texto, use ~~texto~~ (dois tildes), NÃO use ~~~~ ou <s>
-14. **CRÍTICO**: NÃO use a variável {valid_until} e NÃO mencione data de validade na mensagem
-15. **CRÍTICO**: NÃO mencione o nome da plataforma (Mercado Livre, Shopee, Amazon, AliExpress) no texto
-16. NÃO invente variáveis que não foram listadas
-17. Retorne APENAS o template, sem explicações
+REQUISITOS OBRIGATÓRIOS (CRÍTICO - SEGUIR EXATAMENTE):
+1. Use \`{coupon_code}\` para o código (OBRIGATÓRIO - sempre formatar com backticks)
+2. Use {affiliate_link} para o link (OBRIGATÓRIO) - NÃO escreva "[Link de afiliado]", "[Link]" ou texto literal
+3. Use {min_purchase} e adicione emoji/texto: "💳 **Compra mínima:** {min_purchase}"
+4. Use {applicability} apenas se não estiver vazia (será removida automaticamente se vazia)
+5. Use **texto** para negrito, \`código\` para código, ~~texto~~ para riscado
+6. NUNCA use tags HTML (<b>, <code>, <strong>, <s>, etc) - apenas Markdown
+7. NÃO mencione nome da plataforma (a imagem já identifica)
+8. NÃO inclua data de validade ({valid_until} será removida automaticamente)
+9. Seja conciso (8-10 linhas), use 4-5 emojis estratégicos
+10. ${formatGuide}
+11. NÃO adicione explicações, comentários ou notas após o template
+12. NÃO adicione texto como "Template:", "Mensagem:", "Aqui está:", etc.
+13. Retorne APENAS o template limpo, sem prefixos ou sufixos
+14. NÃO adicione texto "mensagem truncada", "continua", "[...]" ou similar
 
-EXEMPLO DE ESTRUTURA BOM (para cupons):
+EXEMPLO DE ESTRUTURA (para cupons):
 🎟️ **NOVO CUPOM DISPONÍVEL!** 🎟️
 
 💰 **{discount_value} OFF**
 
-${context.hasMinPurchase ? '💳 **Compra mínima:** {min_purchase}\n' : ''}🔑 **Código:** \`{coupon_code}\`
-
-${context.isGeneral ? '{applicability}\n' : '{applicability}\n'}${coupon.title ? `📝 ${coupon.title}\n` : ''}${coupon.description ? `${coupon.description}\n` : ''}🔗 {affiliate_link}
+🔑 **Código:** \`{coupon_code}\`
+${context.hasMinPurchase ? '💳 **Compra mínima:** {min_purchase}\n' : ''}${context.isGeneral || context.hasApplicableProducts ? '{applicability}\n' : ''}👉 {affiliate_link}
 
 ⚡ Use agora e economize!
 
-**IMPORTANTE SOBRE {applicability}:**
-- Se o cupom for válido para TODOS os produtos: use {applicability} que mostrará "✅ **Válido para todos os produtos**"
-- Se o cupom for para produtos SELECIONADOS: use {applicability} que mostrará "📦 **Em produtos selecionados** (X produtos)"
-- Se {applicability} estiver VAZIO (não houver produtos selecionados e não for geral): NÃO inclua esta seção na mensagem
-
-**ESTRUTURA OBRIGATÓRIA:**
-1. Cabeçalho com emojis e chamada de atenção
-2. **OBRIGATÓRIO**: Valor do desconto destacado
-3. **OBRIGATÓRIO**: Código do cupom formatado com backticks: \`{coupon_code}\`
-4. Compra mínima (se houver)
-5. **IMPORTANTE**: Aplicabilidade do cupom usando {applicability} - APENAS incluir se a variável não estiver vazia. Se {applicability} estiver vazia, NÃO incluir esta seção.
-6. Título/Descrição do cupom (se disponível)
-7. Link de afiliado usando {affiliate_link}
-8. Mensagem de urgência final
-
-IMPORTANTE SOBRE FORMATAÇÃO:
-- **CRÍTICO**: O código DEVE estar entre backticks: \`{coupon_code}\` - SEMPRE inclua o código
-- Use **texto** para negrito (dois asteriscos)
-- NUNCA use <b>, <strong>, <code> ou outras tags HTML
-- NUNCA duplique texto como "Compra mínima: Compra mínima:"
-- A variável {min_purchase} contém APENAS o valor (ex: "R$ 199.00"), você deve adicionar o emoji e texto: "💳 **Compra mínima:** {min_purchase}"
-- **CRÍTICO**: NÃO mencione o nome da plataforma no texto
-- Seja direto e impactante
+REGRAS IMPORTANTES:
+- {coupon_code} = sempre formatar com backticks: \`{coupon_code}\`
+- {min_purchase} = apenas valor, você adiciona: "💳 **Compra mínima:** {min_purchase}"
+- {applicability} = usar apenas se não estiver vazia
+- {affiliate_link} = link real (NÃO escrever "[Link de afiliado]")
+- Use **texto** para negrito, \`código\` para código
+- NUNCA use tags HTML
+- NÃO mencione nome da plataforma
+- NÃO inclua data de validade
 - Máximo 8-10 linhas
 
 Template:`;
@@ -520,6 +455,9 @@ Título otimizado:`;
     if (!aiConfig.enabled || !aiConfig.apiKey) {
       throw new Error('IA não está habilitada. Configure o OpenRouter em Configurações → IA / OpenRouter');
     }
+    
+    // IMPORTANTE: Capturar erros de créditos insuficientes e outros erros da API
+    // Esses erros serão tratados no templateRenderer para usar template padrão
 
     // Fazer requisição para OpenRouter
     const response = await openrouterClient.makeRequest(prompt, { forceTextMode: true });
@@ -532,14 +470,31 @@ Título otimizado:`;
       template = String(response).trim();
     }
 
-    // Limpar template
+    // Limpar template - remover prefixos comuns que a IA pode adicionar
     template = template
       .replace(/^<s>\s*/g, '')
       .replace(/^\[OUT\]\s*/g, '')
-      .replace(/```[\w]*\n?/g, '')
+      .replace(/^```[\w]*\n?/g, '')  // Remover início de code block
+      .replace(/```$/g, '')  // Remover fim de code block
+      .replace(/```[\w]*\n?/g, '')  // Remover code blocks no meio
       .replace(/```/g, '')
       .replace(/^Template:\s*/i, '')
       .replace(/^Template da Mensagem:\s*/i, '')
+      .replace(/^Mensagem:\s*/i, '')
+      .replace(/^Resposta:\s*/i, '')
+      .replace(/^Aqui está o template:\s*/i, '')
+      .replace(/^Aqui está:\s*/i, '')
+      .replace(/^Segue o template:\s*/i, '')
+      .replace(/^Template gerado:\s*/i, '')
+      .replace(/^Aqui está o template gerado:\s*/i, '')
+      .replace(/^Template de mensagem:\s*/i, '')
+      .replace(/^Mensagem promocional:\s*/i, '')
+      .replace(/^Mensagem de promoção:\s*/i, '')
+      .replace(/^Aqui está a mensagem:\s*/i, '')
+      .replace(/^Mensagem:\s*/i, '')
+      .replace(/^Resposta da IA:\s*/i, '')
+      .replace(/^Output:\s*/i, '')
+      .replace(/^Saída:\s*/i, '')
       .trim();
 
     // IMPORTANTE: Converter HTML literal para Markdown se a IA gerou HTML
@@ -572,46 +527,177 @@ Título otimizado:`;
     
     // 3. Corrigir tildes múltiplos incorretos (~~~~ → ~~, ~~~~~ → ~~)
     // IMPORTANTE: Não afetar ~~texto~~ válido
-    template = template.replace(/(?<!~)~{3,}(?!~)/g, '~~');
+    // Usar abordagem mais segura que funciona em todos os contextos
+    template = template
+      // Corrigir 3 ou mais tildes consecutivos (exceto se já for parte de ~~texto~~)
+      .replace(/(?<!~)~{3,}(?!~)/g, '~~')
+      // Corrigir padrões como "R$ 165,00~~~~" para "R$ 165,00~~"
+      .replace(/([^~\s])~{3,}(?!~)/g, '$1~~')
+      // Corrigir padrões no início de linha
+      .replace(/^~{3,}(?!~)/gm, '~~');
     
-    // 3.5. Corrigir padrões mal formatados de preço antigo como "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)"
-    // A variável {old_price} já vem formatada como " ~~R$ 44,88~~", então quando a IA adiciona "(de" antes, fica errado
-    template = template.replace(/\(de\s+~~\s*([^~]+?)~~\)/g, (match, price) => {
-      // Remover o "(de" e manter apenas o preço formatado
-      return ` ~~${price.trim()}~~`;
-    });
+    // 3.5. Corrigir padrões mal formatados de preço antigo
+    // A variável {old_price} já vem formatada como " ~~R$ 44,88~~"
+    template = template
+      // Remover "(de" antes de preço formatado
+      .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
+      .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+      // Remover "(De" ou "(DE" também
+      .replace(/\([Dd][Ee]\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
+      // Corrigir padrões como "de ~~R$ 44,88~~" (sem parênteses)
+      .replace(/\bde\s+~~\s*([^~]+?)~~/g, ' ~~$1~~')
+      // Corrigir múltiplos espaços antes de ~~
+      .replace(/\s{2,}~~/g, ' ~~');
     
-    // Corrigir também casos onde há espaço entre ~~ e o preço: "(de ~~ R$ 44,88)"
-    template = template.replace(/\(de\s+~~\s+([^~]+?)~~\)/g, (match, price) => {
-      return ` ~~${price.trim()}~~`;
-    });
+    // 4. Remover texto "mensagem truncada" ou variações que a IA pode adicionar
+    template = template
+      .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
+      .replace(/\s*\(mensagem\s+truncada\)/gi, '')
+      .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
+      .replace(/\s*\(truncada\)/gi, '')
+      .replace(/\s*\.\.\.\s*\(continua\)/gi, '')
+      .replace(/\s*\(continua\)/gi, '')
+      .replace(/\s*\[\.\.\.\]/gi, '')
+      .replace(/\s*\.\.\.\s*$/g, '')
+      .replace(/\s*\[continua\s+na\s+próxima\s+mensagem\]/gi, '')
+      .replace(/\s*\(continua\s+na\s+próxima\s+mensagem\)/gi, '')
+      .replace(/\s*\[\.\.\.\s+continua\]/gi, '')
+      .replace(/\s*\(ver\s+mais\)/gi, '')
+      .replace(/\s*\[ver\s+mais\]/gi, '');
     
-    // 4. Remover texto "mensagem truncada" ou "... (mensagem truncada)" que a IA pode adicionar
-    template = template.replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '');
-    template = template.replace(/\s*\(mensagem\s+truncada\)/gi, '');
-    template = template.replace(/\s*\.\.\.\s*\(truncada\)/gi, '');
-    template = template.replace(/\s*\(truncada\)/gi, '');
+    // 4.5. Remover explicações ou comentários que a IA pode adicionar
+    template = template
+      .replace(/\n\s*\/\/.*$/gm, '')  // Remover comentários de linha
+      .replace(/\n\s*<!--.*?-->/g, '')  // Remover comentários HTML
+      .replace(/\n\s*\/\*.*?\*\//g, '')  // Remover comentários de bloco
+      .replace(/\n\s*Nota:.*$/gmi, '')  // Remover notas
+      .replace(/\n\s*Observação:.*$/gmi, '')  // Remover observações
+      .replace(/\n\s*Importante:.*$/gmi, '')  // Remover importâncias
+      .replace(/\n\s*Lembre-se:.*$/gmi, '');  // Remover lembretes
     
     // 5. Restaurar código protegido
     codePlaceholders.forEach(({ placeholder, content }) => {
       template = template.replace(placeholder, content);
     });
 
-    // Validar template
+    // 9. Validar template
     if (!template || template.trim().length < 10) {
       logger.error(`❌ Template gerado está muito curto ou vazio: "${template}"`);
       throw new Error('Template gerado está muito curto ou vazio. A IA não gerou um template válido.');
     }
+    
+    // 10. Validar e corrigir variáveis mal formatadas
+    // Corrigir variáveis com espaços ou caracteres extras
+    template = template
+      .replace(/\{\s*product_name\s*\}/g, '{product_name}')
+      .replace(/\{\s*affiliate_link\s*\}/g, '{affiliate_link}')
+      .replace(/\{\s*coupon_code\s*\}/g, '{coupon_code}')
+      .replace(/\{\s*original_price\s*\}/g, '{original_price}')
+      .replace(/\{\s*final_price\s*\}/g, '{final_price}')
+      .replace(/\{\s*current_price\s*\}/g, '{current_price}')
+      .replace(/\{\s*discount_percentage\s*\}/g, '{discount_percentage}')
+      .replace(/\{\s*platform_name\s*\}/g, '{platform_name}')
+      .replace(/\{\s*applicability\s*\}/g, '{applicability}');
 
-    // Validar que o template contém pelo menos o título do produto ou variável {product_name}
-    if (!template.includes('{product_name}') && !template.includes('product_name')) {
+    // 11. Validar variáveis obrigatórias baseado no tipo de template
+    const hasProductName = template.includes('{product_name}');
+    const hasAffiliateLink = template.includes('{affiliate_link}');
+    const hasCouponCode = template.includes('{coupon_code}');
+    
+    // Para templates de promoção, product_name e affiliate_link são obrigatórios
+    if (!hasProductName) {
       logger.warn(`⚠️ Template não contém {product_name}, mas continuando...`);
     }
-
-    // Validar que o template contém pelo menos o link de afiliado ou variável {affiliate_link}
-    if (!template.includes('{affiliate_link}') && !template.includes('affiliate_link')) {
+    
+    if (!hasAffiliateLink) {
       logger.warn(`⚠️ Template não contém {affiliate_link}, mas continuando...`);
     }
+    
+    // Para templates de cupom, coupon_code é obrigatório
+    // (será validado no templateRenderer)
+    
+    // 12. Validar formatação Markdown básica
+    // Verificar se há backticks mal formatados (apenas um backtick)
+    const singleBackticks = template.match(/(?<!`)`(?!`)/g);
+    if (singleBackticks && singleBackticks.length % 2 !== 0) {
+      logger.warn(`⚠️ Número ímpar de backticks detectado, pode haver formatação incorreta`);
+    }
+    
+    // Verificar se há asteriscos mal formatados (apenas um asterisco)
+    const singleAsterisks = template.match(/(?<!\*)\*(?!\*)/g);
+    if (singleAsterisks && singleAsterisks.length % 2 !== 0) {
+      logger.warn(`⚠️ Número ímpar de asteriscos detectado, pode haver formatação incorreta`);
+    }
+    
+    // 6. Validar e converter tags HTML não convertidas (múltiplas passadas para garantir)
+    let htmlTags = template.match(/<[^>]+>/g);
+    let conversionAttempts = 0;
+    const maxAttempts = 3;
+    
+    while (htmlTags && htmlTags.length > 0 && conversionAttempts < maxAttempts) {
+      logger.warn(`⚠️ Template ainda contém ${htmlTags.length} tag(s) HTML não convertida(s) (tentativa ${conversionAttempts + 1}/${maxAttempts}): ${htmlTags.slice(0, 5).join(', ')}`);
+      
+      // Converter todas as tags HTML para Markdown
+      template = template
+        .replace(/<code>(.*?)<\/code>/gi, '`$1`')  // <code> primeiro
+        .replace(/<pre>(.*?)<\/pre>/gi, '```$1```')  // <pre> para code block
+        .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+        .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+        .replace(/<i>(.*?)<\/i>/gi, '_$1_')
+        .replace(/<em>(.*?)<\/em>/gi, '_$1_')
+        .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
+        .replace(/<strike>(.*?)<\/strike>/gi, '~~$1~~')
+        .replace(/<del>(.*?)<\/del>/gi, '~~$1~~')
+        .replace(/<u>(.*?)<\/u>/gi, '$1')  // Sublinhado não suportado, remover
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<p>(.*?)<\/p>/gi, '$1\n')  // Parágrafos para quebras de linha
+        .replace(/<div>(.*?)<\/div>/gi, '$1\n')
+        .replace(/<span>(.*?)<\/span>/gi, '$1')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'");
+      
+      // Remover tags HTML não reconhecidas (deixar apenas o conteúdo)
+      template = template.replace(/<[^>]+>/g, '');
+      
+      conversionAttempts++;
+      htmlTags = template.match(/<[^>]+>/g);
+    }
+    
+    if (htmlTags && htmlTags.length > 0) {
+      logger.error(`❌ Ainda há ${htmlTags.length} tag(s) HTML após ${maxAttempts} tentativas de conversão`);
+      // Remover todas as tags HTML restantes (última tentativa)
+      template = template.replace(/<[^>]+>/g, '');
+    }
+    
+    // 7. Corrigir formatação de preços e valores mal formatados
+    // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF" (tudo junto)
+    template = template
+      // Separar preço e emoji que estão juntos
+      .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)/g, '$1\n$2')
+      // Separar "Por:" que está junto com preço
+      .replace(/(R\$\s*[\d.,]+)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)/g, '$1\n$2 $3')
+      // Separar desconto que está junto com preço
+      .replace(/(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, '$1\n🏷️ **$2**')
+      // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
+      .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, 
+        '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
+      // Garantir que emojis de preço tenham espaço antes
+      .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
+      // Garantir que emojis de preço tenham espaço depois se não tiver quebra de linha
+      .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(?!\s|\n)/g, '$1 $2');
+    
+    // 8. Limpar espaços e quebras de linha excessivas
+    template = template
+      .replace(/\n{4,}/g, '\n\n\n')  // Máximo 3 quebras consecutivas
+      .replace(/[ \t]{3,}/g, ' ')  // Múltiplos espaços para um espaço
+      .replace(/^\s+/gm, '')  // Remover espaços no início de linha
+      .replace(/\s+$/gm, '')  // Remover espaços no fim de linha
+      .trim();
 
     logger.info(`✅ Template limpo e convertido (${template.length} chars)`);
     logger.debug(`📋 Template completo:\n${template}`);

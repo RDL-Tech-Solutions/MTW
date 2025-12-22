@@ -9,11 +9,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
-import colors from '../../theme/colors';
+import { useThemeStore } from '../../theme/theme';
 import { SCREEN_NAMES } from '../../utils/constants';
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuthStore();
+  const { colors } = useThemeStore();
 
   const handleLogout = () => {
     Alert.alert(
@@ -30,25 +31,27 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
+  const dynamicStyles = createStyles(colors);
+
   const MenuItem = ({ icon, title, subtitle, onPress, danger }) => (
     <TouchableOpacity 
-      style={styles.menuItem}
+      style={dynamicStyles.menuItem}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[styles.menuIconContainer, danger && styles.menuIconDanger]}>
+      <View style={[dynamicStyles.menuIconContainer, danger && dynamicStyles.menuIconDanger]}>
         <Ionicons 
           name={icon} 
           size={24} 
           color={danger ? colors.error : colors.primary} 
         />
       </View>
-      <View style={styles.menuContent}>
-        <Text style={[styles.menuTitle, danger && styles.menuTitleDanger]}>
+      <View style={dynamicStyles.menuContent}>
+        <Text style={[dynamicStyles.menuTitle, danger && dynamicStyles.menuTitleDanger]}>
           {title}
         </Text>
         {subtitle && (
-          <Text style={styles.menuSubtitle}>{subtitle}</Text>
+          <Text style={dynamicStyles.menuSubtitle}>{subtitle}</Text>
         )}
       </View>
       <Ionicons 
@@ -60,26 +63,26 @@ export default function ProfileScreen({ navigation }) {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>
+    <ScrollView style={dynamicStyles.container}>
+      <View style={dynamicStyles.header}>
+        <View style={dynamicStyles.avatarContainer}>
+          <Text style={dynamicStyles.avatarText}>
             {user?.name?.charAt(0).toUpperCase() || 'U'}
           </Text>
         </View>
-        <Text style={styles.name}>{user?.name || 'Usuário'}</Text>
-        <Text style={styles.email}>{user?.email || ''}</Text>
+        <Text style={dynamicStyles.name}>{user?.name || 'Usuário'}</Text>
+        <Text style={dynamicStyles.email}>{user?.email || ''}</Text>
         
         {user?.is_vip && (
-          <View style={styles.vipBadge}>
+          <View style={dynamicStyles.vipBadge}>
             <Ionicons name="star" size={16} color={colors.warning} />
-            <Text style={styles.vipText}>VIP</Text>
+            <Text style={dynamicStyles.vipText}>VIP</Text>
           </View>
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Conta</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>Conta</Text>
         
         <MenuItem
           icon="person-outline"
@@ -104,19 +107,8 @@ export default function ProfileScreen({ navigation }) {
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferências</Text>
-        
-        <MenuItem
-          icon="settings-outline"
-          title="Configurações"
-          subtitle="Notificações e preferências"
-          onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
-        />
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Sobre</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>Sobre</Text>
         
         <MenuItem
           icon="information-circle-outline"
@@ -126,7 +118,7 @@ export default function ProfileScreen({ navigation }) {
         />
       </View>
 
-      <View style={styles.section}>
+      <View style={dynamicStyles.section}>
         <MenuItem
           icon="log-out-outline"
           title="Sair"
@@ -135,14 +127,14 @@ export default function ProfileScreen({ navigation }) {
         />
       </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>PreçoCerto © 2024</Text>
+      <View style={dynamicStyles.footer}>
+        <Text style={dynamicStyles.footerText}>PreçoCerto © 2024</Text>
       </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -151,7 +143,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     paddingTop: 32,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -196,7 +188,7 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: 24,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: colors.border,

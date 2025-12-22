@@ -239,3 +239,4 @@ COMMENT ON TABLE product_duplicates IS 'Relações de produtos duplicados detect
 COMMENT ON TABLE bot_send_logs IS 'Logs de envios de bots para controle de duplicação';
 
 
+

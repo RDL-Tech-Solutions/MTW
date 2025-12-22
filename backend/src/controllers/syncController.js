@@ -218,6 +218,60 @@ class SyncController {
   // ============================================
 
   /**
+   * Analisar produto estrategicamente com IA e decidir se deve publicar
+   * @param {Object} product - Produto a analisar
+   * @param {boolean} autoPublishEnabled - Se auto-publicação está habilitada
+   * @returns {Promise<{shouldPublish: boolean, analysis: Object}>}
+   */
+  static async analyzeAndDecidePublish(product, autoPublishEnabled) {
+    if (!autoPublishEnabled) {
+      // Se auto-publicação não está habilitada, não publicar (fica pendente)
+      return { shouldPublish: false, analysis: null };
+    }
+
+    try {
+      logger.info(`🤖 Analisando produto estrategicamente: ${product.name?.substring(0, 50)}...`);
+      
+      // Fazer análise estratégica com IA
+      const analysis = await productAnalyzer.analyzeProduct(product);
+      
+      logger.info(`📊 Análise estratégica concluída:`);
+      logger.info(`   Quality Score: ${(analysis.quality_score * 100).toFixed(1)}%`);
+      logger.info(`   Relevance Score: ${(analysis.relevance_score * 100).toFixed(1)}%`);
+      logger.info(`   Price Score: ${(analysis.price_score * 100).toFixed(1)}%`);
+      logger.info(`   Should Publish: ${analysis.should_publish ? 'SIM ✅' : 'NÃO ⏸️'}`);
+      logger.info(`   Confidence: ${(analysis.confidence * 100).toFixed(1)}%`);
+      
+      if (analysis.issues && analysis.issues.length > 0) {
+        logger.info(`   Issues: ${analysis.issues.join(', ')}`);
+      }
+      if (analysis.strengths && analysis.strengths.length > 0) {
+        logger.info(`   Strengths: ${analysis.strengths.join(', ')}`);
+      }
+
+      // Decisão baseada na análise da IA
+      const shouldPublish = analysis.should_publish === true && analysis.confidence >= 0.7;
+      
+      if (shouldPublish) {
+        logger.info(`✅ Produto aprovado pela IA para publicação automática`);
+      } else {
+        logger.info(`⏸️ Produto rejeitado pela IA - ficará em /pending-products para revisão manual`);
+        if (analysis.should_publish === false) {
+          logger.info(`   Motivo: IA indicou que não deve ser publicado`);
+        } else if (analysis.confidence < 0.7) {
+          logger.info(`   Motivo: Confiança da análise muito baixa (${(analysis.confidence * 100).toFixed(1)}% < 70%)`);
+        }
+      }
+
+      return { shouldPublish, analysis };
+    } catch (error) {
+      logger.error(`❌ Erro na análise estratégica: ${error.message}`);
+      // Em caso de erro, não publicar automaticamente (fica pendente)
+      return { shouldPublish: false, analysis: null };
+    }
+  }
+
+  /**
    * Sincronizar produtos do Mercado Livre
    */
   static async syncMercadoLivre(config) {
@@ -238,24 +292,63 @@ class SyncController {
       // 3. Salvar e publicar cada promoção
       for (const promo of promotions) {
         try {
-          // Salvar no banco
+          // Salvar no banco (sempre salva como 'pending')
           const { product, isNew } = await meliSync.saveMeliToDatabase(promo, Product);
 
           if (isNew) {
             results.new++;
 
-            // Publicar no app e enviar para bots
-            const publishResult = await publishService.publishAll(product);
-
-            // Registrar log
-            await SyncLog.create({
-              platform: 'mercadolivre',
-              product_name: product.name,
-              product_id: product.id,
-              discount_percentage: product.discount_percentage,
-              is_new_product: true,
-              sent_to_bots: publishResult.success
-            });
+            // Verificar se auto-publicação está habilitada para esta plataforma
+            const autoPublishEnabled = config.mercadolivre_auto_publish === true;
+            
+            if (autoPublishEnabled) {
+              // Fazer análise estratégica com IA
+              const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
+              
+              if (shouldPublish) {
+                // Publicar automaticamente no app e enviar para bots
+                const publishResult = await publishService.publishAll(product);
+                
+                // Atualizar produto para status 'active' após publicação
+                await Product.update(product.id, { status: 'active' });
+                
+                // Registrar log
+                await SyncLog.create({
+                  platform: 'mercadolivre',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: publishResult.success
+                });
+                
+                logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
+              } else {
+                // Produto rejeitado pela IA - fica pendente
+                await SyncLog.create({
+                  platform: 'mercadolivre',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: false
+                });
+                
+                logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
+              }
+            } else {
+              // Auto-publicação desabilitada - produto fica pendente
+              await SyncLog.create({
+                platform: 'mercadolivre',
+                product_name: product.name,
+                product_id: product.id,
+                discount_percentage: product.discount_percentage,
+                is_new_product: true,
+                sent_to_bots: false
+              });
+              
+              logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
+            }
           } else {
             // Produto já existia
             await SyncLog.create({
@@ -315,24 +408,63 @@ class SyncController {
       // 3. Salvar e publicar cada promoção
       for (const promo of promotions) {
         try {
-          // Salvar no banco
+          // Salvar no banco (sempre salva como 'pending')
           const { product, isNew } = await amazonSync.saveAmazonToDatabase(promo, Product);
 
           if (isNew) {
             results.new++;
 
-            // Publicar no app e enviar para bots
-            const publishResult = await publishService.publishAll(product);
-
-            // Registrar log
-            await SyncLog.create({
-              platform: 'amazon',
-              product_name: product.name,
-              product_id: product.id,
-              discount_percentage: product.discount_percentage,
-              is_new_product: true,
-              sent_to_bots: publishResult.success
-            });
+            // Verificar se auto-publicação está habilitada para esta plataforma
+            const autoPublishEnabled = config.amazon_auto_publish === true;
+            
+            if (autoPublishEnabled) {
+              // Fazer análise estratégica com IA
+              const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
+              
+              if (shouldPublish) {
+                // Publicar automaticamente no app e enviar para bots
+                const publishResult = await publishService.publishAll(product);
+                
+                // Atualizar produto para status 'active' após publicação
+                await Product.update(product.id, { status: 'active' });
+                
+                // Registrar log
+                await SyncLog.create({
+                  platform: 'amazon',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: publishResult.success
+                });
+                
+                logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
+              } else {
+                // Produto rejeitado pela IA - fica pendente
+                await SyncLog.create({
+                  platform: 'amazon',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: false
+                });
+                
+                logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
+              }
+            } else {
+              // Auto-publicação desabilitada - produto fica pendente
+              await SyncLog.create({
+                platform: 'amazon',
+                product_name: product.name,
+                product_id: product.id,
+                discount_percentage: product.discount_percentage,
+                is_new_product: true,
+                sent_to_bots: false
+              });
+              
+              logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
+            }
           } else {
             // Produto já existia
             await SyncLog.create({
@@ -382,27 +514,66 @@ class SyncController {
 
       results.total = promotions.length;
 
-      // 3. Processar cada promoção (salvar como pendente, não publicar automaticamente)
+      // 3. Processar cada promoção
       for (const promo of promotions) {
         try {
-          // Salvar no banco (já salva com status 'pending')
+          // Salvar no banco (sempre salva como 'pending')
           const { product, isNew } = await aliExpressSync.saveAliExpressToDatabase(promo, Product);
 
           if (isNew) {
             results.new++;
 
-            // Log (produto salvo como pendente, não publicado automaticamente)
-            // Seguindo a mesma estratégia do Mercado Livre
-            await SyncLog.create({
-              platform: 'aliexpress',
-              product_name: product.name,
-              product_id: product.id,
-              discount_percentage: product.discount_percentage,
-              is_new_product: true,
-              sent_to_bots: false // Não enviar automaticamente, fica em /pending-products
-            });
-
-            logger.info(`📦 Novo produto salvo (pendente): ${product.name} (${product.discount_percentage}% OFF)`);
+            // Verificar se auto-publicação está habilitada para esta plataforma
+            const autoPublishEnabled = config.aliexpress_auto_publish === true;
+            
+            if (autoPublishEnabled) {
+              // Fazer análise estratégica com IA
+              const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
+              
+              if (shouldPublish) {
+                // Publicar automaticamente no app e enviar para bots
+                const publishResult = await publishService.publishAll(product);
+                
+                // Atualizar produto para status 'active' após publicação
+                await Product.update(product.id, { status: 'active' });
+                
+                // Registrar log
+                await SyncLog.create({
+                  platform: 'aliexpress',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: publishResult.success
+                });
+                
+                logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
+              } else {
+                // Produto rejeitado pela IA - fica pendente
+                await SyncLog.create({
+                  platform: 'aliexpress',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: false
+                });
+                
+                logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
+              }
+            } else {
+              // Auto-publicação desabilitada - produto fica pendente
+              await SyncLog.create({
+                platform: 'aliexpress',
+                product_name: product.name,
+                product_id: product.id,
+                discount_percentage: product.discount_percentage,
+                is_new_product: true,
+                sent_to_bots: false
+              });
+              
+              logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
+            }
           } else {
             // Produto já existia
             await SyncLog.create({
@@ -442,27 +613,66 @@ class SyncController {
 
       results.total = promotions.length;
 
-      // 3. Processar cada promoção (salvar como pendente, não publicar automaticamente)
+      // 3. Processar cada promoção
       for (const promo of promotions) {
         try {
-          // Salvar no banco (já salva com status 'pending')
+          // Salvar no banco (sempre salva como 'pending')
           const { product, isNew } = await shopeeSync.saveShopeeToDatabase(promo, Product);
 
           if (isNew) {
             results.new++;
 
-            // Log (produto salvo como pendente, não publicado automaticamente)
-            // Seguindo a mesma estratégia do AliExpress e do autoSyncCron
-            await SyncLog.create({
-              platform: 'shopee',
-              product_name: product.name,
-              product_id: product.id,
-              discount_percentage: product.discount_percentage,
-              is_new_product: true,
-              sent_to_bots: false // Não enviar automaticamente, fica em /pending-products
-            });
-
-            logger.info(`📦 Novo produto salvo (pendente): ${product.name} (${product.discount_percentage}% OFF)`);
+            // Verificar se auto-publicação está habilitada para esta plataforma
+            const autoPublishEnabled = config.shopee_auto_publish === true;
+            
+            if (autoPublishEnabled) {
+              // Fazer análise estratégica com IA
+              const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
+              
+              if (shouldPublish) {
+                // Publicar automaticamente no app e enviar para bots
+                const publishResult = await publishService.publishAll(product);
+                
+                // Atualizar produto para status 'active' após publicação
+                await Product.update(product.id, { status: 'active' });
+                
+                // Registrar log
+                await SyncLog.create({
+                  platform: 'shopee',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: publishResult.success
+                });
+                
+                logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
+              } else {
+                // Produto rejeitado pela IA - fica pendente
+                await SyncLog.create({
+                  platform: 'shopee',
+                  product_name: product.name,
+                  product_id: product.id,
+                  discount_percentage: product.discount_percentage,
+                  is_new_product: true,
+                  sent_to_bots: false
+                });
+                
+                logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
+              }
+            } else {
+              // Auto-publicação desabilitada - produto fica pendente
+              await SyncLog.create({
+                platform: 'shopee',
+                product_name: product.name,
+                product_id: product.id,
+                discount_percentage: product.discount_percentage,
+                is_new_product: true,
+                sent_to_bots: false
+              });
+              
+              logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
+            }
           } else {
             // Produto já existia
             await SyncLog.create({

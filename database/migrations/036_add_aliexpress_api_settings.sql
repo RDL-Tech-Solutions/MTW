@@ -14,3 +14,4 @@ COMMENT ON COLUMN app_settings.aliexpress_app_secret IS 'App Secret da API do Al
 COMMENT ON COLUMN app_settings.aliexpress_tracking_id IS 'Tracking ID para links de afiliado do AliExpress';
 
 
+

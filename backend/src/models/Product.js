@@ -438,6 +438,8 @@ class Product {
       limit = 20,
       platform,
       search,
+      category,
+      min_discount,
       sort = 'created_at',
       order = 'desc'
     } = filters;
@@ -485,6 +487,14 @@ class Product {
       // Aplicar filtros básicos
       if (platform) query = query.eq('platform', platform);
       if (search) query = query.ilike('name', `%${search}%`);
+      if (category) query = query.eq('category_id', category);
+      if (min_discount !== undefined && min_discount !== null) {
+        query = query.gte('discount_percentage', parseFloat(min_discount));
+      }
+      if (category) query = query.eq('category_id', category);
+      if (min_discount !== undefined && min_discount !== null) {
+        query = query.gte('discount_percentage', min_discount);
+      }
 
       // Ordenação
       query = query.order(sort, { ascending: order === 'asc' });

@@ -188,8 +188,16 @@ class AppSettings {
     const cleanUpdates = {};
     for (const [key, value] of Object.entries(safeUpdates)) {
       if (value !== undefined) {
-        // Converter strings vazias para null para campos opcionais
-        if (value === '' && (key.includes('_token') || key.includes('_secret') || key.includes('_key'))) {
+        // Para campos de template_mode, garantir que seja um dos valores válidos
+        if (key.startsWith('template_mode_')) {
+          const validModes = ['default', 'custom', 'ai_advanced'];
+          if (validModes.includes(value)) {
+            cleanUpdates[key] = value;
+            logger.info(`✅ Salvando template_mode: ${key} = ${value}`);
+          } else {
+            logger.warn(`⚠️ Valor inválido para ${key}: "${value}", ignorando...`);
+          }
+        } else if (value === '' && (key.includes('_token') || key.includes('_secret') || key.includes('_key'))) {
           // Manter string vazia para campos de secrets/tokens (não converter para null)
           cleanUpdates[key] = value;
         } else {
@@ -197,6 +205,8 @@ class AppSettings {
         }
       }
     }
+
+    logger.debug(`📝 Atualizando app_settings com: ${Object.keys(cleanUpdates).join(', ')}`);
 
     const { data, error } = await supabase
       .from('app_settings')
@@ -208,7 +218,18 @@ class AppSettings {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error(`❌ Erro ao atualizar app_settings: ${error.message}`);
+      throw error;
+    }
+    
+    // Garantir que campos de template_mode existam após atualização
+    if (!data.template_mode_promotion) data.template_mode_promotion = 'custom';
+    if (!data.template_mode_promotion_coupon) data.template_mode_promotion_coupon = 'custom';
+    if (!data.template_mode_coupon) data.template_mode_coupon = 'custom';
+    if (!data.template_mode_expired_coupon) data.template_mode_expired_coupon = 'custom';
+    
+    logger.info(`✅ app_settings atualizado com sucesso`);
     return data;
   }
 

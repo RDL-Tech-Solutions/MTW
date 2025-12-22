@@ -20,6 +20,10 @@ export default function AutoSync() {
     mercadolivre_enabled: false,
     amazon_enabled: false,
     aliexpress_enabled: false,
+    shopee_auto_publish: false,
+    mercadolivre_auto_publish: false,
+    amazon_auto_publish: false,
+    aliexpress_auto_publish: false,
     keywords: '',
     min_discount_percentage: 10,
     categories: [],
@@ -56,6 +60,10 @@ export default function AutoSync() {
         mercadolivre_enabled: data.mercadolivre_enabled || false,
         amazon_enabled: data.amazon_enabled || false,
         aliexpress_enabled: data.aliexpress_enabled || false,
+        shopee_auto_publish: data.shopee_auto_publish || false,
+        mercadolivre_auto_publish: data.mercadolivre_auto_publish || false,
+        amazon_auto_publish: data.amazon_auto_publish || false,
+        aliexpress_auto_publish: data.aliexpress_auto_publish || false,
         keywords: data.keywords || '',
         min_discount_percentage: data.min_discount_percentage || 10,
         categories: data.categories || [],
@@ -736,6 +744,87 @@ export default function AutoSync() {
                 id="aliexpress"
               />
               <Label htmlFor="aliexpress" className="font-normal">AliExpress</Label>
+            </div>
+          </div>
+
+          {/* Auto-Publicação por Plataforma */}
+          <div className="space-y-4 pt-4 border-t">
+            <div className="space-y-1">
+              <Label className="text-base">Auto-Publicação com IA</Label>
+              <p className="text-sm text-muted-foreground">
+                Quando ativado, a IA analisa estrategicamente cada produto antes de publicar automaticamente nos bots e no app.
+                Se não aprovado pela IA, o produto fica em /pending-products para revisão manual.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="mercadolivre_auto_publish" className="font-medium">Mercado Livre</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <Switch
+                  checked={config.mercadolivre_auto_publish || false}
+                  onCheckedChange={(checked) => setConfig({ ...config, mercadolivre_auto_publish: checked })}
+                  id="mercadolivre_auto_publish"
+                  disabled={!config.mercadolivre_enabled}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="shopee_auto_publish" className="font-medium">Shopee</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <Switch
+                  checked={config.shopee_auto_publish || false}
+                  onCheckedChange={(checked) => setConfig({ ...config, shopee_auto_publish: checked })}
+                  id="shopee_auto_publish"
+                  disabled={!config.shopee_enabled}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="amazon_auto_publish" className="font-medium">Amazon</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <Switch
+                  checked={config.amazon_auto_publish || false}
+                  onCheckedChange={(checked) => setConfig({ ...config, amazon_auto_publish: checked })}
+                  id="amazon_auto_publish"
+                  disabled={!config.amazon_enabled}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="aliexpress_auto_publish" className="font-medium">AliExpress</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <Switch
+                  checked={config.aliexpress_auto_publish || false}
+                  onCheckedChange={(checked) => setConfig({ ...config, aliexpress_auto_publish: checked })}
+                  id="aliexpress_auto_publish"
+                  disabled={!config.aliexpress_enabled}
+                />
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <Brain className="inline mr-2 h-4 w-4" />
+                <strong>Como funciona:</strong> A IA analisa qualidade, relevância, preço e competitividade. 
+                Produtos aprovados são publicados automaticamente. Produtos rejeitados ficam em /pending-products para revisão manual.
+              </p>
             </div>
           </div>
 

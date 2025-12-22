@@ -15,3 +15,4 @@ SET aliexpress_product_origin = 'both'
 WHERE aliexpress_product_origin IS NULL;
 
 
+

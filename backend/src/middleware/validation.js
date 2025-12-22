@@ -86,7 +86,7 @@ export const createCouponSchema = Joi.object({
     Joi.string().isoDate(),
     Joi.string().allow('', null)
   ).optional(),
-  is_general: Joi.boolean().default(true),
+  is_general: Joi.boolean().allow(null).default(true),
   applicable_products: Joi.array().items(Joi.string().uuid()).default([]),
   restrictions: Joi.string().allow('').default(''),
   description: Joi.string().allow('', null).optional(),
@@ -116,7 +116,7 @@ export const updateCouponSchema = Joi.object({
   max_discount_value: Joi.number().min(0).allow(null, ''),
   valid_from: Joi.date().iso().allow(null, ''),
   valid_until: Joi.date().iso().allow(null, ''),
-  is_general: Joi.boolean(),
+  is_general: Joi.boolean().allow(null),
   applicable_products: Joi.array().items(Joi.string().uuid()),
   restrictions: Joi.string().allow(''),
   description: Joi.string().allow('', null),

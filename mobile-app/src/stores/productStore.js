@@ -27,12 +27,26 @@ export const useProductStore = create((set, get) => ({
       
       // A API retorna { products: [...], total, page, limit, totalPages }
       const data = response.data.data || {};
-      const products = data.products || [];
+      const newProducts = data.products || [];
       
-      set({ products, isLoading: false });
+      // Se for página 1, substituir produtos. Se for página > 1, adicionar aos existentes
+      const currentPage = filters.page || 1;
+      const currentProducts = get().products;
+      
+      let updatedProducts;
+      if (currentPage === 1) {
+        updatedProducts = newProducts;
+      } else {
+        // Adicionar novos produtos, evitando duplicatas
+        const existingIds = new Set(currentProducts.map(p => p.id));
+        const uniqueNewProducts = newProducts.filter(p => !existingIds.has(p.id));
+        updatedProducts = [...currentProducts, ...uniqueNewProducts];
+      }
+      
+      set({ products: updatedProducts, isLoading: false });
       return { 
         success: true, 
-        products,
+        products: updatedProducts,
         pagination: {
           total: data.total || 0,
           page: data.page || 1,
@@ -43,7 +57,8 @@ export const useProductStore = create((set, get) => ({
     } catch (error) {
       console.error('Erro ao buscar produtos:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Erro ao buscar produtos';
-      set({ error: errorMessage, isLoading: false, products: [] });
+      set({ error: errorMessage, isLoading: false });
+      // Não limpar produtos em caso de erro, manter os que já foram carregados
       return { success: false, error: errorMessage };
     }
   },

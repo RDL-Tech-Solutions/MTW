@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -39,11 +39,27 @@ export default function PendingProducts() {
     totalPages: 1,
     total: 0
   });
+  const [selectedProducts, setSelectedProducts] = useState(new Set());
+  const [categories, setCategories] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [minDiscountFilter, setMinDiscountFilter] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [batchProcessing, setBatchProcessing] = useState(false);
 
   useEffect(() => {
     fetchPendingProducts(1);
     loadTemplateModes();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories');
+      setCategories(response.data.data || []);
+    } catch (error) {
+      console.error('Erro ao carregar categorias:', error);
+    }
+  };
 
   const loadTemplateModes = async () => {
     try {
@@ -82,6 +98,12 @@ export default function PendingProducts() {
       if (platformFilter && platformFilter !== 'all') {
         params.platform = platformFilter;
       }
+      if (categoryFilter && categoryFilter !== 'all') {
+        params.category = categoryFilter;
+      }
+      if (minDiscountFilter) {
+        params.min_discount = parseFloat(minDiscountFilter);
+      }
 
       const response = await api.get('/products/pending', { params });
 
@@ -94,6 +116,7 @@ export default function PendingProducts() {
         totalPages: totalPages || 1,
         total: total || 0
       }));
+      setSelectedProducts(new Set()); // Limpar seleção ao mudar página
 
     } catch (error) {
       console.error('❌ Erro ao carregar produtos pendentes:', error);
@@ -114,7 +137,7 @@ export default function PendingProducts() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, platformFilter]);
+  }, [searchTerm, platformFilter, categoryFilter, minDiscountFilter]);
 
   const handleOpenApprovalDialog = async (product) => {
     setSelectedProduct(product);
@@ -204,6 +227,121 @@ export default function PendingProducts() {
       setFinalPrice(null);
     }
   }, [selectedCouponId, selectedProduct, availableCoupons]);
+
+  const toggleProductSelection = (productId) => {
+    const newSelection = new Set(selectedProducts);
+    if (newSelection.has(productId)) {
+      newSelection.delete(productId);
+    } else {
+      newSelection.add(productId);
+    }
+    setSelectedProducts(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProducts.size === products.length) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(products.map(p => p.id)));
+    }
+  };
+
+  const handleBatchApprove = async () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos um produto",
+        variant: "default"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    try {
+      const productIds = Array.from(selectedProducts);
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const productId of productIds) {
+        try {
+          const product = products.find(p => p.id === productId);
+          if (!product || !product.original_link) {
+            errorCount++;
+            continue;
+          }
+
+          await api.post(`/products/pending/${productId}/approve`, {
+            affiliate_link: product.original_link,
+            shorten_link: false
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: "Processamento concluído",
+        description: `${successCount} produtos aprovados${errorCount > 0 ? `, ${errorCount} com erro` : ''}`,
+      });
+
+      setSelectedProducts(new Set());
+      fetchPendingProducts(pagination.page);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao processar produtos em lote",
+        variant: "destructive"
+      });
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const handleBatchReject = async () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos um produto",
+        variant: "default"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    try {
+      const productIds = Array.from(selectedProducts);
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const productId of productIds) {
+        try {
+          await api.post(`/products/pending/${productId}/reject`, {
+            reason: 'Rejeitado em lote pelo administrador'
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: "Processamento concluído",
+        description: `${successCount} produtos rejeitados${errorCount > 0 ? `, ${errorCount} com erro` : ''}`,
+      });
+
+      setSelectedProducts(new Set());
+      fetchPendingProducts(pagination.page);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao processar produtos em lote",
+        variant: "destructive"
+      });
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
 
   const handleApprove = async (shouldShorten = false) => {
     if (!affiliateLink || !affiliateLink.trim()) {
@@ -377,11 +515,21 @@ export default function PendingProducts() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Filtros</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Filtros</CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            >
+              {showAdvancedFilters ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
+              Filtros Avançados
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
               <Label htmlFor="search">Buscar</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -409,16 +557,93 @@ export default function PendingProducts() {
                 <option value="aliexpress">AliExpress</option>
               </select>
             </div>
+            {showAdvancedFilters && (
+              <>
+                <div className="w-48">
+                  <Label htmlFor="category">Categoria</Label>
+                  <select
+                    id="category"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                  >
+                    <option value="all">Todas</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.icon} {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-48">
+                  <Label htmlFor="min_discount">Desconto Mín. (%)</Label>
+                  <Input
+                    id="min_discount"
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="Ex: 20"
+                    value={minDiscountFilter}
+                    onChange={(e) => setMinDiscountFilter(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Produtos Pendentes ({pagination.total})</CardTitle>
-          <CardDescription>
-            {pagination.total} produtos aguardando aprovação
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Produtos Pendentes ({pagination.total})</CardTitle>
+              <CardDescription>
+                {pagination.total} produtos aguardando aprovação
+                {selectedProducts.size > 0 && ` • ${selectedProducts.size} selecionado(s)`}
+              </CardDescription>
+            </div>
+            {selectedProducts.size > 0 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleBatchApprove}
+                  disabled={batchProcessing}
+                >
+                  {batchProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Aprovar Selecionados ({selectedProducts.size})
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBatchReject}
+                  disabled={batchProcessing}
+                >
+                  {batchProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Rejeitar Selecionados ({selectedProducts.size})
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -432,6 +657,20 @@ export default function PendingProducts() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleSelectAll}
+                        className="h-8 w-8 p-0"
+                      >
+                        {selectedProducts.size === products.length ? (
+                          <CheckSquare className="h-4 w-4" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TableHead>
                     <TableHead>Imagem</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Plataforma</TableHead>
@@ -444,7 +683,21 @@ export default function PendingProducts() {
                 </TableHeader>
                 <TableBody>
                   {products.map((product) => (
-                    <TableRow key={product.id}>
+                    <TableRow key={product.id} className={selectedProducts.has(product.id) ? 'bg-muted/50' : ''}>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleProductSelection(product.id)}
+                          className="h-8 w-8 p-0"
+                        >
+                          {selectedProducts.has(product.id) ? (
+                            <CheckSquare className="h-4 w-4" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
                       <TableCell>
                         <img
                           src={product.image_url || 'https://via.placeholder.com/50'}
@@ -452,7 +705,11 @@ export default function PendingProducts() {
                           className="w-12 h-12 object-cover rounded"
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell className="font-medium max-w-[300px]">
+                        <div className="truncate" title={product.name}>
+                          {product.name}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge className={getPlatformBadge(product.platform)}>
                           {getPlatformName(product.platform)}
@@ -498,7 +755,12 @@ export default function PendingProducts() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {new Date(product.created_at).toLocaleDateString('pt-BR')}
+                        <div className="text-sm">
+                          {new Date(product.created_at).toLocaleDateString('pt-BR')}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(product.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
@@ -723,6 +985,7 @@ export default function PendingProducts() {
                   </div>
                 )}
               </div>
+
             </div>
           )}
 

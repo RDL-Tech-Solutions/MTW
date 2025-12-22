@@ -66,3 +66,4 @@ COMMENT ON COLUMN telegram_channels.channel_id IS 'ID do canal no Telegram (ex: 
 
 
 
+

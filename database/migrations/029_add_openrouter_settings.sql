@@ -21,3 +21,4 @@ COMMENT ON COLUMN app_settings.openrouter_enabled IS 'Flag para ativar/desativar
 
 
 
+

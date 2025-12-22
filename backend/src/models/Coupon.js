@@ -13,7 +13,7 @@ class Coupon {
       max_discount_value = null,
       valid_from,
       valid_until,
-      is_general = true,
+      is_general = null,
       applicable_products = [],
       restrictions = '',
       description = null,
