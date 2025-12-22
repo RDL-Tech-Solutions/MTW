@@ -21,7 +21,6 @@ const navigation = [
   { name: 'Produtos', href: '/products', icon: Package },
   { name: 'Pendentes', href: '/pending-products', icon: Clock },
   { name: 'Cupons', href: '/coupons', icon: Ticket },
-  { name: 'Captura de Cupons', href: '/coupon-capture', icon: Zap },
   { name: 'Categorias', href: '/categories', icon: FolderTree },
   { name: 'Usuários', href: '/users', icon: Users },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

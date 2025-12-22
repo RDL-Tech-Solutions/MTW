@@ -94,8 +94,8 @@ INSERT INTO bot_message_templates (template_type, platform, template, descriptio
 `{coupon_code}`
 
 💰 **DESCONTO:** {discount_value} OFF
-📅 **VÁLIDO ATÉ:** {valid_until}
 {min_purchase}
+{applicability}
 
 📝 {coupon_title}
 {coupon_description}
@@ -105,7 +105,7 @@ INSERT INTO bot_message_templates (template_type, platform, template, descriptio
 ⚡ Use agora e economize!',
 'Modelo Padrão 1: Simples e Direto - Todas as plataformas',
 true,
-'["platform_name", "coupon_code", "discount_value", "valid_until", "min_purchase", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
+'["platform_name", "coupon_code", "discount_value", "min_purchase", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
 ON CONFLICT DO NOTHING;
 
 -- Modelo 2: Detalhado e Informativo
@@ -121,8 +121,8 @@ INSERT INTO bot_message_templates (template_type, platform, template, descriptio
 `{coupon_code}`
 
 💰 **VALOR DO DESCONTO:** {discount_value} OFF
-📅 **VALIDADE:** {valid_until}
 {min_purchase}
+{applicability}
 
 📋 **DETALHES:**
 {coupon_title}
@@ -134,7 +134,7 @@ INSERT INTO bot_message_templates (template_type, platform, template, descriptio
 ✅ **Cupom pronto para uso!**',
 'Modelo Padrão 2: Detalhado e Informativo - Todas as plataformas',
 false,
-'["platform_name", "coupon_code", "discount_value", "valid_until", "min_purchase", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
+'["platform_name", "coupon_code", "discount_value", "min_purchase", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
 ON CONFLICT DO NOTHING;
 
 -- Modelo 3: Urgente e Ação
@@ -147,8 +147,8 @@ INSERT INTO bot_message_templates (template_type, platform, template, descriptio
 
 🏪 {platform_name}
 💰 {discount_value} OFF
-📅 Válido até {valid_until}
 {min_purchase}
+{applicability}
 
 {coupon_title}
 {coupon_description}
@@ -158,7 +158,7 @@ INSERT INTO bot_message_templates (template_type, platform, template, descriptio
 ⏰ **Use antes que expire!**',
 'Modelo Padrão 3: Urgente e Ação - Todas as plataformas',
 false,
-'["platform_name", "coupon_code", "discount_value", "valid_until", "min_purchase", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
+'["platform_name", "coupon_code", "discount_value", "min_purchase", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
@@ -231,6 +231,7 @@ ON CONFLICT DO NOTHING;
 -- Todos os modelos são criados com platform='all' para funcionar
 -- em todas as plataformas. Templates específicos por plataforma
 -- podem ser criados pelo painel admin.
+
 
 
 

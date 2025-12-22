@@ -4,6 +4,37 @@ import logger from '../../config/logger.js';
 
 class TemplateRenderer {
   /**
+   * Remover código de cupom duplicado da mensagem
+   * @param {string} message - Mensagem a ser processada
+   * @param {string} couponCode - Código do cupom
+   * @returns {string} - Mensagem sem duplicatas
+   */
+  removeDuplicateCouponCode(message, couponCode) {
+    if (!couponCode) return message;
+    
+    const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'gi');
+    const codeMatches = message.match(codePattern);
+    const codeCount = codeMatches ? codeMatches.length : 0;
+    
+    if (codeCount > 1) {
+      logger.warn(`⚠️ Código do cupom duplicado detectado (${codeCount} vezes), removendo duplicatas...`);
+      // Remover todas as ocorrências
+      message = message.replace(codePattern, '');
+      // Adicionar apenas uma ocorrência formatada antes do link ou no final
+      const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+      if (message.includes('{affiliate_link}') || message.includes('affiliate_link') || message.match(/(🔗|👉)/i)) {
+        message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+      } else {
+        message += codeSection;
+      }
+      logger.info(`   ✅ Código duplicado removido, mantendo apenas uma ocorrência: \`${couponCode}\``);
+    }
+    
+    return message;
+  }
+
+  /**
    * Renderizar template com variáveis
    * @param {string} templateType - Tipo do template
    * @param {string} platform - Plataforma (telegram, whatsapp)
@@ -64,14 +95,22 @@ class TemplateRenderer {
             
             logger.debug(`📝 Template de cupom após remoção de data de validade e plataforma: ${message.length} chars`);
             
-            // CRÍTICO: Garantir que o código do cupom esteja presente no template
+            // CRÍTICO: Garantir que o código do cupom esteja presente no template (sem duplicar)
             const couponCode = coupon?.code;
-            if (couponCode && !message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
-              logger.warn(`⚠️ [IA ADVANCED] Código do cupom não encontrado no template gerado, adicionando...`);
-              // Adicionar código do cupom formatado antes do link
-              const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-              message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
-              logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+            if (couponCode) {
+              // Verificar se o código já está presente (formatado ou não)
+              const codePattern = new RegExp(`\\b${couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+              const codeAlreadyPresent = codePattern.test(message) || message.includes(`\`${couponCode}\``) || message.includes(`{coupon_code}`);
+              
+              if (!codeAlreadyPresent) {
+                logger.warn(`⚠️ [IA ADVANCED] Código do cupom não encontrado no template gerado, adicionando...`);
+                // Adicionar código do cupom formatado antes do link
+                const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+                message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+                logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+              } else {
+                logger.debug(`   ✅ Código do cupom já está presente na mensagem: ${couponCode}`);
+              }
             }
           } else if (templateType === 'expired_coupon') {
             // Gerar template de cupom expirado
@@ -161,29 +200,47 @@ class TemplateRenderer {
             logger.debug(`✅ Título do produto encontrado na mensagem: "${productName}"`);
           }
           
-          // 3. IMPORTANTE: Garantir que coupon_code seja formatado com backticks para facilitar cópia no Telegram
+          // 3. IMPORTANTE: Garantir que coupon_code seja formatado com backticks para facilitar cópia no Telegram (sem duplicar)
           if (contextData.coupon && contextData.coupon.code && variables.coupon_code) {
             const couponCode = variables.coupon_code;
-            // Verificar se já está formatado
-            const codeInMessage = message.includes(`\`${couponCode}\``) || 
-                                  message.includes(`<code>${couponCode}</code>`) ||
-                                  message.match(new RegExp(`[<\\\`]${couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[>\\\`]`));
+            // Verificar quantas vezes o código aparece na mensagem
+            const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'gi');
+            const codeMatches = message.match(codePattern);
+            const codeCount = codeMatches ? codeMatches.length : 0;
             
-            if (!codeInMessage) {
-              logger.info(`📝 Garantindo que código do cupom seja formatado para cópia fácil`);
-              // Substituir código sem formatação por código formatado
-              const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const codeRegex = new RegExp(`\\b${escapedCode}\\b`, 'g');
-              
-              if (platform === 'telegram') {
-                // Para Telegram, usar backticks (será convertido para <code> depois se HTML)
-                message = message.replace(codeRegex, `\`${couponCode}\``);
-              } else {
-                message = message.replace(codeRegex, `\`${couponCode}\``);
+            // Se o código aparece mais de uma vez, remover duplicatas
+            if (codeCount > 1) {
+              logger.warn(`⚠️ [IA ADVANCED] Código do cupom duplicado detectado (${codeCount} vezes), removendo duplicatas...`);
+              // Manter apenas a primeira ocorrência formatada
+              const firstMatch = message.match(new RegExp(`([<\\\`]?)${escapedCode}([>\\\`]?)`, 'i'));
+              if (firstMatch) {
+                // Remover todas as ocorrências e adicionar apenas uma formatada
+                message = message.replace(new RegExp(`\\b${escapedCode}\\b`, 'gi'), '');
+                // Adicionar o código formatado uma vez antes do link ou no final
+                const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+                if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
+                  message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+                } else {
+                  message += codeSection;
+                }
+                logger.info(`   ✅ Código duplicado removido, mantendo apenas uma ocorrência: \`${couponCode}\``);
               }
-              logger.info(`   ✅ Código formatado: \`${couponCode}\``);
             } else {
-              logger.debug(`   ✅ Código do cupom já está formatado corretamente`);
+              // Verificar se já está formatado
+              const codeInMessage = message.includes(`\`${couponCode}\``) || 
+                                    message.includes(`<code>${couponCode}</code>`) ||
+                                    message.match(new RegExp(`[<\\\`]${escapedCode}[>\\\`]`));
+              
+              if (!codeInMessage && codeCount === 1) {
+                logger.info(`📝 Garantindo que código do cupom seja formatado para cópia fácil`);
+                // Substituir código sem formatação por código formatado (apenas uma vez)
+                const codeRegex = new RegExp(`\\b${escapedCode}\\b`, 'g');
+                message = message.replace(codeRegex, `\`${couponCode}\``);
+                logger.info(`   ✅ Código formatado: \`${couponCode}\``);
+              } else {
+                logger.debug(`   ✅ Código do cupom já está formatado corretamente (${codeCount} ocorrência(s))`);
+              }
             }
           }
         } catch (aiError) {
@@ -323,29 +380,54 @@ class TemplateRenderer {
           }
         }
         
-        // Substituir placeholder (exceto se for platform_name em IA ADVANCED - já foi removido)
-        if (!(key === 'platform_name' && templateMode === 'ai_advanced')) {
+        // IMPORTANTE: Para applicability, só substituir se não estiver vazio
+        // Se estiver vazio, remover a linha inteira que contém {applicability}
+        if (key === 'applicability') {
+          if (replacement && replacement.trim().length > 0) {
+            message = message.replace(regex, replacement);
+            logger.debug(`📝 Substituindo {applicability} com: ${replacement.substring(0, 50)}...`);
+          } else {
+            // Remover linha que contém {applicability} se estiver vazia
+            // Remover a linha inteira e quebras de linha extras
+            message = message.replace(new RegExp(`.*\\{applicability\\}.*\\n?`, 'gi'), '');
+            // Limpar quebras de linha duplicadas resultantes
+            message = message.replace(/\n{3,}/g, '\n\n');
+            logger.debug(`📝 Removendo linha com {applicability} vazia`);
+          }
+        } else if (!(key === 'platform_name' && templateMode === 'ai_advanced')) {
           message = message.replace(regex, replacement);
         }
       }
       
-      // VALIDAÇÃO FINAL: Garantir que código do cupom esteja presente (especialmente para IA ADVANCED)
+      // VALIDAÇÃO FINAL: Garantir que código do cupom esteja presente (especialmente para IA ADVANCED) - SEM DUPLICAR
       if (templateMode === 'ai_advanced' && variables.coupon_code && variables.coupon_code !== 'N/A') {
         const couponCode = variables.coupon_code;
-        // Verificar se o código está presente na mensagem final
-        if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
-          logger.warn(`⚠️ [VALIDAÇÃO FINAL] Código do cupom não encontrado após substituição, adicionando...`);
-          // Adicionar código do cupom de forma destacada
-          const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-          // Tentar adicionar antes do link ou no final
-          if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
-            message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+        // Primeiro, remover duplicatas se existirem usando a função auxiliar
+        message = this.removeDuplicateCouponCode(message, couponCode);
+        
+        // Verificar se o código está presente após remoção de duplicatas
+        const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'i');
+        const codeCount = message.match(new RegExp(`\\b${escapedCode}\\b`, 'gi'))?.length || 0;
+        
+        if (codeCount === 0) {
+          // Verificar se o código está presente na mensagem final
+          if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
+            logger.warn(`⚠️ [VALIDAÇÃO FINAL] Código do cupom não encontrado após substituição, adicionando...`);
+            // Adicionar código do cupom de forma destacada
+            const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+            // Tentar adicionar antes do link ou no final
+            if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
+              message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+            } else {
+              message += codeSection;
+            }
+            logger.info(`   ✅ Código do cupom adicionado na validação final: \`${couponCode}\``);
           } else {
-            message += codeSection;
+            logger.debug(`   ✅ Código do cupom confirmado na mensagem final: ${couponCode}`);
           }
-          logger.info(`   ✅ Código do cupom adicionado na validação final: \`${couponCode}\``);
         } else {
-          logger.debug(`   ✅ Código do cupom confirmado na mensagem final: ${couponCode}`);
+          logger.debug(`   ✅ Código do cupom confirmado na mensagem final (1 ocorrência): ${couponCode}`);
         }
       }
       
@@ -448,33 +530,55 @@ class TemplateRenderer {
           logger.info(`   ✅ Código formatado: \`${couponCode}\``);
         }
         
-        // IMPORTANTE: Se o código do cupom não está na mensagem, adicionar
-        // Isso garante que mesmo se a IA não incluir, o código será adicionado
-        if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
-          logger.warn(`⚠️ Código do cupom não encontrado na mensagem, adicionando...`);
-          // Adicionar código do cupom após a seção de desconto ou antes do link
-          const discountPattern = /(💰.*?OFF)/i;
-          const linkPattern = /(🔗|👉).*?\{?affiliate_link\}?/i;
-          
-          const couponSection = `\n\n🔑 **Código:** \`${couponCode}\`\n`;
-          
-          if (discountPattern.test(message)) {
-            message = message.replace(discountPattern, `$1${couponSection}`);
-          } else if (linkPattern.test(message)) {
-            message = message.replace(linkPattern, `${couponSection}$1`);
+        // IMPORTANTE: Verificar se o código está presente e não duplicado
+        const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'gi');
+        const codeMatches = message.match(codePattern);
+        const codeCount = codeMatches ? codeMatches.length : 0;
+        
+        // Se o código aparece mais de uma vez, remover duplicatas
+        if (codeCount > 1) {
+          logger.warn(`⚠️ Código do cupom duplicado detectado (${codeCount} vezes), removendo duplicatas...`);
+          // Remover todas as ocorrências e adicionar apenas uma formatada
+          message = message.replace(codePattern, '');
+          const couponSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+          if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
+            message = message.replace(/(🔗|👉|{affiliate_link})/i, `${couponSection}$1`);
           } else {
-            // Adicionar antes do link de afiliado ou no final
-            if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
-              message = message.replace(/(🔗|👉|{affiliate_link})/i, `${couponSection}$1`);
-            } else {
-              // Adicionar no final se não houver link
-              message += couponSection;
-            }
+            message += couponSection;
           }
-          
-          logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+          logger.info(`   ✅ Código duplicado removido, mantendo apenas uma ocorrência: \`${couponCode}\``);
+        } else if (codeCount === 0) {
+          // Se o código do cupom não está na mensagem, adicionar
+          // Isso garante que mesmo se a IA não incluir, o código será adicionado
+          if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
+            logger.warn(`⚠️ Código do cupom não encontrado na mensagem, adicionando...`);
+            // Adicionar código do cupom após a seção de desconto ou antes do link
+            const discountPattern = /(💰.*?OFF)/i;
+            const linkPattern = /(🔗|👉).*?\{?affiliate_link\}?/i;
+            
+            const couponSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+            
+            if (discountPattern.test(message)) {
+              message = message.replace(discountPattern, `$1${couponSection}`);
+            } else if (linkPattern.test(message)) {
+              message = message.replace(linkPattern, `${couponSection}$1`);
+            } else {
+              // Adicionar antes do link de afiliado ou no final
+              if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
+                message = message.replace(/(🔗|👉|{affiliate_link})/i, `${couponSection}$1`);
+              } else {
+                // Adicionar no final se não houver link
+                message += couponSection;
+              }
+            }
+            
+            logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+          } else {
+            logger.debug(`   ✅ Código do cupom encontrado na mensagem: ${couponCode}`);
+          }
         } else {
-          logger.debug(`   ✅ Código do cupom encontrado na mensagem: ${couponCode}`);
+          logger.debug(`   ✅ Código do cupom encontrado na mensagem (1 ocorrência): ${couponCode}`);
         }
       }
       
@@ -1034,19 +1138,19 @@ class TemplateRenderer {
       ? `📊 **Limite de usos:** ${coupon.current_uses || 0} / ${coupon.max_uses}\n`
       : '';
 
-    // Aplicabilidade (não incluir para cupons do Telegram)
+    // Aplicabilidade - SEMPRE incluir quando houver informação (geral ou produtos selecionados)
+    // Se não houver produtos selecionados E não for geral, não incluir
     let applicability = '';
-    if (!isTelegramCaptured) {
-      if (coupon.is_general) {
-        applicability = '✅ **Válido para todos os produtos**';
-      } else {
-        const productCount = coupon.applicable_products?.length || 0;
-        if (productCount > 0) {
-          applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
-        } else {
-          applicability = '📦 **Em produtos selecionados**';
-        }
+    if (coupon.is_general) {
+      // Cupom válido para todos os produtos
+      applicability = '✅ **Válido para todos os produtos**';
+    } else {
+      // Cupom para produtos selecionados
+      const productCount = coupon.applicable_products?.length || 0;
+      if (productCount > 0) {
+        applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
       }
+      // Se productCount === 0 e não é geral, não incluir (deixar vazio)
     }
 
     // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
@@ -1054,7 +1158,7 @@ class TemplateRenderer {
     const validUntil = '';
 
     // Para cupons capturados do Telegram: NÃO incluir descrição, link de afiliado e data de validade
-    // Incluir: plataforma, código, desconto, compra mínima, limite desconto
+    // Incluir: plataforma, código, desconto, compra mínima, limite desconto, aplicabilidade
     if (isTelegramCaptured) {
       return {
         platform_name: platformName,
@@ -1064,7 +1168,7 @@ class TemplateRenderer {
         min_purchase: minPurchase,
         max_discount: maxDiscount,
         usage_limit: '', // NÃO incluir limite de usos
-        applicability: '', // NÃO incluir aplicabilidade
+        applicability: applicability, // Incluir aplicabilidade mesmo para cupons do Telegram
         coupon_title: '', // NÃO incluir título
         coupon_description: '', // NÃO incluir descrição
         affiliate_link: '' // NÃO incluir link de afiliado
@@ -1725,6 +1829,10 @@ class TemplateRenderer {
         if (variables.min_purchase) {
           // min_purchase agora contém apenas o valor (R$ X.XX), adicionar emoji e texto
           message += `💳 **Compra mínima:** ${variables.min_purchase}\n`;
+        }
+        // Incluir aplicabilidade se disponível
+        if (variables.applicability) {
+          message += `${variables.applicability}\n`;
         }
         // IMPORTANTE: NÃO incluir aviso de expiração ou data de validade na mensagem do bot
         // message += `\n⚠️ **Sujeito à expiração**\n`;

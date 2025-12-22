@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Copy, Calendar, Zap, Brain, Send, XCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, Calendar, Brain, Send, XCircle, CheckCircle, Filter, Download, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -12,7 +12,9 @@ import { format } from 'date-fns';
 import { Pagination } from '../components/ui/Pagination';
 
 export default function Coupons() {
+  const [activeTab, setActiveTab] = useState('all'); // 'all' ou 'pending'
   const [coupons, setCoupons] = useState([]);
+  const [pendingCoupons, setPendingCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -22,6 +24,19 @@ export default function Coupons() {
     limit: 20,
     totalPages: 1,
     total: 0
+  });
+  const [pendingPagination, setPendingPagination] = useState({
+    page: 1,
+    limit: 20,
+    totalPages: 1,
+    total: 0
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    platform: '',
+    is_active: '',
+    verification_status: '',
+    discount_type: ''
   });
 
   const [formData, setFormData] = useState({
@@ -48,11 +63,23 @@ export default function Coupons() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchCoupons(1);
+      if (activeTab === 'all') {
+        fetchCoupons(1);
+      } else {
+        fetchPendingCoupons(1);
+      }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, activeTab, filters]);
+
+  useEffect(() => {
+    if (activeTab === 'all') {
+      fetchCoupons(1);
+    } else {
+      fetchPendingCoupons(1);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     loadTemplateMode();
@@ -188,14 +215,69 @@ export default function Coupons() {
     };
   }, [codeSearchTimeout]);
 
+  const fetchPendingCoupons = async (page = 1) => {
+    try {
+      setLoading(true);
+      setSelectedIds([]);
+      // Limpar filtros vazios antes de enviar
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
+      );
+      
+      const params = {
+        page,
+        limit: 20,
+        ...(searchTerm && { search: searchTerm }),
+        ...cleanFilters
+      };
+
+      const response = await api.get('/coupons/pending', { params });
+      const data = response.data.data;
+      
+      console.log('📋 Resposta de cupons pendentes:', data);
+      
+      if (Array.isArray(data)) {
+        setPendingCoupons(data);
+        setPendingPagination(prev => ({ ...prev, page, total: data.length }));
+      } else if (data && data.coupons) {
+        setPendingCoupons(data.coupons || []);
+        setPendingPagination(prev => ({
+          ...prev,
+          page,
+          totalPages: data.totalPages || 1,
+          total: data.total || 0
+        }));
+      } else {
+        // Se a estrutura for diferente, tentar extrair os cupons
+        console.warn('⚠️ Estrutura de dados inesperada:', data);
+        setPendingCoupons([]);
+        setPendingPagination(prev => ({ ...prev, page, totalPages: 1, total: 0 }));
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar cupons pendentes:', error);
+      console.error('   Detalhes:', error.response?.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchCoupons = async (page = 1) => {
     try {
       setLoading(true);
       setSelectedIds([]); // Clear selection when changing view/page
+      
+      // Limpar filtros vazios antes de enviar
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
+      );
+      
       const params = {
         page,
         limit: 20,
-        search: searchTerm
+        ...(searchTerm && { search: searchTerm }),
+        ...cleanFilters,
+        excludePending: true, // Excluir cupons pendentes da lista "Todos os Cupons"
+        is_active: true // Apenas cupons ativos
       };
 
       const response = await api.get('/coupons/admin/all', { params });
@@ -253,14 +335,196 @@ export default function Coupons() {
   const handleForcePublish = async (coupon) => {
     if (!confirm(`Deseja aprovar e publicar o cupom ${coupon.code}? O cupom será aprovado e enviado aos bots.`)) return;
 
+    // Adicionar à lista de processamento
+    setProcessingCoupons(prev => ({
+      ...prev,
+      publishing: new Set(prev.publishing).add(coupon.id)
+    }));
+
     try {
       await api.post(`/coupons/${coupon.id}/force-publish`);
-      fetchCoupons(pagination.page);
+      if (activeTab === 'all') {
+        fetchCoupons(pagination.page);
+      } else {
+        fetchPendingCoupons(pendingPagination.page);
+      }
       alert('Cupom aprovado e publicado com sucesso!');
     } catch (error) {
       console.error('Erro ao publicar cupom:', error);
       const errorMessage = error.response?.data?.message || 'Erro ao publicar cupom';
       alert(`Erro: ${errorMessage}`);
+    } finally {
+      // Remover da lista de processamento
+      setProcessingCoupons(prev => {
+        const newSet = new Set(prev.publishing);
+        newSet.delete(coupon.id);
+        return { ...prev, publishing: newSet };
+      });
+    }
+  };
+
+  const handleApproveCoupon = async (couponId, updates = {}) => {
+    // Adicionar à lista de processamento
+    setProcessingCoupons(prev => ({
+      ...prev,
+      approving: new Set(prev.approving).add(couponId)
+    }));
+
+    try {
+      await api.put(`/coupons/${couponId}/approve`, updates);
+      alert('Cupom aprovado com sucesso!');
+      if (activeTab === 'pending') {
+        fetchPendingCoupons(pendingPagination.page);
+      }
+      fetchCoupons(pagination.page);
+    } catch (error) {
+      console.error('Erro ao aprovar cupom:', error);
+      alert('Erro ao aprovar cupom');
+    } finally {
+      // Remover da lista de processamento
+      setProcessingCoupons(prev => {
+        const newSet = new Set(prev.approving);
+        newSet.delete(couponId);
+        return { ...prev, approving: newSet };
+      });
+    }
+  };
+
+  const handleRejectCoupon = async (couponId, reason = '') => {
+    // Adicionar à lista de processamento
+    setProcessingCoupons(prev => ({
+      ...prev,
+      rejecting: new Set(prev.rejecting).add(couponId)
+    }));
+
+    try {
+      await api.put(`/coupons/${couponId}/reject`, { reason });
+      alert('Cupom rejeitado com sucesso!');
+      if (activeTab === 'pending') {
+        fetchPendingCoupons(pendingPagination.page);
+      }
+      fetchCoupons(pagination.page);
+    } catch (error) {
+      console.error('Erro ao rejeitar cupom:', error);
+      alert('Erro ao rejeitar cupom');
+    } finally {
+      // Remover da lista de processamento
+      setProcessingCoupons(prev => {
+        const newSet = new Set(prev.rejecting);
+        newSet.delete(couponId);
+        return { ...prev, rejecting: newSet };
+      });
+    }
+  };
+
+  const handleApproveBatch = async () => {
+    if (selectedIds.length === 0) {
+      alert('Selecione pelo menos um cupom');
+      return;
+    }
+
+    if (!confirm(`Aprovar ${selectedIds.length} cupom(ns)?`)) return;
+
+    setIsBatchProcessing(true);
+    // Adicionar todos à lista de processamento
+    setProcessingCoupons(prev => ({
+      ...prev,
+      approving: new Set([...prev.approving, ...selectedIds])
+    }));
+
+    try {
+      await api.post('/coupons/approve-batch', { ids: selectedIds });
+      alert(`${selectedIds.length} cupom(ns) aprovado(s) com sucesso!`);
+      setSelectedIds([]);
+      if (activeTab === 'pending') {
+        fetchPendingCoupons(pendingPagination.page);
+      }
+      fetchCoupons(pagination.page);
+    } catch (error) {
+      console.error('Erro ao aprovar cupons:', error);
+      alert('Erro ao aprovar cupons');
+    } finally {
+      setIsBatchProcessing(false);
+      // Remover todos da lista de processamento
+      setProcessingCoupons(prev => {
+        const newSet = new Set(prev.approving);
+        selectedIds.forEach(id => newSet.delete(id));
+        return { ...prev, approving: newSet };
+      });
+    }
+  };
+
+  const handleRejectBatch = async () => {
+    if (selectedIds.length === 0) {
+      alert('Selecione pelo menos um cupom');
+      return;
+    }
+
+    const reason = prompt('Motivo da rejeição (opcional):');
+    if (reason === null) return; // Usuário cancelou
+
+    setIsBatchProcessing(true);
+    // Adicionar todos à lista de processamento
+    setProcessingCoupons(prev => ({
+      ...prev,
+      rejecting: new Set([...prev.rejecting, ...selectedIds])
+    }));
+
+    try {
+      await api.post('/coupons/reject-batch', { ids: selectedIds, reason });
+      alert(`${selectedIds.length} cupom(ns) rejeitado(s) com sucesso!`);
+      setSelectedIds([]);
+      if (activeTab === 'pending') {
+        fetchPendingCoupons(pendingPagination.page);
+      }
+      fetchCoupons(pagination.page);
+    } catch (error) {
+      console.error('Erro ao rejeitar cupons:', error);
+      alert('Erro ao rejeitar cupons');
+    } finally {
+      setIsBatchProcessing(false);
+      // Remover todos da lista de processamento
+      setProcessingCoupons(prev => {
+        const newSet = new Set(prev.rejecting);
+        selectedIds.forEach(id => newSet.delete(id));
+        return { ...prev, rejecting: newSet };
+      });
+    }
+  };
+
+  const handleExport = async (format = 'json') => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams({ format, ...filters, search: searchTerm });
+      const response = await api.get(`/coupons/export?${params.toString()}`, {
+        responseType: format === 'csv' ? 'blob' : 'json'
+      });
+
+      if (format === 'csv') {
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `coupons_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        const dataStr = JSON.stringify(response.data.data || response.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = window.URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `coupons_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      alert('Exportação concluída!');
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
+      alert('Erro ao exportar cupons');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -393,6 +657,12 @@ export default function Coupons() {
   };
 
   const [selectedIds, setSelectedIds] = useState([]);
+  const [processingCoupons, setProcessingCoupons] = useState({
+    approving: new Set(),
+    publishing: new Set(),
+    rejecting: new Set()
+  });
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
   // Toggle selection
   const toggleSelection = (id) => {
@@ -403,10 +673,11 @@ export default function Coupons() {
 
   // Toggle select all
   const toggleSelectAll = () => {
-    if (selectedIds.length === coupons.length) {
+    const currentCoupons = activeTab === 'all' ? coupons : pendingCoupons;
+    if (selectedIds.length === currentCoupons.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(coupons.map(c => c.id));
+      setSelectedIds(currentCoupons.map(c => c.id));
     }
   };
 
@@ -440,10 +711,52 @@ export default function Coupons() {
         </div>
 
         <div className="flex gap-2">
+          {selectedIds.length > 0 && activeTab === 'pending' && (
+            <>
+              <Button
+                variant="default"
+                onClick={handleApproveBatch}
+                disabled={isBatchProcessing}
+                className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBatchProcessing && processingCoupons.approving.size > 0 ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Aprovando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Aprovar ({selectedIds.length})
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRejectBatch}
+                disabled={isBatchProcessing}
+                className="disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBatchProcessing && processingCoupons.rejecting.size > 0 ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Rejeitando...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Rejeitar ({selectedIds.length})
+                  </>
+                )}
+              </Button>
+            </>
+          )}
           {selectedIds.length > 0 && (
             <Button
               variant="destructive"
               onClick={handleBatchDelete}
+              disabled={isBatchProcessing}
+              className="disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Deletar ({selectedIds.length})
@@ -738,23 +1051,129 @@ export default function Coupons() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <CardTitle>Lista de Cupons</CardTitle>
               <CardDescription>
-                Exibindo página {pagination.page} de {pagination.totalPages}
+                {activeTab === 'all' 
+                  ? `Exibindo página ${pagination.page} de ${pagination.totalPages} (${pagination.total} total)`
+                  : `Exibindo página ${pendingPagination.page} de ${pendingPagination.totalPages} (${pendingPagination.total} pendentes)`
+                }
               </CardDescription>
             </div>
-            <div className="relative w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar cupons..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar cupons..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
             </div>
           </div>
+          
+          {/* Tabs */}
+          <div className="flex gap-2 mt-4 border-b">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                activeTab === 'all'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Todos os Cupons
+            </button>
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                activeTab === 'pending'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Pendentes de Aprovação
+              {pendingPagination.total > 0 && (
+                <Badge variant="destructive" className="ml-2 animate-pulse">
+                  {pendingPagination.total}
+                </Badge>
+              )}
+            </button>
+          </div>
+          
+          {/* Informações adicionais para aba pendentes */}
+          {activeTab === 'pending' && pendingCoupons.length > 0 && (
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold text-yellow-800 dark:text-yellow-200">
+                  ⚠️ {pendingPagination.total} cupom(ns) aguardando aprovação
+                </span>
+                <span className="text-yellow-600 dark:text-yellow-400">
+                  • Use os botões de ação em lote para aprovar ou rejeitar múltiplos cupons de uma vez
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Filtros */}
+          {showFilters && (
+            <div className="mt-4 p-4 bg-muted rounded-lg grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label>Plataforma</Label>
+                <select
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
+                  value={filters.platform}
+                  onChange={(e) => setFilters({ ...filters, platform: e.target.value })}
+                >
+                  <option value="">Todas</option>
+                  <option value="mercadolivre">Mercado Livre</option>
+                  <option value="shopee">Shopee</option>
+                  <option value="amazon">Amazon</option>
+                  <option value="aliexpress">AliExpress</option>
+                  <option value="general">Geral</option>
+                </select>
+              </div>
+              <div>
+                <Label>Status</Label>
+                <select
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
+                  value={filters.is_active}
+                  onChange={(e) => setFilters({ ...filters, is_active: e.target.value })}
+                >
+                  <option value="">Todos</option>
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+              </div>
+              <div>
+                <Label>Verificação</Label>
+                <select
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
+                  value={filters.verification_status}
+                  onChange={(e) => setFilters({ ...filters, verification_status: e.target.value })}
+                >
+                  <option value="">Todos</option>
+                  <option value="active">Ativo</option>
+                  <option value="invalid">Inválido</option>
+                  <option value="expired">Expirado</option>
+                </select>
+              </div>
+              <div>
+                <Label>Tipo de Desconto</Label>
+                <select
+                  className="w-full mt-1 px-3 py-2 border rounded-md"
+                  value={filters.discount_type}
+                  onChange={(e) => setFilters({ ...filters, discount_type: e.target.value })}
+                >
+                  <option value="">Todos</option>
+                  <option value="percentage">Percentual</option>
+                  <option value="fixed">Fixo</option>
+                </select>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -770,13 +1189,18 @@ export default function Coupons() {
                       <input
                         type="checkbox"
                         className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
-                        checked={coupons.length > 0 && selectedIds.length === coupons.length}
+                        checked={
+                          (activeTab === 'all' ? coupons.length > 0 : pendingCoupons.length > 0) &&
+                          selectedIds.length === (activeTab === 'all' ? coupons.length : pendingCoupons.length)
+                        }
                         onChange={toggleSelectAll}
                       />
                     </TableHead>
                     <TableHead>Código</TableHead>
                     <TableHead>Plataforma</TableHead>
                     <TableHead>Desconto</TableHead>
+                    <TableHead>Confiança</TableHead>
+                    {activeTab === 'pending' && <TableHead>Origem</TableHead>}
                     <TableHead>Usos</TableHead>
                     <TableHead>Validade</TableHead>
                     <TableHead>Status</TableHead>
@@ -784,14 +1208,14 @@ export default function Coupons() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {coupons.length === 0 ? (
+                  {(activeTab === 'all' ? coupons : pendingCoupons).length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground">
-                        Nenhum cupom encontrado
+                      <TableCell colSpan={activeTab === 'all' ? 9 : 10} className="text-center text-muted-foreground">
+                        {activeTab === 'pending' ? 'Nenhum cupom pendente encontrado' : 'Nenhum cupom encontrado'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    coupons.map((coupon) => (
+                    (activeTab === 'all' ? coupons : pendingCoupons).map((coupon) => (
                       <TableRow key={coupon.id}>
                         <TableCell>
                           <input
@@ -854,44 +1278,76 @@ export default function Coupons() {
                         </TableCell>
                         <TableCell>
                           {coupon.confidence_score !== null && coupon.confidence_score !== undefined ? (
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1">
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div
-                                    className={`h-2 rounded-full ${
-                                      coupon.confidence_score >= 0.90
-                                        ? 'bg-green-500'
-                                        : coupon.confidence_score >= 0.75
-                                        ? 'bg-yellow-500'
-                                        : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${coupon.confidence_score * 100}%` }}
-                                  />
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1">
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className={`h-2 rounded-full ${
+                                        coupon.confidence_score >= 0.90
+                                          ? 'bg-green-500'
+                                          : coupon.confidence_score >= 0.75
+                                          ? 'bg-yellow-500'
+                                          : 'bg-red-500'
+                                      }`}
+                                      style={{ width: `${coupon.confidence_score * 100}%` }}
+                                    />
+                                  </div>
                                 </div>
+                                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                                  {(coupon.confidence_score * 100).toFixed(0)}%
+                                </span>
                               </div>
-                              <span className="text-xs font-medium text-muted-foreground">
-                                {(coupon.confidence_score * 100).toFixed(0)}%
-                              </span>
+                              {activeTab === 'pending' && coupon.ai_decision_reason && (
+                                <div className="text-xs text-muted-foreground mt-1 max-w-xs" title={coupon.ai_decision_reason}>
+                                  <div className="truncate">{coupon.ai_decision_reason}</div>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">N/A</span>
                           )}
-                          {coupon.ai_decision_reason && (
-                            <div className="text-xs text-muted-foreground mt-1 max-w-xs truncate" title={coupon.ai_decision_reason}>
-                              {coupon.ai_decision_reason}
-                            </div>
-                          )}
                         </TableCell>
+                        {activeTab === 'pending' && (
+                          <TableCell>
+                            <div className="flex flex-col gap-1 text-xs">
+                              {coupon.channel_origin && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Canal:</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {coupon.channel_origin}
+                                  </Badge>
+                                </div>
+                              )}
+                              {coupon.capture_source && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Fonte:</span>
+                                  <Badge variant="outline" className="text-xs capitalize">
+                                    {coupon.capture_source}
+                                  </Badge>
+                                </div>
+                              )}
+                              {coupon.created_at && (
+                                <div className="text-muted-foreground">
+                                  📅 {format(new Date(coupon.created_at), 'dd/MM/yyyy HH:mm')}
+                                </div>
+                              )}
+                              {!coupon.channel_origin && !coupon.capture_source && !coupon.created_at && (
+                                <span className="text-xs text-muted-foreground">N/A</span>
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="text-sm">
                             {coupon.current_uses} / {coupon.max_uses || '∞'}
                           </div>
                         </TableCell>
                         <TableCell>
-                          {coupon.expires_at ? (
+                          {coupon.valid_until ? (
                             <div className="flex items-center gap-1 text-sm">
                               <Calendar className="h-3 w-3" />
-                              {format(new Date(coupon.expires_at), 'dd/MM/yyyy')}
+                              {format(new Date(coupon.valid_until), 'dd/MM/yyyy')}
                             </div>
                           ) : (
                             <span className="text-sm text-muted-foreground">Sem validade</span>
@@ -912,22 +1368,94 @@ export default function Coupons() {
                                 {coupon.is_active ? 'Ativo' : 'Inativo'}
                               </Badge>
                             )}
-                            {coupon.is_pending_approval && coupon.confidence_score !== null && (
-                              <span className="text-xs text-muted-foreground">
-                                Confiança: {(coupon.confidence_score * 100).toFixed(0)}%
-                              </span>
+                            {activeTab === 'pending' && coupon.verification_status && coupon.verification_status !== 'pending' && (
+                              <Badge variant="outline" className="text-xs mt-1">
+                                {coupon.verification_status === 'active' ? '✅ Válido' :
+                                 coupon.verification_status === 'invalid' ? '❌ Inválido' :
+                                 coupon.verification_status === 'expired' ? '⏰ Expirado' :
+                                 '📋 ' + coupon.verification_status}
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            {coupon.is_pending_approval && (
+                          <div className="flex justify-end gap-2 flex-wrap">
+                            {coupon.is_pending_approval && activeTab === 'pending' && (
+                              <>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleApproveCoupon(coupon.id)}
+                                  disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
+                                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Aprovar cupom"
+                                >
+                                  {processingCoupons.approving.has(coupon.id) ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Aprovando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Aprovar
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleForcePublish(coupon)}
+                                  disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Aprovar e publicar imediatamente"
+                                >
+                                  {processingCoupons.publishing.has(coupon.id) ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Publicando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="h-3 w-3 mr-1" />
+                                      Publicar
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => {
+                                    const reason = prompt('Motivo da rejeição (opcional):');
+                                    if (reason !== null) {
+                                      handleRejectCoupon(coupon.id, reason);
+                                    }
+                                  }}
+                                  disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
+                                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Rejeitar cupom"
+                                >
+                                  {processingCoupons.rejecting.has(coupon.id) ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Rejeitando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="h-3 w-3 mr-1" />
+                                      Rejeitar
+                                    </>
+                                  )}
+                                </Button>
+                              </>
+                            )}
+                            {coupon.is_pending_approval && activeTab === 'all' && (
                               <Button
                                 variant="default"
                                 size="sm"
                                 onClick={() => handleForcePublish(coupon)}
-                                className="bg-green-600 hover:bg-green-700"
-                                title="Forçar publicação e enviar aos bots"
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                title="Aprovar e publicar imediatamente"
                               >
                                 <Send className="h-3 w-3 mr-1" />
                                 Publicar
@@ -979,9 +1507,15 @@ export default function Coupons() {
               </Table>
 
               <Pagination
-                currentPage={pagination.page}
-                totalPages={pagination.totalPages}
-                onPageChange={(newPage) => fetchCoupons(newPage)}
+                currentPage={activeTab === 'all' ? pagination.page : pendingPagination.page}
+                totalPages={activeTab === 'all' ? pagination.totalPages : pendingPagination.totalPages}
+                onPageChange={(newPage) => {
+                  if (activeTab === 'all') {
+                    fetchCoupons(newPage);
+                  } else {
+                    fetchPendingCoupons(newPage);
+                  }
+                }}
               />
             </>
           )}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -32,6 +32,12 @@ export default function Products() {
   });
 
   const [selectedIds, setSelectedIds] = useState([]);
+  const [processingActions, setProcessingActions] = useState({
+    deleting: new Set(),
+    submitting: false,
+    analyzing: false,
+    batchDeleting: false
+  });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -218,6 +224,11 @@ export default function Products() {
   const handleDelete = async (id) => {
     if (!confirm('Deseja realmente deletar este produto?')) return;
 
+    setProcessingActions(prev => ({
+      ...prev,
+      deleting: new Set(prev.deleting).add(id)
+    }));
+
     try {
       await api.delete(`/products/${id}`);
 
@@ -235,6 +246,12 @@ export default function Products() {
         title: "Erro!",
         description: error.response?.data?.error || "Erro ao deletar produto. Tente novamente.",
         variant: "destructive",
+      });
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev.deleting);
+        newSet.delete(id);
+        return { ...prev, deleting: newSet };
       });
     }
   };
@@ -279,6 +296,7 @@ export default function Products() {
 
     console.log('🔗 Iniciando análise do link:', formData.affiliate_url);
     setAnalyzingLink(true);
+    setProcessingActions(prev => ({ ...prev, analyzing: true }));
     try {
       console.log('📤 Enviando requisição para API...');
       const response = await api.post('/link-analyzer/analyze', {
@@ -395,6 +413,7 @@ export default function Products() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setProcessingActions(prev => ({ ...prev, submitting: true }));
     try {
       // Função para converter preço string para número
       const parsePrice = (priceStr) => {
@@ -484,6 +503,7 @@ export default function Products() {
   const handleBatchDelete = async () => {
     if (!confirm(`Deseja deletar ${selectedIds.length} produtos?`)) return;
 
+    setProcessingActions(prev => ({ ...prev, batchDeleting: true }));
     try {
       await api.post('/products/batch-delete', { ids: selectedIds });
       setSelectedIds([]);
@@ -499,6 +519,8 @@ export default function Products() {
         description: "Erro ao deletar produtos em lote.",
         variant: "destructive",
       });
+    } finally {
+      setProcessingActions(prev => ({ ...prev, batchDeleting: false }));
     }
   };
 
@@ -547,9 +569,20 @@ export default function Products() {
             <Button
               variant="destructive"
               onClick={handleBatchDelete}
+              disabled={processingActions.batchDeleting}
+              className="disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Deletar ({selectedIds.length})
+              {processingActions.batchDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deletando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Deletar ({selectedIds.length})
+                </>
+              )}
             </Button>
           )}
 
@@ -601,13 +634,13 @@ export default function Products() {
                     <Button
                       type="button"
                       onClick={handleAnalyzeLink}
-                      disabled={analyzingLink || !formData.affiliate_url}
+                      disabled={processingActions.analyzing || !formData.affiliate_url}
                       variant="secondary"
-                      className="whitespace-nowrap"
+                      className="whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {analyzingLink ? (
+                      {processingActions.analyzing ? (
                         <>
-                          <Sparkles className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Analisando...
                         </>
                       ) : (
@@ -746,8 +779,21 @@ export default function Products() {
                 )}
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProduct ? 'Salvar' : 'Criar'}</Button>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting}>Cancelar</Button>
+                  <Button 
+                    type="submit"
+                    disabled={processingActions.submitting}
+                    className="disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processingActions.submitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {editingProduct ? 'Salvando...' : 'Criando...'}
+                      </>
+                    ) : (
+                      editingProduct ? 'Salvar' : 'Criar'
+                    )}
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -1014,8 +1060,14 @@ export default function Products() {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDelete(product.id)}
+                              disabled={processingActions.deleting.has(product.id)}
+                              className="disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                              {processingActions.deleting.has(product.id) ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              )}
                             </Button>
                           </div>
                         </TableCell>

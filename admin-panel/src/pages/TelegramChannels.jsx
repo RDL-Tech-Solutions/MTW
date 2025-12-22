@@ -4,7 +4,7 @@ import {
   Plus, Edit, Trash2, MessageSquare, Activity, 
   Play, Square, RefreshCw, CheckCircle2, XCircle,
   ExternalLink, Eye, EyeOff, Settings, Key, Power,
-  Send, Shield, AlertCircle, Trash, Brain, Zap
+  Send, Shield, AlertCircle, Trash, Brain, Zap, Loader2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -73,6 +73,10 @@ export default function TelegramChannels() {
   
   // Listener
   const [listenerLoading, setListenerLoading] = useState(false);
+  const [savingChannel, setSavingChannel] = useState(false);
+  const [deletingChannel, setDeletingChannel] = useState({});
+  const [savingCaptureConfig, setSavingCaptureConfig] = useState(false);
+  const [togglingActive, setTogglingActive] = useState({});
 
   useEffect(() => {
     loadChannels();
@@ -431,6 +435,7 @@ export default function TelegramChannels() {
 
   const handleSaveChannel = async (e) => {
     e.preventDefault();
+    setSavingChannel(true);
     try {
       if (!channelForm.name || (!channelForm.username && !channelForm.channel_id)) {
         toast({
@@ -488,12 +493,15 @@ export default function TelegramChannels() {
         description: error.response?.data?.message || "Erro ao salvar canal",
         variant: "destructive"
       });
+    } finally {
+      setSavingChannel(false);
     }
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Tem certeza que deseja deletar este canal?')) return;
     
+    setDeletingChannel(prev => ({ ...prev, [id]: true }));
     try {
       await api.delete(`/telegram-channels/${id}`);
       toast({
@@ -508,6 +516,8 @@ export default function TelegramChannels() {
         description: "Erro ao deletar canal",
         variant: "destructive"
       });
+    } finally {
+      setDeletingChannel(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -540,6 +550,7 @@ export default function TelegramChannels() {
   
   const handleSaveCaptureConfig = async (e) => {
     e.preventDefault();
+    setSavingCaptureConfig(true);
     try {
       // Converter strings vazias para null nos campos TIME
       const configToSave = {
@@ -575,10 +586,13 @@ export default function TelegramChannels() {
           variant: "destructive"
         });
       }
+    } finally {
+      setSavingCaptureConfig(false);
     }
   };
 
   const handleToggleActive = async (channel) => {
+    setTogglingActive(prev => ({ ...prev, [channel.id]: true }));
     try {
       await api.put(`/telegram-channels/${channel.id}`, {
         is_active: !channel.is_active
@@ -595,6 +609,8 @@ export default function TelegramChannels() {
         description: "Erro ao atualizar status",
         variant: "destructive"
       });
+    } finally {
+      setTogglingActive(prev => ({ ...prev, [channel.id]: false }));
     }
   };
 
@@ -854,7 +870,16 @@ export default function TelegramChannels() {
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit">{editingChannel ? 'Salvar' : 'Criar'}</Button>
+                  <Button type="submit" disabled={savingChannel}>
+                    {savingChannel ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      editingChannel ? 'Salvar' : 'Criar'
+                    )}
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -940,7 +965,16 @@ export default function TelegramChannels() {
                   <Button type="button" variant="outline" onClick={() => setCaptureConfigDialog(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit">Salvar</Button>
+                  <Button type="submit" disabled={savingCaptureConfig}>
+                    {savingCaptureConfig ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      'Salvar'
+                    )}
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -1568,8 +1602,14 @@ export default function TelegramChannels() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleToggleActive(channel)}
+                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
                         >
-                          {channel.is_active ? (
+                          {togglingActive[channel.id] ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Atualizando...
+                            </>
+                          ) : channel.is_active ? (
                             <>
                               <Square className="mr-1 h-3 w-3" />
                               Desativar
@@ -1586,6 +1626,7 @@ export default function TelegramChannels() {
                           size="icon"
                           onClick={() => handleOpenCaptureConfig(channel)}
                           title="Configurar captura"
+                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
                         >
                           <Settings className="h-4 w-4" />
                         </Button>
@@ -1593,6 +1634,7 @@ export default function TelegramChannels() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(channel)}
+                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -1600,8 +1642,13 @@ export default function TelegramChannels() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleDelete(channel.id)}
+                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          {deletingChannel[channel.id] ? (
+                            <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>

@@ -3,7 +3,7 @@ import api from '../services/api';
 import { 
   Plus, Edit, Trash2, MessageSquare, Send, Activity, 
   Settings, Bot, CheckCircle, XCircle, Eye, EyeOff,
-  Wifi, WifiOff, RefreshCw, Save, AlertCircle, FileText
+  Wifi, WifiOff, RefreshCw, Save, AlertCircle, FileText, Loader2
 } from 'lucide-react';
 import BotTemplates from '../components/BotTemplates';
 import { Button } from '../components/ui/button';
@@ -23,6 +23,9 @@ export default function Bots() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState({ telegram: false, whatsapp: false });
+  const [savingChannel, setSavingChannel] = useState(false);
+  const [deletingChannel, setDeletingChannel] = useState({});
+  const [testingChannel, setTestingChannel] = useState({});
   
   // Status dos bots
   const [status, setStatus] = useState({
@@ -275,6 +278,7 @@ export default function Bots() {
   // Gerenciamento de canais
   const handleSaveChannel = async (e) => {
     e.preventDefault();
+    setSavingChannel(true);
     try {
       const payload = {
         platform: channelForm.platform,
@@ -305,17 +309,22 @@ export default function Bots() {
         description: error.response?.data?.message || "Erro ao salvar canal.",
         variant: "destructive"
       });
+    } finally {
+      setSavingChannel(false);
     }
   };
 
   const handleDeleteChannel = async (id) => {
     if (!confirm('Deseja deletar este canal?')) return;
+    setDeletingChannel(prev => ({ ...prev, [id]: true }));
     try {
       await api.delete(`/bots/channels/${id}`);
       toast({ title: "Sucesso!", description: "Canal deletado.", variant: "success" });
       fetchChannels();
     } catch (error) {
       toast({ title: "Erro!", description: "Erro ao deletar canal.", variant: "destructive" });
+    } finally {
+      setDeletingChannel(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -348,6 +357,7 @@ export default function Bots() {
   };
 
   const handleTestChannel = async (id) => {
+    setTestingChannel(prev => ({ ...prev, [id]: true }));
     try {
       const response = await api.post(`/bots/channels/${id}/test`);
       toast({ 
@@ -371,6 +381,8 @@ export default function Bots() {
         variant: "destructive",
         duration: 8000
       });
+    } finally {
+      setTestingChannel(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -976,7 +988,16 @@ export default function Bots() {
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Cancelar
                     </Button>
-                    <Button type="submit">{editingChannel ? 'Salvar' : 'Criar'}</Button>
+                    <Button type="submit" disabled={savingChannel}>
+                      {savingChannel ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Salvando...
+                        </>
+                      ) : (
+                        editingChannel ? 'Salvar' : 'Criar'
+                      )}
+                    </Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -1069,15 +1090,43 @@ export default function Bots() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleTestChannel(channel.id)}>
-                              <Send className="mr-1 h-3 w-3" />
-                              Testar
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleTestChannel(channel.id)}
+                              disabled={testingChannel[channel.id]}
+                            >
+                              {testingChannel[channel.id] ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  Testando...
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="mr-1 h-3 w-3" />
+                                  Testar
+                                </>
+                              )}
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleEditChannel(channel)}>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleEditChannel(channel)}
+                              disabled={savingChannel || deletingChannel[channel.id] || testingChannel[channel.id]}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteChannel(channel.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleDeleteChannel(channel.id)}
+                              disabled={savingChannel || deletingChannel[channel.id] || testingChannel[channel.id]}
+                            >
+                              {deletingChannel[channel.id] ? (
+                                <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              )}
                             </Button>
                           </div>
                         </TableCell>

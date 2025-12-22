@@ -213,7 +213,8 @@ class Coupon {
       valid_until,
       is_general,
       sort = 'created_at',
-      order = 'desc'
+      order = 'desc',
+      excludePending = false // Novo parâmetro para excluir pendentes
     } = filters;
 
     const offset = (page - 1) * limit;
@@ -221,16 +222,59 @@ class Coupon {
     let query = supabase
       .from('coupons')
       .select('*', { count: 'exact' });
+    
+    // Se excludePending for true, excluir cupons pendentes automaticamente
+    // Isso garante que na aba "Todos os Cupons" só apareçam cupons aprovados
+    if (excludePending && (is_pending_approval === undefined || is_pending_approval === null || is_pending_approval === '')) {
+      query = query.eq('is_pending_approval', false);
+    }
 
     // Aplicar filtros básicos
-    if (platform) query = query.eq('platform', platform);
-    if (is_active !== undefined) query = query.eq('is_active', is_active);
-    if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
-    if (auto_captured !== undefined) query = query.eq('auto_captured', auto_captured);
-    if (verification_status) query = query.eq('verification_status', verification_status);
-    if (is_pending_approval !== undefined) query = query.eq('is_pending_approval', is_pending_approval);
-    if (discount_type) query = query.eq('discount_type', discount_type);
-    if (is_general !== undefined) query = query.eq('is_general', is_general);
+    // Normalizar valores booleanos: strings vazias ou "false" devem ser tratados corretamente
+    const normalizeBoolean = (value) => {
+      if (value === '' || value === null || value === undefined) return undefined;
+      if (typeof value === 'string') {
+        if (value.toLowerCase() === 'true') return true;
+        if (value.toLowerCase() === 'false') return false;
+        return undefined;
+      }
+      return value;
+    };
+
+    if (platform && platform !== '') query = query.eq('platform', platform);
+    
+    // Aplicar filtro de is_active
+    // Se excludePending for true e is_active não for fornecido, aplicar is_active: true por padrão
+    if (excludePending && is_active === undefined) {
+      query = query.eq('is_active', true);
+    } else if (is_active !== undefined) {
+      const normalizedIsActive = normalizeBoolean(is_active);
+      if (normalizedIsActive !== undefined) query = query.eq('is_active', normalizedIsActive);
+    }
+    
+    const normalizedIsVip = normalizeBoolean(is_vip);
+    if (normalizedIsVip !== undefined) query = query.eq('is_vip', normalizedIsVip);
+    
+    const normalizedAutoCaptured = normalizeBoolean(auto_captured);
+    if (normalizedAutoCaptured !== undefined) query = query.eq('auto_captured', normalizedAutoCaptured);
+    
+    if (verification_status && verification_status !== '') query = query.eq('verification_status', verification_status);
+    
+    // Sempre aplicar filtro de is_pending_approval se fornecido
+    // Se excludePending for true, não aplicar este filtro (já foi aplicado acima como false)
+    // Se for true (boolean), aplicar diretamente
+    // Se for string, normalizar primeiro
+    if (!excludePending && is_pending_approval !== undefined && is_pending_approval !== null && is_pending_approval !== '') {
+      const normalizedIsPendingApproval = normalizeBoolean(is_pending_approval);
+      if (normalizedIsPendingApproval !== undefined) {
+        query = query.eq('is_pending_approval', normalizedIsPendingApproval);
+      }
+    }
+    
+    if (discount_type && discount_type !== '') query = query.eq('discount_type', discount_type);
+    
+    const normalizedIsGeneral = normalizeBoolean(is_general);
+    if (normalizedIsGeneral !== undefined) query = query.eq('is_general', normalizedIsGeneral);
     if (origem) query = query.eq('origem', origem);
     if (channel_origin) query = query.eq('channel_origin', channel_origin);
     if (capture_source) query = query.eq('capture_source', capture_source);
@@ -341,9 +385,11 @@ class Coupon {
 
   // Buscar cupons pendentes de aprovação
   static async findPendingApproval(filters = {}) {
+    // Garantir que is_pending_approval seja sempre true, mesmo se vier nos filtros
+    const { is_pending_approval, ...otherFilters } = filters;
     return await this.findAll({
-      ...filters,
-      is_pending_approval: true
+      ...otherFilters,
+      is_pending_approval: true // Sempre forçar true para pendentes
     });
   }
 

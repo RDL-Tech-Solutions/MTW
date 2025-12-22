@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
-import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -555,8 +555,17 @@ export default function Settings() {
           </p>
         </div>
         <Button onClick={handleSave} disabled={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? 'Salvando...' : 'Salvar Todas'}
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Salvar Todas
+            </>
+          )}
         </Button>
       </div>
 
@@ -716,8 +725,17 @@ export default function Settings() {
                         disabled={gettingRefreshToken || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri}
                         variant="outline"
                       >
-                        <Key className="h-4 w-4 mr-2" />
-                        {gettingRefreshToken ? 'Abrindo...' : 'Obter Refresh Token'}
+                        {gettingRefreshToken ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Abrindo...
+                          </>
+                        ) : (
+                          <>
+                            <Key className="h-4 w-4 mr-2" />
+                            Obter Refresh Token
+                          </>
+                        )}
                       </Button>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
@@ -732,8 +750,17 @@ export default function Settings() {
                       disabled={gettingRefreshToken || !meliCode || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri}
                       variant="default"
                     >
-                      <RefreshCw className={`h-4 mr-2 ${gettingRefreshToken ? 'animate-spin' : ''}`} />
-                      Trocar por Tokens
+                      {gettingRefreshToken ? (
+                        <>
+                          <Loader2 className="h-4 mr-2 animate-spin" />
+                          Trocando...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 mr-2" />
+                          Trocar por Tokens
+                        </>
+                      )}
                     </Button>
                     
                     <Button
@@ -741,8 +768,17 @@ export default function Settings() {
                       disabled={generatingAccessToken || !settings.meli_refresh_token}
                       variant="default"
                     >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${generatingAccessToken ? 'animate-spin' : ''}`} />
-                      {generatingAccessToken ? 'Gerando...' : 'Gerar Access Token'}
+                      {generatingAccessToken ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Gerando...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Gerar Access Token
+                        </>
+                      )}
                     </Button>
                   </div>
                   <p className="text-sm text-gray-500">

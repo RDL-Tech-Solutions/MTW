@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Search, Shield, Crown, User as UserIcon, Mail, Calendar, Plus, Trash2 } from 'lucide-react';
+import { Search, Shield, Crown, User as UserIcon, Mail, Calendar, Plus, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -30,6 +30,10 @@ export default function Users() {
     admins: 0,
     vips: 0,
     regular: 0
+  });
+  const [processingActions, setProcessingActions] = useState({
+    deleting: new Set(),
+    submitting: false
   });
 
   useEffect(() => {
@@ -88,12 +92,23 @@ export default function Users() {
   const handleDelete = async (userId) => {
     if (!confirm('Deseja realmente deletar este usuário?')) return;
     
+    setProcessingActions(prev => ({
+      ...prev,
+      deleting: new Set(prev.deleting).add(userId)
+    }));
+    
     try {
       await api.delete(`/users/${userId}`);
       fetchUsers();
       fetchStats();
     } catch (error) {
       alert('Erro ao deletar usuário');
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev.deleting);
+        newSet.delete(userId);
+        return { ...prev, deleting: newSet };
+      });
     }
   };
 
@@ -111,6 +126,7 @@ export default function Users() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setProcessingActions(prev => ({ ...prev, submitting: true }));
     try {
       if (editingUser) {
         const updateData = { ...formData };
@@ -134,6 +150,8 @@ export default function Users() {
       fetchStats();
     } catch (error) {
       alert(error.response?.data?.message || 'Erro ao salvar usuário');
+    } finally {
+      setProcessingActions(prev => ({ ...prev, submitting: false }));
     }
   };
 
@@ -252,11 +270,22 @@ export default function Users() {
                 <Label htmlFor="is_vip">Usuário VIP</Label>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting}>
                   Cancelar
                 </Button>
-                <Button type="submit">
-                  {editingUser ? 'Salvar' : 'Criar'}
+                <Button 
+                  type="submit"
+                  disabled={processingActions.submitting}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {processingActions.submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {editingUser ? 'Salvando...' : 'Criando...'}
+                    </>
+                  ) : (
+                    editingUser ? 'Salvar' : 'Criar'
+                  )}
                 </Button>
               </DialogFooter>
             </form>
@@ -440,8 +469,14 @@ export default function Users() {
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDelete(user.id)}
+                          disabled={processingActions.deleting.has(user.id)}
+                          className="disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          {processingActions.deleting.has(user.id) ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>

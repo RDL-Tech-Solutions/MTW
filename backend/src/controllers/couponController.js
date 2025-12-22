@@ -294,6 +294,192 @@ class CouponController {
       next(error);
     }
   }
+
+  // Listar cupons pendentes de aprovação
+  static async listPending(req, res, next) {
+    try {
+      const { page = 1, limit = 20, platform, search } = req.query;
+
+      logger.info(`🔍 Buscando cupons pendentes - página: ${page}, limite: ${limit}, plataforma: ${platform || 'todas'}, busca: ${search || 'nenhuma'}`);
+
+      const result = await Coupon.findPendingApproval({
+        page: parseInt(page),
+        limit: parseInt(limit),
+        platform,
+        search
+      });
+
+      logger.info(`✅ Cupons pendentes encontrados: ${result.coupons?.length || 0} de ${result.total || 0} total`);
+
+      res.json(successResponse(result));
+    } catch (error) {
+      logger.error(`❌ Erro ao listar cupons pendentes: ${error.message}`);
+      next(error);
+    }
+  }
+
+  // Aprovar cupom
+  static async approve(req, res, next) {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      const coupon = await Coupon.approve(id, updates);
+      await cacheDel('coupons:*');
+
+      // Notificar sobre novo cupom aprovado
+      try {
+        await couponNotificationService.notifyNewCoupon(coupon);
+        logger.info(`✅ Cupom ${coupon.code} aprovado e notificado com sucesso`);
+      } catch (notifError) {
+        logger.warn(`⚠️ Erro ao notificar cupom aprovado: ${notifError.message}`);
+      }
+
+      logger.info(`Cupom aprovado: ${id} (${coupon.code})`);
+      res.json(successResponse(coupon, 'Cupom aprovado com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Rejeitar cupom
+  static async reject(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const coupon = await Coupon.reject(id, reason);
+      await cacheDel('coupons:*');
+
+      logger.info(`Cupom rejeitado: ${id} (${coupon.code})`);
+      res.json(successResponse(coupon, 'Cupom rejeitado com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Aprovar múltiplos cupons
+  static async approveBatch(req, res, next) {
+    try {
+      const { ids, updates = {} } = req.body;
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json(
+          errorResponse('IDs inválidos', 'INVALID_IDS')
+        );
+      }
+
+      const approved = [];
+      const errors = [];
+
+      for (const id of ids) {
+        try {
+          const coupon = await Coupon.approve(id, updates);
+          approved.push(coupon);
+          await cacheDel('coupons:*');
+
+          // Notificar sobre novo cupom aprovado
+          try {
+            await couponNotificationService.notifyNewCoupon(coupon);
+          } catch (notifError) {
+            logger.warn(`⚠️ Erro ao notificar cupom aprovado: ${notifError.message}`);
+          }
+        } catch (error) {
+          errors.push({ id, error: error.message });
+        }
+      }
+
+      logger.info(`${approved.length} cupons aprovados em lote`);
+      res.json(successResponse({
+        approved: approved.length,
+        errors: errors.length,
+        details: errors
+      }, `${approved.length} cupons aprovados com sucesso`));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Rejeitar múltiplos cupons
+  static async rejectBatch(req, res, next) {
+    try {
+      const { ids, reason = '' } = req.body;
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json(
+          errorResponse('IDs inválidos', 'INVALID_IDS')
+        );
+      }
+
+      const rejected = [];
+      const errors = [];
+
+      for (const id of ids) {
+        try {
+          const coupon = await Coupon.reject(id, reason);
+          rejected.push(coupon);
+          await cacheDel('coupons:*');
+        } catch (error) {
+          errors.push({ id, error: error.message });
+        }
+      }
+
+      logger.info(`${rejected.length} cupons rejeitados em lote`);
+      res.json(successResponse({
+        rejected: rejected.length,
+        errors: errors.length,
+        details: errors
+      }, `${rejected.length} cupons rejeitados com sucesso`));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Exportar cupons
+  static async export(req, res, next) {
+    try {
+      const { format = 'json', ...filters } = req.query;
+
+      // Buscar todos os cupons (sem paginação para exportação)
+      const allFilters = { ...filters, limit: 10000, page: 1 };
+      const result = await Coupon.findAll(allFilters);
+      const coupons = result.coupons || result;
+
+      if (format === 'csv') {
+        // Converter para CSV
+        const headers = ['Código', 'Plataforma', 'Tipo Desconto', 'Valor Desconto', 'Compra Mínima', 
+                        'Limite Máximo', 'Válido De', 'Válido Até', 'Aplicabilidade', 'Status', 'Criado Em'];
+        
+        const csvRows = [
+          headers.join(','),
+          ...coupons.map(coupon => [
+            coupon.code,
+            coupon.platform,
+            coupon.discount_type,
+            coupon.discount_value,
+            coupon.min_purchase || 0,
+            coupon.max_discount_value || '',
+            coupon.valid_from ? new Date(coupon.valid_from).toISOString() : '',
+            coupon.valid_until ? new Date(coupon.valid_until).toISOString() : '',
+            coupon.is_general ? 'Todos' : 'Selecionados',
+            coupon.verification_status || 'active',
+            coupon.created_at ? new Date(coupon.created_at).toISOString() : ''
+          ].join(','))
+        ];
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=coupons_${new Date().toISOString().split('T')[0]}.csv`);
+        res.send(csvRows.join('\n'));
+      } else {
+        res.json(successResponse({
+          coupons,
+          total: coupons.length
+        }));
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default CouponController;

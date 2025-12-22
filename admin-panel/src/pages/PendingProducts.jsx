@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2 } from 'lucide-react';
+import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -739,14 +739,30 @@ export default function PendingProducts() {
               onClick={() => handleApprove(true)}
               disabled={approving || shortening || !affiliateLink.trim()}
             >
-              <Link2 className="h-4 w-4 mr-2" />
-              {shortening ? 'Encurtando...' : 'Encurtar Link e Publicar'}
+              {shortening ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Encurtando...
+                </>
+              ) : (
+                <>
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Encurtar Link e Publicar
+                </>
+              )}
             </Button>
             <Button
               onClick={() => handleApprove(false)}
               disabled={approving || shortening || !affiliateLink.trim()}
             >
-              {approving ? 'Aprovando...' : 'Aprovar e Publicar'}
+              {approving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Aprovando...
+                </>
+              ) : (
+                'Aprovar e Publicar'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -807,7 +823,14 @@ export default function PendingProducts() {
               onClick={handleReject}
               disabled={rejecting}
             >
-              {rejecting ? 'Rejeitando...' : 'Confirmar Rejeição'}
+              {rejecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Rejeitando...
+                </>
+              ) : (
+                'Confirmar Rejeição'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

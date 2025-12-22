@@ -109,6 +109,7 @@ class AdvancedTemplateGenerator {
       const hasMinPurchase = coupon.min_purchase > 0;
       const hasMaxDiscount = coupon.max_discount_value > 0;
       const isGeneral = coupon.is_general;
+      const hasApplicableProducts = coupon.applicable_products && coupon.applicable_products.length > 0;
       const daysUntilExpiry = this.calculateDaysUntilExpiry(coupon.valid_until);
       
       // Determinar urgência baseado na validade
@@ -124,6 +125,7 @@ class AdvancedTemplateGenerator {
         hasMinPurchase,
         hasMaxDiscount,
         isGeneral,
+        hasApplicableProducts,
         daysUntilExpiry,
         urgencyLevel
       });
@@ -326,7 +328,7 @@ CONTEXTO DO CUPOM:
 ${context.hasMinPurchase ? `- Compra mínima: R$ ${coupon.min_purchase.toFixed(2)}` : ''}
 ${context.hasMaxDiscount ? `- Limite de desconto: R$ ${coupon.max_discount_value.toFixed(2)}` : ''}
 - Urgência: ${this.getUrgencyText(context.urgencyLevel)}
-${context.isGeneral ? '- Válido para TODOS os produtos' : '- Válido para produtos selecionados'}
+${context.isGeneral ? '- Válido para TODOS os produtos' : context.hasApplicableProducts ? `- Válido para produtos selecionados (${coupon.applicable_products?.length || 0} produto(s))` : '- Não há produtos selecionados (aplicabilidade não será mostrada)'}
 
 **IMPORTANTE**: A mensagem será enviada com uma imagem do logo da plataforma. NÃO mencione o nome da plataforma no texto, pois a imagem já identifica a plataforma.
 
@@ -334,6 +336,7 @@ VARIÁVEIS DISPONÍVEIS (use {nome_variavel}):
 - {coupon_code} - Código do cupom (OBRIGATÓRIO - DEVE aparecer na mensagem)
 - {discount_value} - Valor do desconto formatado
 - {min_purchase} - Valor da compra mínima formatado (ex: "R$ 199.00") - Apenas o valor, sem emoji ou texto adicional
+- {applicability} - Aplicabilidade do cupom (ex: "✅ **Válido para todos os produtos**" ou "📦 **Em produtos selecionados** (X produtos)") - APENAS incluir se a variável não estiver vazia
 - {coupon_title} - Título do cupom (se disponível)
 - {coupon_description} - Descrição do cupom (se disponível)
 - {affiliate_link} - Link de afiliado
@@ -367,18 +370,24 @@ EXEMPLO DE ESTRUTURA BOM (para cupons):
 
 ${context.hasMinPurchase ? '💳 **Compra mínima:** {min_purchase}\n' : ''}🔑 **Código:** \`{coupon_code}\`
 
-${coupon.title ? `📝 ${coupon.title}\n` : ''}${coupon.description ? `${coupon.description}\n` : ''}🔗 {affiliate_link}
+${context.isGeneral ? '{applicability}\n' : '{applicability}\n'}${coupon.title ? `📝 ${coupon.title}\n` : ''}${coupon.description ? `${coupon.description}\n` : ''}🔗 {affiliate_link}
 
 ⚡ Use agora e economize!
+
+**IMPORTANTE SOBRE {applicability}:**
+- Se o cupom for válido para TODOS os produtos: use {applicability} que mostrará "✅ **Válido para todos os produtos**"
+- Se o cupom for para produtos SELECIONADOS: use {applicability} que mostrará "📦 **Em produtos selecionados** (X produtos)"
+- Se {applicability} estiver VAZIO (não houver produtos selecionados e não for geral): NÃO inclua esta seção na mensagem
 
 **ESTRUTURA OBRIGATÓRIA:**
 1. Cabeçalho com emojis e chamada de atenção
 2. **OBRIGATÓRIO**: Valor do desconto destacado
 3. **OBRIGATÓRIO**: Código do cupom formatado com backticks: \`{coupon_code}\`
 4. Compra mínima (se houver)
-5. Título/Descrição do cupom (se disponível)
-6. Link de afiliado usando {affiliate_link}
-7. Mensagem de urgência final
+5. **IMPORTANTE**: Aplicabilidade do cupom usando {applicability} - APENAS incluir se a variável não estiver vazia. Se {applicability} estiver vazia, NÃO incluir esta seção.
+6. Título/Descrição do cupom (se disponível)
+7. Link de afiliado usando {affiliate_link}
+8. Mensagem de urgência final
 
 IMPORTANTE SOBRE FORMATAÇÃO:
 - **CRÍTICO**: O código DEVE estar entre backticks: \`{coupon_code}\` - SEMPRE inclua o código

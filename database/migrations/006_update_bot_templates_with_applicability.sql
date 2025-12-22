@@ -20,12 +20,10 @@ SET
 📝 *{coupon_title}*
 {coupon_description}
 
-📅 *Válido até:* {valid_until}
-
 🔗 {affiliate_link}
 
 ⚡ Use agora e economize!',
-  available_variables = '["platform_name", "coupon_code", "discount_value", "min_purchase", "max_discount", "usage_limit", "applicability", "coupon_title", "coupon_description", "valid_until", "affiliate_link"]'::jsonb,
+  available_variables = '["platform_name", "coupon_code", "discount_value", "min_purchase", "max_discount", "usage_limit", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb,
   updated_at = NOW()
 WHERE template_type = 'new_coupon';
 

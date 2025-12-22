@@ -754,11 +754,16 @@ export default function AutoSync() {
                 className="w-full"
               >
                 {runningPlatform === 'mercadolivre' ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
                 ) : (
-                  <Play className="mr-2 h-4 w-4" />
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Mercado Livre
+                  </>
                 )}
-                Mercado Livre
               </Button>
 
               <Button
@@ -769,11 +774,16 @@ export default function AutoSync() {
                 className="w-full"
               >
                 {runningPlatform === 'shopee' ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
                 ) : (
-                  <Play className="mr-2 h-4 w-4" />
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Shopee
+                  </>
                 )}
-                Shopee
               </Button>
 
               <Button
@@ -784,11 +794,16 @@ export default function AutoSync() {
                 className="w-full"
               >
                 {runningPlatform === 'amazon' ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
                 ) : (
-                  <Play className="mr-2 h-4 w-4" />
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Amazon
+                  </>
                 )}
-                Amazon
               </Button>
 
               <Button
@@ -799,11 +814,16 @@ export default function AutoSync() {
                 className="w-full"
               >
                 {runningPlatform === 'aliexpress' ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
                 ) : (
-                  <Play className="mr-2 h-4 w-4" />
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    AliExpress
+                  </>
                 )}
-                AliExpress
               </Button>
             </div>
           </div>
@@ -857,17 +877,31 @@ export default function AutoSync() {
           {/* Botões */}
           <div className="flex gap-3">
             <Button onClick={handleSaveConfig} disabled={loading}>
-              <Save className="mr-2 h-4 w-4" />
-              {loading ? 'Salvando...' : 'Salvar Configurações'}
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Salvar Configurações
+                </>
+              )}
             </Button>
 
             <Button onClick={handleRunNow} disabled={running} variant="outline">
               {running ? (
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Executando...
+                </>
               ) : (
-                <Play className="mr-2 h-4 w-4" />
+                <>
+                  <Play className="mr-2 h-4 w-4" />
+                  Rodar Agora
+                </>
               )}
-              {running ? 'Executando...' : 'Rodar Agora'}
             </Button>
           </div>
         </CardContent>

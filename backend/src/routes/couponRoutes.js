@@ -71,6 +71,9 @@ const preprocessCouponData = (req, res, next) => {
 router.get('/', CouponController.listActive);
 router.get('/expiring', CouponController.expiringSoon);
 router.get('/code/:code', CouponController.getByCode);
+// IMPORTANTE: Rotas específicas devem vir ANTES de rotas com parâmetros dinâmicos
+router.get('/pending', authenticateToken, requireAdmin, CouponController.listPending);
+router.get('/export', authenticateToken, requireAdmin, CouponController.export);
 router.get('/:id', CouponController.getById);
 
 // Rotas protegidas
@@ -85,5 +88,12 @@ router.post('/batch-delete', authenticateToken, requireAdmin, CouponController.b
 router.post('/:id/force-publish', authenticateToken, requireAdmin, CouponController.forcePublish);
 router.post('/:id/mark-out-of-stock', authenticateToken, requireAdmin, CouponController.markAsOutOfStock);
 router.post('/:id/mark-available', authenticateToken, requireAdmin, CouponController.markAsAvailable);
+
+// Rotas de aprovação/rejeição
+// NOTA: /pending e /export já foram movidos para antes de /:id acima
+router.put('/:id/approve', authenticateToken, requireAdmin, CouponController.approve);
+router.put('/:id/reject', authenticateToken, requireAdmin, CouponController.reject);
+router.post('/approve-batch', authenticateToken, requireAdmin, CouponController.approveBatch);
+router.post('/reject-batch', authenticateToken, requireAdmin, CouponController.rejectBatch);
 
 export default router;

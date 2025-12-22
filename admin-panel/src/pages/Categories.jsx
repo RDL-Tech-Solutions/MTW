@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Tag, Grid, List } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Tag, Grid, List, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -21,6 +21,10 @@ export default function Categories() {
     description: '',
     icon: '📦',
     is_active: true
+  });
+  const [processingActions, setProcessingActions] = useState({
+    deleting: new Set(),
+    submitting: false
   });
 
   useEffect(() => {
@@ -58,11 +62,22 @@ export default function Categories() {
   const handleDelete = async (id) => {
     if (!confirm('Deseja realmente deletar esta categoria?')) return;
     
+    setProcessingActions(prev => ({
+      ...prev,
+      deleting: new Set(prev.deleting).add(id)
+    }));
+    
     try {
       await api.delete(`/categories/${id}`);
       fetchCategories();
     } catch (error) {
       alert('Erro ao deletar categoria');
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev.deleting);
+        newSet.delete(id);
+        return { ...prev, deleting: newSet };
+      });
     }
   };
 
@@ -80,6 +95,7 @@ export default function Categories() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setProcessingActions(prev => ({ ...prev, submitting: true }));
     try {
       if (editingCategory) {
         await api.put(`/categories/${editingCategory.id}`, formData);
@@ -98,6 +114,8 @@ export default function Categories() {
       fetchCategories();
     } catch (error) {
       alert('Erro ao salvar categoria');
+    } finally {
+      setProcessingActions(prev => ({ ...prev, submitting: false }));
     }
   };
 
@@ -203,11 +221,22 @@ export default function Categories() {
               </div>
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting}>
                   Cancelar
                 </Button>
-                <Button type="submit">
-                  {editingCategory ? 'Salvar' : 'Criar'}
+                <Button 
+                  type="submit"
+                  disabled={processingActions.submitting}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {processingActions.submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {editingCategory ? 'Salvando...' : 'Criando...'}
+                    </>
+                  ) : (
+                    editingCategory ? 'Salvar' : 'Criar'
+                  )}
                 </Button>
               </DialogFooter>
             </form>
@@ -297,10 +326,15 @@ export default function Categories() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => handleDelete(category.id)}
+                        disabled={processingActions.deleting.has(category.id)}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        {processingActions.deleting.has(category.id) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        )}
                       </Button>
                     </div>
                   </CardContent>
@@ -355,10 +389,15 @@ export default function Categories() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-8 w-8 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => handleDelete(category.id)}
+                            disabled={processingActions.deleting.has(category.id)}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            {processingActions.deleting.has(category.id) ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            )}
                           </Button>
                         </div>
                       </td>

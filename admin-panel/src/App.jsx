@@ -11,7 +11,6 @@ import Users from './pages/Users';
 import Analytics from './pages/Analytics';
 import Bots from './pages/Bots';
 import AutoSync from './pages/AutoSync';
-import CouponCapture from './pages/CouponCapture';
 import Notifications from './pages/Notifications';
 import TelegramChannels from './pages/TelegramChannels';
 import Settings from './pages/Settings';
@@ -43,7 +42,6 @@ function App() {
           <Route path="telegram-channels" element={<TelegramChannels />} />
           <Route path="settings" element={<Settings />} />
           <Route path="auto-sync" element={<AutoSync />} />
-          <Route path="coupon-capture" element={<CouponCapture />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="pending-products" element={<PendingProducts />} />
         </Route>
