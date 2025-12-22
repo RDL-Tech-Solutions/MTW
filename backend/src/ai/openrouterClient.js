@@ -19,9 +19,25 @@ class OpenRouterClient {
   async getConfig() {
     try {
       const settings = await AppSettings.get();
+      let model = settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct';
+      
+      // Verificar se o modelo está na lista de modelos suportados
+      // Se não estiver, avisar mas permitir usar (pode ser um modelo novo ou customizado)
+      const { getModelById } = await import('../config/openrouterModels.js');
+      const modelInfo = getModelById(model);
+      
+      if (!modelInfo) {
+        logger.warn(`⚠️ Modelo "${model}" não está na lista de modelos suportados.`);
+        logger.warn(`   Usando modelo padrão válido: mistralai/mistral-7b-instruct`);
+        // Forçar modelo padrão se não estiver na lista
+        model = 'mistralai/mistral-7b-instruct';
+      } else {
+        logger.debug(`✅ Modelo "${model}" encontrado na lista de modelos suportados (${modelInfo.name}).`);
+      }
+      
       return {
         apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY,
-        model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct',
+        model: model,
         enabled: settings.openrouter_enabled !== undefined 
           ? settings.openrouter_enabled 
           : (process.env.OPENROUTER_ENABLED === 'true' || false)
@@ -150,8 +166,13 @@ class OpenRouterClient {
         if (modelInfo && modelInfo.supportsJson) {
           logger.debug(`   ✅ Modelo ${config.model} suporta JSON mode, ativando response_format`);
           requestPayload.response_format = { type: 'json_object' };
+        } else if (modelInfo) {
+          logger.debug(`   ⚠️ Modelo ${config.model} não suporta JSON mode, tentando sem response_format`);
         } else {
-          logger.debug(`   ⚠️ Modelo ${config.model} não suporta JSON mode ou não está na lista, tentando sem response_format`);
+          // Modelo não está na lista - tentar com JSON mode primeiro, se falhar, tentar sem
+          logger.debug(`   ⚠️ Modelo ${config.model} não está na lista, tentando com JSON mode`);
+          // Tentar com JSON mode - se falhar, será tratado no catch
+          requestPayload.response_format = { type: 'json_object' };
         }
       }
 
@@ -232,19 +253,29 @@ class OpenRouterClient {
         }
         
         // Primeiro, tentar extrair JSON diretamente (mais robusto)
-        // Procurar por padrão { ... } no conteúdo (incluindo quebras de linha)
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        let cleanedContent = jsonMatch ? jsonMatch[0] : content;
+        // IMPORTANTE: Muitos modelos retornam JSON dentro de blocos markdown (```json ... ```)
+        // Precisamos remover o markdown ANTES de extrair o JSON
+        
+        // Passo 1: Remover markdown code blocks primeiro
+        let contentWithoutMarkdown = content
+          .replace(/```json\s*\n?/gi, '')  // ```json com ou sem quebra de linha
+          .replace(/```JSON\s*\n?/gi, '')  // ```JSON (maiúsculo)
+          .replace(/```\s*json\s*\n?/gi, '')  // ``` json (com espaço)
+          .replace(/```\s*\n?/g, '')  // ``` genérico (deve vir depois dos específicos)
+          .replace(/^```/gm, '')  // ``` no início de linha
+          .replace(/```$/gm, '')  // ``` no final de linha
+          .trim();
+        
+        // Passo 2: Procurar por padrão { ... } no conteúdo limpo
+        const jsonMatch = contentWithoutMarkdown.match(/\{[\s\S]*\}/);
+        let cleanedContent = jsonMatch ? jsonMatch[0] : contentWithoutMarkdown;
 
-        // Limpar conteúdo: remover prefixos comuns de modelos de IA
+        // Passo 3: Limpar conteúdo: remover prefixos comuns de modelos de IA
         cleanedContent = cleanedContent
           // Remover tokens especiais (em qualquer posição)
           .replace(/<s>/g, '')  // Remover <s>
           .replace(/\[OUT\]/g, '')  // Remover [OUT]
           .replace(/<\|.*?\|>/g, '')  // Remover tokens de sistema
-          // Remover markdown code blocks
-          .replace(/```json\n?/gi, '')
-          .replace(/```\n?/g, '')
           // Remover espaços e quebras de linha no início e fim
           .trim();
 
@@ -262,15 +293,25 @@ class OpenRouterClient {
         
         // Tentar uma última vez com uma limpeza mais agressiva
         try {
-          // Remover tudo antes do primeiro { e depois do último }
-          const firstBrace = content.indexOf('{');
-          const lastBrace = content.lastIndexOf('}');
+          // Passo 1: Remover markdown primeiro
+          let contentForExtraction = content
+            .replace(/```json\s*\n?/gi, '')
+            .replace(/```JSON\s*\n?/gi, '')
+            .replace(/```\s*json\s*\n?/gi, '')
+            .replace(/```\s*\n?/g, '')
+            .replace(/^```/gm, '')
+            .replace(/```$/gm, '')
+            .trim();
+          
+          // Passo 2: Remover tudo antes do primeiro { e depois do último }
+          const firstBrace = contentForExtraction.indexOf('{');
+          const lastBrace = contentForExtraction.lastIndexOf('}');
           
           if (firstBrace === -1) {
             logger.error(`   ❌ Nenhum caractere '{' encontrado no conteúdo`);
             
             // Limpar tokens especiais para verificar melhor
-            const contentTrimmed = content
+            const contentTrimmed = contentForExtraction
               .replace(/^<s>\s*/g, '')
               .replace(/^\[OUT\]\s*/g, '')
               .replace(/<\|.*?\|>/g, '')
@@ -289,7 +330,7 @@ class OpenRouterClient {
               throw new Error(`Resposta da IA não é JSON válido. O modelo retornou texto livre ao invés de JSON. Conteúdo: ${contentTrimmed.substring(0, 100)}...`);
             }
             
-            throw new Error(`Resposta da IA não contém JSON válido. Conteúdo: ${content.substring(0, 100)}...`);
+            throw new Error(`Resposta da IA não contém JSON válido. Conteúdo: ${contentForExtraction.substring(0, 100)}...`);
           }
           
           if (lastBrace === -1 || lastBrace <= firstBrace) {
@@ -303,10 +344,20 @@ class OpenRouterClient {
             throw new Error(`Resposta da IA contém JSON incompleto ou malformado. Possível truncamento.`);
           }
           
-          const extractedJson = content.substring(firstBrace, lastBrace + 1);
+          const extractedJson = contentForExtraction.substring(firstBrace, lastBrace + 1);
           logger.debug(`   🔍 Tentando extrair JSON: ${extractedJson.substring(0, 200)}...`);
           
-          parsedResponse = JSON.parse(extractedJson);
+          // Limpar markdown do JSON extraído antes de parsear (limpeza final)
+          const finalJson = extractedJson
+            .replace(/```json\s*\n?/gi, '')
+            .replace(/```JSON\s*\n?/gi, '')
+            .replace(/```\s*json\s*\n?/gi, '')
+            .replace(/```\s*\n?/g, '')
+            .replace(/^```/gm, '')
+            .replace(/```$/gm, '')
+            .trim();
+          
+          parsedResponse = JSON.parse(finalJson);
           logger.debug(`✅ JSON extraído com sucesso após limpeza agressiva`);
         } catch (secondParseError) {
           logger.error(`❌ Falha na segunda tentativa de parsing: ${secondParseError.message}`);
@@ -338,6 +389,15 @@ class OpenRouterClient {
       return parsedResponse;
 
     } catch (error) {
+      // Obter config novamente se não estiver definido (pode ter falhado antes)
+      let configForError = null;
+      try {
+        configForError = await this.getConfig();
+      } catch (configError) {
+        // Se não conseguir obter config, usar valores padrão
+        configForError = { model: 'modelo desconhecido' };
+      }
+      
       if (error.response) {
         // Erro da API
         const status = error.response.status;
@@ -349,6 +409,22 @@ class OpenRouterClient {
           throw new Error('Rate limit da OpenRouter atingido. Aguarde alguns minutos.');
         } else if (status === 402) {
           throw new Error('Créditos insuficientes na conta OpenRouter.');
+        } else if (status === 404) {
+          // Modelo não encontrado - sugerir modelos válidos
+          const errorMsg = data?.error?.message || 'Modelo não encontrado';
+          const modelName = configForError?.model || 'modelo desconhecido';
+          logger.error(`❌ Modelo não encontrado: ${modelName}`);
+          logger.error(`   Erro: ${errorMsg}`);
+          
+          // Sugerir modelos alternativos (gratuitos)
+          const { getModelsByType } = await import('../config/openrouterModels.js');
+          const freeModels = getModelsByType('free');
+          if (freeModels && freeModels.length > 0) {
+            const suggestedModels = freeModels.slice(0, 3).map(m => `${m.name} (${m.id})`).join(', ');
+            throw new Error(`Modelo "${modelName}" não encontrado na OpenRouter. Erro: ${errorMsg}. Modelos sugeridos: ${suggestedModels}. Configure um modelo válido em Configurações → IA / OpenRouter.`);
+          } else {
+            throw new Error(`Modelo "${modelName}" não encontrado na OpenRouter. Erro: ${errorMsg}. Configure um modelo válido em Configurações → IA / OpenRouter.`);
+          }
         } else {
           throw new Error(`Erro da API OpenRouter (${status}): ${data?.error?.message || 'Erro desconhecido'}`);
         }
@@ -373,6 +449,7 @@ class OpenRouterClient {
 }
 
 export default new OpenRouterClient();
+
 
 
 

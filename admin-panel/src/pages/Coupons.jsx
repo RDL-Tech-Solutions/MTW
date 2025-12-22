@@ -250,6 +250,20 @@ export default function Coupons() {
     }
   };
 
+  const handleForcePublish = async (coupon) => {
+    if (!confirm(`Deseja aprovar e publicar o cupom ${coupon.code}? O cupom será aprovado e enviado aos bots.`)) return;
+
+    try {
+      await api.post(`/coupons/${coupon.id}/force-publish`);
+      fetchCoupons(pagination.page);
+      alert('Cupom aprovado e publicado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao publicar cupom:', error);
+      const errorMessage = error.response?.data?.message || 'Erro ao publicar cupom';
+      alert(`Erro: ${errorMessage}`);
+    }
+  };
+
   const handleEdit = (coupon) => {
     setEditingCoupon(coupon);
     setFormData({

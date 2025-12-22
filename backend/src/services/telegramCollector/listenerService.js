@@ -52,13 +52,14 @@ class TelegramListenerService {
   /**
    * Salvar cupom no banco de dados
    * Agora com suporte a confidence_score e publicação automática
+   * NOVO: Detecta cupons duplicados em múltiplos canais e aumenta confidence_score
    */
   async saveCoupon(couponData, messageHash) {
     try {
-      // Verificar duplicata
+      // Verificar duplicata por hash de mensagem
       const isDuplicate = await this.checkDuplicate(messageHash);
       if (isDuplicate) {
-        logger.debug(`⚠️ Cupom duplicado ignorado: ${couponData.code}`);
+        logger.debug(`⚠️ Cupom duplicado ignorado (mesma mensagem): ${couponData.code}`);
         return null;
       }
 
@@ -70,6 +71,58 @@ class TelegramListenerService {
       couponData.auto_captured = true;
       couponData.capture_source = 'telegram';
       
+      // NOVO: Verificar se o mesmo código aparece em outros canais
+      let confidenceScore = couponData.confidence_score || couponData.confidence || 0.0;
+      let multiChannelBoost = 0.0;
+      let channelCount = 1;
+      let existingChannels = new Set();
+      
+      if (couponData.code && couponData.channel_origin) {
+        try {
+          // Buscar cupons com o mesmo código em outros canais do Telegram
+          const existingCoupons = await Coupon.findAllByCode(couponData.code, {
+            onlyFromTelegram: true,
+            onlyPending: true // Apenas cupons pendentes (ainda não aprovados)
+          });
+          
+          // Contar canais únicos
+          existingChannels.add(couponData.channel_origin);
+          existingCoupons.forEach(coupon => {
+            if (coupon.channel_origin) {
+              existingChannels.add(coupon.channel_origin);
+            }
+          });
+          
+          channelCount = existingChannels.size;
+          
+          // Aumentar confidence_score baseado no número de canais
+          // 2 canais: +0.15, 3+ canais: +0.25
+          if (channelCount >= 3) {
+            multiChannelBoost = 0.25;
+            logger.info(`🎯 Cupom ${couponData.code} encontrado em ${channelCount} canais diferentes! Boost de confiança: +${multiChannelBoost}`);
+          } else if (channelCount >= 2) {
+            multiChannelBoost = 0.15;
+            logger.info(`🎯 Cupom ${couponData.code} encontrado em ${channelCount} canais diferentes! Boost de confiança: +${multiChannelBoost}`);
+          }
+          
+          // Aplicar boost ao confidence_score (máximo 1.0)
+          confidenceScore = Math.min(1.0, confidenceScore + multiChannelBoost);
+          
+          if (multiChannelBoost > 0) {
+            logger.info(`   Confidence Score original: ${(couponData.confidence_score || 0).toFixed(2)}`);
+            logger.info(`   Boost por múltiplos canais: +${multiChannelBoost.toFixed(2)}`);
+            logger.info(`   Confidence Score final: ${confidenceScore.toFixed(2)}`);
+            logger.info(`   Canais encontrados: ${Array.from(existingChannels).join(', ')}`);
+          }
+        } catch (multiChannelError) {
+          logger.warn(`⚠️ Erro ao verificar cupons em múltiplos canais: ${multiChannelError.message}`);
+          // Continuar mesmo se houver erro na verificação
+        }
+      }
+      
+      // Atualizar confidence_score com o boost
+      couponData.confidence_score = confidenceScore;
+      
       // Obter configurações de IA para determinar threshold de publicação automática
       const AppSettings = (await import('../../models/AppSettings.js')).default;
       const settings = await AppSettings.get();
@@ -77,17 +130,21 @@ class TelegramListenerService {
       const aiAutoPublishEnabled = settings.ai_enable_auto_publish !== false; // Default true
       
       // Determinar se deve publicar automaticamente baseado em confidence_score
-      const confidenceScore = couponData.confidence_score || couponData.confidence || 0.0;
       const shouldAutoPublish = aiAutoPublishEnabled && confidenceScore >= confidenceThreshold;
       
       // Definir is_pending_approval baseado em confidence_score
       couponData.is_pending_approval = !shouldAutoPublish;
       
       // Adicionar motivo da decisão da IA
+      let decisionReason = '';
+      if (multiChannelBoost > 0) {
+        decisionReason = `Cupom encontrado em ${channelCount} canal(is) diferente(s). `;
+      }
+      
       if (confidenceScore >= confidenceThreshold) {
-        couponData.ai_decision_reason = `Confiança alta (${confidenceScore.toFixed(2)} >= ${confidenceThreshold}). Publicação automática.`;
+        couponData.ai_decision_reason = `${decisionReason}Confiança alta (${confidenceScore.toFixed(2)} >= ${confidenceThreshold}). Publicação automática.`;
       } else {
-        couponData.ai_decision_reason = `Confiança abaixo do threshold (${confidenceScore.toFixed(2)} < ${confidenceThreshold}). Requer revisão manual.`;
+        couponData.ai_decision_reason = `${decisionReason}Confiança abaixo do threshold (${confidenceScore.toFixed(2)} < ${confidenceThreshold}). Requer revisão manual.`;
       }
       
       logger.info(`💾 Salvando cupom capturado: ${couponData.code} (${couponData.platform})`);
@@ -144,13 +201,58 @@ class TelegramListenerService {
           decision_type: 'extraction',
           confidence_score: confidenceScore,
           decision_reason: couponData.ai_decision_reason,
-          input_data: { message_hash: messageHash, platform: couponData.platform, message_preview: text.substring(0, 200) },
-          output_data: { code: coupon.code, platform: coupon.platform, is_pending_approval: coupon.is_pending_approval, confidence_score: confidenceScore },
+          input_data: { message_hash: messageHash, platform: couponData.platform, channel_origin: couponData.channel_origin, code: couponData.code },
+          output_data: { code: coupon.code, platform: coupon.platform, is_pending_approval: coupon.is_pending_approval, confidence_score: confidenceScore, channel_count: channelCount },
           success: true
         });
       } catch (logError) {
         logger.warn(`⚠️ Erro ao salvar log de decisão da IA: ${logError.message}`);
         // Não falhar o fluxo por causa de erro de log
+      }
+
+      // NOVO: Se o cupom foi aprovado automaticamente devido a múltiplos canais,
+      // verificar se há cupons pendentes com o mesmo código e aprová-los também
+      if (coupon && !coupon.is_pending_approval && multiChannelBoost > 0 && channelCount >= 2) {
+        try {
+          logger.info(`🔄 Verificando cupons pendentes com o mesmo código para aprovação automática...`);
+          const pendingCoupons = await Coupon.findAllByCode(coupon.code, {
+            onlyFromTelegram: true,
+            onlyPending: true,
+            excludeId: coupon.id
+          });
+          
+          if (pendingCoupons.length > 0) {
+            logger.info(`   Encontrados ${pendingCoupons.length} cupom(ns) pendente(s) com o mesmo código`);
+            
+            for (const pendingCoupon of pendingCoupons) {
+              try {
+                // Aprovar cupom pendente com boost de confiança
+                const newConfidence = Math.min(1.0, (pendingCoupon.confidence_score || 0) + multiChannelBoost);
+                const approvedCoupon = await Coupon.approve(pendingCoupon.id, {
+                  confidence_score: newConfidence,
+                  ai_decision_reason: `Aprovado automaticamente: mesmo código encontrado em ${channelCount} canais diferentes. Boost: +${multiChannelBoost.toFixed(2)}`
+                });
+                
+                logger.info(`   ✅ Cupom ${approvedCoupon.code} aprovado automaticamente (ID: ${approvedCoupon.id})`);
+                logger.info(`      Confidence Score: ${(pendingCoupon.confidence_score || 0).toFixed(2)} → ${newConfidence.toFixed(2)}`);
+                
+                // Notificar o cupom aprovado
+                const CouponSettings = (await import('../../models/CouponSettings.js')).default;
+                const couponSettings = await CouponSettings.get();
+                
+                if (couponSettings.notify_bots_on_new_coupon) {
+                  await couponNotificationService.notifyNewCoupon(approvedCoupon);
+                  logger.info(`   📢 Cupom ${approvedCoupon.code} notificado após aprovação automática`);
+                }
+              } catch (approveError) {
+                logger.warn(`   ⚠️ Erro ao aprovar cupom pendente ${pendingCoupon.id}: ${approveError.message}`);
+              }
+            }
+          }
+        } catch (autoApproveError) {
+          logger.warn(`⚠️ Erro ao aprovar cupons pendentes automaticamente: ${autoApproveError.message}`);
+          // Não falhar o fluxo principal
+        }
       }
 
       // Notificar bots e app apenas se não estiver pendente de aprovação
@@ -166,6 +268,9 @@ class TelegramListenerService {
             logger.info(`   Cupom: ${coupon.code}`);
             logger.info(`   Plataforma: ${coupon.platform}`);
             logger.info(`   Confidence: ${(coupon.confidence_score || 0).toFixed(2)}`);
+            if (multiChannelBoost > 0) {
+              logger.info(`   Boost por múltiplos canais: +${multiChannelBoost.toFixed(2)} (${channelCount} canais)`);
+            }
             logger.info(`   ID: ${coupon.id}`);
             
             // Notificar via serviço de notificação de cupons (envia para bots, app e push notifications)
@@ -186,7 +291,11 @@ class TelegramListenerService {
           // Não falhar o salvamento por causa de erro de notificação
         }
       } else if (coupon && coupon.is_pending_approval) {
-        logger.info(`⏸️ Cupom ${coupon.code} salvo como PENDENTE (confidence: ${confidenceScore.toFixed(2)} < ${confidenceThreshold})`);
+        if (multiChannelBoost > 0) {
+          logger.info(`⏸️ Cupom ${coupon.code} salvo como PENDENTE (confidence: ${confidenceScore.toFixed(2)} < ${confidenceThreshold}, mesmo com boost de +${multiChannelBoost.toFixed(2)} por ${channelCount} canais)`);
+        } else {
+          logger.info(`⏸️ Cupom ${coupon.code} salvo como PENDENTE (confidence: ${confidenceScore.toFixed(2)} < ${confidenceThreshold})`);
+        }
         logger.info(`   Aguardando aprovação manual em /coupons`);
       } else {
         logger.error(`❌ Cupom não foi retornado após criação`);

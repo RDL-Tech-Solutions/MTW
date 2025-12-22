@@ -33,39 +33,12 @@ export const OPENROUTER_MODELS = [
     maxTokens: 8192
   },
   {
-    id: 'openchat/openchat-3.5-0106',
-    name: 'OpenChat 3.5',
-    provider: 'OpenChat',
-    type: 'free',
-    description: 'Modelo de chat otimizado, útil e rápido',
-    supportsJson: false,
-    maxTokens: 8192
-  },
-  {
-    id: 'nousresearch/nous-capybara-7b',
-    name: 'Nous Capybara 7B',
-    provider: 'Nous Research',
-    type: 'free',
-    description: 'Modelo conversacional com boa memória',
-    supportsJson: false,
-    maxTokens: 8192
-  },
-  {
     id: 'gryphe/mythomax-l2-13b',
     name: 'MythoMax L2 13B',
     provider: 'Gryphe',
     type: 'free',
     description: 'Equilibrado entre criatividade e lógica',
     supportsJson: false,
-    maxTokens: 8192
-  },
-  {
-    id: 'google/gemini-flash-1.5',
-    name: 'Gemini Flash 1.5',
-    provider: 'Google',
-    type: 'free',
-    description: 'Modelo rápido e eficiente do Google',
-    supportsJson: true,
     maxTokens: 8192
   },
   {
@@ -120,16 +93,6 @@ export const OPENROUTER_MODELS = [
     pricing: 'Alto custo, excelente qualidade'
   },
   {
-    id: 'anthropic/claude-3-sonnet',
-    name: 'Claude 3 Sonnet',
-    provider: 'Anthropic',
-    type: 'paid',
-    description: 'Versão balanceada do Claude 3',
-    supportsJson: true,
-    maxTokens: 200000,
-    pricing: 'Custo médio-alto, ótima qualidade'
-  },
-  {
     id: 'anthropic/claude-3-haiku',
     name: 'Claude 3 Haiku',
     provider: 'Anthropic',
@@ -138,36 +101,6 @@ export const OPENROUTER_MODELS = [
     supportsJson: true,
     maxTokens: 200000,
     pricing: 'Custo baixo, boa qualidade'
-  },
-  {
-    id: 'google/gemini-pro',
-    name: 'Gemini Pro',
-    provider: 'Google',
-    type: 'paid',
-    description: 'Desempenho razoável do Google',
-    supportsJson: true,
-    maxTokens: 32768,
-    pricing: 'Custo médio'
-  },
-  {
-    id: 'google/gemini-pro-1.5',
-    name: 'Gemini Pro 1.5',
-    provider: 'Google',
-    type: 'paid',
-    description: 'Versão melhorada do Gemini Pro',
-    supportsJson: true,
-    maxTokens: 1000000,
-    pricing: 'Custo médio'
-  },
-  {
-    id: 'cohere/command-r+',
-    name: 'Command R+',
-    provider: 'Cohere',
-    type: 'paid',
-    description: 'Ideal para embedding e aplicações RAG',
-    supportsJson: true,
-    maxTokens: 128000,
-    pricing: 'Custo médio'
   },
   {
     id: 'mistralai/mistral-large',
@@ -186,26 +119,6 @@ export const OPENROUTER_MODELS = [
     type: 'paid',
     description: 'Modelo grande e poderoso da Meta',
     supportsJson: true,
-    maxTokens: 8192,
-    pricing: 'Custo médio'
-  },
-  {
-    id: 'perplexity/llama-3-sonar-large-32k-online',
-    name: 'Llama 3 Sonar Large (Online)',
-    provider: 'Perplexity',
-    type: 'paid',
-    description: 'Modelo com acesso à internet',
-    supportsJson: false,
-    maxTokens: 32000,
-    pricing: 'Custo médio'
-  },
-  {
-    id: 'x-ai/grok-beta',
-    name: 'Grok Beta',
-    provider: 'xAI',
-    type: 'paid',
-    description: 'Modelo da xAI (Elon Musk)',
-    supportsJson: false,
     maxTokens: 8192,
     pricing: 'Custo médio'
   },
@@ -253,5 +166,6 @@ export function getRecommendedModels() {
     model.id.includes('gpt')
   );
 }
+
 
 

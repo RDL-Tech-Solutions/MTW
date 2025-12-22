@@ -234,18 +234,15 @@ class CouponController {
         ai_decision_reason: coupon.ai_decision_reason || 'Publicação forçada manualmente pelo admin'
       });
 
-      // Notificar bots e app
+      // Notificar bots e app (sempre notificar quando forçar publicação manual)
       try {
-        const CouponSettings = (await import('../models/CouponSettings.js')).default;
-        const settings = await CouponSettings.get();
-        
-        if (settings.notify_bots_on_new_coupon) {
-          await couponNotificationService.notifyNewCoupon(approvedCoupon);
-          logger.info(`✅ Cupom ${approvedCoupon.code} publicado e notificado com sucesso`);
-        }
+        await couponNotificationService.notifyNewCoupon(approvedCoupon);
+        logger.info(`✅ Cupom ${approvedCoupon.code} publicado e notificado com sucesso`);
       } catch (notifyError) {
         logger.warn(`⚠️ Erro ao notificar cupom: ${notifyError.message}`);
-        // Não falhar a aprovação por causa de erro de notificação
+        logger.warn(`   Stack: ${notifyError.stack}`);
+        // Não falhar a aprovação por causa de erro de notificação, mas avisar
+        logger.warn(`   ⚠️ Cupom foi aprovado mas não foi notificado. Verifique os logs.`);
       }
 
       res.json(successResponse(approvedCoupon, 'Cupom publicado com sucesso'));

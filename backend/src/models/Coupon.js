@@ -103,6 +103,33 @@ class Coupon {
     return data;
   }
 
+  // Buscar todos os cupons com o mesmo código (para verificar duplicatas em múltiplos canais)
+  static async findAllByCode(code, options = {}) {
+    const { excludeId = null, onlyPending = false, onlyFromTelegram = false } = options;
+    
+    let query = supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', code.toUpperCase());
+    
+    if (excludeId) {
+      query = query.neq('id', excludeId);
+    }
+    
+    if (onlyPending) {
+      query = query.eq('is_pending_approval', true);
+    }
+    
+    if (onlyFromTelegram) {
+      query = query.eq('capture_source', 'telegram');
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    return data || [];
+  }
+
   // Buscar cupom por message_hash (anti-duplicação)
   static async findByMessageHash(messageHash) {
     const { data, error } = await supabase
