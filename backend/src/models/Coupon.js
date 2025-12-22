@@ -23,6 +23,7 @@ class Coupon {
       is_vip = false,
       is_exclusive = false,
       is_pending_approval = false,
+      is_out_of_stock = false,
       capture_source = null,
       source_url = null,
       origem = null,
@@ -52,6 +53,7 @@ class Coupon {
       is_vip,
       is_exclusive: is_exclusive || false,
       is_pending_approval: is_pending_approval !== undefined ? is_pending_approval : false,
+      is_out_of_stock: is_out_of_stock !== undefined ? is_out_of_stock : false,
       capture_source: capture_source || null,
       source_url: source_url || null,
       origem: origem || null,
@@ -132,8 +134,9 @@ class Coupon {
       .from('coupons')
       .select('*', { count: 'exact' })
       .eq('is_active', true)
+      .eq('is_out_of_stock', false) // Excluir cupons esgotados
       .lte('valid_from', now)
-      .gte('valid_until', now);
+      .or(`valid_until.is.null,valid_until.gte.${now}`); // Permitir NULL ou data futura
 
     // Aplicar filtros
     if (platform) query = query.eq('platform', platform);
@@ -288,6 +291,16 @@ class Coupon {
   // Ativar cupom
   static async activate(id) {
     return await this.update(id, { is_active: true });
+  }
+
+  // Marcar cupom como esgotado
+  static async markAsOutOfStock(id) {
+    return await this.update(id, { is_out_of_stock: true });
+  }
+
+  // Marcar cupom como disponível novamente
+  static async markAsAvailable(id) {
+    return await this.update(id, { is_out_of_stock: false });
   }
 
   // Registrar uso do cupom

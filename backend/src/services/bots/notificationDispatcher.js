@@ -118,7 +118,7 @@ class NotificationDispatcher {
 
   /**
    * Filtrar canais por segmentação inteligente
-   * Respeita categoria, horários, score mínimo
+   * Respeita categoria, horários, score mínimo, only_coupons
    */
   async filterChannelsBySegmentation(channels, eventType, data) {
     const filtered = [];
@@ -128,11 +128,24 @@ class NotificationDispatcher {
     const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
 
     for (const channel of channels) {
+      // 0. Filtro de only_coupons: se o canal só aceita cupons, não enviar produtos
+      if (channel.only_coupons === true && eventType === 'promotion_new') {
+        logger.debug(`   🚫 Canal ${channel.id} só aceita cupons, ignorando produto`);
+        continue;
+      }
+
+      // 0.1. Se o evento é de cupom mas o canal não aceita cupons (only_coupons = false), permitir normalmente
+      // (canal pode receber tanto produtos quanto cupons se only_coupons = false)
+
       // 1. Filtro de categoria (se produto)
       if (eventType === 'promotion_new' && data.category_id) {
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
-          if (!channel.category_filter.includes(data.category_id)) {
-            logger.debug(`   🚫 Canal ${channel.id} não aceita categoria ${data.category_id}`);
+          // Converter category_id para string para comparação (pode ser UUID)
+          const productCategoryId = String(data.category_id);
+          const allowedCategories = channel.category_filter.map(cat => String(cat));
+          
+          if (!allowedCategories.includes(productCategoryId)) {
+            logger.debug(`   🚫 Canal ${channel.id} não aceita categoria ${data.category_id} (aceita apenas: ${allowedCategories.join(', ')})`);
             continue;
           }
         }

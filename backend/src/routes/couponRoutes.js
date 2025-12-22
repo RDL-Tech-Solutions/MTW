@@ -83,5 +83,7 @@ router.put('/:id', authenticateToken, requireAdmin, preprocessCouponData, valida
 router.delete('/:id', authenticateToken, requireAdmin, CouponController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, CouponController.batchDelete);
 router.post('/:id/force-publish', authenticateToken, requireAdmin, CouponController.forcePublish);
+router.post('/:id/mark-out-of-stock', authenticateToken, requireAdmin, CouponController.markAsOutOfStock);
+router.post('/:id/mark-available', authenticateToken, requireAdmin, CouponController.markAsAvailable);
 
 export default router;

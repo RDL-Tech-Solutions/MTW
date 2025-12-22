@@ -780,3 +780,4 @@ MIT License
 **Última atualização**: Dezembro 2024
 **Versão**: 1.0.0
 
+

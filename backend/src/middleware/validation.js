@@ -83,8 +83,9 @@ export const createCouponSchema = Joi.object({
   ).optional(),
   valid_until: Joi.alternatives().try(
     Joi.date().iso(),
-    Joi.string().isoDate()
-  ).required(),
+    Joi.string().isoDate(),
+    Joi.string().allow('', null)
+  ).optional(),
   is_general: Joi.boolean().default(true),
   applicable_products: Joi.array().items(Joi.string().uuid()).default([]),
   restrictions: Joi.string().allow('').default(''),

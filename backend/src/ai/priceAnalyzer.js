@@ -172,3 +172,4 @@ export default new PriceAnalyzer();
 
 
 
+

@@ -186,6 +186,77 @@ class ClickTracking {
     };
   }
 
+  // Buscar conversões mensais (últimos N meses)
+  static async getMonthlyConversions(months = 6) {
+    try {
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - months);
+      startDate.setDate(1); // Primeiro dia do mês
+
+      // Buscar todas as conversões no período
+      const { data, error } = await supabase
+        .from('click_tracking')
+        .select('conversion_date, clicked_at')
+        .gte('clicked_at', startDate.toISOString())
+        .eq('converted', true)
+        .order('clicked_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Agrupar por mês
+      const monthlyData = {};
+      
+      // Inicializar todos os meses com 0
+      for (let i = months - 1; i >= 0; i--) {
+        const monthDate = new Date();
+        monthDate.setMonth(monthDate.getMonth() - i);
+        const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = monthDate.toLocaleDateString('pt-BR', { month: 'short' });
+        monthlyData[monthKey] = {
+          name: monthName,
+          conversoes: 0,
+          month: monthDate.getMonth() + 1,
+          year: monthDate.getFullYear()
+        };
+      }
+
+      // Contar conversões por mês
+      if (data && data.length > 0) {
+        data.forEach(click => {
+          const date = new Date(click.conversion_date || click.clicked_at);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (monthlyData[monthKey]) {
+            monthlyData[monthKey].conversoes++;
+          }
+        });
+      }
+
+      // Converter para array e ordenar
+      const result = Object.values(monthlyData).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+
+      return result;
+    } catch (error) {
+      logger.error(`Erro ao buscar conversões mensais: ${error.message}`);
+      // Retornar dados vazios em caso de erro
+      const result = [];
+      for (let i = months - 1; i >= 0; i--) {
+        const monthDate = new Date();
+        monthDate.setMonth(monthDate.getMonth() - i);
+        result.push({
+          name: monthDate.toLocaleDateString('pt-BR', { month: 'short' }),
+          conversoes: 0,
+          month: monthDate.getMonth() + 1,
+          year: monthDate.getFullYear()
+        });
+      }
+      return result;
+    }
+  }
+
   // Deletar cliques antigos
   static async deleteOld(days = 90) {
     const oldDate = new Date();

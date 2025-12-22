@@ -211,3 +211,4 @@ Se a IA falhar:
 
 **Próximo**: [Auto Sync](../auto-sync/README.md)
 
+

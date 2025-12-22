@@ -2,6 +2,7 @@ import TelegramChannel from '../models/TelegramChannel.js';
 import Coupon from '../models/Coupon.js';
 import logger from '../config/logger.js';
 import couponAnalyzer from '../ai/couponAnalyzer.js';
+import supabase from '../config/database.js';
 
 class TelegramChannelController {
   /**
@@ -16,6 +17,69 @@ class TelegramChannelController {
         is_active: is_active !== undefined ? is_active === 'true' : undefined,
         search
       });
+
+      // Calcular estatísticas reais para cada canal usando queries otimizadas
+      const channelsWithStats = await Promise.all(
+        channels.map(async (channel) => {
+          try {
+            // Construir possíveis valores de channel_origin para buscar
+            const possibleOrigins = [];
+            if (channel.username) {
+              possibleOrigins.push(channel.username);
+              possibleOrigins.push(`@${channel.username}`);
+            }
+            if (channel.channel_id) {
+              possibleOrigins.push(channel.channel_id);
+            }
+            possibleOrigins.push(channel.name);
+
+            // Contar cupons usando query otimizada
+            let couponsCount = 0;
+            let lastMessageAt = null;
+
+            if (possibleOrigins.length > 0) {
+              // Contar cupons deste canal usando Supabase
+              const { count, error: countError } = await supabase
+                .from('coupons')
+                .select('*', { count: 'exact', head: true })
+                .eq('origem', 'telegram')
+                .in('channel_origin', possibleOrigins);
+
+              if (!countError) {
+                couponsCount = count || 0;
+              }
+
+              // Buscar última mensagem (último cupom capturado)
+              const { data: lastCoupon, error: lastError } = await supabase
+                .from('coupons')
+                .select('created_at')
+                .eq('origem', 'telegram')
+                .in('channel_origin', possibleOrigins)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+              if (!lastError && lastCoupon) {
+                lastMessageAt = lastCoupon.created_at;
+              }
+            }
+
+            return {
+              ...channel,
+              coupons_captured: couponsCount,
+              last_message_at: lastMessageAt || channel.last_message_at
+            };
+          } catch (error) {
+            logger.warn(`Erro ao calcular stats do canal ${channel.id}: ${error.message}`);
+            // Retornar canal com valores do banco se houver erro
+            return {
+              ...channel,
+              coupons_captured: channel.coupons_captured || 0,
+              last_message_at: channel.last_message_at || null
+            };
+          }
+        })
+      );
 
       // Adicionar informações sobre IA
       const aiEnabled = await couponAnalyzer.isEnabled();
@@ -34,7 +98,7 @@ class TelegramChannelController {
 
       res.json({
         success: true,
-        data: channels,
+        data: channelsWithStats,
         ai: {
           enabled: aiEnabled,
           coupons_extracted: aiCouponsCount

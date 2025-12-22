@@ -98,12 +98,21 @@ export default function CouponCard({ coupon, onPress }) {
 
   return (
     <TouchableOpacity
-      style={[cardStyles.card, getPlatformStyle()]}
+      style={[cardStyles.card, getPlatformStyle(), coupon.is_out_of_stock && styles.outOfStockCard]}
       onPress={onPress}
       activeOpacity={0.8}
+      disabled={coupon.is_out_of_stock}
     >
+      {/* Badge de Esgotado */}
+      {coupon.is_out_of_stock && (
+        <View style={styles.outOfStockBadge}>
+          <Ionicons name="close-circle" size={16} color="#FFFFFF" />
+          <Text style={styles.outOfStockText}>ESGOTADO</Text>
+        </View>
+      )}
+
       {/* Badge de Exclusivo */}
-      {coupon.is_exclusive && (
+      {coupon.is_exclusive && !coupon.is_out_of_stock && (
         <View style={styles.exclusiveBadge}>
           <Ionicons name="star" size={16} color="#FFD700" />
           <Text style={styles.exclusiveText}>EXCLUSIVO</Text>
@@ -152,9 +161,16 @@ export default function CouponCard({ coupon, onPress }) {
           <Text style={styles.clockIcon}>🕐</Text>
           <Text style={[styles.expiryText, { color: colors.textMuted }]}>{formatExpiry() || 'Sem data de expiração'}</Text>
         </View>
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionButtonText}>
-            {coupon.platform === 'mercadolivre' ? 'Eu quero' : 'Conferir produtos'}
+        <TouchableOpacity 
+          style={[styles.actionButton, coupon.is_out_of_stock && styles.actionButtonDisabled]}
+          disabled={coupon.is_out_of_stock}
+        >
+          <Text style={[styles.actionButtonText, coupon.is_out_of_stock && styles.actionButtonTextDisabled]}>
+            {coupon.is_out_of_stock 
+              ? 'Esgotado' 
+              : coupon.platform === 'mercadolivre' 
+                ? 'Eu quero' 
+                : 'Conferir produtos'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -163,6 +179,26 @@ export default function CouponCard({ coupon, onPress }) {
 }
 
 const styles = StyleSheet.create({
+  outOfStockCard: {
+    opacity: 0.6,
+  },
+  outOfStockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+    gap: 4,
+  },
+  outOfStockText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
   exclusiveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -294,6 +330,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  actionButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  actionButtonTextDisabled: {
+    color: '#FFFFFF',
   },
 });
 

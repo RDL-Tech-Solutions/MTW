@@ -3,11 +3,40 @@ import supabase from '../config/database.js';
 class BotChannel {
   // Criar novo canal de bot
   static async create(channelData) {
-    const { platform, identifier, name, is_active = true } = channelData;
+    const { 
+      platform, 
+      identifier, 
+      name, 
+      is_active = true,
+      only_coupons = false,
+      category_filter = null
+    } = channelData;
+
+    const insertData = { 
+      platform, 
+      identifier, 
+      name, 
+      is_active,
+      only_coupons: only_coupons || false
+    };
+
+    // Adicionar category_filter apenas se fornecido
+    if (category_filter !== null && category_filter !== undefined) {
+      // Garantir que seja um array JSON válido
+      if (Array.isArray(category_filter)) {
+        insertData.category_filter = category_filter;
+      } else if (typeof category_filter === 'string') {
+        try {
+          insertData.category_filter = JSON.parse(category_filter);
+        } catch (e) {
+          insertData.category_filter = [];
+        }
+      }
+    }
 
     const { data, error } = await supabase
       .from('bot_channels')
-      .insert([{ platform, identifier, name, is_active }])
+      .insert([insertData])
       .select()
       .single();
 

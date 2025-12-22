@@ -328,52 +328,65 @@ ${context.hasMaxDiscount ? `- Limite de desconto: R$ ${coupon.max_discount_value
 - Urgência: ${this.getUrgencyText(context.urgencyLevel)}
 ${context.isGeneral ? '- Válido para TODOS os produtos' : '- Válido para produtos selecionados'}
 
+**IMPORTANTE**: A mensagem será enviada com uma imagem do logo da plataforma. NÃO mencione o nome da plataforma no texto, pois a imagem já identifica a plataforma.
+
 VARIÁVEIS DISPONÍVEIS (use {nome_variavel}):
-- {platform_name} - Nome da plataforma
-- {coupon_code} - Código do cupom
+- {coupon_code} - Código do cupom (OBRIGATÓRIO - DEVE aparecer na mensagem)
 - {discount_value} - Valor do desconto formatado
 - {min_purchase} - Valor da compra mínima formatado (ex: "R$ 199.00") - Apenas o valor, sem emoji ou texto adicional
-- {coupon_title} - Título do cupom
-- {coupon_description} - Descrição do cupom
+- {coupon_title} - Título do cupom (se disponível)
+- {coupon_description} - Descrição do cupom (se disponível)
 - {affiliate_link} - Link de afiliado
 
-**IMPORTANTE**: NÃO inclua data de validade ({valid_until}) na mensagem. A data de validade não deve aparecer no template do bot.
+**CRÍTICO**: NÃO inclua data de validade ({valid_until}) na mensagem. A data de validade não deve aparecer no template do bot.
+**CRÍTICO**: NÃO mencione o nome da plataforma no texto, pois a imagem do logo já identifica a plataforma.
 
 REQUISITOS:
-1. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara'}
-2. **CRÍTICO**: O código do cupom DEVE aparecer formatado com backticks: \`{coupon_code}\` (exemplo: \`ADMLAYS\`). Isso permite cópia fácil no Telegram.
-3. **IMPORTANTE**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b> ou <strong>texto</strong>
-4. **CRÍTICO**: A variável {min_purchase} contém APENAS o valor formatado (ex: "R$ 199.00"). Você DEVE adicionar o emoji e texto completo: "💳 **Compra mínima:** {min_purchase}". NUNCA duplique "Compra mínima" ou adicione emoji dentro da variável.
-5. Enfatize o valor do desconto de forma clara e destacada
-6. **CRÍTICO**: NÃO inclua data de validade ou informações sobre quando o cupom expira. Apenas crie senso de urgência genérico se necessário.
-6. Use emojis relevantes (máximo 4-5 por mensagem, não exagere): 🎟️, 💰, 🔥, ⚡
-7. ${formatGuide}
-8. Seja conciso mas informativo (máximo 8-10 linhas)
-9. Use quebras de linha para organizar (uma linha em branco entre seções)
-10. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown
-11. **CRÍTICO**: Para riscar texto, use ~~texto~~ (dois tildes), NÃO use ~~~~ ou <s>
-12. **CRÍTICO**: NÃO use a variável {valid_until} e NÃO mencione data de validade na mensagem
-13. NÃO invente variáveis que não foram listadas
-14. Retorne APENAS o template, sem explicações
+1. **CRÍTICO**: O código do cupom ({coupon_code}) DEVE aparecer OBRIGATORIAMENTE na mensagem, formatado com backticks: \`{coupon_code}\` (exemplo: \`ADMLAYS\`). Isso permite cópia fácil no Telegram. SEMPRE inclua o código do cupom.
+2. **CRÍTICO**: NÃO mencione o nome da plataforma no texto. A imagem do logo da plataforma será enviada junto com a mensagem, então não é necessário mencionar a plataforma.
+3. Crie uma mensagem ${context.urgencyLevel === 'muito_urgente' ? 'MUITO URGENTE e impactante' : context.urgencyLevel === 'urgente' ? 'urgente e persuasiva' : 'atrativa e clara'}
+4. **IMPORTANTE**: Use **texto** (dois asteriscos) para negrito, NÃO use <b>texto</b> ou <strong>texto</strong>
+5. **CRÍTICO**: A variável {min_purchase} contém APENAS o valor formatado (ex: "R$ 199.00"). Você DEVE adicionar o emoji e texto completo: "💳 **Compra mínima:** {min_purchase}". NUNCA duplique "Compra mínima" ou adicione emoji dentro da variável.
+6. Enfatize o valor do desconto de forma clara e destacada
+7. **CRÍTICO**: NÃO inclua data de validade ou informações sobre quando o cupom expira. Apenas crie senso de urgência genérico se necessário.
+8. Use emojis relevantes (máximo 4-5 por mensagem, não exagere): 🎟️, 💰, 🔥, ⚡
+9. ${formatGuide}
+10. Seja conciso mas informativo (máximo 8-10 linhas)
+11. Use quebras de linha para organizar (uma linha em branco entre seções)
+12. **CRÍTICO**: NUNCA use tags HTML (<b>, <strong>, <code>, <s>) - use apenas Markdown
+13. **CRÍTICO**: Para riscar texto, use ~~texto~~ (dois tildes), NÃO use ~~~~ ou <s>
+14. **CRÍTICO**: NÃO use a variável {valid_until} e NÃO mencione data de validade na mensagem
+15. **CRÍTICO**: NÃO mencione o nome da plataforma (Mercado Livre, Shopee, Amazon, AliExpress) no texto
+16. NÃO invente variáveis que não foram listadas
+17. Retorne APENAS o template, sem explicações
 
 EXEMPLO DE ESTRUTURA BOM (para cupons):
 🎟️ **NOVO CUPOM DISPONÍVEL!** 🎟️
 
-🛒 {platform_name}
 💰 **{discount_value} OFF**
 
 ${context.hasMinPurchase ? '💳 **Compra mínima:** {min_purchase}\n' : ''}🔑 **Código:** \`{coupon_code}\`
 
-🔗 {affiliate_link}
+${coupon.title ? `📝 ${coupon.title}\n` : ''}${coupon.description ? `${coupon.description}\n` : ''}🔗 {affiliate_link}
 
 ⚡ Use agora e economize!
 
+**ESTRUTURA OBRIGATÓRIA:**
+1. Cabeçalho com emojis e chamada de atenção
+2. **OBRIGATÓRIO**: Valor do desconto destacado
+3. **OBRIGATÓRIO**: Código do cupom formatado com backticks: \`{coupon_code}\`
+4. Compra mínima (se houver)
+5. Título/Descrição do cupom (se disponível)
+6. Link de afiliado usando {affiliate_link}
+7. Mensagem de urgência final
+
 IMPORTANTE SOBRE FORMATAÇÃO:
-- O código DEVE estar entre backticks: \`{coupon_code}\`
+- **CRÍTICO**: O código DEVE estar entre backticks: \`{coupon_code}\` - SEMPRE inclua o código
 - Use **texto** para negrito (dois asteriscos)
 - NUNCA use <b>, <strong>, <code> ou outras tags HTML
 - NUNCA duplique texto como "Compra mínima: Compra mínima:"
 - A variável {min_purchase} contém APENAS o valor (ex: "R$ 199.00"), você deve adicionar o emoji e texto: "💳 **Compra mínima:** {min_purchase}"
+- **CRÍTICO**: NÃO mencione o nome da plataforma no texto
 - Seja direto e impactante
 - Máximo 8-10 linhas
 
@@ -644,6 +657,8 @@ Título otimizado:`;
 }
 
 export default new AdvancedTemplateGenerator();
+
+
 
 
 

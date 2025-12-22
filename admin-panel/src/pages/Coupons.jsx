@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Copy, Calendar, Zap, Brain, Send } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, Calendar, Zap, Brain, Send, XCircle, CheckCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -226,6 +226,30 @@ export default function Coupons() {
     }
   };
 
+  const handleMarkAsOutOfStock = async (coupon) => {
+    if (!confirm(`Deseja marcar o cupom ${coupon.code} como esgotado?`)) return;
+
+    try {
+      await api.post(`/coupons/${coupon.id}/mark-out-of-stock`);
+      fetchCoupons(pagination.page);
+      alert('Cupom marcado como esgotado!');
+    } catch (error) {
+      alert('Erro ao marcar cupom como esgotado');
+    }
+  };
+
+  const handleMarkAsAvailable = async (coupon) => {
+    if (!confirm(`Deseja marcar o cupom ${coupon.code} como disponível novamente?`)) return;
+
+    try {
+      await api.post(`/coupons/${coupon.id}/mark-available`);
+      fetchCoupons(pagination.page);
+      alert('Cupom marcado como disponível!');
+    } catch (error) {
+      alert('Erro ao marcar cupom como disponível');
+    }
+  };
+
   const handleEdit = (coupon) => {
     setEditingCoupon(coupon);
     setFormData({
@@ -262,10 +286,7 @@ export default function Coupons() {
       return;
     }
 
-    if (!formData.valid_until || formData.valid_until.trim() === '') {
-      setErrors({ valid_until: 'Data de expiração é obrigatória' });
-      return;
-    }
+    // Data de expiração não é mais obrigatória
 
     try {
       // Preparar dados para envio
@@ -282,7 +303,9 @@ export default function Coupons() {
           : null,
         is_general: formData.is_general,
         applicable_products: formData.applicable_products || [],
-        valid_until: new Date(formData.valid_until + 'T23:59:59').toISOString(),
+        valid_until: formData.valid_until && formData.valid_until.trim() !== '' 
+          ? new Date(formData.valid_until + 'T23:59:59').toISOString()
+          : null,
       };
 
       // Adicionar current_uses apenas na edição
@@ -597,15 +620,16 @@ export default function Coupons() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="valid_until">Data de Expiração *</Label>
+                    <Label htmlFor="valid_until">Data de Expiração (opcional)</Label>
                     <Input
                       id="valid_until"
                       type="date"
                       value={formData.valid_until || ''}
                       onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
-                      required
                     />
-                    {errors.valid_until && <p className="text-sm text-red-500">{errors.valid_until}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Se não informada, o cupom não terá data de expiração definida
+                    </p>
                   </div>
                 </div>
 
@@ -861,7 +885,11 @@ export default function Coupons() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            {coupon.is_pending_approval ? (
+                            {coupon.is_out_of_stock ? (
+                              <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                                🚫 Esgotado
+                              </Badge>
+                            ) : coupon.is_pending_approval ? (
                               <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
                                 ⏸️ Pendente
                               </Badge>
@@ -889,6 +917,29 @@ export default function Coupons() {
                               >
                                 <Send className="h-3 w-3 mr-1" />
                                 Publicar
+                              </Button>
+                            )}
+                            {coupon.is_out_of_stock ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMarkAsAvailable(coupon)}
+                                className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
+                                title="Marcar como disponível"
+                              >
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Disponível
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMarkAsOutOfStock(coupon)}
+                                className="bg-red-50 hover:bg-red-100 text-red-700 border-red-300"
+                                title="Marcar como esgotado"
+                              >
+                                <XCircle className="h-3 w-3 mr-1" />
+                                Esgotado
                               </Button>
                             )}
                             <Button

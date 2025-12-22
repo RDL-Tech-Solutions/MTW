@@ -253,6 +253,50 @@ class CouponController {
       next(error);
     }
   }
+
+  // Marcar cupom como esgotado
+  static async markAsOutOfStock(req, res, next) {
+    try {
+      const { id } = req.params;
+      const coupon = await Coupon.findById(id);
+
+      if (!coupon) {
+        return res.status(404).json(
+          errorResponse('Cupom não encontrado', ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      const updatedCoupon = await Coupon.markAsOutOfStock(id);
+      await cacheDel('coupons:*');
+
+      logger.info(`Cupom marcado como esgotado: ${id} (${coupon.code})`);
+      res.json(successResponse(updatedCoupon, 'Cupom marcado como esgotado'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Marcar cupom como disponível novamente
+  static async markAsAvailable(req, res, next) {
+    try {
+      const { id } = req.params;
+      const coupon = await Coupon.findById(id);
+
+      if (!coupon) {
+        return res.status(404).json(
+          errorResponse('Cupom não encontrado', ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      const updatedCoupon = await Coupon.markAsAvailable(id);
+      await cacheDel('coupons:*');
+
+      logger.info(`Cupom marcado como disponível: ${id} (${coupon.code})`);
+      res.json(successResponse(updatedCoupon, 'Cupom marcado como disponível'));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default CouponController;

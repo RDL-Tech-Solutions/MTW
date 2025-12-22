@@ -435,6 +435,7 @@ export default function PendingProducts() {
                     <TableHead>Imagem</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Plataforma</TableHead>
+                    <TableHead>Categoria</TableHead>
                     <TableHead>Preço</TableHead>
                     <TableHead>Desconto</TableHead>
                     <TableHead>Data</TableHead>
@@ -456,6 +457,16 @@ export default function PendingProducts() {
                         <Badge className={getPlatformBadge(product.platform)}>
                           {getPlatformName(product.platform)}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {product.category_name ? (
+                          <Badge variant="outline" className="text-xs">
+                            {product.category_icon && <span className="mr-1">{product.category_icon}</span>}
+                            {product.category_name}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sem categoria</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div>
@@ -804,6 +815,8 @@ export default function PendingProducts() {
     </div>
   );
 }
+
+
 
 
 

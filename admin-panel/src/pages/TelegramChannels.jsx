@@ -629,7 +629,17 @@ export default function TelegramChannels() {
             <DialogTrigger asChild>
               <Button onClick={() => {
                 setEditingChannel(null);
-                setChannelForm({ name: '', username: '', channel_id: '', is_active: true });
+                setChannelForm({ 
+                  name: '', 
+                  username: '', 
+                  channel_id: '', 
+                  is_active: true,
+                  capture_schedule_start: '',
+                  capture_schedule_end: '',
+                  capture_mode: 'new_only',
+                  platform_filter: 'all',
+                  example_messages: []
+                });
               }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Canal
@@ -771,27 +781,28 @@ export default function TelegramChannels() {
                   <p className="text-xs text-muted-foreground">
                     Adicione mensagens reais que este canal costuma enviar. A IA usará essas mensagens como referência para melhorar a captura de cupons, aprendendo os padrões específicos de formatação deste canal.
                   </p>
-                  {channelForm.example_messages.length > 0 && (
+                  {channelForm.example_messages && Array.isArray(channelForm.example_messages) && channelForm.example_messages.length > 0 && (
                     <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded text-xs text-blue-800 dark:text-blue-200">
                       <strong>💡 Dica:</strong> Quanto mais exemplos você adicionar, melhor a IA entenderá o formato deste canal.
                     </div>
                   )}
                   
                   <div className="space-y-2">
-                    {channelForm.example_messages.length === 0 ? (
+                    {(!channelForm.example_messages || !Array.isArray(channelForm.example_messages) || channelForm.example_messages.length === 0) ? (
                       <div className="p-3 border-2 border-dashed rounded-lg text-center text-muted-foreground">
                         <Brain className="mx-auto h-8 w-8 mb-2 opacity-50" />
                         <p className="text-sm">Nenhuma mensagem de exemplo adicionada</p>
                         <p className="text-xs mt-1">Adicione mensagens reais do canal para melhorar a precisão da IA</p>
                       </div>
                     ) : (
-                      channelForm.example_messages.map((msg, index) => (
+                      (channelForm.example_messages || []).map((msg, index) => (
                         <div key={index} className="flex gap-2 items-start">
                           <div className="flex-1">
                             <textarea
                               value={msg}
                               onChange={(e) => {
-                                const newMessages = [...channelForm.example_messages];
+                                const currentMessages = channelForm.example_messages || [];
+                                const newMessages = [...currentMessages];
                                 newMessages[index] = e.target.value;
                                 setChannelForm({...channelForm, example_messages: newMessages});
                               }}
@@ -800,7 +811,7 @@ export default function TelegramChannels() {
                               placeholder="Cole aqui uma mensagem de exemplo do canal..."
                             />
                             <p className="text-xs text-muted-foreground mt-1">
-                              Exemplo {index + 1} de {channelForm.example_messages.length}
+                              Exemplo {index + 1} de {(channelForm.example_messages || []).length}
                             </p>
                           </div>
                           <Button
@@ -808,7 +819,8 @@ export default function TelegramChannels() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              const newMessages = channelForm.example_messages.filter((_, i) => i !== index);
+                              const currentMessages = channelForm.example_messages || [];
+                              const newMessages = currentMessages.filter((_, i) => i !== index);
                               setChannelForm({...channelForm, example_messages: newMessages});
                             }}
                             className="mt-0"
@@ -824,9 +836,10 @@ export default function TelegramChannels() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
+                        const currentMessages = channelForm.example_messages || [];
                         setChannelForm({
                           ...channelForm,
-                          example_messages: [...channelForm.example_messages, '']
+                          example_messages: [...currentMessages, '']
                         });
                       }}
                       className="w-full"

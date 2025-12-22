@@ -79,9 +79,17 @@ export default function AutoSync() {
   const fetchStats = async () => {
     try {
       const response = await api.get('/sync/stats?days=7');
-      setStats(response.data.data);
+      if (response.data && response.data.success) {
+        setStats(response.data.data);
+      } else if (response.data && response.data.data) {
+        // Se não tiver success, usar data diretamente
+        setStats(response.data.data);
+      } else {
+        setStats(null);
+      }
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error);
+      setStats(null);
     }
   };
 
@@ -148,8 +156,14 @@ export default function AutoSync() {
         variant: (results.new || 0) > 0 ? "default" : "secondary"
       });
 
-      fetchHistory();
-      fetchStats();
+      // Aguardar um pouco antes de atualizar para garantir que os dados foram salvos
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Atualizar dados
+      await Promise.all([
+        fetchHistory(),
+        fetchStats()
+      ]);
     } catch (error) {
       console.error(`Erro ao executar sincronização do ${platform}:`, error);
       toast({
@@ -206,8 +220,14 @@ export default function AutoSync() {
         variant: totalNew > 0 ? "default" : "secondary" // Destaque se achou algo
       });
 
-      fetchHistory();
-      fetchStats();
+      // Aguardar um pouco antes de atualizar para garantir que os dados foram salvos
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Atualizar dados
+      await Promise.all([
+        fetchHistory(),
+        fetchStats()
+      ]);
     } catch (error) {
       console.error('Erro ao executar sincronização:', error);
       toast({
@@ -363,88 +383,122 @@ export default function AutoSync() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Automação de Produtos</h1>
-        <p className="text-muted-foreground mt-2">
-          Capture automaticamente promoções de múltiplas plataformas (Mercado Livre, Shopee, Amazon, AliExpress)
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Automação de Produtos</h1>
+          <p className="text-muted-foreground mt-2">
+            Capture automaticamente promoções de múltiplas plataformas (Mercado Livre, Shopee, Amazon, AliExpress)
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={async () => {
+            await Promise.all([fetchConfig(), fetchHistory(), fetchStats()]);
+            toast({
+              title: "Atualizado!",
+              description: "Dados atualizados com sucesso.",
+            });
+          }}
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Atualizar
+        </Button>
       </div>
 
       {/* Estatísticas */}
-      {stats && (
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Sincronizados</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-              <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
-            </CardContent>
-          </Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Sincronizados</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.total || 0}</div>
+            <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Produtos Novos</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.new_products}</div>
-              <p className="text-xs text-muted-foreground">Adicionados ao catálogo</p>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Produtos Novos</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats?.new_products || 0}</div>
+            <p className="text-xs text-muted-foreground">Adicionados ao catálogo</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Mercado Livre</CardTitle>
-              <Package className="h-4 w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.mercadolivre}</div>
-              <p className="text-xs text-muted-foreground">Produtos capturados</p>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mercado Livre</CardTitle>
+            <Package className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.mercadolivre || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Shopee</CardTitle>
-              <Package className="h-4 w-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.shopee || 0}</div>
-              <p className="text-xs text-muted-foreground">Produtos capturados</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Shopee</CardTitle>
+            <Package className="h-4 w-4 text-orange-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.shopee || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Estatísticas por Plataforma (Expandido) */}
-      {stats && (
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Amazon</CardTitle>
-              <Package className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.amazon || 0}</div>
-              <p className="text-xs text-muted-foreground">Produtos capturados</p>
-            </CardContent>
-          </Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Amazon</CardTitle>
+            <Package className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.amazon || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">AliExpress</CardTitle>
-              <Package className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.aliexpress || 0}</div>
-              <p className="text-xs text-muted-foreground">Produtos capturados</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">AliExpress</CardTitle>
+            <Package className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.aliexpress || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Enviados aos Bots</CardTitle>
+            <AlertCircle className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">{stats?.sent_to_bots || 0}</div>
+            <p className="text-xs text-muted-foreground">Notificações enviadas</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Erros</CardTitle>
+            <AlertCircle className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats?.errors || 0}</div>
+            <p className="text-xs text-muted-foreground">Sincronizações com erro</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Módulos de IA */}
       <Card>

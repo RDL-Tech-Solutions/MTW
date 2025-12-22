@@ -213,17 +213,8 @@ class AnalyticsController {
         });
       }
 
-      // Dados de conversão mensal (últimos 6 meses)
-      const conversionData = [];
-      for (let i = 5; i >= 0; i--) {
-        const monthDate = new Date();
-        monthDate.setMonth(monthDate.getMonth() - i);
-        const monthName = monthDate.toLocaleDateString('pt-BR', { month: 'short' });
-        conversionData.push({
-          name: monthName,
-          conversoes: Math.floor(Math.random() * 50 + 30) // Dados estimados
-        });
-      }
+      // Dados de conversão mensal (últimos 6 meses) - DADOS REAIS
+      const conversionData = await ClickTracking.getMonthlyConversions(6);
 
       // Top produtos com detalhes
       const topProductsWithDetails = await Promise.all(

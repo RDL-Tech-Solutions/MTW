@@ -214,3 +214,4 @@ Retorne APENAS JSON válido (sem markdown, sem comentários):
 
 export default new ProductEditor();
 
+

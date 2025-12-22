@@ -238,3 +238,4 @@ COMMENT ON TABLE ai_decision_logs IS 'Logs de decisões da IA para observabilida
 COMMENT ON TABLE product_duplicates IS 'Relações de produtos duplicados detectados pela IA';
 COMMENT ON TABLE bot_send_logs IS 'Logs de envios de bots para controle de duplicação';
 
+

@@ -36,7 +36,7 @@ class BotController {
   // Criar novo canal de bot
   async createChannel(req, res) {
     try {
-      const { platform, identifier, name, is_active } = req.body;
+      const { platform, identifier, name, is_active, only_coupons, category_filter } = req.body;
 
       // Validar dados
       if (!platform || !identifier) {
@@ -53,6 +53,35 @@ class BotController {
         });
       }
 
+      // Validar category_filter (deve ser array com máximo 2 categorias)
+      if (category_filter !== undefined && category_filter !== null) {
+        let categories = category_filter;
+        if (typeof category_filter === 'string') {
+          try {
+            categories = JSON.parse(category_filter);
+          } catch (e) {
+            return res.status(400).json({
+              success: false,
+              message: 'category_filter deve ser um array JSON válido'
+            });
+          }
+        }
+        
+        if (!Array.isArray(categories)) {
+          return res.status(400).json({
+            success: false,
+            message: 'category_filter deve ser um array'
+          });
+        }
+
+        if (categories.length > 2) {
+          return res.status(400).json({
+            success: false,
+            message: 'category_filter pode ter no máximo 2 categorias'
+          });
+        }
+      }
+
       // Verificar se já existe
       const existing = await BotChannel.findByPlatformAndIdentifier(platform, identifier);
       if (existing) {
@@ -66,7 +95,9 @@ class BotController {
         platform,
         identifier,
         name,
-        is_active
+        is_active,
+        only_coupons: only_coupons || false,
+        category_filter: category_filter || null
       });
 
       res.status(201).json({
@@ -89,6 +120,37 @@ class BotController {
     try {
       const { id } = req.params;
       const updates = req.body;
+
+      // Validar category_filter se fornecido
+      if (updates.category_filter !== undefined && updates.category_filter !== null) {
+        let categories = updates.category_filter;
+        if (typeof updates.category_filter === 'string') {
+          try {
+            categories = JSON.parse(updates.category_filter);
+          } catch (e) {
+            return res.status(400).json({
+              success: false,
+              message: 'category_filter deve ser um array JSON válido'
+            });
+          }
+        }
+        
+        if (!Array.isArray(categories)) {
+          return res.status(400).json({
+            success: false,
+            message: 'category_filter deve ser um array'
+          });
+        }
+
+        if (categories.length > 2) {
+          return res.status(400).json({
+            success: false,
+            message: 'category_filter pode ter no máximo 2 categorias'
+          });
+        }
+
+        updates.category_filter = categories;
+      }
 
       const channel = await BotChannel.update(id, updates);
 

@@ -63,6 +63,7 @@ export default function Bots() {
   // Canais e logs
   const [channels, setChannels] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [categories, setCategories] = useState([]);
   
   // Mostrar/ocultar tokens
   const [showTokens, setShowTokens] = useState({
@@ -77,7 +78,9 @@ export default function Bots() {
     platform: 'telegram',
     channel_id: '',
     channel_name: '',
-    is_active: true
+    is_active: true,
+    only_coupons: false,
+    category_filter: []
   });
 
   // Carregar dados iniciais
@@ -92,7 +95,8 @@ export default function Bots() {
         fetchConfig(),
         fetchStatus(),
         fetchChannels(),
-        fetchLogs()
+        fetchLogs(),
+        fetchCategories()
       ]);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -149,6 +153,31 @@ export default function Bots() {
       setLogs(response.data.data?.logs || response.data.data || []);
     } catch (error) {
       console.error('Erro ao carregar logs:', error);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories');
+      let categoriesData = [];
+      
+      if (response.data?.success && response.data?.data) {
+        if (Array.isArray(response.data.data)) {
+          categoriesData = response.data.data;
+        } else if (response.data.data.categories && Array.isArray(response.data.data.categories)) {
+          categoriesData = response.data.data.categories;
+        }
+      } else if (Array.isArray(response.data)) {
+        categoriesData = response.data;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        categoriesData = response.data.data;
+      }
+      
+      categoriesData = categoriesData.filter(cat => cat.is_active !== false);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Erro ao carregar categorias:', error);
+      setCategories([]);
     }
   };
 
@@ -251,7 +280,11 @@ export default function Bots() {
         platform: channelForm.platform,
         identifier: channelForm.channel_id,
         name: channelForm.channel_name,
-        is_active: channelForm.is_active
+        is_active: channelForm.is_active,
+        only_coupons: channelForm.only_coupons || false,
+        category_filter: channelForm.category_filter && channelForm.category_filter.length > 0 
+          ? channelForm.category_filter 
+          : null
       };
 
       if (editingChannel) {
@@ -264,7 +297,7 @@ export default function Bots() {
       
       setIsDialogOpen(false);
       setEditingChannel(null);
-      setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true });
+      setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
       fetchChannels();
     } catch (error) {
       toast({
@@ -288,11 +321,28 @@ export default function Bots() {
 
   const handleEditChannel = (channel) => {
     setEditingChannel(channel);
+    
+    // Processar category_filter (pode ser array ou JSON string)
+    let categoryFilter = [];
+    if (channel.category_filter) {
+      if (Array.isArray(channel.category_filter)) {
+        categoryFilter = channel.category_filter;
+      } else if (typeof channel.category_filter === 'string') {
+        try {
+          categoryFilter = JSON.parse(channel.category_filter);
+        } catch (e) {
+          categoryFilter = [];
+        }
+      }
+    }
+    
     setChannelForm({
       platform: channel.platform,
       channel_id: channel.identifier || channel.channel_id,
       channel_name: channel.name || channel.channel_name,
-      is_active: channel.is_active
+      is_active: channel.is_active,
+      only_coupons: channel.only_coupons || false,
+      category_filter: categoryFilter
     });
     setIsDialogOpen(true);
   };
@@ -760,7 +810,7 @@ export default function Bots() {
               <DialogTrigger asChild>
                 <Button onClick={() => {
                   setEditingChannel(null);
-                  setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true });
+                  setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
                 }}>
                   <Plus className="mr-2 h-4 w-4" />
                   Novo Canal
@@ -825,6 +875,103 @@ export default function Bots() {
                     <Label htmlFor="is_active">Canal ativo</Label>
                   </div>
 
+                  <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                    <h4 className="font-medium text-sm">Configurações de Conteúdo</h4>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="only_coupons"
+                        checked={channelForm.only_coupons}
+                        onChange={(e) => setChannelForm({...channelForm, only_coupons: e.target.checked, category_filter: [] })}
+                        className="h-4 w-4 rounded"
+                      />
+                      <Label htmlFor="only_coupons" className="cursor-pointer">
+                        Apenas cupons (não recebe produtos)
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground ml-6">
+                      Se marcado, este canal só receberá notificações de cupons, nunca de produtos
+                    </p>
+
+                    {!channelForm.only_coupons && (
+                      <div className="space-y-2">
+                        <Label>
+                          Categorias de Produtos (máximo 2)
+                        </Label>
+                        <div className="max-h-[200px] overflow-y-auto border rounded-md p-2 space-y-2">
+                          {categories.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-4">
+                              Carregando categorias...
+                            </p>
+                          ) : (
+                            categories.map(category => {
+                              const isSelected = channelForm.category_filter.includes(category.id);
+                              const canSelect = isSelected || channelForm.category_filter.length < 2;
+                              
+                              return (
+                                <div key={category.id} className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`category_${category.id}`}
+                                    checked={isSelected}
+                                    disabled={!canSelect && !isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        if (channelForm.category_filter.length < 2) {
+                                          setChannelForm({
+                                            ...channelForm,
+                                            category_filter: [...channelForm.category_filter, category.id]
+                                          });
+                                        }
+                                      } else {
+                                        setChannelForm({
+                                          ...channelForm,
+                                          category_filter: channelForm.category_filter.filter(id => id !== category.id)
+                                        });
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded"
+                                  />
+                                  <Label 
+                                    htmlFor={`category_${category.id}`} 
+                                    className={`cursor-pointer flex-1 ${!canSelect && !isSelected ? 'opacity-50' : ''}`}
+                                  >
+                                    <span className="mr-1">{category.icon}</span>
+                                    {category.name}
+                                  </Label>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {channelForm.category_filter.length > 0 
+                            ? `Selecionadas: ${channelForm.category_filter.length} categoria(s). ${channelForm.category_filter.length < 2 ? 'Você pode selecionar mais uma.' : 'Limite atingido.'}`
+                            : 'Selecione até 2 categorias. Se nenhuma for selecionada, o canal receberá produtos de todas as categorias.'
+                          }
+                        </p>
+                        {channelForm.category_filter.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {channelForm.category_filter.map(catId => {
+                              const category = categories.find(c => c.id === catId);
+                              return category ? (
+                                <Badge key={catId} variant="secondary" className="cursor-pointer" onClick={() => {
+                                  setChannelForm({
+                                    ...channelForm,
+                                    category_filter: channelForm.category_filter.filter(id => id !== catId)
+                                  });
+                                }}>
+                                  {category.icon} {category.name} ×
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Cancelar
@@ -842,6 +989,7 @@ export default function Bots() {
                   <TableHead>Plataforma</TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>ID/Número</TableHead>
+                  <TableHead>Configuração</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -849,49 +997,93 @@ export default function Bots() {
               <TableBody>
                 {channels.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       Nenhum canal configurado. Clique em "Novo Canal" para adicionar.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  channels.map((channel) => (
-                    <TableRow key={channel.id}>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {channel.platform === 'telegram' ? (
-                            <><MessageSquare className="mr-1 h-3 w-3 text-blue-500" />{channel.platform}</>
-                          ) : (
-                            <><span className="mr-1 text-green-500">📱</span>{channel.platform}</>
-                          )}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{channel.name || channel.channel_name}</TableCell>
-                      <TableCell>
-                        <code className="text-xs bg-muted px-2 py-1 rounded">
-                          {channel.identifier || channel.channel_id}
-                        </code>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={channel.is_active ? 'success' : 'destructive'}>
-                          {channel.is_active ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleTestChannel(channel.id)}>
-                            <Send className="mr-1 h-3 w-3" />
-                            Testar
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleEditChannel(channel)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteChannel(channel.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  channels.map((channel) => {
+                    // Processar category_filter
+                    let categoryFilter = [];
+                    if (channel.category_filter) {
+                      if (Array.isArray(channel.category_filter)) {
+                        categoryFilter = channel.category_filter;
+                      } else if (typeof channel.category_filter === 'string') {
+                        try {
+                          categoryFilter = JSON.parse(channel.category_filter);
+                        } catch (e) {
+                          categoryFilter = [];
+                        }
+                      }
+                    }
+
+                    return (
+                      <TableRow key={channel.id}>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {channel.platform === 'telegram' ? (
+                              <><MessageSquare className="mr-1 h-3 w-3 text-blue-500" />{channel.platform}</>
+                            ) : (
+                              <><span className="mr-1 text-green-500">📱</span>{channel.platform}</>
+                            )}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{channel.name || channel.channel_name}</TableCell>
+                        <TableCell>
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {channel.identifier || channel.channel_id}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {channel.only_coupons ? (
+                              <Badge variant="secondary" className="w-fit text-xs">
+                                🎟️ Apenas Cupons
+                              </Badge>
+                            ) : (
+                              <>
+                                {categoryFilter.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {categoryFilter.slice(0, 2).map(catId => {
+                                      const category = categories.find(c => c.id === catId);
+                                      return category ? (
+                                        <Badge key={catId} variant="outline" className="text-xs">
+                                          {category.icon} {category.name}
+                                        </Badge>
+                                      ) : null;
+                                    })}
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline" className="w-fit text-xs">
+                                    📦 Todas categorias
+                                  </Badge>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={channel.is_active ? 'success' : 'destructive'}>
+                            {channel.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleTestChannel(channel.id)}>
+                              <Send className="mr-1 h-3 w-3" />
+                              Testar
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleEditChannel(channel)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteChannel(channel.id)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

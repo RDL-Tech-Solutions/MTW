@@ -45,7 +45,34 @@ class TemplateRenderer {
               .replace(/\n?.*Válido até.*\n?/gi, '')
               .replace(/\n?.*valid_until.*\n?/gi, '');
             
-            logger.debug(`📝 Template de cupom após remoção de data de validade: ${message.length} chars`);
+            // IMPORTANTE: Remover menções à plataforma (nome da plataforma) já que a imagem será enviada
+            const coupon = contextData.coupon || contextData;
+            if (coupon && coupon.platform) {
+              const platformNames = [
+                'Mercado Livre', 'MercadoLivre', 'Mercado Livre',
+                'Shopee', 'Shopee',
+                'Amazon', 'Amazon',
+                'AliExpress', 'AliExpress', 'Ali Express'
+              ];
+              platformNames.forEach(name => {
+                const regex = new RegExp(`\\b${name}\\b`, 'gi');
+                message = message.replace(regex, '');
+              });
+              // Remover linhas que contenham apenas o nome da plataforma
+              message = message.replace(/^.*(Mercado Livre|Shopee|Amazon|AliExpress).*$/gmi, '');
+            }
+            
+            logger.debug(`📝 Template de cupom após remoção de data de validade e plataforma: ${message.length} chars`);
+            
+            // CRÍTICO: Garantir que o código do cupom esteja presente no template
+            const couponCode = coupon?.code;
+            if (couponCode && !message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
+              logger.warn(`⚠️ [IA ADVANCED] Código do cupom não encontrado no template gerado, adicionando...`);
+              // Adicionar código do cupom formatado antes do link
+              const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+              message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+              logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+            }
           } else if (templateType === 'expired_coupon') {
             // Gerar template de cupom expirado
             message = await advancedTemplateGenerator.generateExpiredCouponTemplate(contextData.coupon || contextData, platform);
@@ -232,6 +259,16 @@ class TemplateRenderer {
           logger.debug(`📝 Removendo data de validade ({valid_until}) do template`);
         }
         
+        // IMPORTANTE: Se for platform_name e estiver usando IA ADVANCED, remover (não mencionar plataforma)
+        // A imagem do logo da plataforma será enviada, então não precisa mencionar no texto
+        if (key === 'platform_name' && templateMode === 'ai_advanced') {
+          replacement = ''; // Remover menção à plataforma
+          logger.debug(`📝 Removendo menção à plataforma ({platform_name}) do template IA ADVANCED`);
+          // Remover linhas que contenham apenas a variável ou texto sobre plataforma
+          message = message.replace(new RegExp(`.*\\{${key}\\}.*\\n?`, 'gi'), '');
+          message = message.replace(/.*(Mercado Livre|Shopee|Amazon|AliExpress).*$/gmi, '');
+        }
+        
         // IMPORTANTE: Se for coupon_code, SEMPRE formatar para facilitar cópia
         if (key === 'coupon_code' && replacement && replacement !== 'N/A') {
           // Verificar se o template já tem backticks ao redor da variável
@@ -286,7 +323,30 @@ class TemplateRenderer {
           }
         }
         
-        message = message.replace(regex, replacement);
+        // Substituir placeholder (exceto se for platform_name em IA ADVANCED - já foi removido)
+        if (!(key === 'platform_name' && templateMode === 'ai_advanced')) {
+          message = message.replace(regex, replacement);
+        }
+      }
+      
+      // VALIDAÇÃO FINAL: Garantir que código do cupom esteja presente (especialmente para IA ADVANCED)
+      if (templateMode === 'ai_advanced' && variables.coupon_code && variables.coupon_code !== 'N/A') {
+        const couponCode = variables.coupon_code;
+        // Verificar se o código está presente na mensagem final
+        if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
+          logger.warn(`⚠️ [VALIDAÇÃO FINAL] Código do cupom não encontrado após substituição, adicionando...`);
+          // Adicionar código do cupom de forma destacada
+          const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
+          // Tentar adicionar antes do link ou no final
+          if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
+            message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
+          } else {
+            message += codeSection;
+          }
+          logger.info(`   ✅ Código do cupom adicionado na validação final: \`${couponCode}\``);
+        } else {
+          logger.debug(`   ✅ Código do cupom confirmado na mensagem final: ${couponCode}`);
+        }
       }
       
       // IMPORTANTE: Remover qualquer texto literal "[Link de afiliado]" que a IA possa ter gerado
@@ -392,22 +452,29 @@ class TemplateRenderer {
         // Isso garante que mesmo se a IA não incluir, o código será adicionado
         if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
           logger.warn(`⚠️ Código do cupom não encontrado na mensagem, adicionando...`);
-          // Adicionar código do cupom após a seção de preço ou antes do link
-          const priceSectionPattern = /(🏷️.*?🏷️)/;
-          const linkPattern = /(👉.*?affiliate_link)/;
+          // Adicionar código do cupom após a seção de desconto ou antes do link
+          const discountPattern = /(💰.*?OFF)/i;
+          const linkPattern = /(🔗|👉).*?\{?affiliate_link\}?/i;
           
-          const couponSection = `\n\n🎟️ **CUPOM DISPONÍVEL!**\n\n🔑 **Código:** \`${couponCode}\`\n`;
+          const couponSection = `\n\n🔑 **Código:** \`${couponCode}\`\n`;
           
-          if (priceSectionPattern.test(message)) {
-            message = message.replace(priceSectionPattern, `$1${couponSection}`);
+          if (discountPattern.test(message)) {
+            message = message.replace(discountPattern, `$1${couponSection}`);
           } else if (linkPattern.test(message)) {
             message = message.replace(linkPattern, `${couponSection}$1`);
           } else {
-            // Adicionar antes do link de afiliado
-            message = message.replace(/(👉.*?\{affiliate_link\})/, `${couponSection}$1`);
+            // Adicionar antes do link de afiliado ou no final
+            if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
+              message = message.replace(/(🔗|👉|{affiliate_link})/i, `${couponSection}$1`);
+            } else {
+              // Adicionar no final se não houver link
+              message += couponSection;
+            }
           }
           
           logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
+        } else {
+          logger.debug(`   ✅ Código do cupom encontrado na mensagem: ${couponCode}`);
         }
       }
       
@@ -982,17 +1049,18 @@ class TemplateRenderer {
       }
     }
 
+    // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
+    // Sempre retornar vazio, independente de ter ou não data de expiração
+    const validUntil = '';
+
     // Para cupons capturados do Telegram: NÃO incluir descrição, link de afiliado e data de validade
     // Incluir: plataforma, código, desconto, compra mínima, limite desconto
     if (isTelegramCaptured) {
-      // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
-      // A data de validade não deve aparecer nos templates
-
       return {
         platform_name: platformName,
         coupon_code: coupon.code || 'N/A',
         discount_value: discountText,
-        valid_until: '', // NÃO incluir data de validade - deixar vazio
+        valid_until: validUntil, // NÃO incluir data de validade - sempre vazio
         min_purchase: minPurchase,
         max_discount: maxDiscount,
         usage_limit: '', // NÃO incluir limite de usos
@@ -1003,12 +1071,12 @@ class TemplateRenderer {
       };
     }
 
-    // Para cupons normais: incluir tudo
+    // Para cupons normais: incluir tudo, mas SEM data de validade
     return {
       platform_name: platformName,
       coupon_code: coupon.code || 'N/A',
       discount_value: discountText,
-      valid_until: '', // IMPORTANTE: NÃO incluir data de validade na mensagem do bot
+      valid_until: validUntil, // IMPORTANTE: NÃO incluir data de validade na mensagem do bot (sempre vazio)
       min_purchase: minPurchase,
       max_discount: maxDiscount,
       usage_limit: usageLimit,

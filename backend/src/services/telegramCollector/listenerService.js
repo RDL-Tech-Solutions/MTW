@@ -113,6 +113,28 @@ class TelegramListenerService {
       logger.info(`   is_pending_approval: ${coupon.is_pending_approval}`);
       logger.info(`   auto_captured: ${coupon.auto_captured}`);
 
+      // Atualizar estatísticas do canal se channel_origin foi fornecido
+      if (couponData.channel_origin) {
+        try {
+          const TelegramChannel = (await import('../../models/TelegramChannel.js')).default;
+          const channel = await TelegramChannel.findByUsername(couponData.channel_origin);
+          if (!channel && couponData.channel_id) {
+            // Tentar buscar por channel_id se não encontrou por username
+            const channelById = await TelegramChannel.findByChannelId(couponData.channel_id);
+            if (channelById) {
+              await TelegramChannel.incrementCouponsCount(channelById.id);
+              logger.debug(`   📊 Estatísticas do canal ${channelById.name} atualizadas`);
+            }
+          } else if (channel) {
+            await TelegramChannel.incrementCouponsCount(channel.id);
+            logger.debug(`   📊 Estatísticas do canal ${channel.name} atualizadas`);
+          }
+        } catch (statsError) {
+          logger.warn(`⚠️ Erro ao atualizar estatísticas do canal: ${statsError.message}`);
+          // Não falhar o fluxo por causa de erro de estatísticas
+        }
+      }
+
       // Logar decisão da IA para observabilidade
       try {
         const AIDecisionLog = (await import('../../models/AIDecisionLog.js')).default;

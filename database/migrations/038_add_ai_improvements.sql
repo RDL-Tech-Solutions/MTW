@@ -197,3 +197,4 @@ COMMENT ON COLUMN products.should_send_push IS 'Se deve enviar push notification
 COMMENT ON COLUMN products.should_send_to_bots IS 'Se deve enviar para bots (decisão da IA)';
 COMMENT ON COLUMN products.is_featured_offer IS 'Se é "Oferta do Dia" (decisão da IA)';
 
+
