@@ -200,10 +200,10 @@ class ProductController {
       logger.info(`   Body completo: ${JSON.stringify(req.body, null, 2)}`);
       logger.info(`   Parâmetros: ${JSON.stringify(req.params, null, 2)}`);
       logger.info(`==========================================`);
-      
+
       const { id } = req.params;
       const { affiliate_link, coupon_id, shorten_link } = req.body;
-      
+
       logger.info(`📝 Parâmetros extraídos do body:`);
       logger.info(`   id: ${id}`);
       logger.info(`   affiliate_link: ${affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
@@ -218,37 +218,37 @@ class ProductController {
 
       // Encurtar link se solicitado
       let finalAffiliateLink = affiliate_link.trim();
-      
+
       // Verificar se encurtamento foi solicitado (aceitar true, 'true', 1, '1')
-      const shouldShorten = shorten_link === true || 
-                           shorten_link === 'true' || 
-                           shorten_link === 1 || 
-                           shorten_link === '1' ||
-                           String(shorten_link).toLowerCase() === 'true';
-      
+      const shouldShorten = shorten_link === true ||
+        shorten_link === 'true' ||
+        shorten_link === 1 ||
+        shorten_link === '1' ||
+        String(shorten_link).toLowerCase() === 'true';
+
       logger.info(`🔗 ========== PROCESSANDO ENCURTAMENTO ==========`);
       logger.info(`   Parâmetro shorten_link recebido: ${JSON.stringify(shorten_link)}`);
       logger.info(`   Tipo do parâmetro: ${typeof shorten_link}`);
       logger.info(`   shouldShorten calculado: ${shouldShorten}`);
       logger.info(`   Link original: ${affiliate_link.substring(0, 100)}...`);
       logger.info(`===============================================`);
-      
+
       if (shouldShorten) {
         logger.info(`🔗 ✅ Encurtamento SOLICITADO. Iniciando processo...`);
         logger.info(`   Link a encurtar: ${affiliate_link.substring(0, 100)}...`);
-        
+
         try {
           const urlShortener = (await import('../services/urlShortener.js')).default;
           logger.info(`   📞 Chamando urlShortener.shorten()...`);
-          
+
           const shortenedUrl = await urlShortener.shorten(affiliate_link.trim());
-          
+
           logger.info(`   📥 Resposta do urlShortener: ${shortenedUrl}`);
           logger.info(`   🔍 Comparando URLs:`);
           logger.info(`      Original: ${affiliate_link.trim()}`);
           logger.info(`      Encurtado: ${shortenedUrl}`);
           logger.info(`      São diferentes: ${shortenedUrl !== affiliate_link.trim()}`);
-          
+
           // Verificar se a URL foi realmente encurtada
           // O serviço urlShortener já normaliza a URL (adiciona https:// se necessário)
           if (shortenedUrl && shortenedUrl !== affiliate_link.trim()) {
@@ -289,7 +289,7 @@ class ProductController {
         logger.info(`   shorten_link: ${shorten_link} (tipo: ${typeof shorten_link})`);
         logger.info(`   shouldShorten: ${shouldShorten}`);
       }
-      
+
       logger.info(`🔗 ========== RESULTADO FINAL ==========`);
       logger.info(`   finalAffiliateLink: ${finalAffiliateLink.substring(0, 100)}...`);
       logger.info(`   É encurtado: ${finalAffiliateLink !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
@@ -312,31 +312,31 @@ class ProductController {
       // Log do link que será usado
       logger.info(`📝 Link que será salvo no banco: ${finalAffiliateLink.substring(0, 100)}...`);
       logger.info(`   É link encurtado: ${finalAffiliateLink !== affiliate_link.trim() ? 'SIM' : 'NÃO'}`);
-      
+
       // Calcular preço final com cupom se fornecido
       let finalPrice = product.current_price;
       let updateData = {
         affiliate_link: finalAffiliateLink, // IMPORTANTE: Usar link encurtado se aplicável
         status: 'approved'
       };
-      
+
       logger.info(`📝 updateData.affiliate_link: ${updateData.affiliate_link.substring(0, 100)}...`);
 
       if (coupon_id) {
         // Buscar cupom
         const Coupon = (await import('../models/Coupon.js')).default;
         const coupon = await Coupon.findById(coupon_id);
-        
+
         if (coupon && coupon.is_active) {
           // Verificar se cupom é válido
           const now = new Date();
           const validFrom = new Date(coupon.valid_from);
           const validUntil = new Date(coupon.valid_until);
-          
+
           if (now >= validFrom && now <= validUntil) {
             // Calcular preço final com cupom
             const currentPrice = product.current_price || 0;
-            
+
             if (coupon.discount_type === 'percentage') {
               // Desconto percentual: preço - (preço * desconto%)
               finalPrice = currentPrice - (currentPrice * (coupon.discount_value / 100));
@@ -355,7 +355,7 @@ class ProductController {
 
             // Vincular cupom ao produto
             updateData.coupon_id = coupon_id;
-            
+
             logger.info(`💰 Preço final calculado: R$ ${product.current_price} → R$ ${finalPrice.toFixed(2)} (cupom: ${coupon.code})`);
           } else {
             logger.warn(`⚠️ Cupom ${coupon_id} não está válido no momento`);
@@ -374,27 +374,47 @@ class ProductController {
       // Buscar produto completo para publicação
       // IMPORTANTE: Aguardar um pouco para garantir que o banco foi atualizado
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       const fullProduct = await Product.findById(id);
-      
+
       // Log do link antes de atualizar
       logger.info(`📝 Link no produto ANTES de atualizar (do banco): ${fullProduct.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
       logger.info(`📝 Link que SERÁ usado na publicação (finalAffiliateLink): ${finalAffiliateLink.substring(0, 100)}...`);
       logger.info(`📝 Link original recebido (affiliate_link): ${affiliate_link.substring(0, 100)}...`);
       logger.info(`📝 Link é encurtado: ${finalAffiliateLink !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
-      
+
       // IMPORTANTE: Sempre usar finalAffiliateLink (pode ser encurtado)
       // Atualizar affiliate_link no objeto para publicação
       fullProduct.affiliate_link = finalAffiliateLink;
-      
+
       // Log após atualizar
       logger.info(`📝 Link no produto APÓS atualizar (fullProduct.affiliate_link): ${fullProduct.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
       logger.info(`📝 Confirmando: Link no fullProduct é encurtado: ${fullProduct.affiliate_link !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
-      if (coupon_id && finalPrice !== product.current_price) {
-        // Armazenar preço final calculado (será usado no bot e app)
-        fullProduct.final_price = finalPrice;
-        fullProduct.price_with_coupon = finalPrice;
+
+      // IMPORTANTE: Garantir que coupon_id está definido no fullProduct para que o template correto seja usado
+      if (coupon_id) {
+        fullProduct.coupon_id = coupon_id;
+        logger.info(`🎟️ Cupom vinculado ao produto para publicação: ${coupon_id}`);
+
+        if (finalPrice !== product.current_price) {
+          // Armazenar preço final calculado (será usado no bot e app)
+          fullProduct.final_price = finalPrice;
+          fullProduct.price_with_coupon = finalPrice;
+          logger.info(`💰 Preço com cupom definido: R$ ${finalPrice.toFixed(2)}`);
+        }
       }
+
+      // Log estado completo do produto antes de publicar
+      logger.info(`📦 ========== ESTADO DO PRODUTO ANTES DE PUBLICAR ==========`);
+      logger.info(`   ID: ${fullProduct.id}`);
+      logger.info(`   Nome: ${fullProduct.name}`);
+      logger.info(`   coupon_id: ${fullProduct.coupon_id || 'NÃO DEFINIDO'}`);
+      logger.info(`   affiliate_link: ${fullProduct.affiliate_link?.substring(0, 80) || 'NÃO DEFINIDO'}...`);
+      logger.info(`   final_price: ${fullProduct.final_price || 'NÃO DEFINIDO'}`);
+      logger.info(`   price_with_coupon: ${fullProduct.price_with_coupon || 'NÃO DEFINIDO'}`);
+      logger.info(`   current_price: ${fullProduct.current_price}`);
+      logger.info(`   Template esperado: ${fullProduct.coupon_id ? 'promotion_with_coupon ✅' : 'new_promotion'}`);
+      logger.info(`===========================================================`);
 
       // Publicar e notificar (agora com edição de IA, score e detecção de duplicados)
       const publishResult = await publishService.publishAll(fullProduct);
@@ -439,7 +459,7 @@ class ProductController {
       }
 
       // Rejeitar produto
-      await Product.update(id, { 
+      await Product.update(id, {
         status: 'rejected',
         // Opcional: salvar motivo da rejeição se houver campo para isso
       });

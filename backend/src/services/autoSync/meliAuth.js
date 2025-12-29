@@ -27,7 +27,7 @@ class MeliAuth {
     try {
       const config = await AppSettings.getMeliConfig();
       const previousRefreshToken = this.refreshToken;
-      
+
       this.clientId = config.clientId || this.clientId;
       this.clientSecret = config.clientSecret || this.clientSecret;
       this.accessToken = config.accessToken || this.accessToken;
@@ -78,114 +78,175 @@ class MeliAuth {
         return this.accessToken;
       }
 
-      logger.info('🔑 Atualizando token do Mercado Livre...');
+      // IMPORTANTE: Lock para evitar múltiplas renovações simultâneas (race condition)
+      if (this._refreshingToken) {
+        logger.debug('⏳ Aguardando renovação de token em andamento...');
+        // Esperar até 10 segundos pela renovação em andamento
+        const startTime = Date.now();
+        while (this._refreshingToken && (Date.now() - startTime) < 10000) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        // Retornar token se foi renovado
+        if (this.accessToken && this.tokenExpiresAt && Date.now() < this.tokenExpiresAt) {
+          logger.debug('✅ Token renovado por outra chamada, usando token renovado');
+          return this.accessToken;
+        }
+      }
 
-      let response;
+      // Marcar que estamos renovando
+      this._refreshingToken = true;
 
-      // Prioridade: Refresh Token (Acesso de usuário/seller)
-      // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
-      // Pular refresh token se já foi marcado como inválido
-      if (this.refreshToken && !this.refreshTokenInvalid) {
-        try {
-          // Validar que todos os valores estão presentes
-          if (!this.clientId || !this.clientSecret || !this.refreshToken) {
-            throw new Error('Credenciais incompletas para refresh token');
-          }
+      try {
+        logger.info('🔑 Atualizando token do Mercado Livre...');
 
-          // Usar URLSearchParams para garantir formato correto
-          const params = new URLSearchParams();
-          params.append('grant_type', 'refresh_token');
-          params.append('client_id', this.clientId.trim());
-          params.append('client_secret', this.clientSecret.trim());
-          params.append('refresh_token', this.refreshToken.trim());
+        let response;
 
-          logger.debug('🔄 Tentando renovar token via Refresh Token...');
+        // Prioridade: Refresh Token (Acesso de usuário/seller)
+        // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+        // Pular refresh token se já foi marcado como inválido
+        if (this.refreshToken && !this.refreshTokenInvalid) {
+          try {
+            // CRÍTICO: Buscar refresh_token mais recente do banco ANTES de usar
+            // Isso evita usar um token já utilizado se outro processo renovou
+            logger.debug('🔄 Buscando refresh_token mais recente do banco...');
+            const config = await AppSettings.getMeliConfig();
+            const latestRefreshToken = config.refreshToken;
 
-          response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
-            headers: { 
-              'Content-Type': 'application/x-www-form-urlencoded', 
-              'Accept': 'application/json' 
-            },
-            timeout: 15000
-          });
+            if (latestRefreshToken && latestRefreshToken !== this.refreshToken) {
+              logger.info('🔄 Refresh token atualizado detectado no banco, usando o mais recente');
+              this.refreshToken = latestRefreshToken;
+              this.refreshTokenInvalid = false; // Resetar flag se novo token
+            }
 
-          this.refreshToken = response.data.refresh_token; // Atualizar refresh token se mudar
-          logger.info('✅ Token renovado via Refresh Token');
+            // Validar que todos os valores estão presentes
+            if (!this.clientId || !this.clientSecret || !this.refreshToken) {
+              throw new Error('Credenciais incompletas para refresh token');
+            }
 
-        } catch (refreshError) {
-          const status = refreshError.response?.status;
-          const errorData = refreshError.response?.data || {};
-          const errorMessage = errorData.message || errorData.error || refreshError.message;
+            // Usar URLSearchParams para garantir formato correto
+            const params = new URLSearchParams();
+            params.append('grant_type', 'refresh_token');
+            params.append('client_id', this.clientId.trim());
+            params.append('client_secret', this.clientSecret.trim());
+            params.append('refresh_token', this.refreshToken.trim());
 
-          if (status === 400) {
-            if (errorMessage?.includes('invalid_grant') || errorMessage?.includes('invalid_token') ||
-                errorMessage?.includes('expired') || errorMessage?.includes('already used')) {
-              logger.error(`❌ Refresh token inválido, expirado ou já utilizado: ${errorMessage}`);
-              logger.error('⚠️ O refresh token do Mercado Livre expira após 6 meses de inatividade');
-              logger.error('⚠️ Cada refresh token só pode ser usado UMA vez - após uso, um novo é gerado');
-              logger.error('💡 Obtenha um novo refresh token usando o fluxo de autorização no painel admin');
-              
-              // Marcar refresh token como inválido para evitar tentativas futuras
-              this.refreshTokenInvalid = true;
-              this.refreshToken = null; // Limpar da memória
-              
-              // Tentar limpar do banco também (opcional, mas útil)
+            logger.debug('🔄 Tentando renovar token via Refresh Token...');
+            logger.debug(`   Client ID: ${this.clientId.substring(0, 10)}...`);
+            logger.debug(`   Refresh Token: ${this.refreshToken.substring(0, 20)}...`);
+
+            response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
+              },
+              timeout: 15000
+            });
+
+            // IMPORTANTE: Atualizar IMEDIATAMENTE o novo refresh token (uso único!)
+            const newRefreshToken = response.data.refresh_token;
+            if (newRefreshToken && newRefreshToken !== this.refreshToken) {
+              logger.info('🔄 Novo refresh_token recebido, atualizando imediatamente...');
+              this.refreshToken = newRefreshToken;
+
+              // Salvar IMEDIATAMENTE no banco para evitar race condition
               try {
-                await AppSettings.updateMeliToken(null, null);
-                logger.info('🧹 Refresh token inválido removido do banco de dados');
-              } catch (dbError) {
-                logger.warn(`⚠️ Erro ao limpar refresh token do banco: ${dbError.message}`);
+                await AppSettings.updateMeliToken(
+                  response.data.access_token,
+                  newRefreshToken
+                );
+                logger.info('✅ Novo refresh_token salvo no banco com sucesso');
+              } catch (saveError) {
+                logger.error(`❌ CRÍTICO: Erro ao salvar novo refresh_token: ${saveError.message}`);
+                logger.error('⚠️ Isso pode causar problemas na próxima renovação!');
               }
-              
-              // Continuar para tentar client credentials como fallback
-              logger.info('🔄 Tentando usar Client Credentials como fallback...');
+            }
+
+            logger.info('✅ Token renovado via Refresh Token');
+
+          } catch (refreshError) {
+            const status = refreshError.response?.status;
+            const errorData = refreshError.response?.data || {};
+            const errorMessage = errorData.message || errorData.error || refreshError.message;
+
+            if (status === 400) {
+              if (errorMessage?.includes('invalid_grant') || errorMessage?.includes('invalid_token') ||
+                errorMessage?.includes('expired') || errorMessage?.includes('already used')) {
+                logger.error(`❌ Refresh token inválido, expirado ou já utilizado: ${errorMessage}`);
+                logger.error('⚠️ O refresh token do Mercado Livre expira após 6 meses de inatividade');
+                logger.error('⚠️ Cada refresh token só pode ser usado UMA vez - após uso, um novo é gerado');
+                logger.error('💡 Obtenha um novo refresh token usando o fluxo de autorização no painel admin');
+                logger.error('📋 Detalhes do erro:');
+                logger.error(JSON.stringify(errorData, null, 2));
+
+                // Marcar refresh token como inválido para evitar tentativas futuras
+                this.refreshTokenInvalid = true;
+                this.refreshToken = null; // Limpar da memória
+
+                // Tentar limpar do banco também (opcional, mas útil)
+                try {
+                  await AppSettings.updateMeliToken(null, null);
+                  logger.info('🧹 Refresh token inválido removido do banco de dados');
+                } catch (dbError) {
+                  logger.warn(`⚠️ Erro ao limpar refresh token do banco: ${dbError.message}`);
+                }
+
+                // Continuar para tentar client credentials como fallback
+                logger.info('🔄 Tentando usar Client Credentials como fallback...');
+              } else {
+                logger.error(`❌ Erro 400 ao renovar token: ${errorMessage}`);
+                logger.error('📋 Detalhes:', JSON.stringify(errorData, null, 2));
+              }
             } else {
-              logger.error(`❌ Erro 400 ao renovar token: ${errorMessage}`);
+              logger.warn(`⚠️ Falha ao renovar via Refresh Token (${status}): ${errorMessage}`);
               logger.error('📋 Detalhes:', JSON.stringify(errorData, null, 2));
             }
-          } else {
-            logger.warn(`⚠️ Falha ao renovar via Refresh Token (${status}): ${errorMessage}`);
+            // Fallback para Client Credentials abaixo se falhar (apenas para outros erros)
           }
-          // Fallback para Client Credentials abaixo se falhar (apenas para outros erros)
         }
-      }
 
-      // Fallback: Client Credentials (Acesso de Aplicação)
-      // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
-      if (!response && this.clientId && this.clientSecret) {
-        const params = new URLSearchParams();
-        params.append('grant_type', 'client_credentials');
-        params.append('client_id', this.clientId);
-        params.append('client_secret', this.clientSecret);
+        // Fallback: Client Credentials (Acesso de Aplicação)
+        // IMPORTANTE: Enviar parâmetros no body (não querystring) conforme documentação de segurança
+        if (!response && this.clientId && this.clientSecret) {
+          const params = new URLSearchParams();
+          params.append('grant_type', 'client_credentials');
+          params.append('client_id', this.clientId);
+          params.append('client_secret', this.clientSecret);
 
-        response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
-          headers: { 
-            'Content-Type': 'application/x-www-form-urlencoded', 
-            'Accept': 'application/json' 
+          response = await axios.post('https://api.mercadolibre.com/oauth/token', params.toString(), {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json'
+            }
+          });
+          logger.info('✅ Token gerado via Client Credentials');
+        }
+
+        if (response && response.data) {
+          this.accessToken = response.data.access_token;
+          const expiresIn = response.data.expires_in || 21600;
+          this.tokenExpiresAt = Date.now() + (expiresIn * 1000) - 60000;
+
+          // Salvar token atualizado no banco (se não foi salvo acima)
+          if (response.data.refresh_token) {
+            try {
+              await AppSettings.updateMeliToken(
+                this.accessToken,
+                response.data.refresh_token || this.refreshToken
+              );
+            } catch (error) {
+              logger.warn(`⚠️ Erro ao salvar token no banco: ${error.message}`);
+            }
           }
-        });
-        logger.info('✅ Token gerado via Client Credentials');
-      }
 
-      if (response && response.data) {
-        this.accessToken = response.data.access_token;
-        const expiresIn = response.data.expires_in || 21600;
-        this.tokenExpiresAt = Date.now() + (expiresIn * 1000) - 60000;
-        
-        // Salvar token atualizado no banco
-        try {
-          await AppSettings.updateMeliToken(
-            this.accessToken,
-            response.data.refresh_token || this.refreshToken
-          );
-        } catch (error) {
-          logger.warn(`⚠️ Erro ao salvar token no banco: ${error.message}`);
+          return this.accessToken;
         }
-        
-        return this.accessToken;
-      }
 
-      throw new Error('Nenhum método de autenticação funcionou.');
+        throw new Error('Nenhum método de autenticação funcionou.');
+
+      } finally {
+        // IMPORTANTE: Sempre liberar o lock, mesmo em caso de erro
+        this._refreshingToken = false;
+      }
 
     } catch (error) {
       logger.error(`❌ Erro auth ML: ${error.message}`);
@@ -257,7 +318,7 @@ class MeliAuth {
         logger.error(`   Código: ${errorCode}`);
         logger.error(`   Mensagem: ${errorMessage}`);
         logger.error(`   URL: ${url}`);
-        
+
         // Sugestões baseadas na documentação
         if (errorCode === 'FORBIDDEN' || errorMessage?.includes('Invalid scopes')) {
           logger.error(`   💡 Verifique se os scopes necessários estão configurados no DevCenter`);

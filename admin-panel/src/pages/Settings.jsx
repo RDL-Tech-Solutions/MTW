@@ -25,41 +25,41 @@ export default function Settings() {
     meli_redirect_uri: '',
     meli_affiliate_code: '',
     meli_affiliate_tag: '',
-    
+
     // Shopee
     shopee_partner_id: '',
     shopee_partner_key: '',
-    
+
     // Amazon
     amazon_access_key: '',
     amazon_secret_key: '',
     amazon_partner_tag: '',
     amazon_marketplace: 'www.amazon.com.br',
-    
+
     // AliExpress
     aliexpress_api_url: 'https://api-sg.aliexpress.com/rest',
     aliexpress_app_key: '',
     aliexpress_app_secret: '',
     aliexpress_tracking_id: '',
     aliexpress_product_origin: 'both',
-    
+
     // Expo
     expo_access_token: '',
-    
+
     // Telegram Collector
     telegram_collector_rate_limit_delay: 1.0,
     telegram_collector_max_retries: 3,
     telegram_collector_reconnect_delay: 30,
-    
+
     // Backend
     backend_url: 'http://localhost:3000',
     backend_api_key: '',
-    
+
     // OpenRouter / IA
     openrouter_api_key: '',
     openrouter_model: 'mistralai/mistral-7b-instruct',
     openrouter_enabled: false,
-    
+
     // Configurações de IA Avançadas
     ai_auto_publish_confidence_threshold: 0.90,
     ai_enable_auto_publish: true,
@@ -104,7 +104,7 @@ export default function Settings() {
       if (response.data.success) {
         // Garantir que todos os valores sejam strings (nunca null ou undefined)
         const data = response.data.data || {};
-        
+
         // Lista de campos sensíveis que precisam ser carregados do banco
         const sensitiveFields = [
           'meli_client_secret',
@@ -120,7 +120,7 @@ export default function Settings() {
 
         // Identificar quais campos têm valores salvos (mascarados como '***')
         const fieldsWithValues = sensitiveFields.filter(field => data[field] === '***');
-        
+
         // Carregar valores reais dos campos sensíveis que têm valores salvos
         let realValues = {};
         if (fieldsWithValues.length > 0) {
@@ -154,7 +154,7 @@ export default function Settings() {
           meli_client_secret: realValues.meli_client_secret || '',
           meli_access_token: realValues.meli_access_token || '',
           meli_refresh_token: realValues.meli_refresh_token || '',
-          meli_redirect_uri: data.meli_redirect_uri || '',
+          meli_redirect_uri: data.meli_redirect_uri || 'https://api.precocerto.app/',
           meli_affiliate_code: data.meli_affiliate_code || '',
           meli_affiliate_tag: data.meli_affiliate_tag || '',
           shopee_partner_id: data.shopee_partner_id || '',
@@ -204,7 +204,7 @@ export default function Settings() {
     try {
       // Preparar dados para envio: não enviar campos vazios (para não sobrescrever valores existentes)
       const dataToSend = { ...settings };
-      
+
       // Remover campos vazios de secrets/tokens (para não sobrescrever valores existentes)
       if (!dataToSend.meli_client_secret || dataToSend.meli_client_secret.trim() === '') {
         delete dataToSend.meli_client_secret;
@@ -240,11 +240,11 @@ export default function Settings() {
           title: "Sucesso",
           description: "Configurações salvas com sucesso!",
         });
-        
+
         // Atualizar apenas campos não-sensíveis do response
         // Manter valores locais de secrets/tokens (não recarregar do servidor)
         const responseData = response.data.data || {};
-        
+
         // Atualizar hasSavedValue para campos que foram salvos
         setHasSavedValue(prev => ({
           ...prev,
@@ -258,7 +258,7 @@ export default function Settings() {
           backend_api_key: dataToSend.backend_api_key ? true : prev.backend_api_key,
           openrouter_api_key: dataToSend.openrouter_api_key ? true : prev.openrouter_api_key
         }));
-        
+
         // Atualizar settings mantendo TODOS os valores que foram salvos
         setSettings(prev => ({
           ...prev,
@@ -279,8 +279,8 @@ export default function Settings() {
           telegram_collector_max_retries: responseData.telegram_collector_max_retries !== undefined ? responseData.telegram_collector_max_retries : prev.telegram_collector_max_retries,
           telegram_collector_reconnect_delay: responseData.telegram_collector_reconnect_delay !== undefined ? responseData.telegram_collector_reconnect_delay : prev.telegram_collector_reconnect_delay,
           backend_url: responseData.backend_url !== undefined ? responseData.backend_url : prev.backend_url,
-        // MANTER valores de secrets/tokens que foram salvos (não limpar)
-        // Se foi enviado e salvo, manter o valor; se não foi enviado, manter o valor anterior
+          // MANTER valores de secrets/tokens que foram salvos (não limpar)
+          // Se foi enviado e salvo, manter o valor; se não foi enviado, manter o valor anterior
           meli_client_secret: dataToSend.meli_client_secret ? prev.meli_client_secret : prev.meli_client_secret,
           meli_access_token: dataToSend.meli_access_token ? prev.meli_access_token : prev.meli_access_token,
           meli_refresh_token: dataToSend.meli_refresh_token ? prev.meli_refresh_token : prev.meli_refresh_token,
@@ -310,7 +310,7 @@ export default function Settings() {
         if (dataToSend.expo_access_token) sensitiveValues.expo_access_token = prev.expo_access_token;
         if (dataToSend.backend_api_key) sensitiveValues.backend_api_key = prev.backend_api_key;
         if (dataToSend.openrouter_api_key) sensitiveValues.openrouter_api_key = prev.openrouter_api_key;
-        
+
         if (Object.keys(sensitiveValues).length > 0) {
           const existing = sessionStorage.getItem('settings_saved_values');
           const existingValues = existing ? JSON.parse(existing) : {};
@@ -333,6 +333,9 @@ export default function Settings() {
     setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Estado inicial com Redirect URI correto
+  // ... (manter o restante do loadSettings como estava, apenas garantindo que se não tiver valor, use o correto)
+
   const handleGetRefreshToken = async () => {
     if (!settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri) {
       toast({
@@ -345,52 +348,23 @@ export default function Settings() {
 
     setGettingRefreshToken(true);
     try {
-      // Gerar URL de autorização
-      const response = await api.post('/settings/meli/authorize', {
-        client_id: settings.meli_client_id,
-        redirect_uri: settings.meli_redirect_uri
+      // Usar a URL direta de autorização
+      const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${settings.meli_client_id}&redirect_uri=${encodeURIComponent(settings.meli_redirect_uri)}`;
+
+      // Abrir em nova aba
+      window.open(authUrl, '_blank');
+
+      toast({
+        title: "Autorização Iniciada",
+        description: "1. Autorize no Mercado Livre. 2. Quando for redirecionado (mesmo se der erro), COPIE A URL COMPLETA da barra de endereço e cole no campo abaixo.",
+        duration: 10000,
       });
 
-      if (response.data.success) {
-        // Abrir URL de autorização em nova janela
-        const authUrl = response.data.data.auth_url;
-        const authWindow = window.open(authUrl, 'Mercado Livre Auth', 'width=600,height=700');
-        
-        // Escutar mensagem do callback
-        const messageHandler = (event) => {
-          // Verificar origem (pode ser do mesmo domínio ou do callback)
-          if (event.data && event.data.type === 'meli_code' && event.data.code) {
-            setMeliCode(event.data.code);
-            authWindow?.close();
-            window.removeEventListener('message', messageHandler);
-            
-            toast({
-              title: "Código recebido",
-              description: "Código de autorização capturado automaticamente. Clique em 'Trocar por Tokens'.",
-            });
-          }
-        };
-        
-        // Verificar periodicamente se a janela foi fechada
-        const checkWindow = setInterval(() => {
-          if (authWindow?.closed) {
-            clearInterval(checkWindow);
-            window.removeEventListener('message', messageHandler);
-            setGettingRefreshToken(false);
-          }
-        }, 500);
-        
-        window.addEventListener('message', messageHandler);
-
-        toast({
-          title: "Autorização",
-          description: "Uma nova janela foi aberta. Após autorizar, o código será capturado automaticamente.",
-        });
-      }
+      setGettingRefreshToken(false);
     } catch (error) {
       toast({
         title: "Erro",
-        description: error.response?.data?.message || "Falha ao gerar URL de autorização.",
+        description: "Erro ao abrir janela de autorização.",
         variant: "destructive"
       });
       setGettingRefreshToken(false);
@@ -398,10 +372,26 @@ export default function Settings() {
   };
 
   const handleExchangeCode = async () => {
-    if (!meliCode || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri) {
+    let codeToExchange = meliCode;
+
+    // Extrair código se o usuário colou uma URL completa
+    if (codeToExchange.includes('code=')) {
+      try {
+        const url = new URL(codeToExchange);
+        codeToExchange = url.searchParams.get('code');
+      } catch (e) {
+        // Fallback simples se não for uma URL válida mas conter code=
+        codeToExchange = codeToExchange.split('code=')[1].split('&')[0];
+      }
+    }
+
+    // Limpar espaços
+    codeToExchange = codeToExchange ? codeToExchange.trim() : '';
+
+    if (!codeToExchange || !settings.meli_client_id || !settings.meli_client_secret || !settings.meli_redirect_uri) {
       toast({
         title: "Erro",
-        description: "Preencha o código de autorização e todas as credenciais necessárias.",
+        description: "Cole a URL ou o código de autorização.",
         variant: "destructive"
       });
       return;
@@ -410,7 +400,7 @@ export default function Settings() {
     setGettingRefreshToken(true);
     try {
       const response = await api.post('/settings/meli/exchange-code', {
-        code: meliCode,
+        code: codeToExchange,
         client_id: settings.meli_client_id,
         client_secret: settings.meli_client_secret,
         redirect_uri: settings.meli_redirect_uri
@@ -442,14 +432,15 @@ export default function Settings() {
 
         setMeliCode('');
         toast({
-          title: "Sucesso",
-          description: "Refresh token e access token obtidos e salvos com sucesso!",
+          title: "✅ Sucesso Absoluto!",
+          description: "Integração com Mercado Livre renovada e salva com sucesso.",
         });
       }
     } catch (error) {
+      console.error(error);
       toast({
-        title: "Erro",
-        description: error.response?.data?.message || "Falha ao trocar código por tokens.",
+        title: "Erro ao trocar token",
+        description: error.response?.data?.message || "Verifique se o código não expirou (ele dura apenas 10 minutos e é de uso único). Tente gerar um novo.",
         variant: "destructive"
       });
     } finally {
@@ -504,12 +495,12 @@ export default function Settings() {
       const errorData = error.response?.data || {};
       const errorMessage = errorData.message || "Falha ao gerar access token.";
       const suggestions = errorData.suggestions || [];
-      
+
       // Verificar se é erro de refresh token inválido/expirado
-      const isInvalidGrant = errorMessage?.includes('invalid_grant') || 
-                            errorMessage?.includes('invalid_token') ||
-                            errorMessage?.includes('Refresh token inválido') ||
-                            errorMessage?.includes('expirado');
+      const isInvalidGrant = errorMessage?.includes('invalid_grant') ||
+        errorMessage?.includes('invalid_token') ||
+        errorMessage?.includes('Refresh token inválido') ||
+        errorMessage?.includes('expirado');
 
       let description = errorMessage;
       if (suggestions.length > 0) {
@@ -617,7 +608,7 @@ export default function Settings() {
                   <Input
                     id="meli_client_id"
                     value={settings.meli_client_id}
-                    onChange={(e) => setSettings({...settings, meli_client_id: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, meli_client_id: e.target.value })}
                     placeholder="Seu Client ID"
                   />
                 </div>
@@ -628,7 +619,7 @@ export default function Settings() {
                       id="meli_client_secret"
                       type={showSecrets.meli_client_secret ? 'text' : 'password'}
                       value={settings.meli_client_secret || ''}
-                      onChange={(e) => setSettings({...settings, meli_client_secret: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, meli_client_secret: e.target.value })}
                       placeholder={hasSavedValue.meli_client_secret ? "Valor salvo no banco de dados" : "Seu Client Secret"}
                     />
                     <Button
@@ -647,7 +638,7 @@ export default function Settings() {
                       id="meli_access_token"
                       type={showSecrets.meli_access_token ? 'text' : 'password'}
                       value={settings.meli_access_token || ''}
-                      onChange={(e) => setSettings({...settings, meli_access_token: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, meli_access_token: e.target.value })}
                       placeholder={hasSavedValue.meli_access_token ? "Valor salvo (clique para editar)" : "Access Token (atualizado automaticamente)"}
                     />
                     <Button
@@ -666,7 +657,7 @@ export default function Settings() {
                       id="meli_refresh_token"
                       type={showSecrets.meli_refresh_token ? 'text' : 'password'}
                       value={settings.meli_refresh_token || ''}
-                      onChange={(e) => setSettings({...settings, meli_refresh_token: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, meli_refresh_token: e.target.value })}
                       placeholder={hasSavedValue.meli_refresh_token ? "Valor salvo no banco de dados" : "Refresh Token"}
                     />
                     <Button
@@ -683,7 +674,7 @@ export default function Settings() {
                   <Input
                     id="meli_redirect_uri"
                     value={settings.meli_redirect_uri || ''}
-                    onChange={(e) => setSettings({...settings, meli_redirect_uri: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, meli_redirect_uri: e.target.value })}
                     placeholder="https://seu-dominio.com/callback"
                   />
                 </div>
@@ -692,7 +683,7 @@ export default function Settings() {
                   <Input
                     id="meli_affiliate_code"
                     value={settings.meli_affiliate_code || ''}
-                    onChange={(e) => setSettings({...settings, meli_affiliate_code: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, meli_affiliate_code: e.target.value })}
                     placeholder="Código de afiliado"
                   />
                 </div>
@@ -701,12 +692,12 @@ export default function Settings() {
                   <Input
                     id="meli_affiliate_tag"
                     value={settings.meli_affiliate_tag || ''}
-                    onChange={(e) => setSettings({...settings, meli_affiliate_tag: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, meli_affiliate_tag: e.target.value })}
                     placeholder="Tag de afiliado"
                   />
                 </div>
               </div>
-              
+
               {/* Seção de gerenciamento de tokens */}
               <div className="mt-6 pt-6 border-t">
                 <h3 className="text-lg font-semibold mb-4">Gerenciamento de Tokens</h3>
@@ -739,11 +730,12 @@ export default function Settings() {
                       </Button>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
-                      Clique em "Obter Refresh Token" para abrir a página de autorização do Mercado Livre.
-                      Após autorizar, cole o código recebido no campo acima e clique em "Trocar por Tokens".
+                      Click em "Obter Refresh Token" para abrir o Mercado Livre. Autorize o app.
+                      Quando for redirecionado (mesmo se der erro de página),
+                      COPIE A URL DA BARRA DE ENDEREÇO e cole no campo acima.
                     </p>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <Button
                       onClick={handleExchangeCode}
@@ -762,7 +754,7 @@ export default function Settings() {
                         </>
                       )}
                     </Button>
-                    
+
                     <Button
                       onClick={handleGenerateAccessToken}
                       disabled={generatingAccessToken || !settings.meli_refresh_token}
@@ -806,7 +798,7 @@ export default function Settings() {
                   <Input
                     id="shopee_partner_id"
                     value={settings.shopee_partner_id || ''}
-                    onChange={(e) => setSettings({...settings, shopee_partner_id: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, shopee_partner_id: e.target.value })}
                     placeholder="Digite o AppID da Shopee (ex: 18349000441)"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
@@ -820,7 +812,7 @@ export default function Settings() {
                       id="shopee_partner_key"
                       type={showSecrets.shopee_partner_key ? 'text' : 'password'}
                       value={settings.shopee_partner_key || ''}
-                      onChange={(e) => setSettings({...settings, shopee_partner_key: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, shopee_partner_key: e.target.value })}
                       placeholder={hasSavedValue.shopee_partner_key ? "Valor salvo no banco de dados" : "Digite o Secret da Shopee"}
                     />
                     <Button
@@ -856,7 +848,7 @@ export default function Settings() {
                   <Input
                     id="amazon_access_key"
                     value={settings.amazon_access_key || ''}
-                    onChange={(e) => setSettings({...settings, amazon_access_key: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, amazon_access_key: e.target.value })}
                     placeholder="Sua Access Key"
                   />
                 </div>
@@ -867,7 +859,7 @@ export default function Settings() {
                       id="amazon_secret_key"
                       type={showSecrets.amazon_secret_key ? 'text' : 'password'}
                       value={settings.amazon_secret_key || ''}
-                      onChange={(e) => setSettings({...settings, amazon_secret_key: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, amazon_secret_key: e.target.value })}
                       placeholder={hasSavedValue.amazon_secret_key ? "Valor salvo no banco de dados" : "Sua Secret Key"}
                     />
                     <Button
@@ -884,7 +876,7 @@ export default function Settings() {
                   <Input
                     id="amazon_partner_tag"
                     value={settings.amazon_partner_tag || ''}
-                    onChange={(e) => setSettings({...settings, amazon_partner_tag: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, amazon_partner_tag: e.target.value })}
                     placeholder="Sua Partner Tag"
                   />
                 </div>
@@ -893,7 +885,7 @@ export default function Settings() {
                   <Input
                     id="amazon_marketplace"
                     value={settings.amazon_marketplace || 'www.amazon.com.br'}
-                    onChange={(e) => setSettings({...settings, amazon_marketplace: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, amazon_marketplace: e.target.value })}
                     placeholder="www.amazon.com.br"
                   />
                 </div>
@@ -918,7 +910,7 @@ export default function Settings() {
                   <Input
                     id="aliexpress_api_url"
                     value={settings.aliexpress_api_url || 'https://api-sg.aliexpress.com/rest'}
-                    onChange={(e) => setSettings({...settings, aliexpress_api_url: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, aliexpress_api_url: e.target.value })}
                     placeholder="https://api-sg.aliexpress.com/rest"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
@@ -930,7 +922,7 @@ export default function Settings() {
                   <Input
                     id="aliexpress_app_key"
                     value={settings.aliexpress_app_key || ''}
-                    onChange={(e) => setSettings({...settings, aliexpress_app_key: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, aliexpress_app_key: e.target.value })}
                     placeholder="Sua App Key do AliExpress"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
@@ -944,7 +936,7 @@ export default function Settings() {
                       id="aliexpress_app_secret"
                       type={showSecrets.aliexpress_app_secret ? 'text' : 'password'}
                       value={settings.aliexpress_app_secret || ''}
-                      onChange={(e) => setSettings({...settings, aliexpress_app_secret: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, aliexpress_app_secret: e.target.value })}
                       placeholder={hasSavedValue.aliexpress_app_secret ? "Valor salvo no banco de dados" : "Sua App Secret do AliExpress"}
                     />
                     <Button
@@ -964,7 +956,7 @@ export default function Settings() {
                   <Input
                     id="aliexpress_tracking_id"
                     value={settings.aliexpress_tracking_id || ''}
-                    onChange={(e) => setSettings({...settings, aliexpress_tracking_id: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, aliexpress_tracking_id: e.target.value })}
                     placeholder="Seu Tracking ID para links de afiliado"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
@@ -976,7 +968,7 @@ export default function Settings() {
                   <select
                     id="aliexpress_product_origin"
                     value={settings.aliexpress_product_origin || 'both'}
-                    onChange={(e) => setSettings({...settings, aliexpress_product_origin: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, aliexpress_product_origin: e.target.value })}
                     className="w-full h-10 px-3 rounded-md border border-input bg-background"
                   >
                     <option value="brazil">🇧🇷 Apenas Brasil</option>
@@ -1018,7 +1010,7 @@ export default function Settings() {
                     id="expo_access_token"
                     type={showSecrets.expo_access_token ? 'text' : 'password'}
                     value={settings.expo_access_token || ''}
-                    onChange={(e) => setSettings({...settings, expo_access_token: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, expo_access_token: e.target.value })}
                     placeholder={hasSavedValue.expo_access_token ? "Valor salvo no banco de dados" : "Seu Expo Access Token"}
                   />
                   <Button
@@ -1049,7 +1041,7 @@ export default function Settings() {
                   type="checkbox"
                   id="openrouter_enabled"
                   checked={settings.openrouter_enabled || false}
-                  onChange={(e) => setSettings({...settings, openrouter_enabled: e.target.checked})}
+                  onChange={(e) => setSettings({ ...settings, openrouter_enabled: e.target.checked })}
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <Label htmlFor="openrouter_enabled" className="cursor-pointer">
@@ -1068,7 +1060,7 @@ export default function Settings() {
                       id="openrouter_api_key"
                       type={showSecrets.openrouter_api_key ? 'text' : 'password'}
                       value={settings.openrouter_api_key || ''}
-                      onChange={(e) => setSettings({...settings, openrouter_api_key: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
                       placeholder={hasSavedValue.openrouter_api_key ? "Valor salvo no banco de dados" : "sk-or-v1-..."}
                       disabled={!settings.openrouter_enabled}
                     />
@@ -1083,9 +1075,9 @@ export default function Settings() {
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
                     Obtenha sua API Key em{' '}
-                    <a 
-                      href="https://openrouter.ai/keys" 
-                      target="_blank" 
+                    <a
+                      href="https://openrouter.ai/keys"
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary hover:underline"
                     >
@@ -1099,7 +1091,7 @@ export default function Settings() {
                   <select
                     id="openrouter_model"
                     value={settings.openrouter_model || 'mistralai/mistral-7b-instruct'}
-                    onChange={(e) => setSettings({...settings, openrouter_model: e.target.value})}
+                    onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                     disabled={!settings.openrouter_enabled}
                   >
@@ -1179,7 +1171,7 @@ export default function Settings() {
                         min="0"
                         max="1"
                         value={settings.ai_auto_publish_confidence_threshold ?? 0.90}
-                        onChange={(e) => setSettings({...settings, ai_auto_publish_confidence_threshold: parseFloat(e.target.value) || 0.90})}
+                        onChange={(e) => setSettings({ ...settings, ai_auto_publish_confidence_threshold: parseFloat(e.target.value) || 0.90 })}
                         disabled={!settings.openrouter_enabled}
                       />
                       <p className="text-sm text-gray-500 mt-1">
@@ -1192,7 +1184,7 @@ export default function Settings() {
                         type="checkbox"
                         id="ai_enable_auto_publish"
                         checked={settings.ai_enable_auto_publish ?? true}
-                        onChange={(e) => setSettings({...settings, ai_enable_auto_publish: e.target.checked})}
+                        onChange={(e) => setSettings({ ...settings, ai_enable_auto_publish: e.target.checked })}
                         disabled={!settings.openrouter_enabled}
                         className="w-4 h-4"
                       />
@@ -1209,7 +1201,7 @@ export default function Settings() {
                         type="checkbox"
                         id="ai_enable_product_editing"
                         checked={settings.ai_enable_product_editing ?? true}
-                        onChange={(e) => setSettings({...settings, ai_enable_product_editing: e.target.checked})}
+                        onChange={(e) => setSettings({ ...settings, ai_enable_product_editing: e.target.checked })}
                         disabled={!settings.openrouter_enabled}
                         className="w-4 h-4"
                       />
@@ -1226,7 +1218,7 @@ export default function Settings() {
                         type="checkbox"
                         id="ai_enable_duplicate_detection"
                         checked={settings.ai_enable_duplicate_detection ?? true}
-                        onChange={(e) => setSettings({...settings, ai_enable_duplicate_detection: e.target.checked})}
+                        onChange={(e) => setSettings({ ...settings, ai_enable_duplicate_detection: e.target.checked })}
                         disabled={!settings.openrouter_enabled}
                         className="w-4 h-4"
                       />
@@ -1243,7 +1235,7 @@ export default function Settings() {
                         type="checkbox"
                         id="ai_enable_quality_scoring"
                         checked={settings.ai_enable_quality_scoring ?? true}
-                        onChange={(e) => setSettings({...settings, ai_enable_quality_scoring: e.target.checked})}
+                        onChange={(e) => setSettings({ ...settings, ai_enable_quality_scoring: e.target.checked })}
                         disabled={!settings.openrouter_enabled}
                         className="w-4 h-4"
                       />
@@ -1280,7 +1272,7 @@ export default function Settings() {
                       type="number"
                       step="0.1"
                       value={settings.telegram_collector_rate_limit_delay ?? 1.0}
-                      onChange={(e) => setSettings({...settings, telegram_collector_rate_limit_delay: parseFloat(e.target.value) || 1.0})}
+                      onChange={(e) => setSettings({ ...settings, telegram_collector_rate_limit_delay: parseFloat(e.target.value) || 1.0 })}
                     />
                   </div>
                   <div>
@@ -1289,7 +1281,7 @@ export default function Settings() {
                       id="telegram_collector_max_retries"
                       type="number"
                       value={settings.telegram_collector_max_retries ?? 3}
-                      onChange={(e) => setSettings({...settings, telegram_collector_max_retries: parseInt(e.target.value) || 3})}
+                      onChange={(e) => setSettings({ ...settings, telegram_collector_max_retries: parseInt(e.target.value) || 3 })}
                     />
                   </div>
                   <div>
@@ -1298,7 +1290,7 @@ export default function Settings() {
                       id="telegram_collector_reconnect_delay"
                       type="number"
                       value={settings.telegram_collector_reconnect_delay ?? 30}
-                      onChange={(e) => setSettings({...settings, telegram_collector_reconnect_delay: parseInt(e.target.value) || 30})}
+                      onChange={(e) => setSettings({ ...settings, telegram_collector_reconnect_delay: parseInt(e.target.value) || 30 })}
                     />
                   </div>
                 </div>
@@ -1319,7 +1311,7 @@ export default function Settings() {
                     <Input
                       id="backend_url"
                       value={settings.backend_url || 'http://localhost:3000'}
-                      onChange={(e) => setSettings({...settings, backend_url: e.target.value})}
+                      onChange={(e) => setSettings({ ...settings, backend_url: e.target.value })}
                       placeholder="http://localhost:3000"
                     />
                   </div>
@@ -1330,7 +1322,7 @@ export default function Settings() {
                         id="backend_api_key"
                         type={showSecrets.backend_api_key ? 'text' : 'password'}
                         value={settings.backend_api_key || ''}
-                        onChange={(e) => setSettings({...settings, backend_api_key: e.target.value})}
+                        onChange={(e) => setSettings({ ...settings, backend_api_key: e.target.value })}
                         placeholder={hasSavedValue.backend_api_key ? "Valor salvo no banco de dados" : "API Key (opcional)"}
                       />
                       <Button
