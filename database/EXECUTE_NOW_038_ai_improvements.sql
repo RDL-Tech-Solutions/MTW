@@ -240,3 +240,4 @@ COMMENT ON TABLE bot_send_logs IS 'Logs de envios de bots para controle de dupli
 
 
 
+

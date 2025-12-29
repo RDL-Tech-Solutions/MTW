@@ -199,3 +199,4 @@ COMMENT ON COLUMN products.is_featured_offer IS 'Se é "Oferta do Dia" (decisão
 
 
 
+

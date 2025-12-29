@@ -54,3 +54,4 @@ COMMENT ON COLUMN products.original_link IS 'Link original do produto antes da c
 
 
 
+

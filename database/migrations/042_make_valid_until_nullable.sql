@@ -24,3 +24,4 @@ COMMENT ON COLUMN coupons.valid_until IS 'Data de expiração do cupom. NULL ind
 -- Verificar se a migration foi aplicada com sucesso
 SELECT 'Migration 042 aplicada com sucesso! A coluna valid_until agora permite NULL.' as status;
 
+

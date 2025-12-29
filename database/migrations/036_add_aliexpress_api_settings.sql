@@ -15,3 +15,4 @@ COMMENT ON COLUMN app_settings.aliexpress_tracking_id IS 'Tracking ID para links
 
 
 
+

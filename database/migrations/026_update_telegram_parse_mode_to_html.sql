@@ -56,3 +56,4 @@ SELECT 'Migration 026_update_telegram_parse_mode_to_html executada com sucesso!'
 
 
 
+

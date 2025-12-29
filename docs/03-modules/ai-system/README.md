@@ -213,3 +213,4 @@ Se a IA falhar:
 
 
 
+

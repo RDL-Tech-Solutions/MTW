@@ -20,3 +20,4 @@ CREATE INDEX IF NOT EXISTS idx_bot_channels_only_coupons ON bot_channels(only_co
 -- =====================================================
 SELECT 'Migration 040 executada com sucesso!' as status;
 
+

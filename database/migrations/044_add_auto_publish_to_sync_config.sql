@@ -14,3 +14,4 @@ COMMENT ON COLUMN sync_config.mercadolivre_auto_publish IS 'Publicar automaticam
 COMMENT ON COLUMN sync_config.amazon_auto_publish IS 'Publicar automaticamente produtos da Amazon após análise estratégica da IA';
 COMMENT ON COLUMN sync_config.aliexpress_auto_publish IS 'Publicar automaticamente produtos do AliExpress após análise estratégica da IA';
 
+

@@ -13,3 +13,4 @@ CREATE INDEX IF NOT EXISTS idx_coupons_is_out_of_stock ON coupons(is_out_of_stoc
 -- Comentário na coluna
 COMMENT ON COLUMN coupons.is_out_of_stock IS 'Indica se o cupom está esgotado (não disponível mais)';
 
+
