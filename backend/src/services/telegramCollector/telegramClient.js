@@ -11,11 +11,23 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SESSIONS_DIR = path.join(__dirname, '../../../telegram_sessions');
+// Detectar ambiente serverless
+const isServerless = __dirname.includes('/var/task') || process.env.VERCEL;
+
+// Em ambiente serverless, usar /tmp, caso contrário usar diretório local
+const SESSIONS_DIR = isServerless
+  ? path.join('/tmp', 'telegram_sessions')
+  : path.join(__dirname, '../../../telegram_sessions');
 
 // Garantir que o diretório de sessões existe
-if (!fs.existsSync(SESSIONS_DIR)) {
-  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(SESSIONS_DIR)) {
+    fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  }
+} catch (error) {
+  // Se falhar (ex: readonly fs mesmo no /tmp), logar erro mas não quebrar
+  // O logger pode não estar totalmente inicializado aqui, então usamos console.error como fallback
+  console.error(`Erro ao criar diretório de sessões ${SESSIONS_DIR}:`, error.message);
 }
 
 class TelegramClientService {
@@ -40,7 +52,7 @@ class TelegramClientService {
   async loadConfig() {
     try {
       this.config = await TelegramCollectorConfig.get();
-      
+
       if (!this.config.api_id || !this.config.api_hash) {
         throw new Error('API ID e API Hash devem ser configurados primeiro');
       }
@@ -102,7 +114,7 @@ class TelegramClientService {
     // Carregar sessão - se houver problema de conexão, pode ser útil limpar a sessão
     // para forçar o gramjs a escolher um novo data center
     let session = this.loadSession();
-    
+
     // Se muitos erros de reconexão, limpar sessão para forçar novo data center
     if (this.reconnectErrors >= this.maxReconnectErrors) {
       logger.warn(`⚠️ Muitos erros de reconexão (${this.reconnectErrors}). Limpando sessão para forçar novo data center...`);
@@ -118,7 +130,7 @@ class TelegramClientService {
         }
       }
     }
-    
+
     // Se a sessão existir mas estiver causando problemas, podemos limpar
     if (session && session.dcId) {
       logger.info(`📡 Sessão existente encontrada com DC: ${session.dcId}`);
@@ -128,7 +140,7 @@ class TelegramClientService {
         logger.warn(`   Se houver problemas, limpe a sessão para forçar novo data center`);
       }
     }
-    
+
     // Configurações do cliente
     // IMPORTANTE: Desabilitar autoReconnect para evitar loops infinitos
     // O listenerService vai gerenciar reconexões manualmente
@@ -172,11 +184,11 @@ class TelegramClientService {
 
     // Usar sessão (pode ser nova se foi limpa)
     this.client = new TelegramClient(session, parseInt(this.config.api_id), this.config.api_hash, clientOptions);
-    
+
     // Log do servidor que será usado (se disponível)
     logger.info(`📡 Cliente criado. O gramjs escolherá o servidor automaticamente baseado na localização e sessão.`);
     logger.info(`   Se houver problemas de conexão, pode ser necessário verificar firewall/proxy.`);
-    
+
     // Log da configuração do cliente
     logger.debug(`📡 Cliente Telegram criado com API ID: ${this.config.api_id.substring(0, 4)}****`);
 
@@ -214,7 +226,7 @@ class TelegramClientService {
 
     this.isConnecting = true;
     this.connectionPromise = this._doConnect();
-    
+
     try {
       const result = await this.connectionPromise;
       return result;
@@ -251,12 +263,12 @@ class TelegramClientService {
 
       logger.info(`🔌 Conectando ao Telegram...`);
       await this.client.connect();
-      
+
       // Log informações sobre a conexão
       try {
         const dcId = this.client.session?.dcId || 'desconhecido';
         logger.info(`✅ Cliente Telegram conectado (DC: ${dcId})`);
-        
+
         // Log do servidor se disponível
         if (this.client._connection && this.client._connection._ip) {
           logger.info(`   Servidor: ${this.client._connection._ip}:${this.client._connection._port || 'padrão'}`);
@@ -289,21 +301,21 @@ class TelegramClientService {
 
       // Reset contador de erros se conectar com sucesso
       this.reconnectErrors = 0;
-      
+
       return true;
     } catch (error) {
       logger.error(`Erro ao conectar: ${error.message}`);
-      
+
       // Incrementar contador de erros
       this.reconnectErrors++;
-      
+
       // Se muitos erros consecutivos, limpar sessão
       if (this.reconnectErrors >= this.maxReconnectErrors) {
         logger.error(`❌ Muitos erros de conexão (${this.reconnectErrors}). Limpando sessão para forçar novo data center...`);
         await this.clearSession();
         this.reconnectErrors = 0;
       }
-      
+
       // Limpar referência do cliente se falhar
       if (this.client && !this.client.connected && !this.client._connected) {
         this.client = null;
@@ -336,7 +348,7 @@ class TelegramClientService {
       if (this.client) {
         // Marcar listener como inativo antes de desconectar
         this.isListenerActive = false;
-        
+
         // Verificar se está realmente conectado antes de desconectar
         const isConnected = this.client.connected || this.client._connected;
         if (isConnected) {
@@ -352,12 +364,12 @@ class TelegramClientService {
           logger.debug(`ℹ️ Cliente já estava desconectado`);
         }
       }
-      
+
       // Limpar referência do cliente
       this.client = null;
       this.isConnecting = false;
       this.connectionPromise = null;
-      
+
       return true;
     } catch (error) {
       logger.error(`Erro ao desconectar: ${error.message}`);
@@ -376,17 +388,17 @@ class TelegramClientService {
     const startTime = Date.now();
     logger.info(`🚀 [sendCode] Iniciando processo de envio de código`);
     logger.info(`   Timestamp: ${new Date().toISOString()}`);
-    
+
     try {
       logger.info(`📋 [1/8] Carregando configurações...`);
       await this.loadConfig();
       logger.info(`✅ [1/8] Configurações carregadas`);
-      
+
       // Validar que temos todos os dados necessários
       if (!this.config.api_id || !this.config.api_hash) {
         throw new Error('API ID e API Hash devem ser configurados primeiro');
       }
-      
+
       // Verificar última tentativa (se houver campo no banco)
       // Isso ajuda a evitar rate limiting
       try {
@@ -395,7 +407,7 @@ class TelegramClientService {
           const lastSent = new Date(config.last_code_sent_at);
           const now = new Date();
           const diffSeconds = (now - lastSent) / 1000;
-          
+
           // Se tentou há menos de 60 segundos, avisar
           if (diffSeconds < 60) {
             const waitTime = Math.ceil(60 - diffSeconds);
@@ -429,26 +441,26 @@ class TelegramClientService {
         throw new Error('Número de telefone deve começar com + (formato internacional).');
       }
       logger.info(`✅ [2/8] Número de telefone válido: ${phoneTrimmed.substring(0, 4)}****`);
-      
+
       // Log para debug (sem expor valores completos)
       logger.info(`📋 [3/8] Preparando para enviar código...`);
       logger.info(`   Phone: ${phoneTrimmed}`);
       logger.info(`   API ID: ${String(this.config.api_id).substring(0, 4)}****`);
-      
+
       // Criar e conectar cliente
       logger.info(`📋 [4/8] Criando cliente Telegram...`);
       this.createClient();
       logger.info(`✅ [4/8] Cliente criado`);
-      
+
       logger.info(`📋 [5/8] Conectando ao Telegram...`);
       try {
         logger.info(`   Iniciando client.connect()...`);
         logger.info(`   Nota: Para sendCode, não precisamos de autorização completa, apenas conexão TCP`);
-        
+
         // O connect() do gramjs pode demorar, mas não deve travar indefinidamente
         // Vamos usar Promise.race com timeout
         const connectPromise = this.client.connect();
-        
+
         // Timeout de 15 segundos (reduzido porque apenas precisamos da conexão TCP)
         const connectTimeout = new Promise((_, reject) => {
           setTimeout(() => {
@@ -457,9 +469,9 @@ class TelegramClientService {
             reject(new Error('Timeout ao conectar: connect() não retornou em 15 segundos'));
           }, 15000);
         });
-        
+
         logger.info(`   Aguardando resposta do connect() (timeout 15s)...`);
-        
+
         let connectResult;
         try {
           connectResult = await Promise.race([connectPromise, connectTimeout]);
@@ -468,21 +480,21 @@ class TelegramClientService {
           // Se foi timeout, verificar se a conexão TCP foi estabelecida
           if (raceError.message.includes('Timeout')) {
             logger.warn(`⚠️ Timeout no connect(), verificando status da conexão...`);
-            
+
             // Aguardar um pouco e verificar novamente
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             // Verificar se há conexão TCP mesmo com timeout
-            const hasTcpConnection = this.client._connection && 
-                                    (this.client._connection._connected || 
-                                     this.client._connection.connected ||
-                                     this.client._connection._transport?.connected);
-            
+            const hasTcpConnection = this.client._connection &&
+              (this.client._connection._connected ||
+                this.client._connection.connected ||
+                this.client._connection._transport?.connected);
+
             logger.info(`   Status da conexão TCP: ${hasTcpConnection ? 'conectado' : 'desconectado'}`);
             logger.info(`   client.connected: ${this.client.connected}`);
             logger.info(`   _connection._connected: ${this.client._connection?._connected}`);
             logger.info(`   _connection.connected: ${this.client._connection?.connected}`);
-            
+
             if (hasTcpConnection || this.client.connected) {
               logger.warn(`⚠️ Conexão TCP estabelecida, mas connect() não retornou. Continuando...`);
               logger.info(`   Para sendCode, conexão TCP é suficiente. Prosseguindo...`);
@@ -495,28 +507,28 @@ class TelegramClientService {
             throw raceError;
           }
         }
-        
+
         logger.info(`✅ [5/8] Conectado ao Telegram com sucesso`);
       } catch (connectError) {
         logger.error(`❌ [5/8] Erro ao conectar ao Telegram: ${connectError.message}`);
         logger.error(`   Stack: ${connectError.stack}`);
         throw new Error(`Falha ao conectar ao Telegram: ${connectError.message}. Verifique sua conexão com a internet e as credenciais API.`);
       }
-      
+
       // Verificar se está realmente conectado
       logger.info(`🔍 Verificando status da conexão...`);
       logger.info(`   client.connected: ${this.client.connected}`);
       logger.info(`   client._connection: ${this.client._connection ? 'presente' : 'ausente'}`);
-      
+
       // Aguardar um pouco e verificar novamente (às vezes leva um tempo para marcar como conectado)
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Verificar novamente após aguardar
-      const isConnected = this.client.connected || 
-                         (this.client._connection && this.client._connection._connected);
-      
+      const isConnected = this.client.connected ||
+        (this.client._connection && this.client._connection._connected);
+
       logger.info(`   Status após aguardar: connected=${this.client.connected}, _connected=${this.client._connection?._connected}`);
-      
+
       if (!isConnected) {
         logger.warn(`⚠️ Cliente não marcado como conectado, mas continuando...`);
         // Não lançar erro, apenas avisar - às vezes o gramjs não marca como connected imediatamente
@@ -524,9 +536,9 @@ class TelegramClientService {
       } else {
         logger.info(`✅ Cliente confirmado como conectado`);
       }
-      
+
       logger.info(`✅ [5/8] Cliente conectado e pronto para enviar código`);
-      
+
       // Log informações do servidor após conexão (não crítico, pode falhar)
       // Fazer isso de forma assíncrona para não bloquear
       logger.info(`📋 [6/8] Obtendo informações do servidor (não bloqueante)...`);
@@ -542,7 +554,7 @@ class TelegramClientService {
         } catch (logError) {
           // Ignorar erros de log - não é crítico
         }
-      }).catch(() => {}); // Ignorar qualquer erro
+      }).catch(() => { }); // Ignorar qualquer erro
       logger.info(`✅ [6/8] Prosseguindo (info do servidor em background)`);
 
       // Aguardar um pouco para garantir que a conexão está estável
@@ -564,10 +576,10 @@ class TelegramClientService {
         logger.error(`   Stack: ${importError.stack}`);
         throw new Error(`Falha ao importar módulo telegram: ${importError.message}`);
       }
-      
+
       // SendCode requer phoneNumber, apiId, apiHash e settings (obrigatório)
       logger.info(`📤 Preparando SendCode com apiId: ${apiId}, apiHash: ${apiHash.substring(0, 8)}****`);
-      
+
       // Criar CodeSettings (obrigatório)
       logger.info(`📋 Criando CodeSettings...`);
       let codeSettings;
@@ -585,40 +597,40 @@ class TelegramClientService {
         logger.error(`   Stack: ${settingsError.stack}`);
         throw new Error(`Falha ao criar CodeSettings: ${settingsError.message}`);
       }
-      
+
       let result;
       let retryCount = 0;
       const maxRetries = 3; // Aumentado para 3 tentativas
-      
+
       logger.info(`🔄 Iniciando loop de tentativas (máximo ${maxRetries + 1} tentativas)...`);
-      
+
       while (retryCount <= maxRetries) {
         try {
           logger.info(`🔄 Tentativa ${retryCount + 1}/${maxRetries + 1} - Enviando SendCode...`);
           logger.info(`   Phone: ${phoneTrimmed}`);
           logger.info(`   API ID: ${apiId}`);
           logger.info(`   Cliente conectado: ${this.client.connected}`);
-          
+
           // Verificar se cliente ainda está conectado antes de enviar
           if (!this.client.connected) {
             logger.warn(`⚠️ Cliente desconectado, reconectando...`);
             await this.client.connect();
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
-          
+
           // Verificar se a conexão está realmente pronta para invocar
           logger.info(`🔍 Verificando se conexão está pronta para invocar...`);
           logger.info(`   client.connected: ${this.client._connected || this.client.connected}`);
           logger.info(`   client._sender: ${this.client._sender ? 'presente' : 'ausente'}`);
-          
+
           // Aguardar um pouco mais para garantir que o handshake MTProto foi completado
           logger.info(`⏳ Aguardando 3 segundos para garantir handshake MTProto completo...`);
           await new Promise(resolve => setTimeout(resolve, 3000));
-          
+
           // Verificar se o handshake MTProto foi completado
           // O gramjs precisa completar o handshake antes de poder invocar métodos
           logger.info(`🔍 Verificando se handshake MTProto foi completado...`);
-          
+
           // Tentar fazer uma chamada simples para verificar se a conexão está realmente pronta
           // Se o handshake não foi completado, o invoke() vai travar
           try {
@@ -626,7 +638,7 @@ class TelegramClientService {
             // Não fazer nada, apenas verificar se o cliente tem o sender configurado
             const hasSender = this.client._sender !== undefined && this.client._sender !== null;
             logger.info(`   _sender presente: ${hasSender}`);
-            
+
             if (!hasSender) {
               logger.warn(`⚠️ _sender não está presente - handshake pode não ter sido completado`);
               logger.warn(`   Aguardando mais 5 segundos para handshake completar...`);
@@ -635,28 +647,28 @@ class TelegramClientService {
           } catch (checkError) {
             logger.warn(`⚠️ Erro ao verificar sender: ${checkError.message}`);
           }
-          
+
           // Adicionar timeout para evitar travamento
           logger.info(`📤 Invocando SendCode...`);
           logger.info(`   Criando Api.auth.SendCode request...`);
-          
+
           const sendCodeRequest = new Api.auth.SendCode({
             phoneNumber: phoneTrimmed,
             apiId: apiId,
             apiHash: apiHash,
             settings: codeSettings
           });
-          
+
           logger.info(`   Request criado, invocando...`);
           logger.info(`   ⚠️ Se travar aqui, o handshake MTProto pode não ter sido completado`);
-          
+
           // Criar a promise de invocação
           const invokeStartTime = Date.now();
           const sendCodePromise = this.client.invoke(sendCodeRequest);
-          
+
           logger.info(`✅ SendCode invoke() chamado, aguardando resposta...`);
           logger.info(`   Promise criada, iniciando timeout...`);
-          
+
           // Timeout de 60 segundos
           const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => {
@@ -668,16 +680,16 @@ class TelegramClientService {
               reject(new Error('Timeout: Resposta do Telegram demorou mais de 60 segundos'));
             }, 60000);
           });
-          
+
           logger.info(`⏳ Aguardando resposta (timeout de 60s)...`);
-          
+
           // Adicionar um log periódico para saber que ainda está rodando
           let elapsedSeconds = 0;
           const progressInterval = setInterval(() => {
             elapsedSeconds += 10;
             logger.info(`   ⏳ Ainda aguardando resposta... (${elapsedSeconds}s decorridos)`);
           }, 10000); // A cada 10 segundos
-          
+
           try {
             result = await Promise.race([sendCodePromise, timeoutPromise]);
             clearInterval(progressInterval);
@@ -690,7 +702,7 @@ class TelegramClientService {
             const totalTime = Math.floor((Date.now() - invokeStartTime) / 1000);
             logger.error(`❌ Erro no Promise.race após ${totalTime}s: ${raceError.message}`);
             logger.error(`   Stack: ${raceError.stack}`);
-            
+
             // Se foi timeout, verificar se há algum problema de conexão
             if (raceError.message.includes('Timeout')) {
               logger.error(`   ⚠️ Timeout detectado - verificando status da conexão...`);
@@ -699,70 +711,70 @@ class TelegramClientService {
               logger.error(`   Isso pode indicar que o handshake MTProto não foi completado`);
               logger.error(`   💡 Solução: Tente limpar a sessão e reconectar`);
             }
-            
+
             throw raceError;
           }
-          
+
         } catch (error) {
           const errorMsg = error.message || '';
           logger.warn(`⚠️ Erro na tentativa ${retryCount + 1}: ${errorMsg}`);
-          
+
           // Verificar se é erro de migração de data center
           if (errorMsg.includes('PHONE_MIGRATE') || errorMsg.includes('phone_migrate')) {
             const dcMatch = errorMsg.match(/PHONE_MIGRATE_(\d+)/i) || errorMsg.match(/phone_migrate[_\s](\d+)/i);
             if (dcMatch && retryCount < maxRetries) {
               const newDcId = parseInt(dcMatch[1]);
               logger.warn(`⚠️ Telefone migrado para data center ${newDcId}. Reconectando...`);
-              
+
               // Desconectar e reconectar ao novo data center
               try {
                 await this.client.disconnect();
               } catch (e) {
                 // Ignorar erros de desconexão
               }
-              
+
               // Aguardar antes de reconectar
               logger.info(`⏳ Aguardando 3 segundos antes de reconectar...`);
               await new Promise(resolve => setTimeout(resolve, 3000));
-              
+
               // Recriar cliente (o gramjs deve reconectar automaticamente ao DC correto)
               this.createClient();
               await this.client.connect();
-              
+
               // Aguardar mais um pouco para garantir que a conexão está estável
               await new Promise(resolve => setTimeout(resolve, 2000));
-              
+
               logger.info(`✅ Reconectado ao data center ${newDcId}. Tentando novamente...`);
               retryCount++;
               continue; // Tentar novamente
             }
           }
-          
+
           // Se não for erro de migração ou já tentou demais, lançar o erro
           if (retryCount >= maxRetries) {
             logger.error(`❌ Erro após ${maxRetries + 1} tentativas: ${errorMsg}`);
             throw error;
           }
-          
+
           // Aguardar antes de tentar novamente
           logger.info(`⏳ Aguardando 2 segundos antes de tentar novamente...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           retryCount++;
         }
       }
-      
+
       // Log detalhado da resposta (com proteção contra erros de serialização)
       try {
         logger.info(`📥 Resposta do SendCode recebida:`);
         logger.info(`   - Tipo: ${result?.constructor?.name || 'desconhecido'}`);
         logger.info(`   - phoneCodeHash: ${result?.phoneCodeHash ? 'presente' : 'ausente'}`);
         logger.info(`   - timeout: ${result?.timeout || 'N/A'} segundos`);
-        
+
         // Log detalhado do tipo de código
         if (result?.type) {
           const typeName = result.type.constructor?.name || 'desconhecido';
           logger.info(`   - Tipo de código: ${typeName}`);
-          
+
           // Log de propriedades adicionais do tipo
           try {
             const typeProps = Object.keys(result.type);
@@ -775,7 +787,7 @@ class TelegramClientService {
         } else {
           logger.warn(`   ⚠️ Tipo de código não especificado na resposta`);
         }
-        
+
         // Log de todas as propriedades da resposta (para debug)
         try {
           const resultProps = Object.keys(result);
@@ -787,7 +799,7 @@ class TelegramClientService {
         logger.warn(`Erro ao fazer log da resposta: ${logError.message}`);
         logger.warn(`Stack: ${logError.stack}`);
       }
-      
+
       // Salvar sessão
       if (this.client.session && this.client.session.save) {
         const sessionString = this.client.session.save();
@@ -802,7 +814,7 @@ class TelegramClientService {
         logger.error(`Resposta completa: ${JSON.stringify(result, null, 2)}`);
         throw new Error('Resposta inválida do Telegram. Tente novamente.');
       }
-      
+
       logger.info(`✅ Código de verificação enviado! phoneCodeHash: ${result.phoneCodeHash.substring(0, 8)}****`);
 
       // Limpar phoneCodeHash anterior (se houver) antes de salvar o novo
@@ -812,7 +824,7 @@ class TelegramClientService {
         // Se o campo não existir ainda (migração não executada), apenas logar
         logger.warn(`Aviso: campo phone_code_hash pode não existir: ${dbError.message}`);
       }
-      
+
       // Armazenar phoneCodeHash no banco de dados para persistir entre requisições
       try {
         await TelegramCollectorConfig.update({ phone_code_hash: result.phoneCodeHash });
@@ -820,13 +832,13 @@ class TelegramClientService {
         // Se o campo não existir ainda, apenas logar e continuar
         logger.warn(`Aviso: não foi possível salvar phone_code_hash no banco: ${dbError.message}`);
       }
-      
+
       // Também armazenar na instância para uso imediato
       this.phoneCodeHash = result.phoneCodeHash;
-      
+
       // Salvar timestamp da última tentativa (se campo existir)
       try {
-        await TelegramCollectorConfig.update({ 
+        await TelegramCollectorConfig.update({
           phone_code_hash: result.phoneCodeHash,
           last_code_sent_at: new Date().toISOString()
         });
@@ -842,7 +854,7 @@ class TelegramClientService {
         if (result?.type) {
           const typeName = result.type.constructor?.name || '';
           logger.info(`🔍 Tipo de código detectado: ${typeName}`);
-          
+
           if (typeName === 'auth.CodeTypeCall') {
             codeTypeMessage = 'via chamada telefônica';
             codeTypeDetails = 'Você receberá uma chamada telefônica com o código.';
@@ -865,7 +877,7 @@ class TelegramClientService {
       } catch (typeError) {
         logger.warn(`Erro ao determinar tipo de código: ${typeError.message}`);
       }
-      
+
       const timeout = result?.timeout || 120;
       logger.info(`📱 Código de verificação será enviado ${codeTypeMessage}`);
       if (codeTypeDetails) {
@@ -879,7 +891,7 @@ class TelegramClientService {
 
       const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
       logger.info(`✅ [sendCode] Processo concluído com sucesso em ${elapsedTime}s`);
-      
+
       return {
         success: true,
         phoneCodeHash: result.phoneCodeHash,
@@ -890,7 +902,7 @@ class TelegramClientService {
       const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
       logger.error(`❌ [sendCode] Erro após ${elapsedTime}s: ${error.message}`);
       logger.error(`   Stack trace: ${error.stack}`);
-      
+
       // Log detalhado do erro
       if (error.cause) {
         logger.error(`   Causa: ${JSON.stringify(error.cause)}`);
@@ -899,12 +911,12 @@ class TelegramClientService {
         logger.error(`   Response status: ${error.response.status}`);
         logger.error(`   Response data: ${JSON.stringify(error.response.data)}`);
       }
-      
+
       // Log detalhado do erro para debug
       if (error.cause) {
         logger.error(`Causa do erro: ${JSON.stringify(error.cause)}`);
       }
-      
+
       // Desconectar cliente em caso de erro
       try {
         if (this.client) {
@@ -913,53 +925,53 @@ class TelegramClientService {
       } catch (disconnectError) {
         logger.warn(`Erro ao desconectar cliente: ${disconnectError.message}`);
       }
-      
+
       // Tratamento específico para erros comuns
       const errorMsg = error.message || '';
-      
+
       if (errorMsg.includes('API_ID_INVALID') || errorMsg.includes('api_id_invalid') || errorMsg.includes('apiId')) {
         throw new Error('API ID inválido. Verifique se o API ID está correto no painel admin.');
       }
-      
+
       if (errorMsg.includes('API_HASH_INVALID') || errorMsg.includes('api_hash_invalid') || errorMsg.includes('apiHash')) {
         throw new Error('API Hash inválido. Verifique se o API Hash está correto no painel admin.');
       }
-      
+
       if (errorMsg.includes('PHONE_NUMBER_INVALID') || errorMsg.includes('phone_number_invalid')) {
         throw new Error('Número de telefone inválido. Use o formato internacional (ex: +5571999541560).');
       }
-      
+
       if (errorMsg.includes('FLOOD_WAIT') || errorMsg.includes('flood_wait')) {
         const waitTimeMatch = errorMsg.match(/(\d+)/);
         const waitTime = waitTimeMatch ? waitTimeMatch[1] : 'alguns';
         const waitMinutes = waitTimeMatch ? Math.ceil(parseInt(waitTime) / 60) : 0;
-        const message = waitMinutes > 0 
+        const message = waitMinutes > 0
           ? `Muitas tentativas. Aguarde ${waitMinutes} minuto(s) (${waitTime} segundos) antes de tentar novamente.`
           : `Muitas tentativas. Aguarde ${waitTime} segundos antes de tentar novamente.`;
         logger.warn(`⚠️ Rate limit detectado: ${message}`);
         throw new Error(message);
       }
-      
+
       if (errorMsg.includes('PHONE_NUMBER_FLOOD') || errorMsg.includes('phone_number_flood')) {
         logger.warn(`⚠️ Número bloqueado temporariamente por muitas tentativas`);
         throw new Error('Muitas tentativas com este número. O Telegram bloqueou temporariamente. Aguarde 2-4 horas antes de tentar novamente.');
       }
-      
+
       if (errorMsg.includes('PHONE_NUMBER_BANNED') || errorMsg.includes('phone_number_banned')) {
         logger.error(`❌ Número banido pelo Telegram`);
         throw new Error('Este número de telefone foi banido pelo Telegram. Entre em contato com o suporte do Telegram.');
       }
-      
+
       // Verificar se é erro de rate limiting genérico
       if (errorMsg.includes('TOO_MANY') || errorMsg.includes('too_many') || errorMsg.includes('RATE_LIMIT')) {
         logger.warn(`⚠️ Rate limiting detectado`);
         throw new Error('Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');
       }
-      
+
       if (errorMsg.includes('CastError') || errorMsg.includes('wrong type')) {
         throw new Error('Erro de validação dos dados. Verifique se API ID e API Hash estão corretos no painel admin.');
       }
-      
+
       // Se for timeout, dar dicas específicas
       if (errorMsg.includes('Timeout')) {
         logger.warn(`⏰ Timeout ao aguardar resposta do Telegram`);
@@ -973,7 +985,7 @@ class TelegramClientService {
         logger.warn(`   - Se persistir, aguarde algumas horas`);
         throw new Error('Timeout ao aguardar resposta do Telegram. O código pode ter sido enviado mesmo assim. Verifique seu Telegram (SMS e chamadas). Se não receber, aguarde 5-10 minutos antes de tentar novamente.');
       }
-      
+
       // Re-throw com mensagem mais amigável
       throw new Error(error.message || 'Erro desconhecido ao enviar código de verificação');
     }
@@ -1041,7 +1053,7 @@ class TelegramClientService {
       }
 
       await TelegramCollectorConfig.setAuthenticated(true);
-      
+
       // Limpar phoneCodeHash após autenticação bem-sucedida
       await TelegramCollectorConfig.update({ phone_code_hash: null });
       this.phoneCodeHash = null;
@@ -1053,19 +1065,19 @@ class TelegramClientService {
       };
     } catch (error) {
       logger.error(`Erro ao verificar código: ${error.message}`);
-      
+
       // Limpar phoneCodeHash se o código expirou
       if (error.message.includes('PHONE_CODE_EXPIRED') || error.message.includes('phone_code_expired')) {
         await TelegramCollectorConfig.update({ phone_code_hash: null });
         this.phoneCodeHash = null;
         throw new Error('Código de verificação expirado. Por favor, solicite um novo código.');
       }
-      
+
       // Verificar se precisa de senha 2FA
       if (error.message.includes('password') || error.message.includes('2FA') || error.message.includes('senha') || error.message.includes('PASSWORD')) {
         throw new Error('Senha 2FA necessária');
       }
-      
+
       throw error;
     }
   }
@@ -1105,7 +1117,7 @@ class TelegramClientService {
 
       try {
         await this.loadConfig();
-        
+
         // Verificar se arquivo de sessão existe
         if (!fs.existsSync(this.sessionPath)) {
           this.lastAuthCheck = false;
@@ -1114,13 +1126,13 @@ class TelegramClientService {
         }
 
         this.createClient();
-        
+
         // Timeout de 10 segundos para conexão
         const connectPromise = this.client.connect();
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Timeout ao conectar')), 10000);
         });
-        
+
         try {
           await Promise.race([connectPromise, timeoutPromise]);
         } catch (connectError) {
@@ -1132,7 +1144,7 @@ class TelegramClientService {
           }
           throw connectError;
         }
-        
+
         // Timeout de 5 segundos para verificação de autorização
         let isAuth = false;
         try {
@@ -1140,7 +1152,7 @@ class TelegramClientService {
           const checkTimeoutPromise = new Promise((_, reject) => {
             setTimeout(() => reject(new Error('Timeout ao verificar autorização')), 5000);
           });
-          
+
           isAuth = await Promise.race([checkAuthPromise, checkTimeoutPromise]);
         } catch (checkError) {
           // Tratar erros de rede/502 especificamente no checkAuthorization
@@ -1151,39 +1163,39 @@ class TelegramClientService {
           }
           throw checkError;
         }
-        
+
         if (isAuth) {
           await TelegramCollectorConfig.setAuthenticated(true);
         }
-        
+
         // Cachear resultado
         this.lastAuthCheck = isAuth;
         this.lastAuthCheckTime = Date.now();
-        
+
         return isAuth;
       } catch (authError) {
         // Tratar erros de rede/502 Bad Gateway especificamente
         const errorMessage = authError.message || String(authError);
-        const isNetworkError = errorMessage.includes('502') || 
-                              errorMessage.includes('Bad Gateway') ||
-                              errorMessage.includes('<html>') ||
-                              errorMessage.includes('cloudflare') ||
-                              errorMessage.includes('ECONNREFUSED') ||
-                              errorMessage.includes('ETIMEDOUT') ||
-                              errorMessage.includes('ENOTFOUND') ||
-                              errorMessage.includes('Timeout');
-        
+        const isNetworkError = errorMessage.includes('502') ||
+          errorMessage.includes('Bad Gateway') ||
+          errorMessage.includes('<html>') ||
+          errorMessage.includes('cloudflare') ||
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('ENOTFOUND') ||
+          errorMessage.includes('Timeout');
+
         if (isNetworkError) {
           logger.warn(`⚠️ Erro de rede ao verificar autenticação: ${errorMessage.substring(0, 100)}`);
           logger.warn(`   Isso geralmente indica problemas temporários de conexão com os servidores do Telegram.`);
           logger.warn(`   Usando status em cache ou assumindo que ainda está autenticado.`);
-          
+
           // Se temos um resultado em cache recente (menos de 5 minutos), usar ele
           if (this.lastAuthCheck !== null && (Date.now() - this.lastAuthCheckTime) < 300000) {
             logger.debug(`   Usando resultado em cache: ${this.lastAuthCheck}`);
             return this.lastAuthCheck;
           }
-          
+
           // Se não tem cache, assumir que está autenticado se estava marcado como tal no banco
           // (para evitar desconectar o usuário por problemas temporários de rede)
           const config = await TelegramCollectorConfig.get();
@@ -1191,10 +1203,10 @@ class TelegramClientService {
             logger.debug(`   Assumindo autenticado baseado no banco de dados (problema de rede temporário)`);
             return true;
           }
-          
+
           return false;
         }
-        
+
         // Para outros erros, logar e retornar false
         logger.warn(`⚠️ Erro ao verificar autenticação: ${errorMessage.substring(0, 200)}`);
         this.lastAuthCheck = false;
@@ -1221,11 +1233,11 @@ class TelegramClientService {
     } catch (error) {
       // Tratar erros de rede/502 especificamente no catch externo também
       const errorMessage = error.message || String(error);
-      const isNetworkError = errorMessage.includes('502') || 
-                            errorMessage.includes('Bad Gateway') ||
-                            errorMessage.includes('<html>') ||
-                            errorMessage.includes('cloudflare');
-      
+      const isNetworkError = errorMessage.includes('502') ||
+        errorMessage.includes('Bad Gateway') ||
+        errorMessage.includes('<html>') ||
+        errorMessage.includes('cloudflare');
+
       if (isNetworkError) {
         logger.warn(`⚠️ Erro de rede ao verificar autenticação (catch externo): ${errorMessage.substring(0, 100)}`);
         // Usar cache se disponível
@@ -1244,7 +1256,7 @@ class TelegramClientService {
       } else {
         logger.error(`Erro ao verificar autenticação: ${errorMessage.substring(0, 200)}`);
       }
-      
+
       this.isCheckingAuth = false;
       this.lastAuthCheck = false;
       this.lastAuthCheckTime = Date.now();
@@ -1288,7 +1300,7 @@ class TelegramClientService {
   async clearSession() {
     try {
       logger.info(`🗑️ Limpando sessão atual...`);
-      
+
       // Desconectar cliente se existir
       if (this.client) {
         try {
@@ -1297,17 +1309,17 @@ class TelegramClientService {
           logger.warn(`⚠️ Erro ao desconectar antes de limpar sessão: ${disconnectError.message}`);
         }
       }
-      
+
       // Limpar arquivo de sessão
       if (this.sessionPath && fs.existsSync(this.sessionPath)) {
         fs.unlinkSync(this.sessionPath);
         logger.info(`✅ Arquivo de sessão removido: ${this.sessionPath}`);
       }
-      
+
       // Limpar referências
       this.client = null;
       this.reconnectErrors = 0;
-      
+
       logger.info(`✅ Sessão limpa. Nova conexão usará novo data center.`);
       return true;
     } catch (error) {
@@ -1323,7 +1335,7 @@ class TelegramClientService {
   async clearSessions() {
     try {
       let deletedCount = 0;
-      
+
       // Desconectar cliente atual se existir
       if (this.client) {
         try {
@@ -1334,14 +1346,14 @@ class TelegramClientService {
         }
         this.client = null;
       }
-      
+
       // Limpar sessão atual
       this.phoneCodeHash = null;
-      
+
       // Limpar diretório de sessões
       if (fs.existsSync(SESSIONS_DIR)) {
         const files = fs.readdirSync(SESSIONS_DIR);
-        
+
         for (const file of files) {
           try {
             const filePath = path.join(SESSIONS_DIR, file);
@@ -1355,9 +1367,9 @@ class TelegramClientService {
           }
         }
       }
-      
+
       logger.info(`✅ Limpeza de sessões concluída. ${deletedCount} arquivo(s) removido(s).`);
-      
+
       return {
         deletedCount,
         message: `${deletedCount} sessão(ões) removida(s) com sucesso`
