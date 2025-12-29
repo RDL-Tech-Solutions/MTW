@@ -10,7 +10,14 @@ const __dirname = path.dirname(__filename);
 
 class ImageGenerator {
   constructor() {
-    this.tempDir = path.join(__dirname, '../../../temp');
+    // Detectar ambiente serverless
+    const isServerless = __dirname.includes('/var/task') || process.env.VERCEL;
+
+    // Em ambiente serverless, usar /tmp
+    this.tempDir = isServerless
+      ? path.join('/tmp', 'temp_images')
+      : path.join(__dirname, '../../../temp');
+
     this.ensureTempDir();
   }
 
@@ -18,7 +25,9 @@ class ImageGenerator {
     try {
       await fs.mkdir(this.tempDir, { recursive: true });
     } catch (error) {
-      logger.warn(`Erro ao criar diretório temp: ${error.message}`);
+      // Apenas logar aviso, pois em serverless pode ser efêmero ou já existir
+      // Em read-only FS, isso vai falhar se não usar /tmp, mas já tratamos acima
+      logger.warn(`Aviso ao acessar/criar diretório temp (${this.tempDir}): ${error.message}`);
     }
   }
 
@@ -40,12 +49,12 @@ class ImageGenerator {
 
       // Converter SVG para PNG usando sharp com alta qualidade
       const buffer = await sharp(Buffer.from(svg))
-        .png({ 
-          quality: 100, 
+        .png({
+          quality: 100,
           compressionLevel: 9, // Máxima compressão sem perda de qualidade
           palette: true // Usar paleta de cores para melhor qualidade
         })
-        .resize(width, height, { 
+        .resize(width, height, {
           fit: 'fill',
           kernel: 'lanczos3' // Melhor algoritmo de redimensionamento
         })
@@ -73,23 +82,23 @@ class ImageGenerator {
       : `R$ ${coupon.discount_value.toFixed(2)}`;
 
     const discountLabel = 'OFF';
-    
+
     // Para cupons capturados do Telegram, não usar título/descrição
     const isTelegramCaptured = coupon.capture_source === 'telegram' || coupon.auto_captured === true;
-    const title = isTelegramCaptured 
-      ? 'Cupom de Desconto' 
+    const title = isTelegramCaptured
+      ? 'Cupom de Desconto'
       : this.truncateText(coupon.title || 'Cupom de Desconto', 60);
-    const description = isTelegramCaptured 
-      ? '' 
+    const description = isTelegramCaptured
+      ? ''
       : this.truncateText(coupon.description || '', 80);
 
     const expiryDate = (isTelegramCaptured || !coupon.valid_until)
       ? ''
-      : new Date(coupon.valid_until).toLocaleDateString('pt-BR', { 
-          day: '2-digit', 
-          month: '2-digit', 
-          year: 'numeric' 
-        });
+      : new Date(coupon.valid_until).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
 
     // Calcular posições (ajustado para melhor layout)
     const padding = 60;
@@ -311,7 +320,7 @@ class ImageGenerator {
     if (!hex) return `rgba(0, 0, 0, ${alpha})`;
     const cleanHex = hex.startsWith('#') ? hex.slice(1) : hex;
     if (cleanHex.length !== 6) return `rgba(0, 0, 0, ${alpha})`;
-    
+
     const r = parseInt(cleanHex.slice(0, 2), 16);
     const g = parseInt(cleanHex.slice(2, 4), 16);
     const b = parseInt(cleanHex.slice(4, 6), 16);
@@ -325,7 +334,7 @@ class ImageGenerator {
     if (!hex) return '#FFFFFF';
     const cleanHex = hex.startsWith('#') ? hex.slice(1) : hex;
     if (cleanHex.length !== 6) return hex;
-    
+
     const num = parseInt(cleanHex, 16);
     const r = Math.min(255, Math.floor((num >> 16) + (255 - (num >> 16)) * percent / 100));
     const g = Math.min(255, Math.floor(((num >> 8) & 0x00FF) + (255 - ((num >> 8) & 0x00FF)) * percent / 100));
@@ -365,7 +374,7 @@ class ImageGenerator {
   async combineProductWithPlatformLogo(productImageUrl, platform) {
     try {
       logger.info(`🖼️ Combinando imagem do produto com logo da plataforma: ${platform}`);
-      
+
       // Mapear plataforma para nome do arquivo da logo
       const platformLogos = {
         mercadolivre: 'mercadolivre-logo.png',
@@ -373,19 +382,19 @@ class ImageGenerator {
         aliexpress: 'aliexpress-logo.png',
         amazon: 'amazon-logo.png'
       };
-      
+
       const logoFileName = platformLogos[platform];
       if (!logoFileName) {
         logger.warn(`⚠️ Plataforma ${platform} não tem logo padrão, retornando apenas imagem do produto`);
         return productImageUrl; // Retornar URL original se não tiver logo
       }
-      
+
       // Buscar logo da plataforma
       const logoPath = path.join(__dirname, '../../assets/logos', logoFileName);
       let absoluteLogoPath = path.resolve(logoPath);
-      
+
       logger.info(`   Logo path: ${absoluteLogoPath}`);
-      
+
       // Verificar se logo existe
       let logoFound = false;
       try {
@@ -398,7 +407,7 @@ class ImageGenerator {
         logoFound = true;
       } catch (logoError) {
         logger.warn(`⚠️ Logo não encontrado em ${absoluteLogoPath}, tentando caminhos alternativos...`);
-        
+
         // Tentar caminhos alternativos
         const alternativePaths = [
           path.resolve(process.cwd(), 'assets/logos', logoFileName),
@@ -406,7 +415,7 @@ class ImageGenerator {
           path.resolve(__dirname, '../../../assets/logos', logoFileName),
           path.resolve(__dirname, '../../../../assets/logos', logoFileName)
         ];
-        
+
         for (const altPath of alternativePaths) {
           const resolvedAltPath = path.resolve(altPath);
           try {
@@ -422,13 +431,13 @@ class ImageGenerator {
             logger.debug(`   Caminho alternativo não encontrado: ${resolvedAltPath}`);
           }
         }
-        
+
         if (!logoFound) {
           logger.warn(`⚠️ Logo não encontrado em nenhum caminho, retornando apenas imagem do produto`);
           return productImageUrl; // Retornar URL original se logo não for encontrado
         }
       }
-      
+
       // Baixar imagem do produto
       logger.info(`   Baixando imagem do produto: ${productImageUrl.substring(0, 100)}...`);
       const productImageResponse = await axios.get(productImageUrl, {
@@ -436,37 +445,37 @@ class ImageGenerator {
         timeout: 10000
       });
       const productImageBuffer = Buffer.from(productImageResponse.data);
-      
+
       // Carregar imagens com sharp
       const productImage = sharp(productImageBuffer);
       const logoImage = sharp(absoluteLogoPath);
-      
+
       // Obter metadados
       const productMetadata = await productImage.metadata();
       const logoMetadata = await logoImage.metadata();
-      
+
       logger.info(`   Produto: ${productMetadata.width}x${productMetadata.height}`);
       logger.info(`   Logo: ${logoMetadata.width}x${logoMetadata.height}`);
-      
+
       // Redimensionar logo para 15% da largura do produto (máximo 200px)
       const logoMaxWidth = Math.min(productMetadata.width * 0.15, 200);
       const logoAspectRatio = logoMetadata.width / logoMetadata.height;
       const logoNewHeight = logoMaxWidth / logoAspectRatio;
-      
+
       const resizedLogo = await logoImage
         .resize(Math.round(logoMaxWidth), Math.round(logoNewHeight), {
           fit: 'inside',
           withoutEnlargement: true
         })
         .toBuffer();
-      
+
       logger.info(`   Logo redimensionado: ${Math.round(logoMaxWidth)}x${Math.round(logoNewHeight)}`);
-      
+
       // Combinar imagens: logo no canto superior direito
       const padding = 20; // Padding do logo em relação às bordas
       const logoX = productMetadata.width - Math.round(logoMaxWidth) - padding;
       const logoY = padding;
-      
+
       const combinedImage = await productImage
         .composite([{
           input: resizedLogo,
@@ -475,17 +484,17 @@ class ImageGenerator {
         }])
         .png({ quality: 90 })
         .toBuffer();
-      
+
       // Salvar imagem combinada temporariamente
       const filename = `product_${Date.now()}_${platform}.png`;
       const filepath = path.join(this.tempDir, filename);
       await fs.writeFile(filepath, combinedImage);
-      
+
       logger.info(`   ✅ Imagem combinada salva: ${filepath}`);
       logger.info(`   ✅ Tamanho final: ${combinedImage.length} bytes`);
-      
+
       return filepath;
-      
+
     } catch (error) {
       logger.error(`❌ Erro ao combinar imagem com logo: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
