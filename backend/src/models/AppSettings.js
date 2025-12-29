@@ -16,18 +16,24 @@ class AppSettings {
             .from('app_settings')
             .select('*')
             .eq('id', '00000000-0000-0000-0000-000000000001')
-            .single();
+            .limit(1)
+            .maybeSingle();
         },
         { maxRetries: 3, initialDelay: 1000 }
       );
-      
+
       let { data, error } = result;
+
+      // Se não encontrar dados (data é null) e não houver erro, forçar criação
+      if (!data && !error) {
+        return await this.create();
+      }
 
       // Se der erro de coluna não encontrada, tentar buscar sem as novas colunas
       if (error && error.code === '42703') {
         logger.warn('⚠️ Colunas de template_mode não existem ainda. Buscando sem essas colunas...');
         logger.warn(`   Erro: ${error.message}`);
-        
+
         // Buscar todas as colunas exceto template_mode
         // Usar uma query mais específica que não inclua as novas colunas
         // Usar retry automático
@@ -67,20 +73,21 @@ class AppSettings {
                 updated_at
               `)
               .eq('id', '00000000-0000-0000-0000-000000000001')
-              .single();
+              .limit(1)
+              .maybeSingle();
           },
           { maxRetries: 3, initialDelay: 1000 }
         );
-        
+
         const { data: basicData, error: basicError } = basicResult;
-        
+
         if (basicError) {
           if (basicError.code === 'PGRST116') {
             return await this.create();
           }
           throw basicError;
         }
-        
+
         if (basicData) {
           // Adicionar valores padrão para template_mode
           data = {
@@ -145,7 +152,7 @@ class AppSettings {
           .from('app_settings')
           .select('template_mode_promotion')
           .limit(0);
-        
+
         // Se não deu erro, as colunas existem
         insertData.template_mode_promotion = 'custom';
         insertData.template_mode_promotion_coupon = 'custom';
@@ -163,13 +170,13 @@ class AppSettings {
         .single();
 
       if (error) throw error;
-      
+
       // Garantir valores padrão mesmo após criação
       if (!data.template_mode_promotion) data.template_mode_promotion = 'custom';
       if (!data.template_mode_promotion_coupon) data.template_mode_promotion_coupon = 'custom';
       if (!data.template_mode_coupon) data.template_mode_coupon = 'custom';
       if (!data.template_mode_expired_coupon) data.template_mode_expired_coupon = 'custom';
-      
+
       return data;
     } catch (error) {
       logger.error(`Erro ao criar app_settings: ${error.message}`);
@@ -222,13 +229,13 @@ class AppSettings {
       logger.error(`❌ Erro ao atualizar app_settings: ${error.message}`);
       throw error;
     }
-    
+
     // Garantir que campos de template_mode existam após atualização
     if (!data.template_mode_promotion) data.template_mode_promotion = 'custom';
     if (!data.template_mode_promotion_coupon) data.template_mode_promotion_coupon = 'custom';
     if (!data.template_mode_coupon) data.template_mode_coupon = 'custom';
     if (!data.template_mode_expired_coupon) data.template_mode_expired_coupon = 'custom';
-    
+
     logger.info(`✅ app_settings atualizado com sucesso`);
     return data;
   }
@@ -312,8 +319,8 @@ class AppSettings {
     return {
       apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY,
       model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct',
-      enabled: settings.openrouter_enabled !== undefined 
-        ? settings.openrouter_enabled 
+      enabled: settings.openrouter_enabled !== undefined
+        ? settings.openrouter_enabled
         : (process.env.OPENROUTER_ENABLED === 'true' || false)
     };
   }
