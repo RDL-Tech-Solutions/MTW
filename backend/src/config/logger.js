@@ -35,21 +35,34 @@ const format = winston.format.combine(
 );
 
 // Definir transports
+
 const transports = [
   // Console
   new winston.transports.Console(),
-  
-  // Arquivo de erro
-  new winston.transports.File({
-    filename: path.join(__dirname, '../../logs/error.log'),
-    level: 'error',
-  }),
-  
-  // Arquivo geral
-  new winston.transports.File({
-    filename: path.join(__dirname, '../../logs/app.log'),
-  }),
 ];
+
+// Adicionar transports de arquivo apenas se não estiver em ambiente serverless (Lambda/Vercel)
+// O caminho /var/task padrão do AWS Lambda geralmente é somente leitura
+const isServerless = __dirname.includes('/var/task') || process.env.VERCEL;
+
+if (!isServerless) {
+  try {
+    transports.push(
+      // Arquivo de erro
+      new winston.transports.File({
+        filename: path.join(__dirname, '../../logs/error.log'),
+        level: 'error',
+      }),
+
+      // Arquivo geral
+      new winston.transports.File({
+        filename: path.join(__dirname, '../../logs/app.log'),
+      })
+    );
+  } catch (error) {
+    console.warn('⚠️ Não foi possível configurar logs em arquivo (provavelmente ambiente readonly). Usando apenas Console.', error.message);
+  }
+}
 
 // Criar logger
 const logger = winston.createLogger({
