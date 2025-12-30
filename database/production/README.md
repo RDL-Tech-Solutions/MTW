@@ -15,6 +15,7 @@ Arquivo: `00_reset.sql`
 ### 2. Schema Principal (Obrigatório)
 Arquivo: `01_schema.sql`
 - Cria todas as tabelas, índices, funções e dados iniciais.
+- Inclui: users, products, coupons, categories, bot_config, sync_config, sync_logs, etc.
 - É seguro rodar múltiplas vezes (usa `IF NOT EXISTS`).
 
 ### 3. Storage (Opcional)
@@ -34,3 +35,15 @@ Arquivo: `03_templates.sql`
 - Após rodar o `01_schema.sql`, o usuário admin padrão será:
   - **Email:** `admin@mtwpromo.com`
   - **Senha:** `admin123` (Altere imediatamente após o login)
+
+## 📁 Estrutura
+```
+database/
+├── production/     ← USE PARA PRODUÇÃO
+│   ├── 00_reset.sql
+│   ├── 01_schema.sql
+│   ├── 02_storage.sql
+│   ├── 03_templates.sql
+│   └── README.md
+└── archive/        ← Histórico (não usar)
+```
