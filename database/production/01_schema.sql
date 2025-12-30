@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     aliexpress_app_key VARCHAR(255),
     aliexpress_app_secret TEXT,
     aliexpress_tracking_id VARCHAR(255),
+    aliexpress_product_origin VARCHAR(20) DEFAULT 'both' CHECK (aliexpress_product_origin IN ('portal', 'local', 'both')),
     
     -- OpenRouter / AI
     openrouter_api_key VARCHAR(255),
@@ -103,6 +104,7 @@ CREATE TABLE IF NOT EXISTS users (
   
   -- Preferences
   theme VARCHAR(20) DEFAULT 'system' CHECK (theme IN ('light', 'dark', 'system')),
+  dark_mode BOOLEAN DEFAULT FALSE,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -201,6 +203,10 @@ CREATE TABLE IF NOT EXISTS bot_channels (
   schedule_end TIME,
   min_offer_score DECIMAL(5,2) DEFAULT 0.0,
   avoid_duplicates_hours INTEGER DEFAULT 24,
+  max_notifications_per_day INTEGER DEFAULT 0,
+  content_filter_keywords TEXT,
+  exclude_keywords TEXT,
+  min_discount_percentage_filter INTEGER DEFAULT 0,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -357,6 +363,11 @@ CREATE INDEX IF NOT EXISTS idx_coupons_origem ON coupons(origem);
 CREATE INDEX IF NOT EXISTS idx_coupons_message_hash ON coupons(message_hash);
 CREATE INDEX IF NOT EXISTS idx_coupons_confidence_score ON coupons(confidence_score);
 
+-- Comentários em colunas de cupons
+COMMENT ON COLUMN coupons.is_out_of_stock IS 'Indica se os produtos vinculados ao cupom estão esgotados';
+COMMENT ON COLUMN coupons.auto_captured IS 'Indica se o cupom foi capturado automaticamente';
+COMMENT ON COLUMN coupons.verification_status IS 'Status da verificação do cupom';
+
 -- =====================================================
 -- 7. PRODUTOS (CORE)
 -- =====================================================
@@ -436,6 +447,10 @@ CREATE TABLE IF NOT EXISTS sync_config (
   categories JSONB DEFAULT '[]'::jsonb,
   cron_interval_minutes INTEGER DEFAULT 60,
   auto_publish BOOLEAN DEFAULT FALSE,
+  shopee_auto_publish BOOLEAN DEFAULT FALSE,
+  mercadolivre_auto_publish BOOLEAN DEFAULT FALSE,
+  amazon_auto_publish BOOLEAN DEFAULT FALSE,
+  aliexpress_auto_publish BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -444,6 +459,12 @@ CREATE TABLE IF NOT EXISTS sync_config (
 INSERT INTO sync_config (id) 
 SELECT '00000000-0000-0000-0000-000000000002' 
 WHERE NOT EXISTS (SELECT 1 FROM sync_config LIMIT 1);
+
+-- Comentários nas colunas de auto-publicação (Migration 044)
+COMMENT ON COLUMN sync_config.shopee_auto_publish IS 'Publicar automaticamente produtos da Shopee após análise estratégica da IA';
+COMMENT ON COLUMN sync_config.mercadolivre_auto_publish IS 'Publicar automaticamente produtos do Mercado Livre após análise estratégica da IA';
+COMMENT ON COLUMN sync_config.amazon_auto_publish IS 'Publicar automaticamente produtos da Amazon após análise estratégica da IA';
+COMMENT ON COLUMN sync_config.aliexpress_auto_publish IS 'Publicar automaticamente produtos do AliExpress após análise estratégica da IA';
 
 CREATE TABLE IF NOT EXISTS sync_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -471,10 +492,17 @@ CREATE TABLE IF NOT EXISTS notification_logs (
   channel_id UUID REFERENCES bot_channels(id) ON DELETE SET NULL,
   payload JSONB NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  success BOOLEAN DEFAULT TRUE,
+  channel_name VARCHAR(255),
+  message_id VARCHAR(255),
   error_message TEXT,
   sent_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_notification_logs_status ON notification_logs(status);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_created_at ON notification_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_channel ON notification_logs(channel_id);
 
 CREATE TABLE IF NOT EXISTS bot_send_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -484,6 +512,10 @@ CREATE TABLE IF NOT EXISTS bot_send_logs (
   sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(channel_id, entity_type, entity_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_bot_send_logs_channel ON bot_send_logs(channel_id);
+CREATE INDEX IF NOT EXISTS idx_bot_send_logs_sent_at ON bot_send_logs(sent_at);
+CREATE INDEX IF NOT EXISTS idx_bot_send_logs_entity ON bot_send_logs(entity_type, entity_id);
 
 CREATE TABLE IF NOT EXISTS ai_decision_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -586,6 +618,44 @@ BEGIN
 END $$;
 
 -- =====================================================
+-- 10.1 FUNÇÕES DE MANUTENÇÃO
+-- =====================================================
+
+-- Função para limpar logs antigos de envio dos bots (manter 30 dias)
+CREATE OR REPLACE FUNCTION cleanup_old_bot_send_logs()
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM bot_send_logs
+  WHERE sent_at < NOW() - INTERVAL '30 days';
+  
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Função para marcar cupons expirados automaticamente
+CREATE OR REPLACE FUNCTION mark_expired_coupons()
+RETURNS INTEGER AS $$
+DECLARE
+  updated_count INTEGER;
+BEGIN
+  UPDATE coupons
+  SET 
+    is_active = FALSE,
+    verification_status = 'expired',
+    updated_at = NOW()
+  WHERE is_active = TRUE
+    AND valid_until < NOW()
+    AND verification_status != 'expired';
+  
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
 -- 11. VIEWS
 -- =====================================================
 -- View de Cupons Ativos
@@ -623,6 +693,11 @@ SELECT
 FROM products p
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN coupons cp ON p.coupon_id = cp.id;
+
+-- Permissões para views
+GRANT SELECT ON active_coupons TO anon, authenticated, service_role;
+GRANT SELECT ON product_stats TO anon, authenticated, service_role;
+GRANT SELECT ON products_full TO anon, authenticated, service_role;
 
 -- =====================================================
 -- 12. DADOS INICIAIS (SEEDS)

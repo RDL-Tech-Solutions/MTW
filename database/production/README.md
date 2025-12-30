@@ -20,8 +20,8 @@ Arquivo: `01_schema.sql`
 
 ### 3. Storage (Opcional)
 Arquivo: `02_storage.sql`
-- Cria os buckets de armazenamento de imagens (`products`, `temp`).
-- Configura permissões de acesso (quem pode ver e fazer upload).
+- Cria os buckets de armazenamento de imagens (`products`, `temp`) e avatares (`avatars`).
+- Configura permissões de acesso e segurança por usuário.
 
 ### 4. Templates de Mensagem (Recomendado)
 Arquivo: `03_templates.sql`

@@ -109,19 +109,21 @@ DROP POLICY IF EXISTS "User Delete Own Avatar" ON storage.objects;
 CREATE POLICY "Public Access Avatars" ON storage.objects 
 FOR SELECT USING (bucket_id = 'avatars');
 
--- Usuário pode fazer upload do próprio avatar
-CREATE POLICY "User Upload Own Avatar" ON storage.objects 
-FOR INSERT WITH CHECK (
-    bucket_id = 'avatars' 
-    AND auth.role() = 'authenticated'
-);
+ -- Usuário pode fazer upload do próprio avatar
+ CREATE POLICY "User Upload Own Avatar" ON storage.objects 
+ FOR INSERT WITH CHECK (
+     bucket_id = 'avatars' 
+     AND auth.role() = 'authenticated'
+     AND (storage.foldername(name))[1] = auth.uid()::text
+ );
 
--- Usuário pode deletar o próprio avatar
-CREATE POLICY "User Delete Own Avatar" ON storage.objects 
-FOR DELETE USING (
-    bucket_id = 'avatars' 
-    AND auth.role() = 'authenticated'
-);
+ -- Usuário pode deletar o próprio avatar
+ CREATE POLICY "User Delete Own Avatar" ON storage.objects 
+ FOR DELETE USING (
+     bucket_id = 'avatars' 
+     AND auth.role() = 'authenticated'
+     AND (storage.foldername(name))[1] = auth.uid()::text
+ );
 
 -- =====================================================
 -- FINALIZAÇÃO
