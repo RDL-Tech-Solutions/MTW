@@ -461,10 +461,11 @@ SELECT '00000000-0000-0000-0000-000000000002'
 WHERE NOT EXISTS (SELECT 1 FROM sync_config LIMIT 1);
 
 -- Comentários nas colunas de auto-publicação (Migration 044)
-COMMENT ON COLUMN sync_config.shopee_auto_publish IS 'Publicar automaticamente produtos da Shopee após análise estratégica da IA';
-COMMENT ON COLUMN sync_config.mercadolivre_auto_publish IS 'Publicar automaticamente produtos do Mercado Livre após análise estratégica da IA';
-COMMENT ON COLUMN sync_config.amazon_auto_publish IS 'Publicar automaticamente produtos da Amazon após análise estratégica da IA';
-COMMENT ON COLUMN sync_config.aliexpress_auto_publish IS 'Publicar automaticamente produtos do AliExpress após análise estratégica da IA';
+COMMENT ON COLUMN sync_config.auto_publish IS 'Habilita publicação automática (precisa de aprovação da IA se ligada)';
+COMMENT ON COLUMN sync_config.shopee_auto_publish IS 'Habilita publicação automática específica para Shopee';
+COMMENT ON COLUMN sync_config.mercadolivre_auto_publish IS 'Habilita publicação automática específica para Mercado Livre';
+COMMENT ON COLUMN sync_config.amazon_auto_publish IS 'Habilita publicação automática específica para Amazon';
+COMMENT ON COLUMN sync_config.aliexpress_auto_publish IS 'Habilita publicação automática específica para AliExpress';
 
 CREATE TABLE IF NOT EXISTS sync_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

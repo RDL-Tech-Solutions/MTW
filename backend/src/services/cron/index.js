@@ -4,7 +4,6 @@ import { updatePrices } from './updatePrices.js';
 import { checkExpiredCoupons } from './checkExpiredCoupons.js';
 import { sendNotifications } from './sendNotifications.js';
 import { cleanupOldData } from './cleanupOldData.js';
-import { syncProducts } from './syncProducts.js';
 import { monitorExpiredCoupons } from './monitorExpiredCoupons.js';
 import autoSyncCron from '../../cron/autoSyncCron.js';
 import couponCaptureCron from '../../cron/couponCaptureCron.js';
@@ -12,11 +11,10 @@ import couponCaptureCron from '../../cron/couponCaptureCron.js';
 export const startCronJobs = () => {
   logger.info('🕐 Iniciando cron jobs...');
 
-  // Atualizar preços e sincronizar produtos - a cada 15 minutos
+  // Atualizar preços - a cada 15 minutos
   cron.schedule('*/15 * * * *', async () => {
-    logger.info('⏰ Executando: Atualização de preços e sincronização');
+    logger.info('⏰ Executando: Atualização de preços');
     try {
-      await syncProducts();
       await updatePrices();
     } catch (error) {
       logger.error(`Erro no cron de atualização: ${error.message}`);
