@@ -10,6 +10,8 @@ DROP TABLE IF EXISTS "bot_send_logs" CASCADE;
 DROP TABLE IF EXISTS "ai_decision_logs" CASCADE;
 DROP TABLE IF EXISTS "click_tracking" CASCADE;
 DROP TABLE IF EXISTS "coupon_sync_logs" CASCADE;
+DROP TABLE IF EXISTS "notification_preferences" CASCADE;
+DROP TABLE IF EXISTS "telegram_collector_config" CASCADE;
 DROP TABLE IF EXISTS "price_history" CASCADE;
 DROP TABLE IF EXISTS "product_duplicates" CASCADE;
 DROP TABLE IF EXISTS "products" CASCADE;

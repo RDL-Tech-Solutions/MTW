@@ -102,7 +102,6 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   
   -- Preferences
-  notification_preferences JSONB DEFAULT '{"push": true, "email": false}'::jsonb,
   theme VARCHAR(20) DEFAULT 'system' CHECK (theme IN ('light', 'dark', 'system')),
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -112,6 +111,36 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider, provider_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
+-- Tabelas de Preferências do Usuário
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  
+  -- Preferências gerais
+  push_enabled BOOLEAN DEFAULT TRUE,
+  email_enabled BOOLEAN DEFAULT FALSE,
+  
+  -- Preferências por categoria/palavra/produto
+  category_preferences JSONB DEFAULT '[]'::jsonb,
+  keyword_preferences JSONB DEFAULT '[]'::jsonb,
+  product_name_preferences JSONB DEFAULT '[]'::jsonb,
+  
+  -- Filtros de tela inicial
+  home_filters JSONB DEFAULT '{
+    "platforms": [],
+    "categories": [],
+    "min_discount": 0,
+    "max_price": null,
+    "only_with_coupon": false
+  }'::jsonb,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_preferences_user_id ON notification_preferences(user_id);
+
 -- =====================================================
 -- 3. CATEGORIAS DE PRODUTOS
 -- =====================================================
@@ -120,6 +149,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name VARCHAR(100) NOT NULL,
   slug VARCHAR(100) UNIQUE NOT NULL,
   icon VARCHAR(50) NOT NULL,
+  description TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -218,6 +248,27 @@ CREATE TABLE IF NOT EXISTS telegram_channels (
 CREATE INDEX IF NOT EXISTS idx_telegram_channels_username ON telegram_channels(username);
 CREATE INDEX IF NOT EXISTS idx_telegram_channels_channel_id ON telegram_channels(channel_id);
 CREATE INDEX IF NOT EXISTS idx_telegram_channels_active ON telegram_channels(is_active);
+
+-- Configurações de Coletor
+CREATE TABLE IF NOT EXISTS telegram_collector_config (
+    id UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
+    api_id VARCHAR(50),
+    api_hash VARCHAR(100),
+    phone VARCHAR(30),
+    password VARCHAR(100),
+    session_path VARCHAR(255) DEFAULT 'telegram_session.session',
+    is_authenticated BOOLEAN DEFAULT FALSE,
+    listener_status VARCHAR(20) DEFAULT 'stopped' CHECK (listener_status IN ('running', 'stopped', 'error')),
+    listener_pid INTEGER,
+    last_error TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT single_collector_config CHECK (id = '00000000-0000-0000-0000-000000000001')
+);
+
+INSERT INTO telegram_collector_config (id)
+VALUES ('00000000-0000-0000-0000-000000000001')
+ON CONFLICT (id) DO NOTHING;
 
 -- =====================================================
 -- 6. CUPONS E CONFIGURAÇÕES
@@ -530,11 +581,34 @@ BEGIN
   CREATE TRIGGER update_coupon_settings_updated_at BEFORE UPDATE ON coupon_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
   CREATE TRIGGER update_sync_config_updated_at BEFORE UPDATE ON sync_config FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
   CREATE TRIGGER update_telegram_channels_updated_at BEFORE UPDATE ON telegram_channels FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  CREATE TRIGGER update_telegram_collector_config_updated_at BEFORE UPDATE ON telegram_collector_config FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  CREATE TRIGGER update_notification_preferences_updated_at BEFORE UPDATE ON notification_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 END $$;
 
 -- =====================================================
 -- 11. VIEWS
 -- =====================================================
+-- View de Cupons Ativos
+CREATE OR REPLACE VIEW active_coupons AS
+SELECT *
+FROM coupons
+WHERE is_active = TRUE
+  AND verification_status = 'active'
+  AND (valid_until IS NULL OR valid_until > NOW())
+  AND (max_uses IS NULL OR current_uses < max_uses);
+
+-- View de Estatísticas de Produtos (Dashboard)
+CREATE OR REPLACE VIEW product_stats AS
+SELECT 
+    platform,
+    status,
+    COUNT(*) as total_count,
+    COUNT(*) FILTER (WHERE is_active = TRUE) as active_count,
+    ROUND(AVG(discount_percentage), 2) as avg_discount,
+    MAX(created_at) as last_added_at
+FROM products
+GROUP BY platform, status;
+
 CREATE OR REPLACE VIEW products_full AS
 SELECT 
     p.*,
@@ -555,18 +629,23 @@ LEFT JOIN coupons cp ON p.coupon_id = cp.id;
 -- =====================================================
 
 -- Categorias
-INSERT INTO categories (name, slug, icon) VALUES
-  ('Eletrônicos', 'eletronicos', 'smartphone'),
-  ('Games', 'games', 'gamepad'),
-  ('Casa', 'casa', 'home'),
-  ('Acessórios', 'acessorios', 'watch'),
-  ('Moda', 'moda', 'shirt'),
-  ('Informática', 'informatica', 'laptop'),
-  ('Beleza', 'beleza', 'sparkles'),
-  ('Esportes', 'esportes', 'dumbbell'),
-  ('Livros', 'livros', 'book'),
-  ('Brinquedos', 'brinquedos', 'toy-brick')
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO categories (name, slug, icon, description, is_active) VALUES
+  ('Acessórios', 'acessorios', '⌚', 'Acessórios diversos', true),
+  ('Beleza', 'beleza', '💄', 'Produtos de beleza e cuidados pessoais', true),
+  ('Brinquedos', 'brinquedos', '🧸', 'Brinquedos e jogos infantis', true),
+  ('Casa', 'casa', '🏠', 'Produtos para casa e decoração', true),
+  ('Eletrônicos', 'eletronicos', '📱', 'Eletrônicos e gadgets', true),
+  ('Esporte', 'esporte', '⚽', 'Artigos esportivos', true),
+  ('Games', 'games', '🎮', 'Jogos e consoles', true),
+  ('Informática', 'informatica', '💻', 'Computadores e periféricos', true),
+  ('Livros', 'livros', '📚', 'Livros e materiais de leitura', true),
+  ('Moda', 'moda', '👕', 'Roupas e acessórios de moda', true)
+ON CONFLICT (slug) DO UPDATE
+SET 
+  name = EXCLUDED.name,
+  icon = EXCLUDED.icon,
+  description = EXCLUDED.description,
+  is_active = EXCLUDED.is_active;
 
 -- Admin User (Senha: admin123 - $2b$10$hash)
 INSERT INTO users (name, email, password, role, is_vip) VALUES
@@ -582,12 +661,21 @@ ALTER TABLE coupons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bot_channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_collector_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sync_config ENABLE ROW LEVEL SECURITY;
 
 -- Políticas básicas
 DROP POLICY IF EXISTS "Public Read Active Products" ON products;
 DROP POLICY IF EXISTS "Admin Full Access" ON products;
 CREATE POLICY "Public Read Active Products" ON products FOR SELECT USING (is_active = TRUE);
 CREATE POLICY "Admin Full Access" ON products FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin'));
+
+-- Políticas para outras tabelas (Admin Only)
+CREATE POLICY "Admin Full Access Sync" ON sync_config FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin'));
+CREATE POLICY "Admin Full Access Telegram Config" ON telegram_collector_config FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin'));
+CREATE POLICY "User Manage Own Preferences" ON notification_preferences FOR ALL USING (user_id::text = auth.uid()::text);
 
 -- Finalização
 SELECT 'Schema V3 Completo criado com sucesso!' as status;

@@ -10,7 +10,7 @@ ADD COLUMN IF NOT EXISTS only_coupons BOOLEAN DEFAULT FALSE;
 
 -- Comentários
 COMMENT ON COLUMN bot_channels.only_coupons IS 'Se TRUE, o canal só recebe notificações de cupons (coupon_new, coupon_expired), nunca produtos (promotion_new)';
-COMMENT ON COLUMN bot_channels.category_filter IS 'Array de category_ids permitidos. Se vazio, aceita todas as categorias. Máximo 2 categorias recomendado.';
+COMMENT ON COLUMN bot_channels.category_filter IS 'Array de category_ids permitidos. Se vazio, aceita todas as categorias. Máximo 10 categorias recomendado.';
 
 -- Índice para melhorar performance de queries
 CREATE INDEX IF NOT EXISTS idx_bot_channels_only_coupons ON bot_channels(only_coupons) WHERE only_coupons = TRUE;
