@@ -2,7 +2,7 @@ import Product from '../models/Product.js';
 import ClickTracking from '../models/ClickTracking.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
-import { cacheGet, cacheSet, cacheDel, cacheDelByPattern } from '../config/redis.js';
+
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
@@ -12,16 +12,8 @@ class ProductController {
   // Listar produtos
   static async list(req, res, next) {
     try {
-      const cacheKey = `products:${JSON.stringify(req.query)}`;
-      const cached = await cacheGet(cacheKey);
-
-      if (cached) {
-        return res.json(successResponse(cached));
-      }
-
+      // CACHE REMOVIDO: Direto ao banco
       const result = await Product.findAll(req.query);
-      await cacheSet(cacheKey, result, CACHE_TTL.PRODUCTS);
-
       res.json(successResponse(result));
     } catch (error) {
       next(error);
@@ -51,8 +43,6 @@ class ProductController {
     try {
       // Criar produto (status padrão é 'pending' no modelo)
       const product = await Product.create(req.body);
-      await cacheDelByPattern('products:*');
-      await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
       logger.info(`Produto criado: ${product.id}`);
 
@@ -86,8 +76,6 @@ class ProductController {
     try {
       const { id } = req.params;
       const product = await Product.update(id, req.body);
-      await cacheDelByPattern('products:*');
-      await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
       logger.info(`Produto atualizado: ${id}`);
       res.json(successResponse(product, 'Produto atualizado com sucesso'));
@@ -101,8 +89,6 @@ class ProductController {
     try {
       const { id } = req.params;
       await Product.delete(id);
-      await cacheDelByPattern('products:*');
-      await cacheDelByPattern('categories:*'); // Limpar cache de categorias também
 
       logger.info(`Produto deletado: ${id}`);
       res.json(successResponse(null, 'Produto deletado com sucesso'));
@@ -123,7 +109,6 @@ class ProductController {
       }
 
       await Product.deleteMany(ids);
-      await cacheDelByPattern('products:*');
 
       logger.info(`Produtos deletados em lote: ${ids.length} itens`);
       res.json(successResponse(null, `${ids.length} produtos deletados com sucesso`));
@@ -422,9 +407,6 @@ class ProductController {
       // Atualizar status para 'published'
       await Product.update(id, { status: 'published' });
 
-      // Limpar cache
-      await cacheDelByPattern('products:*');
-
       logger.info(`✅ Produto aprovado e publicado: ${fullProduct.name}${coupon_id ? ` com cupom (preço final: R$ ${finalPrice.toFixed(2)})` : ''}`);
 
       res.json(successResponse({
@@ -463,9 +445,6 @@ class ProductController {
         status: 'rejected',
         // Opcional: salvar motivo da rejeição se houver campo para isso
       });
-
-      // Limpar cache
-      await cacheDelByPattern('products:*');
 
       logger.info(`❌ Produto rejeitado: ${product.name}${reason ? ` - Motivo: ${reason}` : ''}`);
 

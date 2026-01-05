@@ -1,7 +1,7 @@
 import linkAnalyzer from '../services/linkAnalyzer.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
-import { cacheGet, cacheSet } from '../config/redis.js';
+
 import { CACHE_TTL } from '../config/constants.js';
 
 class LinkAnalyzerController {
@@ -38,7 +38,7 @@ class LinkAnalyzerController {
       if (cached) {
         // Validar cache antes de usar (não usar cache com dados vazios ou lixo conhecido)
         // Validar cache - rejeitar dados inválidos ou parciais
-        const isGarbage = 
+        const isGarbage =
           cached.name === 'shopee__settings' ||
           (cached.name && cached.name.includes('shopee__')) ||
           (cached.name === 'Produto Shopee' && cached.currentPrice === 0) || // Nome padrão sem dados reais
@@ -46,11 +46,11 @@ class LinkAnalyzerController {
           (cached.warning && !cached.currentPrice); // Tem warning mas não tem preço
 
         // Dados válidos devem ter nome real (não padrão) E preço válido
-        const hasValidData = !isGarbage && 
-          cached.name && 
-          cached.name.trim().length > 5 && 
+        const hasValidData = !isGarbage &&
+          cached.name &&
+          cached.name.trim().length > 5 &&
           cached.name !== 'Produto Shopee' && // Não aceitar nome padrão
-          cached.currentPrice && 
+          cached.currentPrice &&
           cached.currentPrice > 0; // Deve ter preço válido
 
         if (hasValidData) {

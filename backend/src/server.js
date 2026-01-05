@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { testConnection } from './config/database.js';
-import { connectRedis } from './config/redis.js';
+
 import logger from './config/logger.js';
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -146,12 +146,7 @@ const startServer = async () => {
       throw new Error('Falha ao conectar com Supabase');
     }
 
-    // Conectar ao Redis
-    logger.info('🔄 Conectando ao Redis...');
-    const redisConnected = await connectRedis();
-    if (!redisConnected) {
-      logger.warn('⚠️  Redis não conectado. Cache desabilitado.');
-    }
+
 
     // Iniciar cron jobs (apenas se não for Vercel, pois Vercel usa cron externo)
     if (process.env.ENABLE_CRON_JOBS === 'true' && !process.env.VERCEL) {

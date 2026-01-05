@@ -1,7 +1,7 @@
 import Coupon from '../models/Coupon.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
-import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
+
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
@@ -61,7 +61,7 @@ class CouponController {
     try {
       const { code } = req.params;
       const { platform } = req.query; // Plataforma opcional para buscar via API
-      
+
       if (!code || code.trim() === '') {
         return res.status(400).json(
           errorResponse('Código do cupom é obrigatório', ERROR_CODES.VALIDATION_ERROR)
@@ -76,7 +76,7 @@ class CouponController {
         try {
           logger.debug(`🔍 Buscando cupom ${upperCode} via API da plataforma ${platform}`);
           const apiCoupon = await couponApiService.getCouponFromPlatform(upperCode, platform);
-          
+
           if (apiCoupon) {
             logger.info(`✅ Cupom ${upperCode} encontrado via API da plataforma ${platform}`);
             return res.json(successResponse(apiCoupon));
@@ -447,9 +447,9 @@ class CouponController {
 
       if (format === 'csv') {
         // Converter para CSV
-        const headers = ['Código', 'Plataforma', 'Tipo Desconto', 'Valor Desconto', 'Compra Mínima', 
-                        'Limite Máximo', 'Válido De', 'Válido Até', 'Aplicabilidade', 'Status', 'Criado Em'];
-        
+        const headers = ['Código', 'Plataforma', 'Tipo Desconto', 'Valor Desconto', 'Compra Mínima',
+          'Limite Máximo', 'Válido De', 'Válido Até', 'Aplicabilidade', 'Status', 'Criado Em'];
+
         const csvRows = [
           headers.join(','),
           ...coupons.map(coupon => [

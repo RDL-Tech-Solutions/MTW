@@ -54,13 +54,11 @@
     "express-rate-limit": "^7.1.5",
     "form-data": "^4.0.5",
     "helmet": "^7.1.0",
-    "ioredis": "^5.8.2",
     "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
     "open": "^11.0.0",
-    "redis": "^4.6.11",
     "sharp": "^0.33.5",
     "telegram": "^2.26.22",
     "winston": "^3.11.0"

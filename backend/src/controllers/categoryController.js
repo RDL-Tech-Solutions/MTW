@@ -1,7 +1,7 @@
 import Category from '../models/Category.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
-import { cacheGet, cacheSet, cacheDel, cacheDelByPattern } from '../config/redis.js';
+
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
 
@@ -11,11 +11,11 @@ class CategoryController {
     try {
       // Limpar cache para garantir dados atualizados
       await cacheDel('categories:all');
-      
+
       logger.info('📊 Buscando categorias com contagem de produtos...');
       const categories = await Category.findAllWithCount();
       logger.info(`✅ ${categories.length} categorias encontradas`);
-      
+
       // Log das contagens para debug
       categories.forEach(cat => {
         logger.info(`   - ${cat.name} (ID: ${cat.id}): ${cat.product_count} produtos`);
