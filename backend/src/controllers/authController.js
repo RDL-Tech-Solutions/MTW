@@ -1,7 +1,7 @@
 import User from '../models/User.js';
-import { 
-  comparePassword, 
-  generateToken, 
+import {
+  comparePassword,
+  generateToken,
   generateRefreshToken,
   verifyToken,
   successResponse,
@@ -61,6 +61,14 @@ class AuthController {
         );
       }
 
+      // Log de debug para diagnóstico
+      logger.info(`[LOGIN DEBUG] Email: ${email}`);
+      logger.info(`[LOGIN DEBUG] Usuário encontrado: ${!!user}`);
+      if (user) {
+        logger.info(`[LOGIN DEBUG] Hash no banco: ${user.password_hash ? 'Presente' : 'Ausente'}`);
+        logger.info(`[LOGIN DEBUG] Senha (legado) no banco: ${user.password ? 'Presente' : 'Ausente'}`);
+      }
+
       // Verificar senha (tentar password_hash primeiro, depois password)
       const passwordToCompare = user.password_hash || user.password;
       if (!passwordToCompare) {
@@ -71,6 +79,8 @@ class AuthController {
       }
 
       const isValidPassword = await comparePassword(password, passwordToCompare);
+      logger.info(`[LOGIN DEBUG] Senha válida: ${isValidPassword}`);
+
       if (!isValidPassword) {
         logger.warn(`Tentativa de login falhou para: ${email}`);
         return res.status(401).json(
@@ -152,7 +162,7 @@ class AuthController {
   static async me(req, res, next) {
     try {
       const user = await User.findById(req.user.id);
-      
+
       if (!user) {
         return res.status(404).json(
           errorResponse(ERROR_MESSAGES.NOT_FOUND, ERROR_CODES.NOT_FOUND)
