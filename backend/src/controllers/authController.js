@@ -64,9 +64,16 @@ class AuthController {
       // Log de debug para diagnóstico
       logger.info(`[LOGIN DEBUG] Email: ${email}`);
       logger.info(`[LOGIN DEBUG] Usuário encontrado: ${!!user}`);
+
       if (user) {
-        logger.info(`[LOGIN DEBUG] Hash no banco: ${user.password_hash ? 'Presente' : 'Ausente'}`);
-        logger.info(`[LOGIN DEBUG] Senha (legado) no banco: ${user.password ? 'Presente' : 'Ausente'}`);
+        logger.info(`[LOGIN DEBUG] ID do Usuário: ${user.id}`);
+        logger.info(`[LOGIN DEBUG] Hash no banco: ${user.password_hash ? user.password_hash.substring(0, 15) + '...' : 'Ausente'}`);
+        // DEBUG EXTREMO: Logar senha recebida (tamanho e chars)
+        logger.info(`[LOGIN DEBUG] Senha recebida: "${password}" (Len: ${password.length})`);
+
+        // Teste de comparação manual
+        const isMatchNow = await comparePassword(password, user.password_hash || user.password);
+        logger.info(`[LOGIN DEBUG] Comparação direta (bcrypt): ${isMatchNow}`);
       }
 
       // Verificar senha (tentar password_hash primeiro, depois password)
