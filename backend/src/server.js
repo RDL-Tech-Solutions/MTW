@@ -37,7 +37,9 @@ const defaultOrigins = [
   'http://localhost:5174',
   'http://localhost:19006',
   'http://localhost:8081', // Expo Web
+  'http://localhost:8081', // Expo Web
   'http://localhost:3000',
+  'https://precocertooo.vercel.app', // Frontend Vercel
 ];
 
 // Se CORS_ORIGIN estiver definido, usar ele + adicionar localhost:8081 se não estiver presente
@@ -56,7 +58,7 @@ const corsOptions = {
     if (!origin) {
       return callback(null, true);
     }
-    
+
     // Verificar se origin está na lista
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -83,7 +85,7 @@ app.use(cors(corsOptions));
 // Handle preflight requests explicitamente (antes das rotas)
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
-  
+
   if (origin && allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -202,6 +204,9 @@ process.on('SIGINT', () => {
 });
 
 // Iniciar
-startServer();
+// Iniciar
+if (!process.env.VERCEL) {
+  startServer();
+}
 
 export default app;

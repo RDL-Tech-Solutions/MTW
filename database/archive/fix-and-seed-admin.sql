@@ -28,8 +28,8 @@ INSERT INTO users (
   updated_at
 ) VALUES (
   'admin@mtwpromo.com',
-  '$2b$10$rZ5YhkW8qN3xJ5xJ5xJ5xOeKqF5xJ5xJ5xJ5xJ5xJ5xJ5xJ5xJ5xu', -- para compatibilidade
-  '$2b$10$rZ5YhkW8qN3xJ5xJ5xJ5xOeKqF5xJ5xJ5xJ5xJ5xJ5xJ5xJ5xJ5xu', -- admin123
+  '$2a$10$39YioAKycwb9ZaSpwTWKmOceKd7iCpcxjP3.uG0XXu/EMcKW/W5/O', -- para compatibilidade
+  '$2a$10$39YioAKycwb9ZaSpwTWKmOceKd7iCpcxjP3.uG0XXu/EMcKW/W5/O', -- admin123
   'Administrador',
   'admin',
   true,
