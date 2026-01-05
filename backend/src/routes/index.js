@@ -14,6 +14,7 @@ import notificationPreferenceRoutes from './notificationPreferenceRoutes.js';
 import telegramChannelRoutes from './telegramChannelRoutes.js';
 import telegramCollectorRoutes from './telegramCollectorRoutes.js';
 import appSettingsRoutes from './appSettingsRoutes.js';
+import cronRoutes from './cronRoutes.js';
 
 const router = express.Router();
 
@@ -42,5 +43,6 @@ router.use('/notification-preferences', notificationPreferenceRoutes);
 router.use('/telegram-channels', telegramChannelRoutes);
 router.use('/telegram-collector', telegramCollectorRoutes);
 router.use('/settings', appSettingsRoutes);
+router.use('/cron', cronRoutes); // Rotas para Vercel Cron
 
 export default router;

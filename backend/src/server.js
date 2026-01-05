@@ -153,9 +153,9 @@ const startServer = async () => {
       logger.warn('⚠️  Redis não conectado. Cache desabilitado.');
     }
 
-    // Iniciar cron jobs
-    if (process.env.ENABLE_CRON_JOBS === 'true') {
-      logger.info('🔄 Iniciando cron jobs...');
+    // Iniciar cron jobs (apenas se não for Vercel, pois Vercel usa cron externo)
+    if (process.env.ENABLE_CRON_JOBS === 'true' && !process.env.VERCEL) {
+      logger.info('🔄 Iniciando cron jobs (Node-Cron)...');
       startCronJobs();
     }
 

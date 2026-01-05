@@ -41,9 +41,8 @@ const transports = [
   new winston.transports.Console(),
 ];
 
-// Adicionar transports de arquivo apenas se não estiver em ambiente serverless (Lambda/Vercel)
-// O caminho /var/task padrão do AWS Lambda geralmente é somente leitura
-const isServerless = __dirname.includes('/var/task') || process.env.VERCEL;
+// Adicionar transports de arquivo apenas se não estiver em ambiente serverless
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 if (!isServerless) {
   try {
