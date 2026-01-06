@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     aliexpress_app_key VARCHAR(255),
     aliexpress_app_secret TEXT,
     aliexpress_tracking_id VARCHAR(255),
-    aliexpress_product_origin VARCHAR(20) DEFAULT 'both' CHECK (aliexpress_product_origin IN ('portal', 'local', 'both')),
+    aliexpress_product_origin VARCHAR(20) DEFAULT 'both' CHECK (aliexpress_product_origin IN ('brazil', 'international', 'both')),
     
     -- OpenRouter / AI
     openrouter_api_key VARCHAR(255),
@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS bot_channels (
   identifier VARCHAR(255) NOT NULL,
   name VARCHAR(255),
   is_active BOOLEAN DEFAULT TRUE,
+  only_coupons BOOLEAN DEFAULT FALSE,
   
   -- Segmentação
   category_filter JSONB DEFAULT '[]'::jsonb,
@@ -216,6 +217,8 @@ CREATE TABLE IF NOT EXISTS bot_channels (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(platform, identifier)
 );
+
+CREATE INDEX IF NOT EXISTS idx_bot_channels_only_coupons ON bot_channels(only_coupons) WHERE only_coupons = TRUE;
 
 CREATE TABLE IF NOT EXISTS bot_message_templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -118,29 +118,29 @@ class PublishService {
   async notifyTelegramBot(product) {
     try {
       const message = await this.formatBotMessage(product, 'telegram');
-      
+
       // Log detalhado sobre a imagem
       logger.info(`📸 Verificando imagem do produto: ${product.name}`);
       logger.info(`   image_url: ${product.image_url || 'NÃO DEFINIDA'}`);
       logger.info(`   image_url type: ${typeof product.image_url}`);
       logger.info(`   image_url length: ${product.image_url?.length || 0}`);
-      
+
       // Se tiver imagem válida, enviar com foto
-      const hasValidImage = product.image_url && 
-          typeof product.image_url === 'string' &&
-          product.image_url.trim().length > 0 &&
-          (product.image_url.startsWith('http://') || product.image_url.startsWith('https://')) && 
-          !product.image_url.includes('placeholder') &&
-          !product.image_url.includes('data:image');
-      
+      const hasValidImage = product.image_url &&
+        typeof product.image_url === 'string' &&
+        product.image_url.trim().length > 0 &&
+        (product.image_url.startsWith('http://') || product.image_url.startsWith('https://')) &&
+        !product.image_url.includes('placeholder') &&
+        !product.image_url.includes('data:image');
+
       logger.info(`   Imagem válida: ${hasValidImage ? 'SIM' : 'NÃO'}`);
       if (!hasValidImage) {
-        logger.warn(`   Motivo: ${!product.image_url ? 'image_url não existe' : 
-                              !product.image_url.startsWith('http') ? 'não começa com http' :
-                              product.image_url.includes('placeholder') ? 'contém placeholder' :
-                              product.image_url.includes('data:image') ? 'é data URI' : 'desconhecido'}`);
+        logger.warn(`   Motivo: ${!product.image_url ? 'image_url não existe' :
+          !product.image_url.startsWith('http') ? 'não começa com http' :
+            product.image_url.includes('placeholder') ? 'contém placeholder' :
+              product.image_url.includes('data:image') ? 'é data URI' : 'desconhecido'}`);
       }
-      
+
       if (hasValidImage) {
         try {
           // IMPORTANTE: Usar imagem do produto diretamente (como estava antes)
@@ -152,9 +152,9 @@ class PublishService {
             'promotion_new',
             product // Passar dados do produto para segmentação
           );
-          
+
           logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
-          
+
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação Telegram com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
             return true;
@@ -190,18 +190,18 @@ class PublishService {
   async notifyWhatsAppBot(product) {
     try {
       const message = await this.formatBotMessage(product, 'whatsapp');
-      
+
       // Log detalhado sobre a imagem
       logger.info(`📸 Verificando imagem do produto (WhatsApp): ${product.name}`);
       logger.info(`   image_url: ${product.image_url || 'NÃO DEFINIDA'}`);
-      
+
       // Se tiver imagem válida, enviar com foto
-      const hasValidImage = product.image_url && 
-          product.image_url.startsWith('http') && 
-          !product.image_url.includes('placeholder');
-      
+      const hasValidImage = product.image_url &&
+        product.image_url.startsWith('http') &&
+        !product.image_url.includes('placeholder');
+
       logger.info(`   Imagem válida: ${hasValidImage ? 'SIM' : 'NÃO'}`);
-      
+
       if (hasValidImage) {
         try {
           logger.info(`📤 Enviando imagem para WhatsApp: ${product.image_url.substring(0, 80)}...`);
@@ -210,9 +210,9 @@ class PublishService {
             product.image_url,
             'promotion_new'
           );
-          
+
           logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
-          
+
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação WhatsApp com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
             return true;
@@ -227,11 +227,11 @@ class PublishService {
       } else {
         logger.warn(`⚠️ Produto sem imagem válida, enviando apenas mensagem`);
       }
-      
+
       // Fallback: enviar apenas mensagem
       logger.info(`📤 Enviando mensagem para WhatsApp (sem imagem)`);
       const result = await notificationDispatcher.sendToWhatsApp(message, 'promotion_new');
-      
+
       if (result && result.success && result.sent > 0) {
         logger.info(`✅ Notificação WhatsApp enviada para produto: ${product.name} (${result.sent} canal(is))`);
         return true;
@@ -287,36 +287,36 @@ class PublishService {
       // Se produto tem cupom vinculado, usar template 'promotion_with_coupon'
       // Se não tem cupom, usar template 'new_promotion' (sem cupom)
       let templateType = 'new_promotion';
-      
+
       if (product.coupon_id) {
         templateType = 'promotion_with_coupon';
         logger.info(`📋 Produto tem cupom vinculado (${product.coupon_id}), usando template 'promotion_with_coupon'`);
       } else {
         logger.info(`📋 Produto sem cupom, usando template 'new_promotion'`);
       }
-      
+
       // Preparar contextData para IA ADVANCED (antes de preparar variáveis)
       // A IA ADVANCED pode otimizar o título do produto, então precisamos passar o produto
       const contextData = { product };
-      
+
       // Preparar variáveis do template
       // NOTA: Se IA ADVANCED for usada, o título será otimizado e as variáveis serão atualizadas depois
       const variables = await templateRenderer.preparePromotionVariables(product);
-      
+
       // Renderizar template - pode usar template do banco ou IA ADVANCED
       // Se IA ADVANCED for usada, o título será otimizado e as variáveis serão atualizadas
       logger.info(`📝 Renderizando template '${templateType}' para plataforma '${platform}'...`);
       const message = await templateRenderer.render(templateType, platform, variables, contextData);
-      
+
       if (!message || message.trim().length === 0) {
         logger.error(`❌ Template renderizado está vazio para produto: ${product.name}`);
         throw new Error('Template renderizado está vazio');
       }
-      
+
       logger.info(`✅ Mensagem formatada usando template '${templateType}' (${message.length} chars)`);
       logger.debug(`📝 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
       logger.debug(`📝 Mensagem completa tem ${(message.match(/\n/g) || []).length} quebras de linha`);
-      
+
       return message;
     } catch (error) {
       logger.error(`❌ ERRO CRÍTICO ao formatar mensagem com template: ${error.message}`);
@@ -347,11 +347,11 @@ class PublishService {
     }).format(product.old_price) : null;
 
     const productName = this.escapeMarkdown(product.name);
-    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' : 
-                        product.platform === 'shopee' ? 'Shopee' :
-                        product.platform === 'amazon' ? 'Amazon' :
-                        product.platform === 'aliexpress' ? 'AliExpress' : 'Geral';
-    
+    const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' :
+      product.platform === 'shopee' ? 'Shopee' :
+        product.platform === 'amazon' ? 'Amazon' :
+          product.platform === 'aliexpress' ? 'AliExpress' : 'Geral';
+
     let message = `🔥 *NOVA PROMOÇÃO!*\n\n`;
     message += `🛍 *${productName}*\n\n`;
     if (oldPriceFormatted) {
@@ -359,7 +359,7 @@ class PublishService {
     }
     message += `💰 *Por: ${priceFormatted}* ${product.discount_percentage || 0}% OFF\n\n`;
     message += `🛒 *Loja:* ${platformName}\n`;
-    
+
     // Adicionar categoria se disponível
     if (product.category_id) {
       try {
@@ -382,15 +382,15 @@ class PublishService {
           const discountText = coupon.discount_type === 'percentage'
             ? `${coupon.discount_value}%`
             : `R$ ${coupon.discount_value.toFixed(2)}`;
-          
+
           message += `\n🎟️ *CUPOM DISPONÍVEL*\n\n`;
           message += `💬 *Código:* \`${coupon.code}\`\n`;
           message += `💰 *Desconto:* ${discountText} OFF\n`;
-          
+
           if (coupon.min_purchase > 0) {
             message += `💳 *Compra mínima:* R$ ${coupon.min_purchase.toFixed(2)}\n`;
           }
-          
+
           // Aplicabilidade
           if (coupon.is_general) {
             message += `✅ *Válido para todos os produtos*\n`;
@@ -418,7 +418,7 @@ class PublishService {
    * Publicar e notificar tudo
    * Agora com edição de IA e score de qualidade
    */
-  async publishAll(product) {
+  async publishAll(product, options = {}) {
     const results = {
       app: false,
       push: false,
@@ -427,13 +427,24 @@ class PublishService {
     };
 
     try {
+      logger.info(`🔄 Iniciando publishAll para produto ${product.id}`);
+      logger.info(`   Options: ${JSON.stringify(options)}`);
+      logger.info(`   Category ID inicial: ${product.category_id}`);
+
       // 1. Editar produto com IA (antes de publicar)
       try {
         const productEditor = (await import('../ai/productEditor.js')).default;
+        const Product = (await import('../../models/Product.js')).default; // Importar Model Product
+
         if (await productEditor.isEnabled()) {
           logger.info(`🤖 Editando produto com IA antes da publicação...`);
           const editedProduct = await productEditor.editProduct(product);
-          
+
+          // Log do resultado da IA
+          logger.info(`🤖 IA sugeriu categoria: ${editedProduct.ai_detected_category_id || 'Nenhuma'}`);
+          logger.info(`   Categoria atual (manual): ${product.category_id}`);
+          logger.info(`   Skip AI: ${options.skipAiCategory}, Manual ID Option: ${options.manualCategoryId}`);
+
           // Aplicar edições ao produto
           if (editedProduct.ai_optimized_title) {
             product.ai_optimized_title = editedProduct.ai_optimized_title;
@@ -443,7 +454,19 @@ class PublishService {
           }
           if (editedProduct.ai_detected_category_id) {
             product.ai_detected_category_id = editedProduct.ai_detected_category_id;
-            product.category_id = editedProduct.ai_detected_category_id; // Usar categoria detectada
+
+            // Só atualizar a categoria principal se NÃO foi solicitado pular (ex: alteração manual)
+            // E se não houver uma categoria manual explícita nas opções
+            if (!options.skipAiCategory && !options.manualCategoryId) {
+              product.category_id = editedProduct.ai_detected_category_id; // Usar categoria detectada
+            } else {
+              logger.info(`🛡️ Mantendo categoria manual: ${options.manualCategoryId || product.category_id} (ignorando sugestão IA: ${editedProduct.ai_detected_category_id})`);
+
+              // Se tiver manualCategoryId explícito, garantir que está aplicado
+              if (options.manualCategoryId) {
+                product.category_id = options.manualCategoryId;
+              }
+            }
           }
           if (editedProduct.offer_priority) {
             product.offer_priority = editedProduct.offer_priority;
@@ -463,9 +486,10 @@ class PublishService {
           if (editedProduct.ai_edit_history) {
             product.ai_edit_history = editedProduct.ai_edit_history;
           }
-          
+
           // Atualizar no banco
           if (product.id) {
+            logger.info(`💾 Salvando atualizações de IA no banco. Categoria final: ${product.category_id}`);
             await Product.update(product.id, {
               ai_optimized_title: product.ai_optimized_title,
               ai_generated_description: product.ai_generated_description,
@@ -476,7 +500,7 @@ class PublishService {
               is_featured_offer: product.is_featured_offer,
               ai_decision_reason: product.ai_decision_reason,
               ai_edit_history: product.ai_edit_history,
-              category_id: product.ai_detected_category_id || product.category_id // Atualizar categoria se detectada
+              category_id: product.category_id // Usar a categoria final decidida (pode ser manual ou IA)
             });
           }
         }
@@ -490,12 +514,12 @@ class PublishService {
         const qualityScorer = (await import('../services/qualityScorer.js')).default;
         const scoreData = await qualityScorer.calculateOfferScore(product);
         product.offer_score = scoreData.score;
-        
+
         // Atualizar score no banco
         if (product.id) {
           await qualityScorer.updateProductScore(product.id, scoreData);
         }
-        
+
         logger.info(`📊 Score de qualidade: ${scoreData.score.toFixed(1)}/100`);
       } catch (scoreError) {
         logger.warn(`⚠️ Erro ao calcular score: ${scoreError.message}`);
@@ -506,10 +530,10 @@ class PublishService {
       try {
         const duplicateDetector = (await import('../services/duplicateDetector.js')).default;
         const duplicate = await duplicateDetector.detectDuplicate(product);
-        
+
         if (duplicate && duplicate.canonical_id) {
           logger.info(`🔄 Produto duplicado detectado. Usando produto canônico: ${duplicate.canonical_id}`);
-          
+
           // Atualizar produto para apontar para o canônico
           if (product.id) {
             await Product.update(product.id, {
@@ -517,14 +541,14 @@ class PublishService {
             });
             product.canonical_product_id = duplicate.canonical_id;
           }
-          
+
           // Criar relação de duplicado
           await duplicateDetector.createDuplicateRelation(
             duplicate.canonical_id,
             product.id,
             duplicate.similarity_score
           );
-          
+
           // Se é duplicado, não publicar (evitar spam)
           logger.info(`⏸️ Produto duplicado não será publicado para evitar spam`);
           return {
@@ -547,13 +571,13 @@ class PublishService {
       logger.info(`   image_url presente: ${product.image_url ? 'SIM' : 'NÃO'}`);
       logger.info(`   image_url valor: ${product.image_url || 'NÃO DEFINIDA'}`);
       logger.info(`   image_url tipo: ${typeof product.image_url}`);
-      
+
       // Verificar se image_url está presente e válida
       if (!product.image_url || !product.image_url.startsWith('http')) {
         logger.error(`❌ Produto ${product.name || product.id} SEM IMAGEM VÁLIDA para publicação!`);
         logger.error(`   Campos do produto: ${JSON.stringify(Object.keys(product))}`);
         logger.error(`   image_url: ${JSON.stringify(product.image_url)}`);
-        
+
         // Tentar buscar do banco se não tiver
         if (product.id) {
           try {
@@ -594,9 +618,9 @@ class PublishService {
       }
 
       const success = results.telegram || results.whatsapp;
-      
+
       logger.info(`✅ Publicação completa: ${product.name}`, results);
-      
+
       return {
         success,
         results

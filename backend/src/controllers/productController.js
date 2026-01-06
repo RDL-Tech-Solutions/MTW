@@ -382,7 +382,12 @@ class ProductController {
       logger.info(`📝 Link no produto APÓS atualizar (fullProduct.affiliate_link): ${fullProduct.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
       logger.info(`📝 Confirmando: Link no fullProduct é encurtado: ${fullProduct.affiliate_link !== affiliate_link.trim() ? 'SIM ✅' : 'NÃO ❌'}`);
 
-      // IMPORTANTE: Garantir que coupon_id está definido no fullProduct para que o template correto seja usado
+      // IMPORTANTE: Garantir que coupon_id e category_id estão definidos no fullProduct
+      if (category_id) {
+        fullProduct.category_id = category_id;
+        logger.info(`📂 Categoria vinculada ao produto para publicação: ${category_id}`);
+      }
+
       if (coupon_id) {
         fullProduct.coupon_id = coupon_id;
         logger.info(`🎟️ Cupom vinculado ao produto para publicação: ${coupon_id}`);
@@ -399,6 +404,7 @@ class ProductController {
       logger.info(`📦 ========== ESTADO DO PRODUTO ANTES DE PUBLICAR ==========`);
       logger.info(`   ID: ${fullProduct.id}`);
       logger.info(`   Nome: ${fullProduct.name}`);
+      logger.info(`   category_id: ${fullProduct.category_id || 'NÃO DEFINIDO'}`);
       logger.info(`   coupon_id: ${fullProduct.coupon_id || 'NÃO DEFINIDO'}`);
       logger.info(`   affiliate_link: ${fullProduct.affiliate_link?.substring(0, 80) || 'NÃO DEFINIDO'}...`);
       logger.info(`   final_price: ${fullProduct.final_price || 'NÃO DEFINIDO'}`);
@@ -408,7 +414,12 @@ class ProductController {
       logger.info(`===========================================================`);
 
       // Publicar e notificar (agora com edição de IA, score e detecção de duplicados)
-      const publishResult = await publishService.publishAll(fullProduct);
+      // Passar skipAiCategory: true se a categoria foi definida manualmente
+      // Passar manualCategoryId explicitamente para garantir
+      const publishResult = await publishService.publishAll(fullProduct, {
+        skipAiCategory: !!category_id,
+        manualCategoryId: category_id
+      });
 
       // Atualizar status para 'published'
       await Product.update(id, { status: 'published' });

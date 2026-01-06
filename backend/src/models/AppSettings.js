@@ -49,6 +49,7 @@ class AppSettings {
                 aliexpress_app_key,
                 aliexpress_app_secret,
                 aliexpress_tracking_id,
+                aliexpress_product_origin,
                 telegram_collector_rate_limit_delay,
                 telegram_collector_max_retries,
                 telegram_collector_reconnect_delay,

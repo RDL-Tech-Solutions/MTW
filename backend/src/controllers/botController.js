@@ -66,7 +66,7 @@ class BotController {
             });
           }
         }
-        
+
         if (!Array.isArray(categories)) {
           return res.status(400).json({
             success: false,
@@ -74,10 +74,10 @@ class BotController {
           });
         }
 
-        if (categories.length > 2) {
+        if (categories.length > 10) {
           return res.status(400).json({
             success: false,
-            message: 'category_filter pode ter no máximo 2 categorias'
+            message: 'category_filter pode ter no máximo 10 categorias'
           });
         }
       }
@@ -134,7 +134,7 @@ class BotController {
             });
           }
         }
-        
+
         if (!Array.isArray(categories)) {
           return res.status(400).json({
             success: false,
@@ -142,10 +142,10 @@ class BotController {
           });
         }
 
-        if (categories.length > 2) {
+        if (categories.length > 10) {
           return res.status(400).json({
             success: false,
-            message: 'category_filter pode ter no máximo 2 categorias'
+            message: 'category_filter pode ter no máximo 10 categorias'
           });
         }
 
@@ -196,7 +196,7 @@ class BotController {
       const { id } = req.params;
       const { is_active } = req.body;
 
-      const channel = is_active 
+      const channel = is_active
         ? await BotChannel.activate(id)
         : await BotChannel.deactivate(id);
 
@@ -223,7 +223,7 @@ class BotController {
       if (channelId) {
         // Testar canal específico
         const channel = await BotChannel.findById(channelId);
-        
+
         if (!channel) {
           return res.status(404).json({
             success: false,
@@ -233,7 +233,7 @@ class BotController {
 
         let result;
         const testMessage = message || `🤖 *Teste de Bot*\n\n✅ Bot configurado e funcionando!\n⏰ ${new Date().toLocaleString('pt-BR')}`;
-        
+
         if (channel.platform === 'whatsapp') {
           // Converter formatação para WhatsApp
           const templateRenderer = (await import('../services/bots/templateRenderer.js')).default;
@@ -245,10 +245,10 @@ class BotController {
           const botConfig = await BotConfig.get();
           const parseMode = botConfig.telegram_parse_mode || 'HTML';
           const finalParseMode = (parseMode === 'Markdown' || parseMode === 'MarkdownV2') ? 'HTML' : parseMode;
-          
+
           const templateRenderer = (await import('../services/bots/templateRenderer.js')).default;
           const convertedMessage = templateRenderer.convertBoldFormatting(testMessage, 'telegram', finalParseMode);
-          
+
           result = await telegramService.sendMessage(channel.identifier, convertedMessage, {
             parse_mode: finalParseMode
           });
@@ -262,7 +262,7 @@ class BotController {
       } else {
         // Testar todos os canais ativos
         const testMessage = message || `🤖 *Teste de Bot*\n\n✅ Bot configurado e funcionando!\n⏰ ${new Date().toLocaleString('pt-BR')}`;
-        
+
         if (message) {
           // Se há mensagem customizada, enviar para todos os canais
           const result = await notificationDispatcher.sendCustomMessageToAllChannels(testMessage);
@@ -361,7 +361,7 @@ class BotController {
   async checkStatus(req, res) {
     try {
       const config = await BotConfig.get();
-      
+
       const status = {
         whatsapp: {
           configured: config.whatsapp_enabled && !!config.whatsapp_api_token,
@@ -418,11 +418,11 @@ class BotController {
   async getConfig(req, res) {
     try {
       const config = await BotConfig.get();
-      
+
       // Mascarar tokens sensíveis para exibição
       const safeConfig = {
         ...config,
-        telegram_bot_token: config.telegram_bot_token 
+        telegram_bot_token: config.telegram_bot_token
           ? `${config.telegram_bot_token.substring(0, 10)}...${config.telegram_bot_token.slice(-5)}`
           : '',
         whatsapp_api_token: config.whatsapp_api_token
@@ -451,7 +451,7 @@ class BotController {
   async saveConfig(req, res) {
     try {
       const configData = req.body;
-      
+
       // Campos válidos na tabela bot_config
       const validFields = [
         'telegram_enabled',
@@ -474,7 +474,7 @@ class BotController {
         'rate_limit_per_minute',
         'delay_between_messages'
       ];
-      
+
       // Filtrar apenas campos válidos
       const filteredData = {};
       for (const field of validFields) {
@@ -482,7 +482,7 @@ class BotController {
           filteredData[field] = configData[field];
         }
       }
-      
+
       // Se o token vier mascarado (com ...), não atualizar
       if (filteredData.telegram_bot_token && filteredData.telegram_bot_token.includes('...')) {
         delete filteredData.telegram_bot_token;
@@ -492,21 +492,21 @@ class BotController {
       }
 
       const config = await BotConfig.upsert(filteredData);
-      
+
       // Limpar cache das configurações se foram atualizadas
       if (filteredData.telegram_bot_token !== undefined) {
         telegramService.clearTokenCache();
         logger.info('🔄 Cache do token do Telegram limpo (novo token será carregado na próxima requisição)');
       }
-      
+
       // Limpar cache do WhatsApp se foi atualizado
-      if (filteredData.whatsapp_api_url !== undefined || 
-          filteredData.whatsapp_api_token !== undefined || 
-          filteredData.whatsapp_phone_number_id !== undefined) {
+      if (filteredData.whatsapp_api_url !== undefined ||
+        filteredData.whatsapp_api_token !== undefined ||
+        filteredData.whatsapp_phone_number_id !== undefined) {
         whatsappService.clearConfigCache();
         logger.info('🔄 Cache das configurações do WhatsApp limpo (novas configurações serão carregadas na próxima requisição)');
       }
-      
+
       logger.info('⚙️ Configurações de bots atualizadas');
 
       res.json({
@@ -528,10 +528,10 @@ class BotController {
   async testTelegram(req, res) {
     try {
       const { token } = req.body;
-      
+
       // Usar token fornecido ou buscar do banco/env
       let botToken = token;
-      
+
       // Se token não fornecido ou é mascarado, buscar do banco
       if (!botToken || botToken.includes('...')) {
         const config = await BotConfig.get();
@@ -578,7 +578,7 @@ class BotController {
       });
     } catch (error) {
       logger.error(`Erro ao testar Telegram: ${error.message}`);
-      
+
       let errorMessage = 'Erro ao conectar com o Telegram';
       if (error.response?.status === 401) {
         errorMessage = 'Token inválido. Verifique se o token está correto.';
@@ -603,7 +603,7 @@ class BotController {
 
       // Usar valores fornecidos ou buscar do banco
       let config = { api_url, api_token, phone_number_id };
-      
+
       if (!api_url || !api_token) {
         const savedConfig = await BotConfig.get();
         // Usar apenas configurações do banco de dados
@@ -643,7 +643,7 @@ class BotController {
       });
     } catch (error) {
       logger.error(`Erro ao testar WhatsApp: ${error.message}`);
-      
+
       let errorMessage = 'Erro ao conectar com o WhatsApp';
       if (error.response?.status === 401 || error.response?.status === 403) {
         errorMessage = 'Token inválido ou sem permissão.';
@@ -661,7 +661,7 @@ class BotController {
   async sendTestToChannel(req, res) {
     try {
       const { id } = req.params;
-      
+
       const channel = await BotChannel.findById(id);
       if (!channel) {
         return res.status(404).json({
@@ -686,7 +686,7 @@ class BotController {
             message: 'Token do Telegram não configurado no banco de dados. Vá em Configurações e salve o token primeiro.'
           });
         }
-        
+
         logger.info(`📱 Usando token do banco de dados`);
 
         logger.info(`📤 Enviando teste para Telegram: ${channelId}`);
@@ -718,21 +718,21 @@ Você receberá notificações automáticas sobre:
             platform: 'telegram',
             message_id: response.data.result.message_id
           };
-          
+
           logger.info(`✅ Mensagem enviada com sucesso para ${channelId}`);
         } catch (telegramError) {
           // Tratar erros específicos do Telegram
           const errorCode = telegramError.response?.data?.error_code;
           const errorDescription = telegramError.response?.data?.description || telegramError.message;
           const errorMessage = telegramError.response?.data?.description || telegramError.message;
-          
+
           logger.error(`❌ Erro Telegram: ${errorDescription}`);
           logger.error(`   Error Code: ${errorCode}`);
           logger.error(`   Chat ID usado: ${channelId}`);
           logger.error(`   Token usado: ${token ? token.substring(0, 10) + '...' : 'não configurado'}`);
-          
+
           let userMessage = 'Erro ao enviar mensagem';
-          
+
           // Erro 401 - Unauthorized (token inválido ou bot não autorizado)
           if (errorCode === 401 || errorDescription.includes('Unauthorized') || errorMessage.includes('Unauthorized')) {
             userMessage = 'Token do bot inválido ou bot não autorizado. Verifique: 1) Se o token está correto nas configurações, 2) Se o bot foi iniciado com @BotFather, 3) Se o bot tem permissões para enviar mensagens.';
@@ -761,7 +761,7 @@ Você receberá notificações automáticas sobre:
           else {
             userMessage = `Erro do Telegram (${errorCode || 'desconhecido'}): ${errorDescription}`;
           }
-          
+
           return res.status(400).json({
             success: false,
             message: userMessage,
@@ -832,7 +832,7 @@ Você receberá notificações automáticas sobre:
       });
     } catch (error) {
       logger.error(`Erro ao enviar teste: ${error.message}`);
-      
+
       // Registrar falha no log
       try {
         if (channel) {
