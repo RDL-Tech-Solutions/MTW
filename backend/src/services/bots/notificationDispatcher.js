@@ -16,14 +16,14 @@ class NotificationDispatcher {
       const BotConfig = (await import('../../models/BotConfig.js')).default;
       const botConfig = await BotConfig.get();
       const configuredMode = botConfig.telegram_parse_mode || 'HTML';
-      
+
       // HTML é mais confiável e suporta tudo (negrito, riscado, itálico, etc)
       // Se estiver configurado como Markdown/MarkdownV2, usar HTML
       if (configuredMode === 'Markdown' || configuredMode === 'MarkdownV2') {
         logger.info('📝 Usando HTML parse_mode para melhor compatibilidade');
         return 'HTML';
       }
-      
+
       return configuredMode;
     } catch (error) {
       logger.warn(`Erro ao buscar parse_mode, usando HTML: ${error.message}`);
@@ -86,7 +86,7 @@ class NotificationDispatcher {
           }
 
           const result = await this.sendToChannel(channel, eventType, data);
-          
+
           if (result.success) {
             results.sent++;
             // Registrar envio para controle de duplicação
@@ -94,7 +94,7 @@ class NotificationDispatcher {
           } else {
             results.failed++;
           }
-          
+
           results.details.push(result);
         } catch (error) {
           logger.error(`❌ Erro ao enviar para canal ${channel.id}: ${error.message}`);
@@ -128,25 +128,46 @@ class NotificationDispatcher {
     const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
 
     for (const channel of channels) {
-      // 0. Filtro de only_coupons: se o canal só aceita cupons, não enviar produtos
+      // 0. Filtro de content_filter (NOVO - CRÍTICO!)
+      // Se o canal tem content_filter configurado, verificar se aceita o tipo de conteúdo
+      if (channel.content_filter && typeof channel.content_filter === 'object') {
+        const contentFilter = channel.content_filter;
+
+        // Verificar se canal aceita produtos
+        if (eventType === 'promotion_new' && contentFilter.products === false) {
+          logger.debug(`   🚫 Canal ${channel.id} não aceita produtos (content_filter.products = false)`);
+          continue;
+        }
+
+        // Verificar se canal aceita cupons
+        if ((eventType === 'coupon_new' || eventType === 'coupon_expired') && contentFilter.coupons === false) {
+          logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (content_filter.coupons = false)`);
+          continue;
+        }
+      }
+
+      // 0.1. Filtro de only_coupons (LEGADO - manter para compatibilidade)
+      // se o canal só aceita cupons, não enviar produtos
       if (channel.only_coupons === true && eventType === 'promotion_new') {
-        logger.debug(`   🚫 Canal ${channel.id} só aceita cupons, ignorando produto`);
+        logger.debug(`   🚫 Canal ${channel.id} só aceita cupons (only_coupons = true), ignorando produto`);
         continue;
       }
 
-      // 0.1. Se o evento é de cupom mas o canal não aceita cupons (only_coupons = false), permitir normalmente
-      // (canal pode receber tanto produtos quanto cupons se only_coupons = false)
-
-      // 1. Filtro de categoria (se produto)
-      if (eventType === 'promotion_new' && data.category_id) {
+      // 1. Filtro de categoria (produtos E cupons)
+      // IMPORTANTE: Cupons também podem ter categoria!
+      if (data.category_id) {
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
           // Converter category_id para string para comparação (pode ser UUID)
-          const productCategoryId = String(data.category_id);
+          const itemCategoryId = String(data.category_id);
           const allowedCategories = channel.category_filter.map(cat => String(cat));
-          
-          if (!allowedCategories.includes(productCategoryId)) {
-            logger.debug(`   🚫 Canal ${channel.id} não aceita categoria ${data.category_id} (aceita apenas: ${allowedCategories.join(', ')})`);
+
+          if (!allowedCategories.includes(itemCategoryId)) {
+            const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
+            logger.debug(`   🚫 Canal ${channel.id} não aceita categoria ${data.category_id} para ${itemType} (aceita apenas: ${allowedCategories.join(', ')})`);
             continue;
+          } else {
+            const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
+            logger.debug(`   ✅ Canal ${channel.id} aceita categoria ${data.category_id} para ${itemType}`);
           }
         }
       }
@@ -165,7 +186,7 @@ class NotificationDispatcher {
       if (channel.schedule_start && channel.schedule_end) {
         const startTime = channel.schedule_start;
         const endTime = channel.schedule_end;
-        
+
         let isWithinSchedule = false;
         if (endTime < startTime) {
           // Cruza meia-noite
@@ -173,7 +194,7 @@ class NotificationDispatcher {
         } else {
           isWithinSchedule = currentTime >= startTime && currentTime <= endTime;
         }
-        
+
         if (!isWithinSchedule) {
           logger.debug(`   🚫 Canal ${channel.id} fora do horário (${startTime}-${endTime})`);
           continue;
@@ -205,7 +226,7 @@ class NotificationDispatcher {
 
       const BotSendLog = (await import('../../models/BotSendLog.js')).default;
       const channel = await BotChannel.findById(channelId);
-      
+
       if (!channel || !channel.avoid_duplicates_hours) {
         return false; // Sem controle de duplicação
       }
@@ -347,19 +368,19 @@ class NotificationDispatcher {
           // Preparar variáveis para template de promoção
           variables = await templateRenderer.preparePromotionVariables(data);
           break;
-        
+
         case 'coupon_new':
           templateType = 'new_coupon';
           // Preparar variáveis para template de cupom
           variables = templateRenderer.prepareCouponVariables(data);
           break;
-        
+
         case 'coupon_expired':
           templateType = 'expired_coupon';
           // Preparar variáveis para template de cupom expirado
           variables = templateRenderer.prepareExpiredCouponVariables(data);
           break;
-        
+
         default:
           throw new Error(`Tipo de evento não suportado: ${eventType}`);
       }
@@ -374,18 +395,18 @@ class NotificationDispatcher {
 
       // Renderizar template usando templates ativos do painel admin ou IA ADVANCED
       const message = await templateRenderer.render(templateType, platform, variables, contextData);
-      
+
       if (!message || message.trim().length === 0) {
         throw new Error(`Template renderizado está vazio para ${templateType} (${platform})`);
       }
-      
+
       logger.debug(`✅ Mensagem renderizada usando template do painel admin (${message.length} chars, ${(message.match(/\n/g) || []).length} quebras de linha)`);
       return message;
     } catch (error) {
       logger.error(`❌ ERRO CRÍTICO ao formatar mensagem com template: ${error.message}`);
       logger.error(`   Tipo: ${eventType}, Plataforma: ${platform}`);
       logger.error(`   Stack: ${error.stack}`);
-      
+
       // NÃO usar fallback - template do painel admin é obrigatório
       throw new Error(`Falha ao renderizar template do painel admin para ${eventType} (${platform}): ${error.message}. Configure um template ativo no painel admin.`);
     }
@@ -439,16 +460,16 @@ class NotificationDispatcher {
       logger.info(`   imagePath: ${imagePath}`);
       logger.info(`   message length: ${message?.length || 0}`);
       logger.info(`   eventType: ${eventType}`);
-      
+
       const allChannels = await BotChannel.findActive('telegram');
-      
+
       if (!allChannels || allChannels.length === 0) {
         logger.warn('⚠️ Nenhum canal Telegram ativo encontrado');
         return { success: false, sent: 0, total: 0 };
       }
 
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
-      const channels = data 
+      const channels = data
         ? await this.filterChannelsBySegmentation(allChannels, eventType, { ...data, id: data.product_id || data.coupon_id || data.id })
         : allChannels;
 
@@ -479,21 +500,21 @@ class NotificationDispatcher {
         try {
           logger.info(`   Enviando para canal ${channel.id} (chat: ${channel.identifier})`);
           const parseMode = await this.getTelegramParseMode();
-          
+
           // A mensagem já vem formatada corretamente do templateRenderer
           // Não converter novamente para manter a formatação do template configurado
           // Apenas garantir que o parse_mode seja passado corretamente
           logger.debug(`📝 Usando mensagem do template (${message.length} caracteres) com parse_mode: ${parseMode}`);
-          
+
           const result = await telegramService.sendMessageWithPhoto(
             channel.identifier,
             imagePath,
             message, // Usar mensagem original do template
             { parse_mode: parseMode }
           );
-          
-          logger.info(`   Resultado do telegramService: ${JSON.stringify({ 
-            success: result?.success, 
+
+          logger.info(`   Resultado do telegramService: ${JSON.stringify({
+            success: result?.success,
             photoMessageId: result?.photoMessageId
           })}`);
 
@@ -529,7 +550,7 @@ class NotificationDispatcher {
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (error) {
           logger.error(`❌ Erro ao enviar para Telegram canal ${channel.id} (chat: ${channel.identifier}): ${error.message}`);
-          
+
           // Criar log de erro
           const log = await NotificationLog.create({
             event_type: eventType,
@@ -571,7 +592,7 @@ class NotificationDispatcher {
   async sendToWhatsAppWithImage(message, imagePath, eventType = 'general') {
     try {
       const channels = await BotChannel.findActive('whatsapp');
-      
+
       if (!channels || channels.length === 0) {
         logger.debug('Nenhum canal WhatsApp ativo encontrado');
         return { success: false, sent: 0, total: 0 };
@@ -585,14 +606,14 @@ class NotificationDispatcher {
           // Para WhatsApp, precisamos fazer upload da imagem primeiro ou usar URL
           // Por enquanto, vamos tentar enviar como URL se for um caminho local
           let imageUrl = imagePath;
-          
+
           // Se for caminho local, precisaríamos fazer upload para um serviço de hospedagem
           // Por enquanto, vamos tentar enviar a mensagem sem imagem se for arquivo local
           if (!imagePath.startsWith('http://') && !imagePath.startsWith('https://')) {
             logger.warn(`Imagem local não suportada diretamente no WhatsApp: ${imagePath}`);
             // Fallback: enviar apenas mensagem
             const result = await whatsappService.sendMessage(channel.identifier, message);
-            
+
             const log = await NotificationLog.create({
               event_type: eventType,
               platform: 'whatsapp',
@@ -649,7 +670,7 @@ class NotificationDispatcher {
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (error) {
           logger.error(`❌ Erro ao enviar para WhatsApp canal ${channel.id} (grupo: ${channel.identifier}): ${error.message}`);
-          
+
           // Criar log de erro
           const log = await NotificationLog.create({
             event_type: eventType,
@@ -698,7 +719,7 @@ class NotificationDispatcher {
       // Buscar canais Telegram ativos
       const allChannels = await BotChannel.findActive();
       logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
-      
+
       const telegramChannels = allChannels?.filter(ch => ch.platform === 'telegram') || [];
       logger.info(`📋 Canais Telegram encontrados: ${telegramChannels.length}`);
 
@@ -733,16 +754,16 @@ class NotificationDispatcher {
 
           // Obter parse_mode configurado
           let parseMode = await this.getTelegramParseMode();
-          
+
           // IMPORTANTE: A mensagem já vem formatada corretamente do templateRenderer
           // Não converter novamente para preservar o template configurado no painel admin
           // Apenas garantir que o parse_mode seja passado corretamente
           logger.debug(`📝 Usando mensagem do template (${message.length} caracteres) com parse_mode: ${parseMode}`);
-          
+
           const result = await telegramService.sendMessage(channel.identifier, message, {
             parse_mode: parseMode
           });
-          
+
           // Atualizar log apenas se foi criado com sucesso
           if (log && log.id) {
             try {
@@ -799,7 +820,7 @@ class NotificationDispatcher {
       }
 
       logger.info(`✅ Telegram: ${results.sent} sucesso, ${results.failed} falhas`);
-      
+
       // Retornar com success baseado em se pelo menos uma mensagem foi enviada
       return {
         ...results,
@@ -824,7 +845,7 @@ class NotificationDispatcher {
       // Buscar canais WhatsApp ativos
       const allChannels = await BotChannel.findActive();
       logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
-      
+
       const whatsappChannels = allChannels?.filter(ch => ch.platform === 'whatsapp') || [];
       logger.info(`📋 Canais WhatsApp encontrados: ${whatsappChannels.length}`);
 
@@ -858,7 +879,7 @@ class NotificationDispatcher {
           log = await NotificationLog.create(logData);
 
           const result = await whatsappService.sendMessage(channel.identifier, message);
-          
+
           // Atualizar log apenas se foi criado com sucesso
           if (log && log.id) {
             try {
@@ -915,7 +936,7 @@ class NotificationDispatcher {
       }
 
       logger.info(`✅ WhatsApp: ${results.sent} sucesso, ${results.failed} falhas`);
-      
+
       // Retornar com success baseado em se pelo menos uma mensagem foi enviada
       return {
         ...results,

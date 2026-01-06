@@ -18,12 +18,18 @@ Arquivo: `01_schema.sql`
 - Inclui: users, products, coupons, categories, bot_config, sync_config, sync_logs, etc.
 - É seguro rodar múltiplas vezes (usa `IF NOT EXISTS`).
 
-### 3. Storage (Opcional)
+### 3. Fix max_discount_value Column (Importante - Execute se tiver erro)
+Arquivo: `02_fix_max_discount_column.sql`
+- Renomeia ou cria a coluna `max_discount_value` na tabela `coupons`.
+- **Execute este script se você receber o erro:** `Could not find the 'max_discount_value' column`
+- Seguro para executar múltiplas vezes.
+
+### 4. Storage (Opcional)
 Arquivo: `02_storage.sql`
 - Cria os buckets de armazenamento de imagens (`products`, `temp`) e avatares (`avatars`).
 - Configura permissões de acesso e segurança por usuário.
 
-### 4. Templates de Mensagem (Recomendado)
+### 5. Templates de Mensagem (Recomendado)
 Arquivo: `03_templates.sql`
 - Insere os modelos padrão de mensagens para os bots (Telegram/WhatsApp).
 - Essencial para que as notificações funcionem corretamente desde o início.

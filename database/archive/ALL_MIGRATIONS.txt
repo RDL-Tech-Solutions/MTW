@@ -1,0 +1,3435 @@
+﻿=== 001_add_bot_tables.sql ===
+-- Migration: Adicionar tabelas para sistema de bots
+-- Execute este script no SQL Editor do Supabase
+
+-- =====================================================
+-- TABELA: bot_channels
+-- Armazena configuraÃ§Ãµes dos canais de bot (WhatsApp e Telegram)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS bot_channels (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  platform VARCHAR(20) NOT NULL CHECK (platform IN ('whatsapp', 'telegram')),
+  identifier VARCHAR(255) NOT NULL, -- ID do grupo/canal
+  name VARCHAR(255), -- Nome descritivo do canal
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(platform, identifier)
+);
+
+-- Ãndices para bot_channels
+CREATE INDEX idx_bot_channels_platform ON bot_channels(platform);
+CREATE INDEX idx_bot_channels_is_active ON bot_channels(is_active);
+
+-- =====================================================
+-- TABELA: notification_logs
+-- Registra todas as notificaÃ§Ãµes enviadas pelos bots
+-- =====================================================
+CREATE TABLE IF NOT EXISTS notification_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_type VARCHAR(50) NOT NULL CHECK (event_type IN ('promotion_new', 'coupon_new', 'coupon_expired')),
+  platform VARCHAR(20) NOT NULL CHECK (platform IN ('whatsapp', 'telegram')),
+  channel_id UUID REFERENCES bot_channels(id) ON DELETE SET NULL,
+  payload JSONB NOT NULL,
+  status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'sent', 'failed')) DEFAULT 'pending',
+  error_message TEXT,
+  sent_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndices para notification_logs
+CREATE INDEX idx_notification_logs_event_type ON notification_logs(event_type);
+CREATE INDEX idx_notification_logs_platform ON notification_logs(platform);
+CREATE INDEX idx_notification_logs_status ON notification_logs(status);
+CREATE INDEX idx_notification_logs_created_at ON notification_logs(created_at);
+CREATE INDEX idx_notification_logs_channel_id ON notification_logs(channel_id);
+
+-- =====================================================
+-- TRIGGERS
+-- =====================================================
+
+-- Trigger para atualizar updated_at em bot_channels
+CREATE TRIGGER update_bot_channels_updated_at BEFORE UPDATE ON bot_channels
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- POLÃTICAS DE SEGURANÃ‡A (RLS)
+-- =====================================================
+
+-- Habilitar RLS
+ALTER TABLE bot_channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_logs ENABLE ROW LEVEL SECURITY;
+
+-- PolÃ­ticas para bot_channels (apenas admin pode gerenciar)
+CREATE POLICY "Admins can view bot channels" ON bot_channels FOR SELECT USING (
+  EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin')
+);
+
+CREATE POLICY "Admins can manage bot channels" ON bot_channels FOR ALL USING (
+  EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin')
+);
+
+-- PolÃ­ticas para notification_logs (apenas admin pode visualizar)
+CREATE POLICY "Admins can view notification logs" ON notification_logs FOR SELECT USING (
+  EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin')
+);
+
+CREATE POLICY "System can insert notification logs" ON notification_logs FOR INSERT WITH CHECK (TRUE);
+
+-- =====================================================
+-- COMENTÃRIOS
+-- =====================================================
+
+COMMENT ON TABLE bot_channels IS 'ConfiguraÃ§Ãµes dos canais de bot (WhatsApp e Telegram)';
+COMMENT ON TABLE notification_logs IS 'Log de todas as notificaÃ§Ãµes enviadas pelos bots';
+
+-- Verificar se tudo foi criado corretamente
+SELECT 'Migration 001 executada com sucesso!' as status;
+
+
+
+=== 002_enhance_coupons_table.sql ===
+-- =====================================================
+-- Migration: Aprimorar tabela de cupons para captura automÃ¡tica
+-- Data: 2024-12-12
+-- DescriÃ§Ã£o: Adiciona campos necessÃ¡rios para o mÃ³dulo de captura automÃ¡tica
+-- =====================================================
+
+-- Adicionar novos campos Ã  tabela coupons
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS title VARCHAR(500),
+ADD COLUMN IF NOT EXISTS description TEXT,
+ADD COLUMN IF NOT EXISTS affiliate_link TEXT,
+ADD COLUMN IF NOT EXISTS campaign_id VARCHAR(255),
+ADD COLUMN IF NOT EXISTS campaign_name VARCHAR(500),
+ADD COLUMN IF NOT EXISTS terms_and_conditions TEXT,
+ADD COLUMN IF NOT EXISTS auto_captured BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS source_url TEXT,
+ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) DEFAULT 'pending' 
+  CHECK (verification_status IN ('pending', 'active', 'expired', 'invalid'));
+
+-- Atualizar constraint de platform para incluir novas plataformas
+ALTER TABLE coupons DROP CONSTRAINT IF EXISTS coupons_platform_check;
+ALTER TABLE coupons
+ADD CONSTRAINT coupons_platform_check 
+CHECK (platform IN ('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'));
+
+-- Criar Ã­ndices para os novos campos
+CREATE INDEX IF NOT EXISTS idx_coupons_campaign_id ON coupons(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_coupons_auto_captured ON coupons(auto_captured);
+CREATE INDEX IF NOT EXISTS idx_coupons_verification_status ON coupons(verification_status);
+CREATE INDEX IF NOT EXISTS idx_coupons_last_verified_at ON coupons(last_verified_at);
+
+-- =====================================================
+-- TABELA: coupon_sync_logs
+-- =====================================================
+CREATE TABLE IF NOT EXISTS coupon_sync_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  platform VARCHAR(20) NOT NULL,
+  sync_type VARCHAR(50) NOT NULL CHECK (sync_type IN ('capture', 'verification', 'expiration_check')),
+  coupons_found INTEGER DEFAULT 0,
+  coupons_created INTEGER DEFAULT 0,
+  coupons_updated INTEGER DEFAULT 0,
+  coupons_expired INTEGER DEFAULT 0,
+  errors INTEGER DEFAULT 0,
+  error_details TEXT,
+  duration_ms INTEGER,
+  started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  status VARCHAR(20) DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndices para coupon_sync_logs
+CREATE INDEX idx_coupon_sync_logs_platform ON coupon_sync_logs(platform);
+CREATE INDEX idx_coupon_sync_logs_sync_type ON coupon_sync_logs(sync_type);
+CREATE INDEX idx_coupon_sync_logs_status ON coupon_sync_logs(status);
+CREATE INDEX idx_coupon_sync_logs_started_at ON coupon_sync_logs(started_at);
+
+-- =====================================================
+-- TABELA: coupon_settings
+-- =====================================================
+CREATE TABLE IF NOT EXISTS coupon_settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  auto_capture_enabled BOOLEAN DEFAULT TRUE,
+  capture_interval_minutes INTEGER DEFAULT 10,
+  
+  -- Shopee settings
+  shopee_enabled BOOLEAN DEFAULT TRUE,
+  shopee_partner_id VARCHAR(255),
+  shopee_partner_key TEXT,
+  
+  -- Mercado Livre settings
+  meli_enabled BOOLEAN DEFAULT TRUE,
+  meli_capture_deals BOOLEAN DEFAULT TRUE,
+  meli_capture_campaigns BOOLEAN DEFAULT TRUE,
+  
+  -- Amazon settings
+  amazon_enabled BOOLEAN DEFAULT FALSE,
+  amazon_partner_tag VARCHAR(255),
+  amazon_access_key VARCHAR(255),
+  amazon_secret_key TEXT,
+  
+  -- AliExpress settings
+  aliexpress_enabled BOOLEAN DEFAULT FALSE,
+  aliexpress_app_key VARCHAR(255),
+  aliexpress_app_secret TEXT,
+  aliexpress_tracking_id VARCHAR(255),
+  
+  -- Notification settings
+  notify_bots_on_new_coupon BOOLEAN DEFAULT TRUE,
+  notify_bots_on_expiration BOOLEAN DEFAULT TRUE,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Inserir configuraÃ§Ã£o padrÃ£o
+INSERT INTO coupon_settings (id) 
+VALUES ('00000000-0000-0000-0000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+
+-- Trigger para atualizar updated_at
+CREATE TRIGGER update_coupon_settings_updated_at 
+BEFORE UPDATE ON coupon_settings
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- Atualizar view de cupons ativos
+-- =====================================================
+CREATE OR REPLACE VIEW active_coupons AS
+SELECT *
+FROM coupons
+WHERE is_active = TRUE
+  AND verification_status = 'active'
+  AND valid_until > NOW()
+  AND (max_uses IS NULL OR current_uses < max_uses);
+
+-- =====================================================
+-- FunÃ§Ãµes utilitÃ¡rias
+-- =====================================================
+
+-- FunÃ§Ã£o para marcar cupons expirados automaticamente
+CREATE OR REPLACE FUNCTION mark_expired_coupons()
+RETURNS INTEGER AS $$
+DECLARE
+  updated_count INTEGER;
+BEGIN
+  UPDATE coupons
+  SET 
+    is_active = FALSE,
+    verification_status = 'expired',
+    updated_at = NOW()
+  WHERE is_active = TRUE
+    AND valid_until < NOW()
+    AND verification_status != 'expired';
+  
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ComentÃ¡rios
+COMMENT ON TABLE coupon_sync_logs IS 'Logs de sincronizaÃ§Ã£o automÃ¡tica de cupons';
+COMMENT ON TABLE coupon_settings IS 'ConfiguraÃ§Ãµes globais do mÃ³dulo de captura de cupons';
+COMMENT ON COLUMN coupons.auto_captured IS 'Indica se o cupom foi capturado automaticamente';
+COMMENT ON COLUMN coupons.verification_status IS 'Status da verificaÃ§Ã£o do cupom';
+
+-- Verificar se a migration foi aplicada com sucesso
+SELECT 'Migration 002 aplicada com sucesso!' as status;
+
+
+
+=== 003_create_bot_config.sql ===
+-- =====================================================
+-- TABELA: bot_config
+-- ConfiguraÃ§Ãµes globais dos bots de notificaÃ§Ã£o
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS bot_config (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- Telegram
+  telegram_enabled BOOLEAN DEFAULT FALSE,
+  telegram_bot_token TEXT,
+  telegram_bot_username VARCHAR(100),
+  telegram_parse_mode VARCHAR(20) DEFAULT 'Markdown',
+  telegram_disable_preview BOOLEAN DEFAULT FALSE,
+  
+  -- WhatsApp (Meta Business API)
+  whatsapp_enabled BOOLEAN DEFAULT FALSE,
+  whatsapp_api_url TEXT,
+  whatsapp_api_token TEXT,
+  whatsapp_phone_number_id VARCHAR(100),
+  whatsapp_business_account_id VARCHAR(100),
+  
+  -- ConfiguraÃ§Ãµes de NotificaÃ§Ã£o
+  notify_new_products BOOLEAN DEFAULT TRUE,
+  notify_new_coupons BOOLEAN DEFAULT TRUE,
+  notify_expired_coupons BOOLEAN DEFAULT FALSE,
+  notify_price_drops BOOLEAN DEFAULT TRUE,
+  min_discount_to_notify INTEGER DEFAULT 20,
+  
+  -- Templates de Mensagem
+  message_template_product TEXT DEFAULT 'ðŸ”¥ *Nova PromoÃ§Ã£o!*
+
+ðŸ› *{name}*
+
+{old_price}ðŸ’° *R$ {price}* {discount}
+
+ðŸª Loja: {platform}
+
+[ðŸ”— Ver Oferta]({link})',
+  
+  message_template_coupon TEXT DEFAULT 'ðŸŽŸ *Novo Cupom!*
+
+ðŸª Loja: {platform}
+ðŸ’¬ CÃ³digo: `{code}`
+ðŸ’° Desconto: {discount}
+â³ VÃ¡lido atÃ©: {expires}',
+  
+  -- Rate Limiting
+  rate_limit_per_minute INTEGER DEFAULT 20,
+  delay_between_messages INTEGER DEFAULT 500,
+  
+  -- Timestamps
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndice para busca rÃ¡pida (sÃ³ terÃ¡ 1 registro)
+CREATE INDEX IF NOT EXISTS idx_bot_config_id ON bot_config(id);
+
+-- Trigger para atualizar updated_at
+CREATE OR REPLACE FUNCTION update_bot_config_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_bot_config_updated_at ON bot_config;
+CREATE TRIGGER update_bot_config_updated_at
+  BEFORE UPDATE ON bot_config
+  FOR EACH ROW EXECUTE FUNCTION update_bot_config_updated_at();
+
+-- Inserir configuraÃ§Ã£o padrÃ£o se nÃ£o existir
+INSERT INTO bot_config (id)
+SELECT uuid_generate_v4()
+WHERE NOT EXISTS (SELECT 1 FROM bot_config);
+
+-- ComentÃ¡rio na tabela
+COMMENT ON TABLE bot_config IS 'ConfiguraÃ§Ãµes globais dos bots de notificaÃ§Ã£o (Telegram e WhatsApp)';
+
+-- =====================================================
+-- FIM DA MIGRATION
+-- =====================================================
+SELECT 'Migration 003_create_bot_config executada com sucesso!' as status;
+
+
+
+
+=== 004_create_bot_message_templates.sql ===
+-- =====================================================
+-- TABELA: bot_message_templates
+-- Templates customizÃ¡veis de mensagens para bots
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS bot_message_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- Tipo de template
+  template_type VARCHAR(50) NOT NULL CHECK (template_type IN ('new_promotion', 'new_coupon', 'expired_coupon')),
+  
+  -- Plataforma (telegram, whatsapp, ou 'all' para ambas)
+  platform VARCHAR(20) DEFAULT 'all' CHECK (platform IN ('telegram', 'whatsapp', 'all')),
+  
+  -- Template da mensagem (suporta variÃ¡veis {name}, {price}, etc)
+  template TEXT NOT NULL,
+  
+  -- Se estÃ¡ ativo
+  is_active BOOLEAN DEFAULT TRUE,
+  
+  -- DescriÃ§Ã£o do template
+  description TEXT,
+  
+  -- VariÃ¡veis disponÃ­veis (JSON)
+  available_variables JSONB DEFAULT '[]'::jsonb,
+  
+  -- Timestamps
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndices
+CREATE INDEX IF NOT EXISTS idx_bot_message_templates_type ON bot_message_templates(template_type);
+CREATE INDEX IF NOT EXISTS idx_bot_message_templates_platform ON bot_message_templates(platform);
+CREATE INDEX IF NOT EXISTS idx_bot_message_templates_active ON bot_message_templates(is_active);
+
+-- Trigger para atualizar updated_at
+CREATE OR REPLACE FUNCTION update_bot_message_templates_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_bot_message_templates_updated_at
+  BEFORE UPDATE ON bot_message_templates
+  FOR EACH ROW
+  EXECUTE FUNCTION update_bot_message_templates_updated_at();
+
+-- Inserir templates padrÃ£o
+INSERT INTO bot_message_templates (template_type, platform, template, description, available_variables) VALUES
+('new_promotion', 'all', 
+'ðŸ”¥ *NOVA PROMOÃ‡ÃƒO AUTOMÃTICA*
+
+ðŸ“¦ {product_name}
+
+ðŸ’° *{current_price}*{old_price}
+ðŸ·ï¸ *{discount_percentage}% OFF*
+
+ðŸ›’ Plataforma: {platform_name}
+
+{coupon_section}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Aproveite antes que acabe!',
+'Template para nova promoÃ§Ã£o de produto',
+'["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "affiliate_link", "coupon_section"]'::jsonb),
+
+('new_coupon', 'all',
+'ðŸŽŸï¸ *NOVO CUPOM DISPONÃVEL*
+
+ðŸª Plataforma: {platform_name}
+ðŸ’¬ *CÃ³digo do Cupom:*
+`{coupon_code}`
+
+ðŸ’° Desconto: {discount_value} OFF
+ðŸ“… VÃ¡lido atÃ©: {valid_until}
+{min_purchase}
+
+ðŸ“ {coupon_title}
+{coupon_description}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Use agora e economize!',
+'Template para novo cupom',
+'["platform_name", "coupon_code", "discount_value", "valid_until", "min_purchase", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb),
+
+('expired_coupon', 'all',
+'âš ï¸ *CUPOM EXPIROU*
+
+ðŸª Plataforma: {platform_name}
+ðŸ’¬ CÃ³digo: `{coupon_code}`
+ðŸ“… Expirado em: {expired_date}
+
+ðŸ˜” Infelizmente este cupom nÃ£o estÃ¡ mais disponÃ­vel.
+ðŸ”” Fique atento Ã s prÃ³ximas promoÃ§Ãµes!',
+'Template para cupom expirado',
+'["platform_name", "coupon_code", "expired_date"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+
+
+
+=== 004_enhance_notification_logs.sql ===
+-- =====================================================
+-- ENHANCEMENT: notification_logs
+-- Adicionar colunas extras para melhor tracking
+-- =====================================================
+
+-- Adicionar coluna channel_name se nÃ£o existir
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'notification_logs' 
+                 AND column_name = 'channel_name') THEN
+    ALTER TABLE notification_logs ADD COLUMN channel_name VARCHAR(255);
+  END IF;
+END $$;
+
+-- Adicionar coluna success se nÃ£o existir
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'notification_logs' 
+                 AND column_name = 'success') THEN
+    ALTER TABLE notification_logs ADD COLUMN success BOOLEAN DEFAULT TRUE;
+  END IF;
+END $$;
+
+-- Adicionar coluna message_id se nÃ£o existir
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'notification_logs' 
+                 AND column_name = 'message_id') THEN
+    ALTER TABLE notification_logs ADD COLUMN message_id VARCHAR(255);
+  END IF;
+END $$;
+
+-- Atualizar success baseado em status existente
+UPDATE notification_logs 
+SET success = CASE 
+  WHEN status = 'sent' THEN TRUE
+  WHEN status = 'failed' THEN FALSE
+  ELSE NULL
+END
+WHERE success IS NULL;
+
+-- =====================================================
+-- FIM DA MIGRATION
+-- =====================================================
+SELECT 'Migration 004_enhance_notification_logs executada com sucesso!' as status;
+
+
+
+
+=== 005_add_test_event_type.sql ===
+-- =====================================================
+-- MIGRATION: Adicionar 'test' ao event_type
+-- =====================================================
+
+-- Remover constraint antigo e adicionar novo com 'test'
+ALTER TABLE notification_logs 
+DROP CONSTRAINT IF EXISTS notification_logs_event_type_check;
+
+ALTER TABLE notification_logs 
+ADD CONSTRAINT notification_logs_event_type_check 
+CHECK (event_type IN ('promotion_new', 'coupon_new', 'coupon_expired', 'test', 'price_drop'));
+
+-- =====================================================
+-- FIM DA MIGRATION
+-- =====================================================
+SELECT 'Migration 005_add_test_event_type executada com sucesso!' as status;
+
+
+
+
+=== 006_update_bot_templates_with_applicability.sql ===
+-- =====================================================
+-- Migration: Atualizar templates de bot com informaÃ§Ãµes de aplicabilidade
+-- Data: 2024-12-13
+-- DescriÃ§Ã£o: Adiciona variÃ¡veis de aplicabilidade e compra mÃ­nima nos templates
+-- =====================================================
+
+-- Atualizar template de novo cupom
+UPDATE bot_message_templates
+SET 
+  template = 'ðŸŽŸï¸ *NOVO CUPOM DISPONÃVEL!*
+
+ðŸª *Plataforma:* {platform_name}
+ðŸ’¬ *CÃ³digo:* `{coupon_code}`
+ðŸ’° *Desconto:* {discount_value} OFF
+{min_purchase}
+{max_discount}
+{usage_limit}
+{applicability}
+
+ðŸ“ *{coupon_title}*
+{coupon_description}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Use agora e economize!',
+  available_variables = '["platform_name", "coupon_code", "discount_value", "min_purchase", "max_discount", "usage_limit", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'new_coupon';
+
+-- Atualizar template de cupom expirado (manter simples)
+UPDATE bot_message_templates
+SET 
+  template = 'âŒ *CUPOM EXPIROU* âŒ
+
+ðŸª *Plataforma:* {platform_name}
+ðŸ’¬ *CÃ³digo:* `{coupon_code}`
+ðŸ“… *Expirado em:* {expired_date}
+
+ðŸ˜” Infelizmente este cupom nÃ£o estÃ¡ mais disponÃ­vel.
+ðŸ”” Fique de olho para novos cupons!',
+  available_variables = '["platform_name", "coupon_code", "expired_date"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'expired_coupon';
+
+-- Atualizar template de nova promoÃ§Ã£o para incluir informaÃ§Ãµes de cupom melhoradas
+UPDATE bot_message_templates
+SET 
+  template = 'ðŸ”¥ *NOVA PROMOÃ‡ÃƒO!*
+
+ðŸ› *{product_name}*
+
+{old_price}ðŸ’° *Por: {current_price}* {discount_percentage}% OFF
+
+ðŸ›’ *Loja:* {platform_name}
+{coupon_section}
+ðŸ”— *Link:* {affiliate_link}
+
+âš¡ Aproveite antes que acabe!',
+  available_variables = '["product_name", "old_price", "current_price", "discount_percentage", "platform_name", "coupon_section", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'new_promotion';
+
+-- Verificar se as atualizaÃ§Ãµes foram aplicadas
+SELECT 
+  template_type,
+  LEFT(template, 50) as template_preview,
+  available_variables
+FROM bot_message_templates
+ORDER BY template_type;
+
+
+
+
+=== 007_add_max_discount_to_coupons.sql ===
+-- =====================================================
+-- Migration: Adicionar limite mÃ¡ximo de desconto aos cupons
+-- Data: 2024-12-13
+-- DescriÃ§Ã£o: Adiciona campo max_discount_value para cupons do Mercado Livre/Pago
+-- =====================================================
+
+-- Adicionar campo max_discount_value (limite mÃ¡ximo de desconto aplicÃ¡vel)
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS max_discount_value DECIMAL(10,2) DEFAULT NULL;
+
+-- ComentÃ¡rio
+COMMENT ON COLUMN coupons.max_discount_value IS 'Valor mÃ¡ximo de desconto que pode ser aplicado (ex: R$ 60 mÃ¡ximo, mesmo que o desconto seja maior)';
+
+-- Verificar se a migration foi aplicada
+SELECT 'Migration 007 aplicada com sucesso! Campo max_discount_value adicionado.' as status;
+
+
+
+
+
+
+
+
+
+
+
+=== 008_add_amazon_aliexpress_sync.sql ===
+-- =====================================================
+-- Migration: Adicionar suporte para Amazon e AliExpress
+-- Data: 13/12/2024
+-- =====================================================
+
+-- Adicionar colunas amazon_enabled e aliexpress_enabled na tabela sync_config
+ALTER TABLE sync_config 
+ADD COLUMN IF NOT EXISTS amazon_enabled BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS aliexpress_enabled BOOLEAN DEFAULT false;
+
+-- Atualizar sync_logs para aceitar novas plataformas
+ALTER TABLE sync_logs 
+DROP CONSTRAINT IF EXISTS sync_logs_platform_check;
+
+ALTER TABLE sync_logs 
+ADD CONSTRAINT sync_logs_platform_check 
+CHECK (platform IN ('shopee', 'mercadolivre', 'amazon', 'aliexpress'));
+
+-- Atualizar products para aceitar novas plataformas
+ALTER TABLE products 
+DROP CONSTRAINT IF EXISTS products_platform_check;
+
+ALTER TABLE products 
+ADD CONSTRAINT products_platform_check 
+CHECK (platform IN ('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'));
+
+-- Atualizar coupons para aceitar novas plataformas
+ALTER TABLE coupons 
+DROP CONSTRAINT IF EXISTS coupons_platform_check;
+
+ALTER TABLE coupons 
+ADD CONSTRAINT coupons_platform_check 
+CHECK (platform IN ('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'));
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN sync_config.amazon_enabled IS 'Habilitar sincronizaÃ§Ã£o automÃ¡tica da Amazon';
+COMMENT ON COLUMN sync_config.aliexpress_enabled IS 'Habilitar sincronizaÃ§Ã£o automÃ¡tica do AliExpress';
+
+
+
+
+=== 009_enhance_users_categories_analytics.sql ===
+-- =====================================================
+-- Migration: Melhorias para UsuÃ¡rios, Categorias e Analytics
+-- Data: 13/12/2024
+-- =====================================================
+
+-- Adicionar campos faltantes na tabela categories se nÃ£o existirem
+ALTER TABLE categories
+ADD COLUMN IF NOT EXISTS slug TEXT,
+ADD COLUMN IF NOT EXISTS description TEXT,
+ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT 'ðŸ“¦',
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
+-- Criar Ã­ndice Ãºnico para slug
+CREATE UNIQUE INDEX IF NOT EXISTS categories_slug_unique ON categories(slug) WHERE slug IS NOT NULL;
+
+-- Adicionar comentÃ¡rios
+COMMENT ON COLUMN categories.slug IS 'Slug Ãºnico para URL amigÃ¡vel';
+COMMENT ON COLUMN categories.description IS 'DescriÃ§Ã£o da categoria';
+COMMENT ON COLUMN categories.icon IS 'Ãcone emoji da categoria';
+COMMENT ON COLUMN categories.is_active IS 'Indica se a categoria estÃ¡ ativa';
+
+-- Garantir que a tabela click_tracking existe com os campos necessÃ¡rios
+-- (Se a tabela nÃ£o existir, serÃ¡ criada pelo schema principal)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'click_tracking') THEN
+    CREATE TABLE click_tracking (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+      coupon_id UUID REFERENCES coupons(id) ON DELETE SET NULL,
+      clicked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      converted BOOLEAN DEFAULT false,
+      conversion_date TIMESTAMP WITH TIME ZONE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_click_tracking_user_id ON click_tracking(user_id);
+    CREATE INDEX IF NOT EXISTS idx_click_tracking_product_id ON click_tracking(product_id);
+    CREATE INDEX IF NOT EXISTS idx_click_tracking_clicked_at ON click_tracking(clicked_at);
+    CREATE INDEX IF NOT EXISTS idx_click_tracking_converted ON click_tracking(converted);
+  END IF;
+END $$;
+
+-- Atualizar categorias existentes sem slug para gerar slugs
+UPDATE categories
+SET slug = LOWER(
+  REGEXP_REPLACE(
+    REGEXP_REPLACE(name, '[Ã Ã¡Ã¢Ã£Ã¤Ã¥]', 'a', 'gi'),
+    '[^a-z0-9]+', '-', 'g'
+  )
+)
+WHERE slug IS NULL OR slug = '';
+
+-- Garantir que nÃ£o hÃ¡ slugs duplicados
+DO $$
+DECLARE
+  cat RECORD;
+  counter INTEGER;
+  new_slug TEXT;
+BEGIN
+  FOR cat IN SELECT id, name FROM categories WHERE slug IS NULL OR slug = '' LOOP
+    counter := 1;
+    new_slug := LOWER(
+      REGEXP_REPLACE(
+        REGEXP_REPLACE(cat.name, '[Ã Ã¡Ã¢Ã£Ã¤Ã¥]', 'a', 'gi'),
+        '[^a-z0-9]+', '-', 'g'
+      )
+    );
+    
+    WHILE EXISTS (SELECT 1 FROM categories WHERE slug = new_slug AND id != cat.id) LOOP
+      new_slug := new_slug || '-' || counter;
+      counter := counter + 1;
+    END LOOP;
+    
+    UPDATE categories SET slug = new_slug WHERE id = cat.id;
+  END LOOP;
+END $$;
+
+
+
+
+=== 010_add_social_auth_fields.sql ===
+-- Adicionar campos para autenticaÃ§Ã£o social (Google/Facebook)
+-- Migration: 010_add_social_auth_fields.sql
+
+-- Adicionar colunas para autenticaÃ§Ã£o social
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS provider TEXT,
+ADD COLUMN IF NOT EXISTS provider_id TEXT,
+ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+-- Criar Ã­ndice para busca rÃ¡pida por provider_id
+CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider, provider_id);
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN users.provider IS 'Provedor de autenticaÃ§Ã£o social: google, facebook, etc.';
+COMMENT ON COLUMN users.provider_id IS 'ID do usuÃ¡rio no provedor de autenticaÃ§Ã£o';
+COMMENT ON COLUMN users.avatar_url IS 'URL do avatar do usuÃ¡rio (do provedor social)';
+
+
+
+
+=== 011_add_notification_preferences_theme.sql ===
+-- Migration: 011_add_notification_preferences_theme.sql
+-- Adicionar preferÃªncias de notificaÃ§Ã£o e tema escuro
+
+-- Adicionar coluna para tema escuro
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS dark_mode BOOLEAN DEFAULT FALSE;
+
+-- Criar tabela de preferÃªncias de notificaÃ§Ã£o
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  
+  -- PreferÃªncias gerais
+  push_enabled BOOLEAN DEFAULT TRUE,
+  email_enabled BOOLEAN DEFAULT FALSE,
+  
+  -- PreferÃªncias por categoria
+  category_preferences JSONB DEFAULT '[]'::jsonb, -- Array de category_ids
+  
+  -- PreferÃªncias por palavra-chave
+  keyword_preferences JSONB DEFAULT '[]'::jsonb, -- Array de palavras-chave
+  
+  -- PreferÃªncias por nome de produto
+  product_name_preferences JSONB DEFAULT '[]'::jsonb, -- Array de nomes de produtos
+  
+  -- Filtros de produtos para tela inicial
+  home_filters JSONB DEFAULT '{
+    "platforms": [],
+    "categories": [],
+    "min_discount": 0,
+    "max_price": null,
+    "only_with_coupon": false
+  }'::jsonb,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(user_id)
+);
+
+-- Criar Ã­ndices
+CREATE INDEX IF NOT EXISTS idx_notification_preferences_user_id ON notification_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_preferences_push_enabled ON notification_preferences(push_enabled) WHERE push_enabled = TRUE;
+
+-- ComentÃ¡rios
+COMMENT ON TABLE notification_preferences IS 'PreferÃªncias de notificaÃ§Ã£o e filtros do usuÃ¡rio';
+COMMENT ON COLUMN notification_preferences.category_preferences IS 'Array de IDs de categorias para receber notificaÃ§Ãµes';
+COMMENT ON COLUMN notification_preferences.keyword_preferences IS 'Array de palavras-chave para filtrar notificaÃ§Ãµes';
+COMMENT ON COLUMN notification_preferences.product_name_preferences IS 'Array de nomes de produtos para receber notificaÃ§Ãµes';
+COMMENT ON COLUMN notification_preferences.home_filters IS 'Filtros para produtos na tela inicial';
+COMMENT ON COLUMN users.dark_mode IS 'Tema escuro ativado pelo usuÃ¡rio';
+
+
+
+
+=== 012_add_coupon_exclusive.sql ===
+-- Migration: 012_add_coupon_exclusive.sql
+-- Adicionar campo is_exclusive para cupons exclusivos
+
+-- Adicionar coluna is_exclusive
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS is_exclusive BOOLEAN DEFAULT FALSE;
+
+-- Criar Ã­ndice para busca rÃ¡pida de cupons exclusivos
+CREATE INDEX IF NOT EXISTS idx_coupons_is_exclusive ON coupons(is_exclusive) WHERE is_exclusive = TRUE;
+
+-- ComentÃ¡rio
+COMMENT ON COLUMN coupons.is_exclusive IS 'Cupom exclusivo - aparece primeiro e destacado no app mobile';
+
+
+
+
+=== 013_add_default_categories.sql ===
+-- Migration: 013_add_default_categories.sql
+-- Adicionar categorias padrÃ£o fixas no sistema
+
+-- Garantir que a coluna description existe
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS description TEXT;
+
+-- Categorias padrÃ£o conforme especificado
+INSERT INTO categories (name, slug, icon, description, is_active) VALUES
+  ('AcessÃ³rios', 'acessorios', 'âŒš', 'AcessÃ³rios diversos', true),
+  ('Beleza', 'beleza', 'ðŸ’„', 'Produtos de beleza e cuidados pessoais', true),
+  ('Brinquedos', 'brinquedos', 'ðŸ§¸', 'Brinquedos e jogos infantis', true),
+  ('Casa', 'casa', 'ðŸ ', 'Produtos para casa e decoraÃ§Ã£o', true),
+  ('EletrÃ´nicos', 'eletronicos', 'ðŸ“±', 'EletrÃ´nicos e gadgets', true),
+  ('Esporte', 'esporte', 'âš½', 'Artigos esportivos', true),
+  ('Games', 'games', 'ðŸŽ®', 'Jogos e consoles', true),
+  ('InformÃ¡tica', 'informatica', 'ðŸ’»', 'Computadores e perifÃ©ricos', true),
+  ('Livros', 'livros', 'ðŸ“š', 'Livros e materiais de leitura', true),
+  ('Moda', 'moda', 'ðŸ‘•', 'Roupas e acessÃ³rios de moda', true)
+ON CONFLICT (slug) DO UPDATE
+SET 
+  name = EXCLUDED.name,
+  icon = EXCLUDED.icon,
+  description = EXCLUDED.description,
+  is_active = EXCLUDED.is_active;
+
+-- ComentÃ¡rio
+COMMENT ON TABLE categories IS 'Categorias padrÃ£o fixas do sistema';
+
+
+
+
+=== 014_add_captured_coupons_approval.sql ===
+-- =====================================================
+-- Migration: Adicionar suporte a cupons capturados pendentes de aprovaÃ§Ã£o
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Adiciona campos para gerenciar cupons capturados de fontes externas
+-- =====================================================
+
+-- Adicionar campo para marcar cupons como pendentes de aprovaÃ§Ã£o
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS is_pending_approval BOOLEAN DEFAULT FALSE;
+
+-- Adicionar campo para fonte de captura
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS capture_source VARCHAR(50) DEFAULT NULL;
+
+-- Adicionar campo para URL de origem
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS source_url TEXT;
+
+-- Criar Ã­ndice para busca rÃ¡pida de cupons pendentes
+CREATE INDEX IF NOT EXISTS idx_coupons_pending_approval ON coupons(is_pending_approval) WHERE is_pending_approval = TRUE;
+CREATE INDEX IF NOT EXISTS idx_coupons_capture_source ON coupons(capture_source);
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN coupons.is_pending_approval IS 'Indica se o cupom estÃ¡ aguardando aprovaÃ§Ã£o do administrador';
+COMMENT ON COLUMN coupons.capture_source IS 'Fonte de captura do cupom (gatry, api, manual, etc)';
+COMMENT ON COLUMN coupons.source_url IS 'URL de origem do cupom capturado';
+
+
+
+
+=== 015_add_gatry_coupon_capture.sql ===
+-- =====================================================
+-- Migration: Adicionar suporte a captura de cupons do Gatry
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Adiciona configuraÃ§Ã£o para captura de cupons do Gatry
+-- =====================================================
+
+-- Adicionar campo para habilitar captura do Gatry
+ALTER TABLE coupon_settings
+ADD COLUMN IF NOT EXISTS gatry_enabled BOOLEAN DEFAULT TRUE;
+
+-- ComentÃ¡rio
+COMMENT ON COLUMN coupon_settings.gatry_enabled IS 'Habilita captura automÃ¡tica de cupons do site Gatry';
+
+-- Atualizar configuraÃ§Ã£o padrÃ£o se necessÃ¡rio
+UPDATE coupon_settings
+SET gatry_enabled = TRUE
+WHERE id = '00000000-0000-0000-0000-000000000001'
+  AND gatry_enabled IS NULL;
+
+
+
+
+=== 016_add_telegram_channels.sql ===
+-- Migration: Adicionar tabela de canais Telegram e campos relacionados
+-- Data: 2024-12-13
+
+-- Tabela para armazenar canais Telegram monitorados
+CREATE TABLE IF NOT EXISTS telegram_channels (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    is_active BOOLEAN DEFAULT true,
+    coupons_captured INTEGER DEFAULT 0,
+    last_message_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndices para performance
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_username ON telegram_channels(username);
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_active ON telegram_channels(is_active);
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_created_at ON telegram_channels(created_at);
+
+-- Adicionar campos na tabela coupons se nÃ£o existirem
+DO $$ 
+BEGIN
+    -- Campo origem (jÃ¡ pode existir, entÃ£o verificamos)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'coupons' AND column_name = 'origem'
+    ) THEN
+        ALTER TABLE coupons ADD COLUMN origem VARCHAR(50);
+    END IF;
+
+    -- Campo channel_origin para Telegram
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'coupons' AND column_name = 'channel_origin'
+    ) THEN
+        ALTER TABLE coupons ADD COLUMN channel_origin VARCHAR(255);
+    END IF;
+
+    -- Campo message_id para referÃªncia Ã  mensagem do Telegram
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'coupons' AND column_name = 'message_id'
+    ) THEN
+        ALTER TABLE coupons ADD COLUMN message_id BIGINT;
+    END IF;
+
+    -- Campo message_hash para anti-duplicaÃ§Ã£o
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'coupons' AND column_name = 'message_hash'
+    ) THEN
+        ALTER TABLE coupons ADD COLUMN message_hash VARCHAR(64);
+    END IF;
+END $$;
+
+-- Ãndices para os novos campos
+CREATE INDEX IF NOT EXISTS idx_coupons_origem ON coupons(origem);
+CREATE INDEX IF NOT EXISTS idx_coupons_channel_origin ON coupons(channel_origin);
+CREATE INDEX IF NOT EXISTS idx_coupons_message_hash ON coupons(message_hash);
+
+-- ComentÃ¡rios
+COMMENT ON TABLE telegram_channels IS 'Canais pÃºblicos do Telegram monitorados para captura de cupons';
+COMMENT ON COLUMN telegram_channels.username IS 'Username do canal (sem @)';
+COMMENT ON COLUMN telegram_channels.coupons_captured IS 'Contador de cupons capturados deste canal';
+COMMENT ON COLUMN coupons.origem IS 'Origem do cupom: telegram, gatry, manual, etc';
+COMMENT ON COLUMN coupons.channel_origin IS 'Canal do Telegram de origem (username)';
+COMMENT ON COLUMN coupons.message_id IS 'ID da mensagem do Telegram';
+COMMENT ON COLUMN coupons.message_hash IS 'Hash SHA-256 para anti-duplicaÃ§Ã£o';
+
+
+
+
+
+
+
+
+=== 017_add_telegram_collector_config.sql ===
+-- Migration: Adicionar tabela de configuraÃ§Ãµes do Telegram Collector
+-- Data: 2024-12-13
+
+-- Tabela para armazenar configuraÃ§Ãµes do Telegram Collector
+CREATE TABLE IF NOT EXISTS telegram_collector_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    api_id VARCHAR(50),
+    api_hash VARCHAR(100),
+    phone VARCHAR(20),
+    session_path VARCHAR(255) DEFAULT 'telegram_session.session',
+    is_authenticated BOOLEAN DEFAULT false,
+    listener_status VARCHAR(20) DEFAULT 'stopped', -- stopped, running, error
+    listener_pid INTEGER,
+    last_error TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT single_config CHECK (id = '00000000-0000-0000-0000-000000000001')
+);
+
+-- Inserir registro Ãºnico (ou atualizar se jÃ¡ existir)
+INSERT INTO telegram_collector_config (id, api_id, api_hash, phone, session_path, is_authenticated, listener_status)
+VALUES ('00000000-0000-0000-0000-000000000001', NULL, NULL, NULL, 'telegram_session.session', false, 'stopped')
+ON CONFLICT (id) DO NOTHING;
+
+-- Ãndices
+CREATE INDEX IF NOT EXISTS idx_telegram_collector_config_id ON telegram_collector_config(id);
+
+-- ComentÃ¡rios
+COMMENT ON TABLE telegram_collector_config IS 'ConfiguraÃ§Ãµes do Telegram Collector (MTProto)';
+COMMENT ON COLUMN telegram_collector_config.api_id IS 'API ID do Telegram (obtido em my.telegram.org/apps)';
+COMMENT ON COLUMN telegram_collector_config.api_hash IS 'API Hash do Telegram';
+COMMENT ON COLUMN telegram_collector_config.phone IS 'NÃºmero de telefone para autenticaÃ§Ã£o';
+COMMENT ON COLUMN telegram_collector_config.is_authenticated IS 'Indica se a conta estÃ¡ autenticada';
+COMMENT ON COLUMN telegram_collector_config.listener_status IS 'Status do listener: stopped, running, error';
+COMMENT ON COLUMN telegram_collector_config.listener_pid IS 'PID do processo do listener (se estiver rodando)';
+
+
+
+
+
+
+
+
+=== 018_add_app_settings.sql ===
+-- Migration: Adicionar tabela de configuraÃ§Ãµes gerais da aplicaÃ§Ã£o
+-- Data: 2024-12-13
+-- DescriÃ§Ã£o: Migra configuraÃ§Ãµes do .env para o banco de dados (admin panel)
+
+-- Tabela para armazenar configuraÃ§Ãµes gerais da aplicaÃ§Ã£o
+CREATE TABLE IF NOT EXISTS app_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Mercado Livre
+    meli_client_id VARCHAR(255),
+    meli_client_secret VARCHAR(255),
+    meli_access_token TEXT,
+    meli_refresh_token TEXT,
+    meli_redirect_uri VARCHAR(500),
+    meli_affiliate_code VARCHAR(100),
+    meli_affiliate_tag VARCHAR(100),
+    
+    -- Shopee
+    shopee_partner_id VARCHAR(100),
+    shopee_partner_key VARCHAR(255),
+    
+    -- Amazon
+    amazon_access_key VARCHAR(255),
+    amazon_secret_key VARCHAR(255),
+    amazon_partner_tag VARCHAR(100),
+    amazon_marketplace VARCHAR(50) DEFAULT 'www.amazon.com.br',
+    
+    -- AliExpress
+    aliexpress_api_url VARCHAR(500) DEFAULT 'https://api-sg.aliexpress.com/rest',
+    
+    -- Expo / Push Notifications
+    expo_access_token VARCHAR(255),
+    
+    -- Telegram Collector (jÃ¡ tem tabela prÃ³pria, mas pode ter configs extras)
+    telegram_collector_rate_limit_delay DECIMAL(3,1) DEFAULT 1.0,
+    telegram_collector_max_retries INTEGER DEFAULT 3,
+    telegram_collector_reconnect_delay INTEGER DEFAULT 30,
+    
+    -- Backend API
+    backend_url VARCHAR(500) DEFAULT 'http://localhost:3000',
+    backend_api_key VARCHAR(255),
+    
+    -- Outras configuraÃ§Ãµes
+    python_path VARCHAR(255) DEFAULT 'python',
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT single_settings CHECK (id = '00000000-0000-0000-0000-000000000001')
+);
+
+-- Inserir registro Ãºnico (ou atualizar se jÃ¡ existir)
+INSERT INTO app_settings (id, amazon_marketplace, backend_url, python_path)
+VALUES ('00000000-0000-0000-0000-000000000001', 'www.amazon.com.br', 'http://localhost:3000', 'python')
+ON CONFLICT (id) DO NOTHING;
+
+-- Ãndices
+CREATE INDEX IF NOT EXISTS idx_app_settings_id ON app_settings(id);
+
+-- ComentÃ¡rios
+COMMENT ON TABLE app_settings IS 'ConfiguraÃ§Ãµes gerais da aplicaÃ§Ã£o migradas do .env';
+COMMENT ON COLUMN app_settings.meli_client_id IS 'Client ID do Mercado Livre';
+COMMENT ON COLUMN app_settings.meli_client_secret IS 'Client Secret do Mercado Livre';
+COMMENT ON COLUMN app_settings.meli_access_token IS 'Access Token do Mercado Livre (atualizado automaticamente)';
+COMMENT ON COLUMN app_settings.meli_refresh_token IS 'Refresh Token do Mercado Livre';
+COMMENT ON COLUMN app_settings.shopee_partner_id IS 'Partner ID da Shopee';
+COMMENT ON COLUMN app_settings.shopee_partner_key IS 'Partner Key da Shopee';
+COMMENT ON COLUMN app_settings.amazon_access_key IS 'Access Key da Amazon';
+COMMENT ON COLUMN app_settings.amazon_secret_key IS 'Secret Key da Amazon';
+COMMENT ON COLUMN app_settings.expo_access_token IS 'Access Token do Expo para push notifications';
+
+
+
+
+
+
+
+
+=== 019_remove_python_path.sql ===
+-- Migration: Remover coluna python_path da tabela app_settings
+-- Data: 2024-12-14
+-- DescriÃ§Ã£o: Remove python_path pois o Telegram Collector agora usa Node.js (gramjs) em vez de Python
+
+-- Remover coluna python_path
+ALTER TABLE app_settings DROP COLUMN IF EXISTS python_path;
+
+-- ComentÃ¡rio atualizado
+COMMENT ON TABLE app_settings IS 'ConfiguraÃ§Ãµes gerais da aplicaÃ§Ã£o migradas do .env. Telegram Collector agora usa Node.js (gramjs) em vez de Python.';
+
+
+
+
+
+
+
+
+=== 020_add_phone_code_hash.sql ===
+-- Migration: Adicionar campo phone_code_hash para autenticaÃ§Ã£o Telegram
+-- Data: 2024-12-13
+
+-- Adicionar campo para armazenar phoneCodeHash temporariamente durante autenticaÃ§Ã£o
+ALTER TABLE telegram_collector_config 
+ADD COLUMN IF NOT EXISTS phone_code_hash VARCHAR(255);
+
+-- ComentÃ¡rio
+COMMENT ON COLUMN telegram_collector_config.phone_code_hash IS 'Hash temporÃ¡rio do cÃ³digo de verificaÃ§Ã£o (expira apÃ³s alguns minutos)';
+
+
+
+
+
+
+
+=== 021_add_last_code_sent_at.sql ===
+-- Migration: Adicionar campo last_code_sent_at para rastrear tentativas de envio de cÃ³digo
+-- Data: 2024-12-14
+
+-- Adicionar campo para rastrear Ãºltima tentativa de envio de cÃ³digo
+ALTER TABLE telegram_collector_config
+ADD COLUMN IF NOT EXISTS last_code_sent_at TIMESTAMP;
+
+-- ComentÃ¡rio
+COMMENT ON COLUMN telegram_collector_config.last_code_sent_at IS 'Timestamp da Ãºltima tentativa de envio de cÃ³digo de verificaÃ§Ã£o (para evitar rate limiting)';
+
+
+
+
+
+
+
+=== 022_add_channel_id_to_telegram_channels.sql ===
+-- Migration: Adicionar coluna channel_id Ã  tabela telegram_channels
+-- Data: 2025-12-15
+-- DescriÃ§Ã£o: Adiciona campo para armazenar o ID do canal do Telegram (obtido via API)
+
+-- Adicionar coluna channel_id se nÃ£o existir
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'channel_id'
+    ) THEN
+        ALTER TABLE telegram_channels 
+        ADD COLUMN channel_id VARCHAR(50);
+        
+        COMMENT ON COLUMN telegram_channels.channel_id IS 'ID do canal no Telegram (ex: -1001234567890). Obtido automaticamente ao resolver o username.';
+    END IF;
+END $$;
+
+-- Adicionar Ã­ndice para channel_id
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_channel_id ON telegram_channels(channel_id);
+
+-- Adicionar campos adicionais Ãºteis para o listener
+DO $$ 
+BEGIN
+    -- Campo last_message_id para rastrear Ãºltima mensagem processada
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'last_message_id'
+    ) THEN
+        ALTER TABLE telegram_channels 
+        ADD COLUMN last_message_id BIGINT;
+    END IF;
+
+    -- Campo last_sync_at para rastrear Ãºltima sincronizaÃ§Ã£o
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'last_sync_at'
+    ) THEN
+        ALTER TABLE telegram_channels 
+        ADD COLUMN last_sync_at TIMESTAMP WITH TIME ZONE;
+    END IF;
+END $$;
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN telegram_channels.channel_id IS 'ID do canal no Telegram (ex: -1001234567890). Obtido automaticamente ao resolver o username.';
+COMMENT ON COLUMN telegram_channels.last_message_id IS 'ID da Ãºltima mensagem processada deste canal';
+COMMENT ON COLUMN telegram_channels.last_sync_at IS 'Timestamp da Ãºltima sincronizaÃ§Ã£o/processamento de mensagens';
+
+
+
+
+
+=== 025_add_default_template_models.sql ===
+-- =====================================================
+-- MIGRATION: Adicionar 3 modelos padrÃ£o de templates
+-- para cada tipo (produto, cupom, cupom expirado)
+-- =====================================================
+
+-- Limpar templates padrÃ£o antigos (opcional - comentado para nÃ£o perder dados)
+-- DELETE FROM bot_message_templates WHERE description LIKE '%Modelo PadrÃ£o%';
+
+-- =====================================================
+-- MODELOS PARA: NOVA PROMOÃ‡ÃƒO (new_promotion)
+-- =====================================================
+
+-- Modelo 1: Simples e Direto
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('new_promotion', 'all', 
+'ðŸ”¥ **PROMOÃ‡ÃƒO IMPERDÃVEL!**
+
+ðŸ“¦ {product_name}
+
+ðŸ’° **{current_price}**{old_price}
+ðŸ·ï¸ **{discount_percentage}% OFF**
+
+ðŸ›’ {platform_name}
+
+{coupon_section}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Corre que estÃ¡ acabando!',
+'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas',
+true,
+'["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "coupon_section", "affiliate_link"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 2: Detalhado e Informativo
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('new_promotion', 'all', 
+'ðŸŽ¯ **OFERTA ESPECIAL ENCONTRADA!**
+
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+ðŸ“¦ **PRODUTO**
+{product_name}
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+ðŸ’° **PREÃ‡O ATUAL:** {current_price}{old_price}
+ðŸŽ **DESCONTO:** {discount_percentage}% OFF
+
+ðŸª **LOJA:** {platform_name}
+
+{coupon_section}
+
+ðŸ”— **COMPRAR AGORA:**
+{affiliate_link}
+
+â° **Oferta limitada! NÃ£o perca!**',
+'Modelo PadrÃ£o 2: Detalhado e Informativo - Todas as plataformas',
+false,
+'["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "coupon_section", "affiliate_link"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 3: Urgente e AÃ§Ã£o
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('new_promotion', 'all', 
+'âš¡ **ALERTA DE OFERTA!** âš¡
+
+ðŸŽ {product_name}
+
+ðŸ’¸ De {old_price} por apenas **{current_price}**
+ðŸ”¥ **ECONOMIZE {discount_percentage}%!**
+
+{coupon_section}
+
+ðŸ›’ {platform_name}
+ðŸ”— {affiliate_link}
+
+â° **ÃšLTIMAS HORAS! Aproveite agora!**',
+'Modelo PadrÃ£o 3: Urgente e AÃ§Ã£o - Todas as plataformas',
+false,
+'["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "coupon_section", "affiliate_link"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- MODELOS PARA: NOVO CUPOM (new_coupon)
+-- =====================================================
+
+-- Modelo 1: Simples e Direto
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('new_coupon', 'all', 
+'ðŸŽŸï¸ **NOVO CUPOM DISPONÃVEL!**
+
+ðŸª {platform_name}
+
+ðŸ’¬ **CÃ“DIGO:**
+`{coupon_code}`
+
+ðŸ’° **DESCONTO:** {discount_value} OFF
+{min_purchase}
+{applicability}
+
+ðŸ“ {coupon_title}
+{coupon_description}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Use agora e economize!',
+'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas',
+true,
+'["platform_name", "coupon_code", "discount_value", "min_purchase", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 2: Detalhado e Informativo
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('new_coupon', 'all', 
+'ðŸŽ **CUPOM DE DESCONTO ATIVO!**
+
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+ðŸª **PLATAFORMA:** {platform_name}
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+ðŸ’¬ **COPIE O CÃ“DIGO:**
+`{coupon_code}`
+
+ðŸ’° **VALOR DO DESCONTO:** {discount_value} OFF
+{min_purchase}
+{applicability}
+
+ðŸ“‹ **DETALHES:**
+{coupon_title}
+{coupon_description}
+
+ðŸ”— **LINK PARA USAR:**
+{affiliate_link}
+
+âœ… **Cupom pronto para uso!**',
+'Modelo PadrÃ£o 2: Detalhado e Informativo - Todas as plataformas',
+false,
+'["platform_name", "coupon_code", "discount_value", "min_purchase", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 3: Urgente e AÃ§Ã£o
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('new_coupon', 'all', 
+'âš¡ **CUPOM LIBERADO!** âš¡
+
+ðŸŽŸï¸ **CÃ“DIGO EXCLUSIVO:**
+`{coupon_code}`
+
+ðŸª {platform_name}
+ðŸ’° {discount_value} OFF
+{min_purchase}
+{applicability}
+
+{coupon_title}
+{coupon_description}
+
+ðŸ”— {affiliate_link}
+
+â° **Use antes que expire!**',
+'Modelo PadrÃ£o 3: Urgente e AÃ§Ã£o - Todas as plataformas',
+false,
+'["platform_name", "coupon_code", "discount_value", "min_purchase", "applicability", "coupon_title", "coupon_description", "affiliate_link"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- MODELOS PARA: CUPOM EXPIrado (expired_coupon)
+-- =====================================================
+
+-- Modelo 1: Simples e Direto
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('expired_coupon', 'all', 
+'âš ï¸ **CUPOM EXPIROU**
+
+ðŸª {platform_name}
+ðŸ’¬ CÃ³digo: `{coupon_code}`
+ðŸ“… Expirado em: {expired_date}
+
+ðŸ˜” Este cupom nÃ£o estÃ¡ mais disponÃ­vel.
+ðŸ”” Fique atento Ã s prÃ³ximas promoÃ§Ãµes!',
+'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas',
+true,
+'["platform_name", "coupon_code", "expired_date"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 2: Informativo
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('expired_coupon', 'all', 
+'ðŸ“¢ **AVISO: CUPOM EXPIRADO**
+
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+ðŸª **Plataforma:** {platform_name}
+ðŸ’¬ **CÃ³digo:** `{coupon_code}`
+ðŸ“… **Data de ExpiraÃ§Ã£o:** {expired_date}
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+â„¹ï¸ Este cupom de desconto nÃ£o estÃ¡ mais vÃ¡lido.
+
+ðŸ”” **NÃ£o se preocupe!** Novos cupons sÃ£o adicionados regularmente. Fique de olho!',
+'Modelo PadrÃ£o 2: Informativo - Todas as plataformas',
+false,
+'["platform_name", "coupon_code", "expired_date"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 3: Motivacional
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('expired_coupon', 'all', 
+'â° **CUPOM EXPIRADO**
+
+ðŸª {platform_name}
+ðŸ’¬ `{coupon_code}`
+ðŸ“… {expired_date}
+
+ðŸ˜¢ Infelizmente este cupom expirou.
+
+âœ¨ Mas nÃ£o desanime! Novas oportunidades estÃ£o chegando. Continue acompanhando para nÃ£o perder as prÃ³ximas ofertas! ðŸŽ',
+'Modelo PadrÃ£o 3: Motivacional - Todas as plataformas',
+false,
+'["platform_name", "coupon_code", "expired_date"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- COMENTÃRIOS
+-- =====================================================
+-- Esta migration adiciona 3 modelos padrÃ£o para cada tipo de template:
+-- - new_promotion: 3 modelos (Simples, Detalhado, Urgente)
+-- - new_coupon: 3 modelos (Simples, Detalhado, Urgente)
+-- - expired_coupon: 3 modelos (Simples, Informativo, Motivacional)
+--
+-- Apenas o "Modelo 1" de cada tipo estÃ¡ ativo por padrÃ£o.
+-- Os outros modelos podem ser ativados pelo painel admin.
+--
+-- Todos os modelos sÃ£o criados com platform='all' para funcionar
+-- em todas as plataformas. Templates especÃ­ficos por plataforma
+-- podem ser criados pelo painel admin.
+
+
+
+
+
+
+
+
+
+
+
+
+=== 026_update_telegram_parse_mode_to_html.sql ===
+-- =====================================================
+-- Migration: 026_update_telegram_parse_mode_to_html
+-- Data: 2024-12-XX
+-- DescriÃ§Ã£o: Atualiza telegram_parse_mode padrÃ£o para HTML
+-- =====================================================
+
+-- Atualizar o valor padrÃ£o da coluna
+ALTER TABLE bot_config 
+ALTER COLUMN telegram_parse_mode SET DEFAULT 'HTML';
+
+-- Atualizar registros existentes que estÃ£o com 'Markdown' ou 'MarkdownV2' para 'HTML'
+-- HTML Ã© mais confiÃ¡vel e suporta todas as formataÃ§Ãµes (negrito, riscado, itÃ¡lico, etc)
+UPDATE bot_config 
+SET telegram_parse_mode = 'HTML',
+    updated_at = NOW()
+WHERE telegram_parse_mode IN ('Markdown', 'MarkdownV2')
+   OR telegram_parse_mode IS NULL;
+
+-- Se nÃ£o houver registro, criar um com HTML como padrÃ£o
+INSERT INTO bot_config (
+  id,
+  telegram_parse_mode,
+  telegram_enabled,
+  whatsapp_enabled,
+  notify_new_products,
+  notify_new_coupons,
+  notify_expired_coupons,
+  notify_price_drops,
+  min_discount_to_notify
+)
+SELECT 
+  uuid_generate_v4(),
+  'HTML',
+  FALSE,
+  FALSE,
+  TRUE,
+  TRUE,
+  FALSE,
+  TRUE,
+  20
+WHERE NOT EXISTS (SELECT 1 FROM bot_config LIMIT 1);
+
+-- ComentÃ¡rio explicativo
+COMMENT ON COLUMN bot_config.telegram_parse_mode IS 'Modo de parsing do Telegram: HTML (recomendado), Markdown, MarkdownV2. HTML suporta todas as formataÃ§Ãµes e Ã© mais confiÃ¡vel.';
+
+-- =====================================================
+-- FIM DA MIGRATION
+-- =====================================================
+SELECT 'Migration 026_update_telegram_parse_mode_to_html executada com sucesso!' as status;
+
+
+
+
+
+
+
+
+
+
+
+
+
+=== 027_add_system_templates_protection.sql ===
+-- =====================================================
+-- Migration: 027_add_system_templates_protection
+-- Data: 2024-12-XX
+-- DescriÃ§Ã£o: Adiciona proteÃ§Ã£o para templates padrÃ£o do sistema
+-- =====================================================
+
+-- Adicionar coluna is_system para marcar templates do sistema
+ALTER TABLE bot_message_templates 
+ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE;
+
+-- Criar Ã­ndice para busca rÃ¡pida
+CREATE INDEX IF NOT EXISTS idx_bot_message_templates_system ON bot_message_templates(is_system);
+
+-- Marcar os 3 templates padrÃ£o ativos como templates do sistema
+-- Template 1: new_promotion (Modelo PadrÃ£o 1 - Simples e Direto)
+UPDATE bot_message_templates 
+SET is_system = TRUE
+WHERE template_type = 'new_promotion' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas'
+  AND is_active = TRUE;
+
+-- Template 2: new_coupon (Modelo PadrÃ£o 1 - Simples e Direto)
+UPDATE bot_message_templates 
+SET is_system = TRUE
+WHERE template_type = 'new_coupon' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas'
+  AND is_active = TRUE;
+
+-- Template 3: expired_coupon (Modelo PadrÃ£o 1 - Simples e Direto)
+UPDATE bot_message_templates 
+SET is_system = TRUE
+WHERE template_type = 'expired_coupon' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas'
+  AND is_active = TRUE;
+
+-- Se nÃ£o encontrou os templates acima, tentar marcar os primeiros ativos de cada tipo
+-- (para casos onde os templates jÃ¡ existiam antes desta migraÃ§Ã£o)
+DO $$
+DECLARE
+  promotion_id UUID;
+  coupon_id UUID;
+  expired_id UUID;
+BEGIN
+  -- Se nÃ£o hÃ¡ template de promoÃ§Ã£o marcado como sistema, marcar o primeiro ativo
+  IF NOT EXISTS (SELECT 1 FROM bot_message_templates WHERE template_type = 'new_promotion' AND is_system = TRUE) THEN
+    SELECT id INTO promotion_id
+    FROM bot_message_templates
+    WHERE template_type = 'new_promotion' 
+      AND platform = 'all'
+      AND is_active = TRUE
+    ORDER BY created_at ASC
+    LIMIT 1;
+    
+    IF promotion_id IS NOT NULL THEN
+      UPDATE bot_message_templates SET is_system = TRUE WHERE id = promotion_id;
+    END IF;
+  END IF;
+
+  -- Se nÃ£o hÃ¡ template de cupom marcado como sistema, marcar o primeiro ativo
+  IF NOT EXISTS (SELECT 1 FROM bot_message_templates WHERE template_type = 'new_coupon' AND is_system = TRUE) THEN
+    SELECT id INTO coupon_id
+    FROM bot_message_templates
+    WHERE template_type = 'new_coupon' 
+      AND platform = 'all'
+      AND is_active = TRUE
+    ORDER BY created_at ASC
+    LIMIT 1;
+    
+    IF coupon_id IS NOT NULL THEN
+      UPDATE bot_message_templates SET is_system = TRUE WHERE id = coupon_id;
+    END IF;
+  END IF;
+
+  -- Se nÃ£o hÃ¡ template de cupom expirado marcado como sistema, marcar o primeiro ativo
+  IF NOT EXISTS (SELECT 1 FROM bot_message_templates WHERE template_type = 'expired_coupon' AND is_system = TRUE) THEN
+    SELECT id INTO expired_id
+    FROM bot_message_templates
+    WHERE template_type = 'expired_coupon' 
+      AND platform = 'all'
+      AND is_active = TRUE
+    ORDER BY created_at ASC
+    LIMIT 1;
+    
+    IF expired_id IS NOT NULL THEN
+      UPDATE bot_message_templates SET is_system = TRUE WHERE id = expired_id;
+    END IF;
+  END IF;
+END $$;
+
+-- ComentÃ¡rio explicativo
+COMMENT ON COLUMN bot_message_templates.is_system IS 'Indica se o template Ã© do sistema e nÃ£o pode ser deletado. Templates do sistema sÃ£o os 3 modelos padrÃ£o (um de cada tipo) que sempre devem existir.';
+
+-- =====================================================
+-- FIM DA MIGRATION
+-- =====================================================
+SELECT 'Migration 027_add_system_templates_protection executada com sucesso!' as status;
+
+
+
+
+
+
+
+
+
+
+
+
+
+=== 028_add_telegram_channel_capture_settings.sql ===
+-- Migration: Adicionar configuraÃ§Ãµes de captura para canais Telegram
+-- Data: 2024-12-17
+
+-- Adicionar campos de configuraÃ§Ã£o de captura
+DO $$ 
+BEGIN
+    -- HorÃ¡rio de inÃ­cio da captura
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'capture_schedule_start'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN capture_schedule_start TIME;
+    END IF;
+
+    -- HorÃ¡rio de fim da captura
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'capture_schedule_end'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN capture_schedule_end TIME;
+    END IF;
+
+    -- Modo de captura: 'new_only', '1_day', '2_days'
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'capture_mode'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN capture_mode VARCHAR(20) DEFAULT 'new_only';
+    END IF;
+
+    -- Filtro de plataforma: 'all' ou nome da plataforma especÃ­fica
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'platform_filter'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN platform_filter VARCHAR(50) DEFAULT 'all';
+    END IF;
+
+    -- Campo channel_id (jÃ¡ pode existir)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'channel_id'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN channel_id VARCHAR(100);
+    END IF;
+
+    -- Campo last_message_id para rastrear Ãºltima mensagem processada
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'last_message_id'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN last_message_id BIGINT;
+    END IF;
+
+    -- Campo last_sync_at para rastrear Ãºltima sincronizaÃ§Ã£o
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' AND column_name = 'last_sync_at'
+    ) THEN
+        ALTER TABLE telegram_channels ADD COLUMN last_sync_at TIMESTAMP WITH TIME ZONE;
+    END IF;
+END $$;
+
+-- Ãndices para performance
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_capture_mode ON telegram_channels(capture_mode);
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_platform_filter ON telegram_channels(platform_filter);
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_channel_id ON telegram_channels(channel_id);
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN telegram_channels.capture_schedule_start IS 'HorÃ¡rio de inÃ­cio para captura de mensagens (formato HH:MM)';
+COMMENT ON COLUMN telegram_channels.capture_schedule_end IS 'HorÃ¡rio de fim para captura de mensagens (formato HH:MM)';
+COMMENT ON COLUMN telegram_channels.capture_mode IS 'Modo de captura: new_only (apenas novas), 1_day (atÃ© 1 dia atrÃ¡s), 2_days (atÃ© 2 dias atrÃ¡s)';
+COMMENT ON COLUMN telegram_channels.platform_filter IS 'Filtro de plataforma: all (todas) ou nome especÃ­fico (mercadolivre, amazon, shopee, etc)';
+COMMENT ON COLUMN telegram_channels.channel_id IS 'ID do canal Telegram (formato -100XXXXXXXXX)';
+COMMENT ON COLUMN telegram_channels.last_message_id IS 'ID da Ãºltima mensagem processada';
+COMMENT ON COLUMN telegram_channels.last_sync_at IS 'Data/hora da Ãºltima sincronizaÃ§Ã£o de mensagens';
+
+
+
+
+
+
+
+
+
+
+
+
+=== 029_add_openrouter_settings.sql ===
+-- Migration: Adicionar configuraÃ§Ãµes OpenRouter para mÃ³dulo de IA
+-- Data: 2024-12-XX
+-- DescriÃ§Ã£o: Adiciona campos para configuraÃ§Ã£o do OpenRouter no app_settings
+
+-- Adicionar colunas na tabela app_settings
+ALTER TABLE app_settings
+ADD COLUMN IF NOT EXISTS openrouter_api_key VARCHAR(255),
+ADD COLUMN IF NOT EXISTS openrouter_model VARCHAR(100) DEFAULT 'mistralai/mistral-7b-instruct',
+ADD COLUMN IF NOT EXISTS openrouter_enabled BOOLEAN DEFAULT false;
+
+-- ComentÃ¡rios nas colunas
+COMMENT ON COLUMN app_settings.openrouter_api_key IS 'API Key do OpenRouter para acesso aos modelos de IA';
+COMMENT ON COLUMN app_settings.openrouter_model IS 'Modelo de IA a ser usado (ex: mistralai/mistral-7b-instruct, openchat/openchat-7b)';
+COMMENT ON COLUMN app_settings.openrouter_enabled IS 'Flag para ativar/desativar o mÃ³dulo de IA';
+
+-- Ãndice para busca rÃ¡pida (se necessÃ¡rio)
+-- CREATE INDEX IF NOT EXISTS idx_app_settings_openrouter_enabled ON app_settings(openrouter_enabled) WHERE openrouter_enabled = true;
+
+
+
+
+
+
+
+
+
+
+
+=== 030_add_coupon_ai_settings.sql ===
+-- Adicionar configuraÃ§Ãµes de IA para captura de cupons
+ALTER TABLE coupon_settings
+ADD COLUMN IF NOT EXISTS use_ai_filtering BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS use_ai_optimization BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS ai_min_quality_score DECIMAL(3,2) DEFAULT 0.60,
+ADD COLUMN IF NOT EXISTS ai_min_relevance_score DECIMAL(3,2) DEFAULT 0.50,
+ADD COLUMN IF NOT EXISTS ai_min_price_score DECIMAL(3,2) DEFAULT 0.50,
+ADD COLUMN IF NOT EXISTS ai_require_good_deal BOOLEAN DEFAULT false;
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN coupon_settings.use_ai_filtering IS 'Usar IA para filtrar cupons automaticamente';
+COMMENT ON COLUMN coupon_settings.use_ai_optimization IS 'Usar IA para otimizar descriÃ§Ãµes de cupons';
+COMMENT ON COLUMN coupon_settings.ai_min_quality_score IS 'Score mÃ­nimo de qualidade (0.0-1.0)';
+COMMENT ON COLUMN coupon_settings.ai_min_relevance_score IS 'Score mÃ­nimo de relevÃ¢ncia (0.0-1.0)';
+COMMENT ON COLUMN coupon_settings.ai_min_price_score IS 'Score mÃ­nimo de preÃ§o (0.0-1.0)';
+COMMENT ON COLUMN coupon_settings.ai_require_good_deal IS 'Requerer que seja uma boa oportunidade';
+
+
+
+
+
+
+
+
+
+
+
+=== 031_add_product_status_and_original_link.sql ===
+-- =====================================================
+-- Migration: Adicionar status e original_link aos produtos
+-- Data: 18/12/2024
+-- =====================================================
+
+-- Adicionar coluna status na tabela products
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending' 
+CHECK (status IN ('pending', 'approved', 'rejected', 'published'));
+
+-- Adicionar coluna original_link para armazenar o link original do produto
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS original_link TEXT;
+
+-- Se jÃ¡ existirem produtos, marcar como 'published' (jÃ¡ foram publicados)
+UPDATE products 
+SET status = 'published' 
+WHERE status IS NULL OR status = 'pending';
+
+-- Copiar affiliate_link para original_link nos produtos existentes
+UPDATE products 
+SET original_link = affiliate_link 
+WHERE original_link IS NULL AND affiliate_link IS NOT NULL;
+
+-- Criar Ã­ndice para busca por status
+CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
+
+-- Atualizar view products_full para incluir os novos campos
+-- IMPORTANTE: Dropar a view primeiro para evitar conflitos de colunas
+DROP VIEW IF EXISTS products_full;
+
+CREATE VIEW products_full AS
+SELECT 
+  p.*,
+  c.name as category_name,
+  c.slug as category_slug,
+  c.icon as category_icon,
+  cp.code as coupon_code,
+  cp.discount_type as coupon_discount_type,
+  cp.discount_value as coupon_discount_value,
+  cp.valid_until as coupon_valid_until,
+  cp.is_vip as coupon_is_vip
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN coupons cp ON p.coupon_id = cp.id;
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN products.status IS 'Status do produto: pending (aguardando aprovaÃ§Ã£o), approved (aprovado), rejected (rejeitado), published (publicado)';
+COMMENT ON COLUMN products.original_link IS 'Link original do produto antes da conversÃ£o para link de afiliado';
+
+
+
+
+
+
+
+
+
+
+
+=== 032_add_promotion_with_coupon_template.sql ===
+-- =====================================================
+-- MIGRATION: 032_add_promotion_with_coupon_template
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Adiciona suporte ao novo tipo de template 'promotion_with_coupon'
+--            e atualiza templates de 'new_promotion' para remover coupon_section
+-- =====================================================
+
+-- =====================================================
+-- 1. ATUALIZAR CONSTRAINT DO template_type
+-- =====================================================
+
+-- Remover constraint antiga
+ALTER TABLE bot_message_templates 
+DROP CONSTRAINT IF EXISTS bot_message_templates_template_type_check;
+
+-- Adicionar nova constraint com 'promotion_with_coupon'
+ALTER TABLE bot_message_templates 
+ADD CONSTRAINT bot_message_templates_template_type_check 
+CHECK (template_type IN ('new_promotion', 'promotion_with_coupon', 'new_coupon', 'expired_coupon'));
+
+-- =====================================================
+-- 2. ATUALIZAR TEMPLATES EXISTENTES DE new_promotion
+--    Remover {coupon_section} e atualizar variÃ¡veis disponÃ­veis
+-- =====================================================
+
+-- Atualizar Modelo PadrÃ£o 1: Simples e Direto (SEM CUPOM)
+UPDATE bot_message_templates 
+SET 
+  template = 'ðŸ”¥ **PROMOÃ‡ÃƒO IMPERDÃVEL!**
+
+ðŸ“¦ {product_name}
+
+ðŸ’° **{current_price}**{old_price}
+ðŸ·ï¸ **{discount_percentage}% OFF**
+
+ðŸ›’ {platform_name}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Corre que estÃ¡ acabando!',
+  description = 'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas (SEM CUPOM)',
+  available_variables = '["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'new_promotion' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 1: Simples e Direto - Todas as plataformas';
+
+-- Atualizar Modelo PadrÃ£o 2: Detalhado e Informativo (SEM CUPOM)
+UPDATE bot_message_templates 
+SET 
+  template = 'ðŸŽ¯ **OFERTA ESPECIAL ENCONTRADA!**
+
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+ðŸ“¦ **PRODUTO**
+{product_name}
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+ðŸ’° **PREÃ‡O ATUAL:** {current_price}{old_price}
+ðŸŽ **DESCONTO:** {discount_percentage}% OFF
+
+ðŸª **LOJA:** {platform_name}
+
+ðŸ”— **COMPRAR AGORA:**
+{affiliate_link}
+
+â° **Oferta limitada! NÃ£o perca!**',
+  description = 'Modelo PadrÃ£o 2: Detalhado e Informativo - Todas as plataformas (SEM CUPOM)',
+  available_variables = '["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'new_promotion' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 2: Detalhado e Informativo - Todas as plataformas';
+
+-- Atualizar Modelo PadrÃ£o 3: Urgente e AÃ§Ã£o (SEM CUPOM)
+UPDATE bot_message_templates 
+SET 
+  template = 'âš¡ **ALERTA DE OFERTA!** âš¡
+
+ðŸŽ {product_name}
+
+ðŸ’¸ De {old_price} por apenas **{current_price}**
+ðŸ”¥ **ECONOMIZE {discount_percentage}%!**
+
+ðŸ›’ {platform_name}
+ðŸ”— {affiliate_link}
+
+â° **ÃšLTIMAS HORAS! Aproveite agora!**',
+  description = 'Modelo PadrÃ£o 3: Urgente e AÃ§Ã£o - Todas as plataformas (SEM CUPOM)',
+  available_variables = '["product_name", "current_price", "old_price", "discount_percentage", "platform_name", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'new_promotion' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 3: Urgente e AÃ§Ã£o - Todas as plataformas';
+
+-- =====================================================
+-- 3. INSERIR TEMPLATES PADRÃƒO PARA promotion_with_coupon
+-- =====================================================
+
+-- Modelo 1: Simples e Direto (COM CUPOM)
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('promotion_with_coupon', 'all', 
+'ðŸ”¥ **PROMOÃ‡ÃƒO + CUPOM!**
+
+ðŸ“¦ {product_name}
+
+ðŸ’° **PreÃ§o:** {original_price}
+ðŸŽŸï¸ **Com Cupom:** {final_price}
+{old_price}
+ðŸ·ï¸ **{discount_percentage}% OFF**
+
+{coupon_section}
+
+ðŸ›’ {platform_name}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Economia dupla! Corre que estÃ¡ acabando!',
+'Modelo PadrÃ£o 1: PromoÃ§Ã£o com Cupom - Simples e Direto',
+true,
+'["product_name", "current_price", "original_price", "final_price", "old_price", "discount_percentage", "platform_name", "coupon_section", "coupon_code", "coupon_discount", "affiliate_link", "price_with_coupon"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 2: Detalhado e Informativo (COM CUPOM)
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('promotion_with_coupon', 'all', 
+'ðŸŽ¯ **OFERTA ESPECIAL + CUPOM!**
+
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+ðŸ“¦ **PRODUTO**
+{product_name}
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+ðŸ’° **PREÃ‡O ORIGINAL:** {original_price}
+ðŸŽŸï¸ **PREÃ‡O COM CUPOM:** {final_price}
+{old_price}
+ðŸŽ **DESCONTO DO PRODUTO:** {discount_percentage}% OFF
+
+{coupon_section}
+
+ðŸª **LOJA:** {platform_name}
+
+ðŸ”— **COMPRAR AGORA:**
+{affiliate_link}
+
+â° **Oferta limitada! NÃ£o perca!**',
+'Modelo PadrÃ£o 2: PromoÃ§Ã£o com Cupom - Detalhado',
+false,
+'["product_name", "current_price", "original_price", "final_price", "old_price", "discount_percentage", "platform_name", "coupon_section", "coupon_code", "coupon_discount", "affiliate_link", "price_with_coupon"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Modelo 3: Urgente e AÃ§Ã£o (COM CUPOM)
+INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
+('promotion_with_coupon', 'all', 
+'âš¡ **ECONOMIA DUPLA!** âš¡
+
+ðŸŽ {product_name}
+
+ðŸ’¸ De {old_price}
+ðŸ’° Por {original_price}
+ðŸŽŸï¸ **COM CUPOM: {final_price}**
+ðŸ”¥ **ECONOMIZE {discount_percentage}% + CUPOM!**
+
+{coupon_section}
+
+ðŸ›’ {platform_name}
+ðŸ”— {affiliate_link}
+
+â° **ÃšLTIMA CHANCE! Use o cupom agora!**',
+'Modelo PadrÃ£o 3: PromoÃ§Ã£o com Cupom - Urgente',
+false,
+'["product_name", "current_price", "original_price", "final_price", "old_price", "discount_percentage", "platform_name", "coupon_section", "coupon_code", "coupon_discount", "affiliate_link", "price_with_coupon"]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- 4. COMENTÃRIOS E NOTAS
+-- =====================================================
+-- Esta migration:
+-- 1. Adiciona suporte ao novo tipo 'promotion_with_coupon' no constraint
+-- 2. Atualiza templates existentes de 'new_promotion' para remover {coupon_section}
+-- 3. Cria 3 templates padrÃ£o para 'promotion_with_coupon'
+--
+-- O sistema agora escolhe automaticamente:
+-- - 'new_promotion' quando produto NÃƒO tem cupom vinculado
+-- - 'promotion_with_coupon' quando produto TEM cupom vinculado
+--
+-- VariÃ¡veis disponÃ­veis para promotion_with_coupon:
+-- - product_name, current_price, original_price, final_price, old_price
+-- - discount_percentage, platform_name, affiliate_link
+-- - coupon_section, coupon_code, coupon_discount, price_with_coupon
+
+
+
+
+
+
+
+
+
+
+=== 033_add_template_mode_settings.sql ===
+-- =====================================================
+-- MIGRATION: 033_add_template_mode_settings
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Adiciona configuraÃ§Ãµes para modo de template
+--            (padrÃ£o, customizado, IA ADVANCED)
+-- =====================================================
+
+-- Adicionar colunas em app_settings para configuraÃ§Ã£o de template mode
+ALTER TABLE app_settings 
+ADD COLUMN IF NOT EXISTS template_mode_promotion VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_promotion IN ('default', 'custom', 'ai_advanced')),
+ADD COLUMN IF NOT EXISTS template_mode_promotion_coupon VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_promotion_coupon IN ('default', 'custom', 'ai_advanced')),
+ADD COLUMN IF NOT EXISTS template_mode_coupon VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_coupon IN ('default', 'custom', 'ai_advanced')),
+ADD COLUMN IF NOT EXISTS template_mode_expired_coupon VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_expired_coupon IN ('default', 'custom', 'ai_advanced'));
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN app_settings.template_mode_promotion IS 'Modo de template para promoÃ§Ãµes: default (padrÃ£o do sistema), custom (template salvo), ai_advanced (IA gera automaticamente)';
+COMMENT ON COLUMN app_settings.template_mode_promotion_coupon IS 'Modo de template para promoÃ§Ãµes com cupom: default, custom, ai_advanced';
+COMMENT ON COLUMN app_settings.template_mode_coupon IS 'Modo de template para cupons: default, custom, ai_advanced';
+COMMENT ON COLUMN app_settings.template_mode_expired_coupon IS 'Modo de template para cupons expirados: default, custom, ai_advanced';
+
+-- Atualizar registro existente com valores padrÃ£o
+UPDATE app_settings 
+SET 
+  template_mode_promotion = 'custom',
+  template_mode_promotion_coupon = 'custom',
+  template_mode_coupon = 'custom',
+  template_mode_expired_coupon = 'custom'
+WHERE id = '00000000-0000-0000-0000-000000000001';
+
+
+
+
+
+
+
+
+
+
+=== 034_allow_null_username_for_private_channels.sql ===
+-- Migration: Permitir username NULL para canais privados
+-- Data: 2025-12-19
+-- DescriÃ§Ã£o: Permite criar canais privados usando apenas channel_id, sem username
+
+-- 1. Remover constraint UNIQUE de username (para permitir mÃºltiplos NULLs)
+-- Primeiro, remover o Ã­ndice Ãºnico se existir
+DROP INDEX IF EXISTS idx_telegram_channels_username;
+
+-- Remover constraint UNIQUE se existir
+DO $$
+BEGIN
+    -- Verificar se existe constraint UNIQUE em username
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.table_constraints 
+        WHERE table_name = 'telegram_channels' 
+        AND constraint_name LIKE '%username%'
+        AND constraint_type = 'UNIQUE'
+    ) THEN
+        -- Remover constraint UNIQUE
+        ALTER TABLE telegram_channels 
+        DROP CONSTRAINT IF EXISTS telegram_channels_username_key;
+    END IF;
+END $$;
+
+-- 2. Alterar username para permitir NULL
+ALTER TABLE telegram_channels 
+ALTER COLUMN username DROP NOT NULL;
+
+-- 3. Criar Ã­ndice parcial Ãºnico para username (apenas quando nÃ£o for NULL)
+-- Isso garante que usernames sejam Ãºnicos, mas permite mÃºltiplos NULLs
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_channels_username_unique 
+ON telegram_channels(username) 
+WHERE username IS NOT NULL;
+
+-- 4. Criar constraint CHECK para garantir que pelo menos um dos dois seja fornecido
+-- (username OU channel_id deve ser NOT NULL)
+ALTER TABLE telegram_channels 
+DROP CONSTRAINT IF EXISTS telegram_channels_username_or_channel_id_check;
+
+ALTER TABLE telegram_channels 
+ADD CONSTRAINT telegram_channels_username_or_channel_id_check 
+CHECK (username IS NOT NULL OR channel_id IS NOT NULL);
+
+-- 5. Criar Ã­ndice Ãºnico para channel_id (quando nÃ£o for NULL)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_channels_channel_id_unique 
+ON telegram_channels(channel_id) 
+WHERE channel_id IS NOT NULL;
+
+-- 6. Recriar Ã­ndice normal para username (para buscas)
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_username 
+ON telegram_channels(username) 
+WHERE username IS NOT NULL;
+
+-- ComentÃ¡rios atualizados
+COMMENT ON COLUMN telegram_channels.username IS 'Username do canal pÃºblico (sem @). NULL para canais privados que usam apenas channel_id.';
+COMMENT ON COLUMN telegram_channels.channel_id IS 'ID do canal no Telegram (ex: -1001234567890). ObrigatÃ³rio para canais privados, opcional para canais pÃºblicos.';
+
+-- ============================================
+-- âœ… Migration concluÃ­da!
+-- ============================================
+-- Agora Ã© possÃ­vel criar canais privados usando apenas channel_id
+-- ou canais pÃºblicos usando apenas username
+-- ============================================
+
+
+
+
+
+
+
+
+
+=== 035_add_example_messages_to_telegram_channels.sql ===
+-- Migration: Adicionar campo example_messages para mensagens padrÃ£o do canal
+-- Data: 2025-12-19
+-- DescriÃ§Ã£o: Permite armazenar mensagens de exemplo que o canal envia para melhorar a captura de cupons pela IA
+
+-- Adicionar coluna example_messages (JSONB para armazenar array de mensagens)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'telegram_channels' 
+        AND column_name = 'example_messages'
+    ) THEN
+        ALTER TABLE telegram_channels 
+        ADD COLUMN example_messages JSONB DEFAULT '[]'::jsonb;
+        
+        COMMENT ON COLUMN telegram_channels.example_messages IS 'Array de mensagens de exemplo que o canal envia. Usado pela IA para melhorar a captura de cupons analisando padrÃµes de mensagem.';
+    END IF;
+END $$;
+
+-- Criar Ã­ndice GIN para buscas eficientes em JSONB
+CREATE INDEX IF NOT EXISTS idx_telegram_channels_example_messages 
+ON telegram_channels USING GIN (example_messages);
+
+-- ============================================
+-- âœ… Migration concluÃ­da!
+-- ============================================
+-- Agora Ã© possÃ­vel armazenar mensagens de exemplo por canal
+-- para melhorar a precisÃ£o da IA na captura de cupons
+-- ============================================
+
+
+
+
+
+
+
+
+=== 036_add_aliexpress_api_settings.sql ===
+-- Migration: Adicionar campos de API do AliExpress na tabela app_settings
+-- Data: 2025-01-20
+-- DescriÃ§Ã£o: Adiciona campos para configuraÃ§Ã£o da API do AliExpress (app_key, app_secret, tracking_id)
+
+-- Adicionar colunas de API do AliExpress
+ALTER TABLE app_settings
+ADD COLUMN IF NOT EXISTS aliexpress_app_key VARCHAR(255),
+ADD COLUMN IF NOT EXISTS aliexpress_app_secret VARCHAR(255),
+ADD COLUMN IF NOT EXISTS aliexpress_tracking_id VARCHAR(255);
+
+-- ComentÃ¡rios nas colunas
+COMMENT ON COLUMN app_settings.aliexpress_app_key IS 'App Key da API do AliExpress';
+COMMENT ON COLUMN app_settings.aliexpress_app_secret IS 'App Secret da API do AliExpress (sensÃ­vel)';
+COMMENT ON COLUMN app_settings.aliexpress_tracking_id IS 'Tracking ID para links de afiliado do AliExpress';
+
+
+
+
+
+
+
+=== 037_add_aliexpress_product_origin.sql ===
+-- Migration: Adicionar campo de origem de produtos do AliExpress
+-- Data: 2025-01-20
+-- DescriÃ§Ã£o: Permite escolher se quer capturar produtos do Brasil, internacionais ou ambos
+
+-- Adicionar coluna para origem de produtos do AliExpress
+ALTER TABLE app_settings
+ADD COLUMN IF NOT EXISTS aliexpress_product_origin VARCHAR(20) DEFAULT 'both' CHECK (aliexpress_product_origin IN ('brazil', 'international', 'both'));
+
+-- ComentÃ¡rio na coluna
+COMMENT ON COLUMN app_settings.aliexpress_product_origin IS 'Origem dos produtos AliExpress: brazil (apenas Brasil), international (apenas internacionais), both (ambos)';
+
+-- Valor padrÃ£o: ambos
+UPDATE app_settings
+SET aliexpress_product_origin = 'both'
+WHERE aliexpress_product_origin IS NULL;
+
+
+
+
+
+
+
+=== 038_add_ai_improvements.sql ===
+-- =====================================================
+-- Migration: Melhorias de IA e AutomaÃ§Ã£o Inteligente
+-- Data: 2024-12-20
+-- DescriÃ§Ã£o: Adiciona campos para IA, scores de qualidade, detecÃ§Ã£o de duplicados e observabilidade
+-- =====================================================
+
+-- =====================================================
+-- CUPONS: Campos de IA e ConfianÃ§a
+-- =====================================================
+
+-- Adicionar confidence_score aos cupons
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2) DEFAULT 0.0
+  CHECK (confidence_score >= 0.0 AND confidence_score <= 1.0);
+
+-- Adicionar motivo da decisÃ£o da IA
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS ai_decision_reason TEXT;
+
+-- Adicionar histÃ³rico de ediÃ§Ãµes da IA (JSON)
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS ai_edit_history JSONB DEFAULT '[]'::jsonb;
+
+-- Ãndices para cupons
+CREATE INDEX IF NOT EXISTS idx_coupons_confidence_score ON coupons(confidence_score);
+CREATE INDEX IF NOT EXISTS idx_coupons_ai_decision ON coupons(confidence_score, is_pending_approval);
+
+-- =====================================================
+-- PRODUTOS: Campos de IA, Score e Duplicados
+-- =====================================================
+
+-- Adicionar offer_score (score de qualidade da oferta)
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS offer_score DECIMAL(5,2) DEFAULT 0.0
+  CHECK (offer_score >= 0.0 AND offer_score <= 100.0);
+
+-- Adicionar canonical_product_id (para detecÃ§Ã£o de duplicados)
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS canonical_product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+
+-- Adicionar prioridade da oferta (baixa, mÃ©dia, alta)
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS offer_priority VARCHAR(10) DEFAULT 'medium'
+  CHECK (offer_priority IN ('low', 'medium', 'high'));
+
+-- Adicionar tÃ­tulo otimizado pela IA
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS ai_optimized_title VARCHAR(500);
+
+-- Adicionar descriÃ§Ã£o gerada pela IA
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS ai_generated_description TEXT;
+
+-- Adicionar categoria detectada pela IA
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS ai_detected_category_id UUID REFERENCES categories(id) ON DELETE SET NULL;
+
+-- Adicionar motivo da decisÃ£o da IA
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS ai_decision_reason TEXT;
+
+-- Adicionar histÃ³rico de ediÃ§Ãµes da IA (JSON)
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS ai_edit_history JSONB DEFAULT '[]'::jsonb;
+
+-- Adicionar flags de publicaÃ§Ã£o automÃ¡tica
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS should_send_push BOOLEAN DEFAULT FALSE;
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS should_send_to_bots BOOLEAN DEFAULT TRUE;
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS is_featured_offer BOOLEAN DEFAULT FALSE; -- "Oferta do Dia"
+
+-- Ãndices para produtos
+CREATE INDEX IF NOT EXISTS idx_products_offer_score ON products(offer_score);
+CREATE INDEX IF NOT EXISTS idx_products_canonical_id ON products(canonical_product_id);
+CREATE INDEX IF NOT EXISTS idx_products_priority ON products(offer_priority);
+CREATE INDEX IF NOT EXISTS idx_products_ai_category ON products(ai_detected_category_id);
+CREATE INDEX IF NOT EXISTS idx_products_featured ON products(is_featured_offer, status);
+
+-- =====================================================
+-- TABELA: ai_decision_logs (Observabilidade)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS ai_decision_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  entity_type VARCHAR(20) NOT NULL CHECK (entity_type IN ('coupon', 'product')),
+  entity_id UUID NOT NULL,
+  decision_type VARCHAR(50) NOT NULL, -- 'extraction', 'publication', 'editing', 'scoring', 'duplicate_detection'
+  confidence_score DECIMAL(3,2),
+  decision_reason TEXT,
+  input_data JSONB,
+  output_data JSONB,
+  model_used VARCHAR(100),
+  processing_time_ms INTEGER,
+  success BOOLEAN DEFAULT TRUE,
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndices para logs de decisÃ£o
+CREATE INDEX IF NOT EXISTS idx_ai_logs_entity ON ai_decision_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_ai_logs_decision_type ON ai_decision_logs(decision_type);
+CREATE INDEX IF NOT EXISTS idx_ai_logs_created_at ON ai_decision_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_logs_success ON ai_decision_logs(success);
+
+-- =====================================================
+-- TABELA: product_duplicates (DetecÃ§Ã£o de Duplicados)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS product_duplicates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  canonical_product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  duplicate_product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  similarity_score DECIMAL(5,2) DEFAULT 0.0
+    CHECK (similarity_score >= 0.0 AND similarity_score <= 100.0),
+  detection_method VARCHAR(50), -- 'ai', 'name_similarity', 'external_id'
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(canonical_product_id, duplicate_product_id)
+);
+
+-- Ãndices para duplicados
+CREATE INDEX IF NOT EXISTS idx_duplicates_canonical ON product_duplicates(canonical_product_id);
+CREATE INDEX IF NOT EXISTS idx_duplicates_duplicate ON product_duplicates(duplicate_product_id);
+CREATE INDEX IF NOT EXISTS idx_duplicates_similarity ON product_duplicates(similarity_score);
+
+-- =====================================================
+-- ATUALIZAR APP_SETTINGS: ConfiguraÃ§Ãµes de IA
+-- =====================================================
+
+-- Adicionar configuraÃ§Ãµes de IA se nÃ£o existirem
+DO $$
+BEGIN
+  -- Verificar se jÃ¡ existe a coluna
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'app_settings' 
+    AND column_name = 'ai_auto_publish_confidence_threshold'
+  ) THEN
+    ALTER TABLE app_settings
+    ADD COLUMN ai_auto_publish_confidence_threshold DECIMAL(3,2) DEFAULT 0.90
+      CHECK (ai_auto_publish_confidence_threshold >= 0.0 AND ai_auto_publish_confidence_threshold <= 1.0);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'app_settings' 
+    AND column_name = 'ai_enable_auto_publish'
+  ) THEN
+    ALTER TABLE app_settings
+    ADD COLUMN ai_enable_auto_publish BOOLEAN DEFAULT TRUE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'app_settings' 
+    AND column_name = 'ai_enable_product_editing'
+  ) THEN
+    ALTER TABLE app_settings
+    ADD COLUMN ai_enable_product_editing BOOLEAN DEFAULT TRUE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'app_settings' 
+    AND column_name = 'ai_enable_duplicate_detection'
+  ) THEN
+    ALTER TABLE app_settings
+    ADD COLUMN ai_enable_duplicate_detection BOOLEAN DEFAULT TRUE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'app_settings' 
+    AND column_name = 'ai_enable_quality_scoring'
+  ) THEN
+    ALTER TABLE app_settings
+    ADD COLUMN ai_enable_quality_scoring BOOLEAN DEFAULT TRUE;
+  END IF;
+END $$;
+
+-- =====================================================
+-- COMENTÃRIOS
+-- =====================================================
+
+COMMENT ON COLUMN coupons.confidence_score IS 'Score de confianÃ§a da IA na extraÃ§Ã£o (0.0 a 1.0). >= 0.90 = publicaÃ§Ã£o automÃ¡tica';
+COMMENT ON COLUMN coupons.ai_decision_reason IS 'Motivo da decisÃ£o da IA (por que foi aprovado/rejeitado)';
+COMMENT ON COLUMN coupons.ai_edit_history IS 'HistÃ³rico de ediÃ§Ãµes feitas pela IA (array de objetos com timestamp, campo, valor_antigo, valor_novo)';
+
+COMMENT ON COLUMN products.offer_score IS 'Score de qualidade da oferta (0.0 a 100.0). Baseado em desconto, histÃ³rico, popularidade, CTR, confianÃ§a IA';
+COMMENT ON COLUMN products.canonical_product_id IS 'ID do produto canÃ´nico (primeiro produto encontrado). Produtos duplicados apontam para o mesmo canonical';
+COMMENT ON COLUMN products.offer_priority IS 'Prioridade da oferta: low, medium, high. Define ordem no feed e push notifications';
+COMMENT ON COLUMN products.ai_optimized_title IS 'TÃ­tulo reescrito pela IA (curto, chamativo, sem emojis excessivos)';
+COMMENT ON COLUMN products.ai_generated_description IS 'DescriÃ§Ã£o padronizada gerada pela IA';
+COMMENT ON COLUMN products.ai_detected_category_id IS 'Categoria detectada automaticamente pela IA';
+COMMENT ON COLUMN products.should_send_push IS 'Se deve enviar push notification (decisÃ£o da IA)';
+COMMENT ON COLUMN products.should_send_to_bots IS 'Se deve enviar para bots (decisÃ£o da IA)';
+COMMENT ON COLUMN products.is_featured_offer IS 'Se Ã© "Oferta do Dia" (decisÃ£o da IA)';
+
+
+
+
+
+
+
+=== 039_add_bot_segmentation.sql ===
+-- =====================================================
+-- Migration: SegmentaÃ§Ã£o Inteligente de Bots
+-- Data: 2024-12-20
+-- DescriÃ§Ã£o: Adiciona campos para segmentaÃ§Ã£o por categoria, horÃ¡rios e controle de duplicaÃ§Ã£o
+-- =====================================================
+
+-- Adicionar campos de segmentaÃ§Ã£o aos bot_channels
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS category_filter JSONB DEFAULT '[]'::jsonb; -- Array de category_ids permitidos (vazio = todas)
+
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS platform_filter JSONB DEFAULT '[]'::jsonb; -- Array de plataformas permitidas (vazio = todas)
+
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS schedule_start TIME; -- HorÃ¡rio de inÃ­cio (ex: '09:00')
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS schedule_end TIME; -- HorÃ¡rio de fim (ex: '22:00')
+
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS min_offer_score DECIMAL(5,2) DEFAULT 0.0; -- Score mÃ­nimo para enviar (0-100)
+
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS avoid_duplicates_hours INTEGER DEFAULT 24; -- NÃ£o enviar mesma oferta por X horas
+
+-- Ãndices
+CREATE INDEX IF NOT EXISTS idx_bot_channels_category_filter ON bot_channels USING GIN (category_filter);
+CREATE INDEX IF NOT EXISTS idx_bot_channels_platform_filter ON bot_channels USING GIN (platform_filter);
+
+-- =====================================================
+-- TABELA: bot_send_logs (Controle de DuplicaÃ§Ã£o)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS bot_send_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  channel_id UUID NOT NULL REFERENCES bot_channels(id) ON DELETE CASCADE,
+  entity_type VARCHAR(20) NOT NULL CHECK (entity_type IN ('product', 'coupon')),
+  entity_id UUID NOT NULL,
+  sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(channel_id, entity_type, entity_id)
+);
+
+-- Ãndices para logs de envio
+CREATE INDEX IF NOT EXISTS idx_bot_send_logs_channel ON bot_send_logs(channel_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_bot_send_logs_entity ON bot_send_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_bot_send_logs_sent_at ON bot_send_logs(sent_at);
+
+-- FunÃ§Ã£o para limpar logs antigos (manter apenas Ãºltimos 30 dias)
+CREATE OR REPLACE FUNCTION cleanup_old_bot_send_logs()
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM bot_send_logs
+  WHERE sent_at < NOW() - INTERVAL '30 days';
+  
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+
+
+
+
+=== 040_add_channel_content_filter.sql ===
+-- =====================================================
+-- Migration: Filtro de ConteÃºdo por Canal
+-- Data: 2024-12-XX
+-- DescriÃ§Ã£o: Adiciona campo para canais que sÃ³ recebem cupons e melhorar filtro de categorias
+-- =====================================================
+
+-- Adicionar campo para canais que sÃ³ recebem cupons (nÃ£o recebem produtos)
+ALTER TABLE bot_channels
+ADD COLUMN IF NOT EXISTS only_coupons BOOLEAN DEFAULT FALSE;
+
+-- ComentÃ¡rios
+COMMENT ON COLUMN bot_channels.only_coupons IS 'Se TRUE, o canal sÃ³ recebe notificaÃ§Ãµes de cupons (coupon_new, coupon_expired), nunca produtos (promotion_new)';
+COMMENT ON COLUMN bot_channels.category_filter IS 'Array de category_ids permitidos. Se vazio, aceita todas as categorias. MÃ¡ximo 10 categorias recomendado.';
+
+-- Ãndice para melhorar performance de queries
+CREATE INDEX IF NOT EXISTS idx_bot_channels_only_coupons ON bot_channels(only_coupons) WHERE only_coupons = TRUE;
+
+-- =====================================================
+-- Verificar se tudo foi criado corretamente
+-- =====================================================
+SELECT 'Migration 040 executada com sucesso!' as status;
+
+
+
+
+
+=== 041_add_coupon_out_of_stock.sql ===
+-- =====================================================
+-- Migration: Adicionar campo is_out_of_stock aos cupons
+-- Data: 2024-12-20
+-- DescriÃ§Ã£o: Adiciona campo para marcar cupons como esgotados
+-- =====================================================
+
+ALTER TABLE coupons
+ADD COLUMN IF NOT EXISTS is_out_of_stock BOOLEAN DEFAULT FALSE;
+
+-- Criar Ã­ndice para melhorar performance nas consultas
+CREATE INDEX IF NOT EXISTS idx_coupons_is_out_of_stock ON coupons(is_out_of_stock) WHERE is_out_of_stock = TRUE;
+
+-- ComentÃ¡rio na coluna
+COMMENT ON COLUMN coupons.is_out_of_stock IS 'Indica se o cupom estÃ¡ esgotado (nÃ£o disponÃ­vel mais)';
+
+
+
+
+
+=== 042_make_valid_until_nullable.sql ===
+-- =====================================================
+-- Migration: Tornar valid_until opcional nos cupons
+-- Data: 2024-12-22
+-- DescriÃ§Ã£o: Altera a coluna valid_until para permitir NULL, 
+--            permitindo cupons sem data de expiraÃ§Ã£o definida
+-- =====================================================
+
+-- Remover constraint NOT NULL da coluna valid_until
+ALTER TABLE coupons
+ALTER COLUMN valid_until DROP NOT NULL;
+
+-- Atualizar view de cupons ativos para considerar NULL em valid_until
+CREATE OR REPLACE VIEW active_coupons AS
+SELECT *
+FROM coupons
+WHERE is_active = TRUE
+  AND verification_status = 'active'
+  AND (valid_until IS NULL OR valid_until > NOW())
+  AND (max_uses IS NULL OR current_uses < max_uses);
+
+-- ComentÃ¡rio na coluna
+COMMENT ON COLUMN coupons.valid_until IS 'Data de expiraÃ§Ã£o do cupom. NULL indica que o cupom nÃ£o tem data de expiraÃ§Ã£o definida.';
+
+-- Verificar se a migration foi aplicada com sucesso
+SELECT 'Migration 042 aplicada com sucesso! A coluna valid_until agora permite NULL.' as status;
+
+
+
+
+
+=== 043_update_templates_with_applicability.sql ===
+-- =====================================================
+-- Migration: Atualizar templates com informaÃ§Ã£o de aplicabilidade
+-- Data: 2024-12-XX
+-- DescriÃ§Ã£o: Atualiza todos os templates (padrÃ£o, customizado) para incluir {applicability}
+-- A variÃ¡vel {applicability} serÃ¡ substituÃ­da apenas se houver informaÃ§Ã£o (geral ou produtos selecionados)
+-- Se nÃ£o houver produtos selecionados e nÃ£o for geral, a variÃ¡vel serÃ¡ removida automaticamente
+-- =====================================================
+
+-- Atualizar templates de novo cupom para incluir {applicability}
+-- Adicionar {applicability} apÃ³s o cÃ³digo do cupom ou apÃ³s compra mÃ­nima
+UPDATE bot_message_templates
+SET 
+  template = CASE 
+    -- Se o template jÃ¡ tem {applicability}, manter
+    WHEN template LIKE '%{applicability}%' THEN template
+    -- Se tem {min_purchase}, adicionar apÃ³s
+    WHEN template LIKE '%{min_purchase}%' THEN 
+      REPLACE(template, '{min_purchase}', '{min_purchase}\n{applicability}')
+    -- Se tem {max_discount}, adicionar apÃ³s
+    WHEN template LIKE '%{max_discount}%' THEN 
+      REPLACE(template, '{max_discount}', '{max_discount}\n{applicability}')
+    -- Se tem {usage_limit}, adicionar apÃ³s
+    WHEN template LIKE '%{usage_limit}%' THEN 
+      REPLACE(template, '{usage_limit}', '{usage_limit}\n{applicability}')
+    -- Se tem {discount_value}, adicionar apÃ³s
+    WHEN template LIKE '%{discount_value}%' THEN 
+      REPLACE(template, '{discount_value}', '{discount_value}\n{applicability}')
+    -- Caso padrÃ£o: adicionar apÃ³s o cÃ³digo do cupom
+    ELSE 
+      REPLACE(template, '{coupon_code}', '{coupon_code}\n{applicability}')
+  END,
+  available_variables = CASE 
+    WHEN available_variables::text LIKE '%applicability%' THEN available_variables
+    ELSE available_variables || '["applicability"]'::jsonb
+  END,
+  updated_at = NOW()
+WHERE template_type = 'new_coupon'
+  AND (template NOT LIKE '%{applicability}%' OR available_variables::text NOT LIKE '%applicability%');
+
+-- Verificar se as atualizaÃ§Ãµes foram aplicadas
+SELECT 
+  template_type,
+  LEFT(template, 150) as template_preview,
+  available_variables
+FROM bot_message_templates
+WHERE template_type = 'new_coupon'
+ORDER BY created_at DESC
+LIMIT 5;
+
+
+
+
+=== 044_add_auto_publish_to_sync_config.sql ===
+-- Migration: Adicionar campos de auto-publicaÃ§Ã£o por plataforma
+-- DescriÃ§Ã£o: Adiciona campos para controlar auto-publicaÃ§Ã£o com anÃ¡lise estratÃ©gica da IA por plataforma
+
+-- Adicionar colunas de auto-publicaÃ§Ã£o para cada plataforma
+ALTER TABLE sync_config
+ADD COLUMN IF NOT EXISTS shopee_auto_publish BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS mercadolivre_auto_publish BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS amazon_auto_publish BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS aliexpress_auto_publish BOOLEAN DEFAULT false;
+
+-- ComentÃ¡rios nas colunas
+COMMENT ON COLUMN sync_config.shopee_auto_publish IS 'Publicar automaticamente produtos da Shopee apÃ³s anÃ¡lise estratÃ©gica da IA';
+COMMENT ON COLUMN sync_config.mercadolivre_auto_publish IS 'Publicar automaticamente produtos do Mercado Livre apÃ³s anÃ¡lise estratÃ©gica da IA';
+COMMENT ON COLUMN sync_config.amazon_auto_publish IS 'Publicar automaticamente produtos da Amazon apÃ³s anÃ¡lise estratÃ©gica da IA';
+COMMENT ON COLUMN sync_config.aliexpress_auto_publish IS 'Publicar automaticamente produtos do AliExpress apÃ³s anÃ¡lise estratÃ©gica da IA';
+
+
+
+
+
+=== 045_update_promotion_with_coupon_template.sql ===
+-- =====================================================
+-- MIGRATION: 045_update_promotion_with_coupon_template
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Atualiza template padrÃ£o de promotion_with_coupon para novo formato
+-- =====================================================
+
+-- Atualizar Modelo PadrÃ£o 1: Simples e Direto (COM CUPOM)
+UPDATE bot_message_templates 
+SET 
+  template = 'ðŸ“¦ {product_name}
+
+ðŸ’° PreÃ§o: {original_price}
+ðŸŽŸï¸ Com Cupom: {final_price}
+ðŸ·ï¸ {discount_percentage}% OFF
+
+ðŸŽŸï¸ CUPOM: `{coupon_code}`
+
+ðŸ›’ Plataforma: {platform_name}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Economia dupla! Aproveite agora!',
+  description = 'Modelo PadrÃ£o 1: PromoÃ§Ã£o com Cupom - Simples e Direto',
+  available_variables = '["product_name", "original_price", "final_price", "discount_percentage", "coupon_code", "platform_name", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'promotion_with_coupon' 
+  AND platform = 'all'
+  AND description = 'Modelo PadrÃ£o 1: PromoÃ§Ã£o com Cupom - Simples e Direto';
+
+-- Atualizar tambÃ©m outros templates de promotion_with_coupon que possam existir
+UPDATE bot_message_templates 
+SET 
+  template = 'ðŸ“¦ {product_name}
+
+ðŸ’° PreÃ§o: {original_price}
+ðŸŽŸï¸ Com Cupom: {final_price}
+ðŸ·ï¸ {discount_percentage}% OFF
+
+ðŸŽŸï¸ CUPOM: `{coupon_code}`
+
+ðŸ›’ Plataforma: {platform_name}
+
+ðŸ”— {affiliate_link}
+
+âš¡ Economia dupla! Aproveite agora!',
+  available_variables = '["product_name", "original_price", "final_price", "discount_percentage", "coupon_code", "platform_name", "affiliate_link"]'::jsonb,
+  updated_at = NOW()
+WHERE template_type = 'promotion_with_coupon' 
+  AND is_active = true;
+
+-- =====================================================
+-- COMENTÃRIOS
+-- =====================================================
+-- Esta migration atualiza o template padrÃ£o ativo de promotion_with_coupon
+-- para seguir o novo formato solicitado:
+-- - Formato mais limpo e direto
+-- - CÃ³digo do cupom destacado com backticks (`{coupon_code}`) para conversÃ£o em <code> no Telegram
+-- - InformaÃ§Ãµes de preÃ§o claras: original_price (antes do cupom) e final_price (com cupom)
+-- - Mensagem de economia dupla
+-- 
+-- VariÃ¡veis disponÃ­veis:
+-- - {product_name}: Nome do produto
+-- - {original_price}: PreÃ§o antes do cupom (ou preÃ§o atual se nÃ£o houver cupom)
+-- - {final_price}: PreÃ§o final com cupom aplicado (ou preÃ§o atual se nÃ£o houver cupom)
+-- - {discount_percentage}: Percentual de desconto
+-- - {coupon_code}: CÃ³digo do cupom (formatado com backticks)
+-- - {platform_name}: Nome da plataforma
+-- - {affiliate_link}: Link de afiliado
+
+
+
+
+=== 046_clean_all_products_and_coupons.sql ===
+-- =====================================================
+-- MIGRATION: 046_clean_all_products_and_coupons
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Script para limpar TODOS os produtos e TODOS os cupons do banco de dados
+-- ATENÃ‡ÃƒO: Esta operaÃ§Ã£o Ã© IRREVERSÃVEL! FaÃ§a backup antes de executar.
+-- =====================================================
+
+-- =====================================================
+-- AVISO IMPORTANTE
+-- =====================================================
+-- Este script irÃ¡ DELETAR PERMANENTEMENTE:
+-- - Todos os produtos
+-- - Todos os cupons
+-- - HistÃ³rico de preÃ§os
+-- - Logs de sincronizaÃ§Ã£o relacionados
+-- - NotificaÃ§Ãµes relacionadas
+-- - Logs de envio de bots relacionados
+-- - Rastreamento de cliques relacionados
+--
+-- Esta operaÃ§Ã£o NÃƒO PODE ser desfeita!
+-- FaÃ§a backup do banco de dados antes de executar este script!
+-- =====================================================
+
+BEGIN;
+
+-- =====================================================
+-- 1. DELETAR DADOS RELACIONADOS (em ordem de dependÃªncia)
+-- =====================================================
+
+-- 1.1. Deletar histÃ³rico de preÃ§os (depende de products)
+DELETE FROM price_history;
+
+-- 1.2. Deletar rastreamento de cliques (depende de products e coupons)
+DELETE FROM click_tracking 
+WHERE product_id IS NOT NULL OR coupon_id IS NOT NULL;
+
+-- 1.3. Deletar notificaÃ§Ãµes relacionadas (depende de products e coupons)
+DELETE FROM notifications 
+WHERE related_product_id IS NOT NULL OR related_coupon_id IS NOT NULL;
+
+-- 1.4. Deletar logs de envio de bots relacionados (depende de products e coupons)
+-- Verificar se a tabela existe antes de deletar
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'bot_send_logs') THEN
+    -- Usa entity_type/entity_id (padrÃ£o)
+    DELETE FROM bot_send_logs 
+    WHERE (entity_type = 'product' AND entity_id IS NOT NULL) 
+       OR (entity_type = 'coupon' AND entity_id IS NOT NULL)
+       OR (entity_type = 'promotion_new' AND entity_id IS NOT NULL)
+       OR (entity_type = 'coupon_new' AND entity_id IS NOT NULL);
+    RAISE NOTICE 'Logs de envio de bots deletados';
+  END IF;
+END $$;
+
+-- 1.5. Deletar logs de sincronizaÃ§Ã£o relacionados (depende de products)
+-- Verificar se a tabela existe antes de deletar
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sync_logs') THEN
+    DELETE FROM sync_logs 
+    WHERE product_id IS NOT NULL;
+    RAISE NOTICE 'Logs de sincronizaÃ§Ã£o deletados';
+  END IF;
+END $$;
+
+-- 1.6. Deletar logs de captura de cupons (depende de coupons)
+DELETE FROM coupon_sync_logs;
+
+-- 1.7. Deletar duplicatas de produtos (depende de products)
+-- Verificar se a tabela existe antes de deletar
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product_duplicates') THEN
+    DELETE FROM product_duplicates;
+    RAISE NOTICE 'Duplicatas de produtos deletadas';
+  END IF;
+END $$;
+
+-- 1.8. Deletar logs de decisÃ£o de IA relacionados (depende de products e coupons)
+-- Verificar se a tabela existe antes de deletar
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'ai_decision_logs') THEN
+    DELETE FROM ai_decision_logs 
+    WHERE (entity_type = 'product' AND entity_id IS NOT NULL) 
+       OR (entity_type = 'coupon' AND entity_id IS NOT NULL);
+    RAISE NOTICE 'Logs de decisÃ£o de IA deletados';
+  END IF;
+END $$;
+
+-- 1.9. Deletar logs de notificaÃ§Ãµes relacionados (se existir a tabela)
+-- notification_logs nÃ£o tem product_id/coupon_id, mas tem event_type relacionado
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'notification_logs') THEN
+    -- Deletar logs relacionados a produtos e cupons baseado no event_type
+    DELETE FROM notification_logs 
+    WHERE event_type IN ('promotion_new', 'coupon_new', 'coupon_expired', 'price_drop');
+    RAISE NOTICE 'Logs de notificaÃ§Ãµes deletados';
+  END IF;
+END $$;
+
+-- =====================================================
+-- 2. DELETAR PRODUTOS
+-- =====================================================
+
+-- 2.1. Desvincular cupons dos produtos (atualizar coupon_id para NULL)
+UPDATE products SET coupon_id = NULL;
+
+-- 2.2. Deletar todos os produtos
+DELETE FROM products;
+
+-- =====================================================
+-- 3. DELETAR CUPONS
+-- =====================================================
+
+-- 3.1. Deletar todos os cupons
+DELETE FROM coupons;
+
+-- =====================================================
+-- 4. RESETAR SEQUÃŠNCIAS (opcional, mas recomendado)
+-- =====================================================
+
+-- Resetar contadores de IDs (se houver sequÃªncias)
+-- Nota: UUIDs nÃ£o usam sequÃªncias, mas se houver alguma, resetar aqui
+
+-- =====================================================
+-- 5. VERIFICAÃ‡ÃƒO FINAL
+-- =====================================================
+
+-- Verificar se ainda hÃ¡ produtos
+DO $$
+DECLARE
+  product_count INTEGER;
+  coupon_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO product_count FROM products;
+  SELECT COUNT(*) INTO coupon_count FROM coupons;
+  
+  IF product_count > 0 THEN
+    RAISE WARNING 'Ainda existem % produto(s) no banco de dados', product_count;
+  END IF;
+  
+  IF coupon_count > 0 THEN
+    RAISE WARNING 'Ainda existem % cupom(ns) no banco de dados', coupon_count;
+  END IF;
+  
+  RAISE NOTICE 'Limpeza concluÃ­da!';
+  RAISE NOTICE 'Produtos restantes: %', product_count;
+  RAISE NOTICE 'Cupons restantes: %', coupon_count;
+END $$;
+
+-- =====================================================
+-- COMMIT OU ROLLBACK
+-- =====================================================
+
+-- Descomente a linha abaixo para confirmar a operaÃ§Ã£o
+-- COMMIT;
+
+-- OU mantenha comentado para revisar antes de confirmar
+-- Se nÃ£o fizer COMMIT, a transaÃ§Ã£o serÃ¡ revertida automaticamente
+
+-- =====================================================
+-- COMENTÃRIOS
+-- =====================================================
+-- Este script deleta:
+-- 1. Todos os produtos da tabela 'products'
+-- 2. Todos os cupons da tabela 'coupons'
+-- 3. HistÃ³rico de preÃ§os relacionado
+-- 4. Rastreamento de cliques relacionado
+-- 5. NotificaÃ§Ãµes relacionadas
+-- 6. Logs de envio de bots relacionados
+-- 7. Logs de sincronizaÃ§Ã£o relacionados
+-- 8. Logs de captura de cupons
+--
+-- IMPORTANTE:
+-- - Esta operaÃ§Ã£o Ã© IRREVERSÃVEL
+-- - FaÃ§a backup antes de executar
+-- - Revise o script antes de executar
+-- - Execute em ambiente de desenvolvimento primeiro
+-- - Descomente o COMMIT apenas quando tiver certeza
+--
+-- Para executar apenas a limpeza sem transaÃ§Ã£o:
+-- Remova BEGIN; e COMMIT; e execute os comandos DELETE diretamente
+-- =====================================================
+
+-- =====================================================
+-- VERSÃƒO SIMPLIFICADA (SEM TRANSAÃ‡ÃƒO)
+-- =====================================================
+-- Se preferir executar sem transaÃ§Ã£o, use os comandos abaixo:
+-- (Remova o BEGIN; e descomente os comandos abaixo)
+
+/*
+-- Deletar dados relacionados
+DELETE FROM price_history;
+DELETE FROM click_tracking WHERE product_id IS NOT NULL OR coupon_id IS NOT NULL;
+DELETE FROM notifications WHERE related_product_id IS NOT NULL OR related_coupon_id IS NOT NULL;
+DELETE FROM bot_send_logs WHERE (entity_type = 'product' AND entity_id IS NOT NULL) OR (entity_type = 'coupon' AND entity_id IS NOT NULL);
+DELETE FROM sync_logs WHERE product_id IS NOT NULL;
+DELETE FROM coupon_sync_logs;
+DELETE FROM product_duplicates;
+DELETE FROM ai_decision_logs WHERE (entity_type = 'product' AND entity_id IS NOT NULL) OR (entity_type = 'coupon' AND entity_id IS NOT NULL);
+DELETE FROM notification_logs WHERE event_type IN ('promotion_new', 'coupon_new', 'coupon_expired', 'price_drop');
+
+-- Desvincular e deletar produtos
+UPDATE products SET coupon_id = NULL;
+DELETE FROM products;
+
+-- Deletar cupons
+DELETE FROM coupons;
+*/
+
+
+
+
+=== 047_clean_all_data_keep_configs.sql ===
+-- =====================================================
+-- MIGRATION: 047_clean_all_data_keep_configs
+-- Data: 2025-01-XX
+-- DescriÃ§Ã£o: Limpa TODOS os dados do banco, mantendo apenas configuraÃ§Ãµes
+-- ATENÃ‡ÃƒO: Esta operaÃ§Ã£o Ã© IRREVERSÃVEL! FaÃ§a backup antes de executar.
+-- =====================================================
+
+-- =====================================================
+-- AVISO IMPORTANTE
+-- =====================================================
+-- Este script irÃ¡ DELETAR PERMANENTEMENTE TODOS OS DADOS:
+-- - Todos os produtos
+-- - Todos os cupons
+-- - Todos os usuÃ¡rios (exceto admins se necessÃ¡rio)
+-- - Todas as categorias (exceto padrÃµes se necessÃ¡rio)
+-- - HistÃ³rico de preÃ§os
+-- - Logs de sincronizaÃ§Ã£o
+-- - NotificaÃ§Ãµes
+-- - Logs de envio de bots
+-- - Rastreamento de cliques
+-- - Logs de decisÃ£o de IA
+-- - Duplicatas de produtos
+-- - Logs de notificaÃ§Ãµes
+--
+-- TABELAS QUE SERÃƒO MANTIDAS (CONFIGURAÃ‡Ã•ES):
+-- - app_settings (configuraÃ§Ãµes gerais)
+-- - bot_config (configuraÃ§Ãµes de bots)
+-- - bot_channels (canais de bots)
+-- - bot_message_templates (templates de mensagens)
+-- - telegram_channels (canais Telegram)
+-- - telegram_collector_config (configuraÃ§Ãµes do coletor Telegram)
+-- - sync_config (configuraÃ§Ãµes de sincronizaÃ§Ã£o)
+-- - coupon_settings (configuraÃ§Ãµes de cupons)
+--
+-- Esta operaÃ§Ã£o NÃƒO PODE ser desfeita!
+-- FaÃ§a backup do banco de dados antes de executar este script!
+-- =====================================================
+
+BEGIN;
+
+-- =====================================================
+-- 1. DELETAR DADOS RELACIONADOS (em ordem de dependÃªncia)
+-- =====================================================
+
+-- 1.1. Deletar histÃ³rico de preÃ§os
+DELETE FROM price_history;
+
+-- 1.2. Deletar rastreamento de cliques
+DELETE FROM click_tracking;
+
+-- 1.3. Deletar notificaÃ§Ãµes de usuÃ¡rios
+DELETE FROM notifications;
+
+-- 1.4. Deletar logs de envio de bots
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'bot_send_logs') THEN
+    DELETE FROM bot_send_logs;
+    RAISE NOTICE 'Logs de envio de bots deletados';
+  END IF;
+END $$;
+
+-- 1.5. Deletar logs de sincronizaÃ§Ã£o
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sync_logs') THEN
+    DELETE FROM sync_logs;
+    RAISE NOTICE 'Logs de sincronizaÃ§Ã£o deletados';
+  END IF;
+END $$;
+
+-- 1.6. Deletar logs de captura de cupons
+DELETE FROM coupon_sync_logs;
+
+-- 1.7. Deletar duplicatas de produtos
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product_duplicates') THEN
+    DELETE FROM product_duplicates;
+    RAISE NOTICE 'Duplicatas de produtos deletadas';
+  END IF;
+END $$;
+
+-- 1.8. Deletar logs de decisÃ£o de IA
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'ai_decision_logs') THEN
+    DELETE FROM ai_decision_logs;
+    RAISE NOTICE 'Logs de decisÃ£o de IA deletados';
+  END IF;
+END $$;
+
+-- 1.9. Deletar logs de notificaÃ§Ãµes (relacionados a produtos/cupons)
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'notification_logs') THEN
+    DELETE FROM notification_logs 
+    WHERE event_type IN ('promotion_new', 'coupon_new', 'coupon_expired', 'price_drop');
+    RAISE NOTICE 'Logs de notificaÃ§Ãµes deletados';
+  END IF;
+END $$;
+
+-- =====================================================
+-- 2. DESVINCULAR E DELETAR PRODUTOS
+-- =====================================================
+
+-- 2.1. Desvincular cupons dos produtos
+UPDATE products SET coupon_id = NULL;
+
+-- 2.2. Deletar todos os produtos
+DELETE FROM products;
+
+-- =====================================================
+-- 3. DELETAR CUPONS
+-- =====================================================
+
+-- 3.1. Deletar todos os cupons
+DELETE FROM coupons;
+
+-- =====================================================
+-- 4. DELETAR USUÃRIOS (OPCIONAL - descomente se quiser limpar)
+-- =====================================================
+
+-- IMPORTANTE: Descomente as linhas abaixo se quiser deletar TODOS os usuÃ¡rios
+-- Caso contrÃ¡rio, mantenha comentado para preservar usuÃ¡rios (incluindo admins)
+
+-- DELETE FROM users WHERE role != 'admin'; -- Deletar apenas usuÃ¡rios nÃ£o-admin
+-- DELETE FROM users; -- Deletar TODOS os usuÃ¡rios (incluindo admins)
+
+-- =====================================================
+-- 5. DELETAR CATEGORIAS (OPCIONAL - descomente se quiser limpar)
+-- =====================================================
+
+-- IMPORTANTE: Descomente a linha abaixo se quiser deletar TODAS as categorias
+-- Caso contrÃ¡rio, mantenha comentado para preservar categorias padrÃ£o
+
+-- DELETE FROM categories;
+
+-- =====================================================
+-- 6. VERIFICAÃ‡ÃƒO FINAL
+-- =====================================================
+
+DO $$
+DECLARE
+  product_count INTEGER;
+  coupon_count INTEGER;
+  user_count INTEGER;
+  category_count INTEGER;
+  price_history_count INTEGER;
+  click_tracking_count INTEGER;
+  notification_count INTEGER;
+BEGIN
+  -- Contar registros restantes
+  SELECT COUNT(*) INTO product_count FROM products;
+  SELECT COUNT(*) INTO coupon_count FROM coupons;
+  SELECT COUNT(*) INTO user_count FROM users;
+  SELECT COUNT(*) INTO category_count FROM categories;
+  SELECT COUNT(*) INTO price_history_count FROM price_history;
+  SELECT COUNT(*) INTO click_tracking_count FROM click_tracking;
+  SELECT COUNT(*) INTO notification_count FROM notifications;
+  
+  -- Exibir resultados
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'LIMPEZA CONCLUÃDA!';
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'Produtos restantes: %', product_count;
+  RAISE NOTICE 'Cupons restantes: %', coupon_count;
+  RAISE NOTICE 'UsuÃ¡rios restantes: %', user_count;
+  RAISE NOTICE 'Categorias restantes: %', category_count;
+  RAISE NOTICE 'HistÃ³rico de preÃ§os restante: %', price_history_count;
+  RAISE NOTICE 'Rastreamento de cliques restante: %', click_tracking_count;
+  RAISE NOTICE 'NotificaÃ§Ãµes restantes: %', notification_count;
+  RAISE NOTICE '========================================';
+  
+  -- Avisos se ainda houver dados
+  IF product_count > 0 THEN
+    RAISE WARNING 'Ainda existem % produto(s) no banco de dados', product_count;
+  END IF;
+  
+  IF coupon_count > 0 THEN
+    RAISE WARNING 'Ainda existem % cupom(ns) no banco de dados', coupon_count;
+  END IF;
+END $$;
+
+-- =====================================================
+-- COMMIT OU ROLLBACK
+-- =====================================================
+
+-- Descomente a linha abaixo para confirmar a operaÃ§Ã£o
+-- COMMIT;
+
+-- OU mantenha comentado para revisar antes de confirmar
+-- Se nÃ£o fizer COMMIT, a transaÃ§Ã£o serÃ¡ revertida automaticamente
+
+-- =====================================================
+-- COMENTÃRIOS
+-- =====================================================
+-- Este script deleta:
+-- 1. Todos os produtos
+-- 2. Todos os cupons
+-- 3. HistÃ³rico de preÃ§os
+-- 4. Rastreamento de cliques
+-- 5. NotificaÃ§Ãµes de usuÃ¡rios
+-- 6. Logs de envio de bots
+-- 7. Logs de sincronizaÃ§Ã£o
+-- 8. Logs de captura de cupons
+-- 9. Duplicatas de produtos
+-- 10. Logs de decisÃ£o de IA
+-- 11. Logs de notificaÃ§Ãµes relacionadas
+--
+-- TABELAS PRESERVADAS (CONFIGURAÃ‡Ã•ES):
+-- - app_settings
+-- - bot_config
+-- - bot_channels
+-- - bot_message_templates
+-- - telegram_channels
+-- - telegram_collector_config
+-- - sync_config
+-- - coupon_settings
+--
+-- IMPORTANTE:
+-- - Esta operaÃ§Ã£o Ã© IRREVERSÃVEL
+-- - FaÃ§a backup antes de executar
+-- - Revise o script antes de executar
+-- - Execute em ambiente de desenvolvimento primeiro
+-- - Descomente o COMMIT apenas quando tiver certeza
+-- - UsuÃ¡rios e categorias sÃ£o preservados por padrÃ£o (descomente se quiser deletar)
+--
+-- Para executar apenas a limpeza sem transaÃ§Ã£o:
+-- Remova BEGIN; e COMMIT; e execute os comandos DELETE diretamente
+-- =====================================================
+
+-- =====================================================
+-- VERSÃƒO SIMPLIFICADA (SEM TRANSAÃ‡ÃƒO)
+-- =====================================================
+-- Se preferir executar sem transaÃ§Ã£o, use os comandos abaixo:
+-- (Remova o BEGIN; e descomente os comandos abaixo)
+
+/*
+-- Deletar dados relacionados
+DELETE FROM price_history;
+DELETE FROM click_tracking;
+DELETE FROM notifications;
+DELETE FROM bot_send_logs;
+DELETE FROM sync_logs;
+DELETE FROM coupon_sync_logs;
+DELETE FROM product_duplicates;
+DELETE FROM ai_decision_logs;
+DELETE FROM notification_logs WHERE event_type IN ('promotion_new', 'coupon_new', 'coupon_expired', 'price_drop');
+
+-- Desvincular e deletar produtos
+UPDATE products SET coupon_id = NULL;
+DELETE FROM products;
+
+-- Deletar cupons
+DELETE FROM coupons;
+
+-- Opcional: Deletar usuÃ¡rios (descomente se necessÃ¡rio)
+-- DELETE FROM users WHERE role != 'admin';
+-- DELETE FROM users;
+
+-- Opcional: Deletar categorias (descomente se necessÃ¡rio)
+-- DELETE FROM categories;
+*/
+
+
+
+
+
+=== 050_create_sync_config.sql ===
+-- Tabela de ConfiguraÃ§Ã£o de SincronizaÃ§Ã£o
+CREATE TABLE IF NOT EXISTS sync_config (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shopee_enabled BOOLEAN DEFAULT FALSE,
+    mercadolivre_enabled BOOLEAN DEFAULT FALSE,
+    amazon_enabled BOOLEAN DEFAULT FALSE,
+    aliexpress_enabled BOOLEAN DEFAULT FALSE,
+    shopee_auto_publish BOOLEAN DEFAULT FALSE,
+    mercadolivre_auto_publish BOOLEAN DEFAULT FALSE,
+    amazon_auto_publish BOOLEAN DEFAULT FALSE,
+    aliexpress_auto_publish BOOLEAN DEFAULT FALSE,
+    keywords VARCHAR(1000),
+    min_discount_percentage INTEGER DEFAULT 10,
+    categories JSONB DEFAULT '[]'::jsonb,
+    cron_interval_minutes INTEGER DEFAULT 60,
+    is_active BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Trigger para atualizar updated_at
+CREATE TRIGGER update_sync_config_updated_at BEFORE UPDATE ON sync_config FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- PolÃ­ticas de seguranÃ§a
+ALTER TABLE sync_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin Full Access Sync Config" ON sync_config FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin'));
+CREATE POLICY "Public Read Sync Config" ON sync_config FOR SELECT USING (TRUE);
+
+
+
+=== 051_create_telegram_collector_config.sql ===
+-- Tabela para ConfiguraÃ§Ãµes do Coletor Telegram
+CREATE TABLE IF NOT EXISTS telegram_collector_config (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_id VARCHAR(50),
+    api_hash VARCHAR(100),
+    phone VARCHAR(30),
+    password VARCHAR(100),
+    session_path VARCHAR(255) DEFAULT 'telegram_session.session',
+    is_authenticated BOOLEAN DEFAULT FALSE,
+    listener_status VARCHAR(20) DEFAULT 'stopped' CHECK (listener_status IN ('running', 'stopped', 'error')),
+    listener_pid INTEGER,
+    last_error TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT single_collector_config CHECK (id = '00000000-0000-0000-0000-000000000001')
+);
+
+-- Trigger para atualizar updated_at
+CREATE TRIGGER update_telegram_collector_config_updated_at BEFORE UPDATE ON telegram_collector_config FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- PolÃ­ticas de seguranÃ§a
+ALTER TABLE telegram_collector_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin Full Access Telegram Config" ON telegram_collector_config FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin'));
+
+-- Criar configuraÃ§Ã£o padrÃ£o se nÃ£o existir
+INSERT INTO telegram_collector_config (id)
+VALUES ('00000000-0000-0000-0000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+
+
+
+=== 052_fix_schema_mismatches.sql ===
+-- MigraÃ§Ã£o para corrigir discrepÃ¢ncias entre o cÃ³digo e o banco de dados
+-- Adiciona colunas faltantes e cria views necessÃ¡rias
+
+-- =============================================
+-- 1. TABELA PRODUCTS
+-- =============================================
+
+-- Adicionar coluna 'status'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'status') THEN
+        ALTER TABLE products ADD COLUMN status VARCHAR(20) DEFAULT 'published' CHECK (status IN ('pending', 'approved', 'published', 'rejected'));
+    END IF;
+END $$;
+
+-- Adicionar coluna 'original_link'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'original_link') THEN
+        ALTER TABLE products ADD COLUMN original_link TEXT;
+    END IF;
+END $$;
+
+-- =============================================
+-- 2. TABELA COUPONS
+-- =============================================
+
+-- Adicionar coluna 'is_out_of_stock'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'is_out_of_stock') THEN
+        ALTER TABLE coupons ADD COLUMN is_out_of_stock BOOLEAN DEFAULT FALSE;
+    END IF;
+END $$;
+
+-- Adicionar coluna 'is_pending_approval'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'is_pending_approval') THEN
+        ALTER TABLE coupons ADD COLUMN is_pending_approval BOOLEAN DEFAULT FALSE;
+    END IF;
+END $$;
+
+-- Adicionar coluna 'is_exclusive'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'is_exclusive') THEN
+        ALTER TABLE coupons ADD COLUMN is_exclusive BOOLEAN DEFAULT FALSE;
+    END IF;
+END $$;
+
+-- Adicionar colunas de rastreamento de origem do Telegram
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'capture_source') THEN
+        ALTER TABLE coupons ADD COLUMN capture_source VARCHAR(50);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'channel_origin') THEN
+        ALTER TABLE coupons ADD COLUMN channel_origin VARCHAR(255);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'message_id') THEN
+        ALTER TABLE coupons ADD COLUMN message_id VARCHAR(100);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'message_hash') THEN
+        ALTER TABLE coupons ADD COLUMN message_hash VARCHAR(64);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'origem') THEN
+        ALTER TABLE coupons ADD COLUMN origem VARCHAR(50);
+    END IF;
+END $$;
+
+-- =============================================
+-- 3. VIEWS
+-- =============================================
+
+-- Criar ou atualizar view products_full
+-- Esta view Ã© usada extensivamente no Product.js para buscas
+CREATE OR REPLACE VIEW products_full AS
+SELECT 
+    p.*,
+    c.name as category_name,
+    c.slug as category_slug,
+    c.icon as category_icon,
+    cp.code as coupon_code,
+    cp.discount_type as coupon_discount_type,
+    cp.discount_value as coupon_discount_value,
+    cp.valid_until as coupon_valid_until,
+    cp.is_vip as coupon_is_vip
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN coupons cp ON p.coupon_id = cp.id;
+
+-- PermissÃµes para a view (para usuÃ¡rios autenticados e anonimos se necessÃ¡rio)
+GRANT SELECT ON products_full TO anon, authenticated, service_role;
+
+
+
+=== 053_create_sync_logs.sql ===
+-- CriaÃ§Ã£o da tabela sync_logs que estÃ¡ faltando
+-- NecessÃ¡ria para o funcionamento do histÃ³rico e estatÃ­sticas de sincronizaÃ§Ã£o automÃ¡tica
+
+CREATE TABLE IF NOT EXISTS sync_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    platform VARCHAR(50) NOT NULL,
+    product_name VARCHAR(500),
+    product_id UUID,
+    discount_percentage INTEGER,
+    is_new_product BOOLEAN DEFAULT FALSE,
+    sent_to_bots BOOLEAN DEFAULT FALSE,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ãndices para melhor performance nas consultas de histÃ³rico e estatÃ­sticas
+CREATE INDEX IF NOT EXISTS idx_sync_logs_platform ON sync_logs(platform);
+CREATE INDEX IF NOT EXISTS idx_sync_logs_created_at ON sync_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_sync_logs_is_new_product ON sync_logs(is_new_product);
+
+-- PolÃ­ticas de seguranÃ§a (RLS)
+ALTER TABLE sync_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admin Full Access Sync Logs" ON sync_logs
+    FOR ALL
+    USING (EXISTS (SELECT 1 FROM users WHERE id::text = auth.uid()::text AND role = 'admin'));
+
+-- PermissÃ£o de leitura pÃºblica (ou autenticada) se necessÃ¡rio para o dashboard visual
+CREATE POLICY "Authenticated Read Sync Logs" ON sync_logs
+    FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+
+

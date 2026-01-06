@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
     
     -- Template Mode
     use_system_templates BOOLEAN DEFAULT TRUE,
+    template_mode_promotion VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_promotion IN ('default', 'custom', 'ai_advanced')),
+    template_mode_promotion_coupon VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_promotion_coupon IN ('default', 'custom', 'ai_advanced')),
+    template_mode_coupon VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_coupon IN ('default', 'custom', 'ai_advanced')),
+    template_mode_expired_coupon VARCHAR(20) DEFAULT 'custom' CHECK (template_mode_expired_coupon IN ('default', 'custom', 'ai_advanced')),
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -313,7 +317,7 @@ CREATE TABLE IF NOT EXISTS coupons (
   platform VARCHAR(20) NOT NULL CHECK (platform IN ('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general')),
   discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
   discount_value DECIMAL(10,2) NOT NULL,
-  max_discount DECIMAL(10,2),
+  max_discount_value DECIMAL(10,2),
   min_purchase DECIMAL(10,2) DEFAULT 0,
   valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
   valid_until TIMESTAMP WITH TIME ZONE,
