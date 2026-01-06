@@ -101,21 +101,21 @@ export default function BotTemplates() {
       }
 
       console.log(`🔄 Salvando modo de template: ${field} = ${mode}`);
-      
+
       const response = await api.put('/settings', { [field]: mode });
-      
+
       // Atualizar estado local imediatamente
       setTemplateModes(prev => ({ ...prev, [templateType]: mode }));
-      
+
       // Recarregar modos do servidor para confirmar
       await loadTemplateModes();
-      
+
       const modeNames = {
         'default': 'Padrão',
         'custom': 'Customizado',
         'ai_advanced': 'IA ADVANCED'
       };
-      
+
       toast({
         title: "Sucesso",
         description: `Modo de template atualizado para "${modeNames[mode]}"`,
@@ -136,7 +136,7 @@ export default function BotTemplates() {
     try {
       const response = await api.get('/bots/templates');
       setTemplates(response.data.data || []);
-      
+
       // Carregar variáveis para cada tipo
       const vars = {};
       for (const type of Object.keys(templateTypes)) {
@@ -274,9 +274,9 @@ export default function BotTemplates() {
       });
       return;
     }
-    
+
     if (!confirm('Tem certeza que deseja deletar este template?')) return;
-    
+
     try {
       await api.delete(`/bots/templates/${id}`);
       toast({
@@ -297,7 +297,7 @@ export default function BotTemplates() {
   const handlePreview = (template) => {
     const varInfo = variables[template.template_type];
     let preview = template.template;
-    
+
     // Substituir variáveis com exemplos
     if (varInfo && varInfo.variables) {
       const exampleValues = {
@@ -387,7 +387,7 @@ export default function BotTemplates() {
       const response = await api.post('/bots/test', {
         message: testMessage
       });
-      
+
       const result = response.data.data;
       const sentCount = result?.sent || result?.total || 0;
       const failedCount = result?.failed || 0;
@@ -405,7 +405,7 @@ export default function BotTemplates() {
           variant: "destructive"
         });
       }
-      
+
       setIsTestDialogOpen(false);
     } catch (error) {
       console.error('Erro ao enviar teste:', error);
@@ -428,7 +428,7 @@ export default function BotTemplates() {
 
   const handleCreateDefaults = async () => {
     if (!confirm('Isso criará 9 templates padrão (3 para cada tipo). Deseja continuar?')) return;
-    
+
     try {
       const response = await api.post('/bots/templates/create-defaults');
       toast({
@@ -473,7 +473,7 @@ export default function BotTemplates() {
       await api.put(`/bots/templates/${id}`, { is_active: newStatus });
       toast({
         title: "Sucesso",
-        description: newStatus 
+        description: newStatus
           ? "Template ativado. Os bots usarão este template nas próximas mensagens."
           : "Template desativado. Os bots não usarão este template.",
         variant: "success"
@@ -490,7 +490,7 @@ export default function BotTemplates() {
 
   const renderTemplateEditor = (template) => {
     const varInfo = variables[template.template_type];
-    
+
     return (
       <Card className="mt-4">
         <CardHeader>
@@ -574,9 +574,9 @@ export default function BotTemplates() {
               <div className="mt-2 p-3 bg-muted rounded-md">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {varInfo.variables?.map((varName) => (
-                    <Badge 
-                      key={varName} 
-                      variant="outline" 
+                    <Badge
+                      key={varName}
+                      variant="outline"
                       className="font-mono cursor-pointer hover:bg-primary hover:text-primary-foreground"
                       onClick={() => handleCopyVariable(varName)}
                       title="Clique para copiar"
@@ -654,21 +654,22 @@ export default function BotTemplates() {
             {Object.entries(templateTypes).map(([key, label]) => {
               const currentMode = templateModes[key] || 'custom';
               return (
-                <div key={key} className="flex items-center justify-between p-4 border rounded-lg">
+                <div key={key} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border rounded-lg gap-4">
                   <div className="flex-1">
-                    <Label className="text-base font-semibold">{label}</Label>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <Label className="text-sm sm:text-base font-semibold">{label}</Label>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                       {currentMode === 'default' && '📋 Usa template padrão do sistema'}
                       {currentMode === 'custom' && '✏️ Usa template salvo no painel admin'}
-                      {currentMode === 'ai_advanced' && '🤖 IA ADVANCED: Gera template automaticamente baseado no contexto'}
+                      {currentMode === 'ai_advanced' && '🤖 IA ADVANCED: Gera template automaticamente'}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="grid grid-cols-2 sm:flex items-center gap-2">
                     <Button
                       variant={currentMode === 'default' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => handleTemplateModeChange(key, 'default')}
                       disabled={loadingModes}
+                      className="h-8 sm:h-9 text-[10px] sm:text-xs"
                     >
                       Padrão
                     </Button>
@@ -677,15 +678,16 @@ export default function BotTemplates() {
                       size="sm"
                       onClick={() => handleTemplateModeChange(key, 'custom')}
                       disabled={loadingModes}
+                      className="h-8 sm:h-9 text-[10px] sm:text-xs"
                     >
-                      Customizado
+                      Personalizado
                     </Button>
                     <Button
                       variant={currentMode === 'ai_advanced' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => handleTemplateModeChange(key, 'ai_advanced')}
                       disabled={loadingModes}
-                      className={currentMode === 'ai_advanced' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}
+                      className={`h-8 sm:h-9 text-[10px] sm:text-xs col-span-2 sm:col-span-1 ${currentMode === 'ai_advanced' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}`}
                     >
                       <Zap className="h-3 w-3 mr-1" />
                       IA ADVANCED
@@ -697,357 +699,367 @@ export default function BotTemplates() {
           </div>
           <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              <strong>💡 Dica:</strong> IA ADVANCED analisa o produto/cupom e gera templates personalizados automaticamente, 
+              <strong>💡 Dica:</strong> IA ADVANCED analisa o produto/cupom e gera templates personalizados automaticamente,
               adaptando-se ao desconto, urgência e contexto. Requer OpenRouter configurado em Configurações → IA / OpenRouter.
             </p>
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Templates de Mensagens</h2>
-          <p className="text-muted-foreground">
-            Personalize as mensagens enviadas pelos bots. Use variáveis entre chaves {'{'}{'}'} para inserir dados dinâmicos.
+          <h2 className="text-xl sm:text-2xl font-bold">Templates de Mensagens</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Personalize as mensagens enviadas pelos bots.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
             onClick={handleCreateDefaults}
             title="Criar 3 modelos padrão para cada tipo de template"
+            className="flex-1 sm:flex-none h-9 text-xs"
           >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Criar Templates Padrão
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            <span className="hidden xs:inline">Criar </span>Padrão
           </Button>
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
             setIsCreateDialogOpen(open);
             if (!open) {
-              // Limpar campos quando dialog fecha
               setAiDescription('');
               setGeneratingTemplate(false);
             }
           }}>
-          <DialogTrigger asChild>
-            <Button onClick={() => {
-              setNewTemplate({
-                template_type: activeType,
-                platform: 'all',
-                template: '',
-                description: '',
-                is_active: true
-              });
-              setAiDescription('');
-              setGeneratingTemplate(false);
-            }}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Template
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Criar Novo Template</DialogTitle>
-              <DialogDescription>
-                Crie um novo template de mensagem para os bots
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Tipo de Template *</Label>
-                <select
-                  value={newTemplate.template_type}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, template_type: e.target.value })}
-                  className="w-full p-2 border rounded-md"
-                >
-                  {Object.entries(templateTypes).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <Label>Plataforma *</Label>
-                <select
-                  value={newTemplate.platform}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, platform: e.target.value })}
-                  className="w-full p-2 border rounded-md"
-                >
-                  <option value="all">Todas (Telegram e WhatsApp)</option>
-                  <option value="telegram">Telegram</option>
-                  <option value="whatsapp">WhatsApp</option>
-                </select>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>Template da Mensagem *</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateWithAI}
-                    disabled={generatingTemplate}
-                    className="flex items-center gap-2"
+            <DialogTrigger asChild>
+              <Button className="flex-1 sm:flex-none h-9 text-xs" onClick={() => {
+                setNewTemplate({
+                  template_type: activeType,
+                  platform: 'all',
+                  template: '',
+                  description: '',
+                  is_active: true
+                });
+                setAiDescription('');
+                setGeneratingTemplate(false);
+              }}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Novo Template
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Criar Novo Template</DialogTitle>
+                <DialogDescription>
+                  Crie um novo template de mensagem para os bots
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Tipo de Template *</Label>
+                  <select
+                    value={newTemplate.template_type}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, template_type: e.target.value })}
+                    className="w-full p-2 border rounded-md"
                   >
-                    {generatingTemplate ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Gerando...
-                      </>
-                    ) : (
-                      <>
-                        <Brain className="h-4 w-4" />
-                        Gerar com IA
-                      </>
-                    )}
-                  </Button>
+                    {Object.entries(templateTypes).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
                 </div>
-                {generatingTemplate && (
-                  <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      🤖 Gerando template com IA... Isso pode levar alguns segundos.
+
+                <div>
+                  <Label>Plataforma *</Label>
+                  <select
+                    value={newTemplate.platform}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, platform: e.target.value })}
+                    className="w-full p-2 border rounded-md"
+                  >
+                    <option value="all">Todas (Telegram e WhatsApp)</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="whatsapp">WhatsApp</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Template da Mensagem *</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateWithAI}
+                      disabled={generatingTemplate}
+                      className="flex items-center gap-2"
+                    >
+                      {generatingTemplate ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Gerando...
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="h-4 w-4" />
+                          Gerar com IA
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {generatingTemplate && (
+                    <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        🤖 Gerando template com IA... Isso pode levar alguns segundos.
+                      </p>
+                    </div>
+                  )}
+                  <div className="mb-2">
+                    <Label className="text-sm text-muted-foreground">Descrição para IA (opcional)</Label>
+                    <Input
+                      value={aiDescription}
+                      onChange={(e) => setAiDescription(e.target.value)}
+                      placeholder="Ex: Template criativo e atrativo com emojis, focado em economia..."
+                      className="text-sm"
+                      disabled={generatingTemplate}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Descreva como você quer que o template seja. Deixe vazio para usar padrão.
                     </p>
                   </div>
-                )}
-                <div className="mb-2">
-                  <Label className="text-sm text-muted-foreground">Descrição para IA (opcional)</Label>
-                  <Input
-                    value={aiDescription}
-                    onChange={(e) => setAiDescription(e.target.value)}
-                    placeholder="Ex: Template criativo e atrativo com emojis, focado em economia..."
-                    className="text-sm"
+                  <Textarea
+                    value={newTemplate.template}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, template: e.target.value })}
+                    rows={12}
+                    className="font-mono text-sm"
+                    placeholder="Digite o template da mensagem ou clique em 'Gerar com IA' para criar automaticamente..."
                     disabled={generatingTemplate}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Descreva como você quer que o template seja. Deixe vazio para usar padrão.
-                  </p>
-                </div>
-                <Textarea
-                  value={newTemplate.template}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, template: e.target.value })}
-                  rows={12}
-                  className="font-mono text-sm"
-                  placeholder="Digite o template da mensagem ou clique em 'Gerar com IA' para criar automaticamente..."
-                  disabled={generatingTemplate}
-                />
-                {variables[newTemplate.template_type] && (
-                  <div className="mt-2 p-3 bg-muted rounded-md">
-                    <p className="text-sm font-semibold mb-2">Variáveis Disponíveis:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {variables[newTemplate.template_type].variables?.map((varName) => (
-                        <Badge 
-                          key={varName} 
-                          variant="outline" 
-                          className="font-mono cursor-pointer hover:bg-primary hover:text-primary-foreground"
-                          onClick={() => {
-                            const textarea = document.querySelector('textarea');
-                            const start = textarea.selectionStart;
-                            const end = textarea.selectionEnd;
-                            const text = textarea.value;
-                            const before = text.substring(0, start);
-                            const after = text.substring(end, text.length);
-                            const newValue = before + `{${varName}}` + after;
-                            setNewTemplate({ ...newTemplate, template: newValue });
-                            setTimeout(() => {
-                              textarea.focus();
-                              textarea.setSelectionRange(start + varName.length + 2, start + varName.length + 2);
-                            }, 0);
-                          }}
-                        >
-                          {'{'}{varName}{'}'}
-                        </Badge>
-                      ))}
+                  {variables[newTemplate.template_type] && (
+                    <div className="mt-2 p-3 bg-muted rounded-md">
+                      <p className="text-sm font-semibold mb-2">Variáveis Disponíveis:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {variables[newTemplate.template_type].variables?.map((varName) => (
+                          <Badge
+                            key={varName}
+                            variant="outline"
+                            className="font-mono cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => {
+                              const textarea = document.querySelector('textarea');
+                              const start = textarea.selectionStart;
+                              const end = textarea.selectionEnd;
+                              const text = textarea.value;
+                              const before = text.substring(0, start);
+                              const after = text.substring(end, text.length);
+                              const newValue = before + `{${varName}}` + after;
+                              setNewTemplate({ ...newTemplate, template: newValue });
+                              setTimeout(() => {
+                                textarea.focus();
+                                textarea.setSelectionRange(start + varName.length + 2, start + varName.length + 2);
+                              }, 0);
+                            }}
+                          >
+                            {'{'}{varName}{'}'}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              <div>
-                <Label>Descrição (opcional)</Label>
-                <Input
-                  value={newTemplate.description}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
-                  placeholder="Descrição do template..."
-                />
-              </div>
+                <div>
+                  <Label>Descrição (opcional)</Label>
+                  <Input
+                    value={newTemplate.description}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
+                    placeholder="Descrição do template..."
+                  />
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="new_template_active"
-                  checked={newTemplate.is_active}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, is_active: e.target.checked })}
-                  className="h-4 w-4 rounded"
-                />
-                <Label htmlFor="new_template_active">Template ativo</Label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="new_template_active"
+                    checked={newTemplate.is_active}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, is_active: e.target.checked })}
+                    className="h-4 w-4 rounded"
+                  />
+                  <Label htmlFor="new_template_active">Template ativo</Label>
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreate}>
-                <Save className="mr-2 h-4 w-4" />
-                Criar Template
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCreate}>
+                  <Save className="mr-2 h-4 w-4" />
+                  Criar Template
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
-      <div className="space-y-6">
-        <div className="flex gap-2 border-b">
-          {Object.entries(templateTypes).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveType(key)}
-              className={`px-4 py-2 font-medium transition-colors ${
-                activeType === key
-                  ? 'text-primary border-b-2 border-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      <div className="space-y-4 sm:space-y-6">
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="flex gap-1 border-b min-w-max sm:min-w-0">
+            {Object.entries(templateTypes).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setActiveType(key)}
+                className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeType === key
+                    ? 'text-primary border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {Object.entries(templateTypes).map(([type, label]) => (
           activeType === type && (
-          <div key={type} className="space-y-4">
-            {/* Agrupar por plataforma */}
-            {['all', 'telegram', 'whatsapp'].map((platform) => {
-              const platformTemplates = templatesByType[type]?.filter(t => t.platform === platform) || [];
-              if (platformTemplates.length === 0) return null;
-              
-              return (
-                <div key={platform} className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">
-                      {platform === 'all' ? '🌐 Todas as Plataformas' : 
-                       platform === 'telegram' ? '📱 Telegram' : 
-                       '💬 WhatsApp'}
-                    </h3>
-                    <Badge variant="secondary">{platformTemplates.length} template(s)</Badge>
-                  </div>
-                  {platformTemplates.map((template) => (
-                    <Card key={template.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-5 w-5" />
-                        {label}
-                        <Badge variant={template.platform === 'all' ? 'default' : 'secondary'}>
-                          {template.platform === 'all' ? 'Todas' : template.platform}
-                        </Badge>
-                        {!template.is_active && (
-                          <Badge variant="outline">Inativo</Badge>
-                        )}
-                        {template.is_system && (
-                          <Badge variant="default" className="bg-blue-600 hover:bg-blue-700">
-                            🔒 Template Padrão
-                          </Badge>
-                        )}
-                      </CardTitle>
-                      {template.description && (
-                        <CardDescription className="mt-1">
-                          {template.description}
-                        </CardDescription>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePreview(template)}
-                        title="Visualizar preview"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleTest(template)}
-                        title="Testar template"
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDuplicate(template)}
-                        title="Duplicar template"
-                      >
-                        <CopyIcon className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleActive(template.id, template.is_active)}
-                      >
-                        {template.is_active ? 'Desativar' : 'Ativar'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(template)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(template.id, template.is_system)}
-                        disabled={template.is_system}
-                        className={template.is_system ? "opacity-50 cursor-not-allowed" : "text-destructive hover:text-destructive"}
-                        title={template.is_system ? "Template padrão do sistema não pode ser deletado" : "Deletar template"}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {editingId === template.id ? (
-                    renderTemplateEditor(template)
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="bg-muted p-4 rounded-md">
-                        <pre className="whitespace-pre-wrap text-sm font-mono">
-                          {template.template}
-                        </pre>
-                      </div>
-                      {template.is_active && (
-                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span>Este template está ativo e será usado pelos bots</span>
-                        </div>
-                      )}
-                      {!template.is_active && (
-                        <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
-                          <AlertCircle className="h-4 w-4" />
-                          <span>Este template está inativo e não será usado pelos bots</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                    </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              );
-            })}
+            <div key={type} className="space-y-4">
+              {/* Agrupar por plataforma */}
+              {['all', 'telegram', 'whatsapp'].map((platform) => {
+                const platformTemplates = templatesByType[type]?.filter(t => t.platform === platform) || [];
+                if (platformTemplates.length === 0) return null;
 
-            {(!templatesByType[type] || templatesByType[type].length === 0) && (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  Nenhum template encontrado para {label}
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                return (
+                  <div key={platform} className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-semibold">
+                        {platform === 'all' ? '🌐 Todas' :
+                          platform === 'telegram' ? '📱 Telegram' :
+                            '💬 WhatsApp'}
+                      </h3>
+                      <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                        {platformTemplates.length}
+                      </Badge>
+                    </div>
+                    {platformTemplates.map((template) => (
+                      <Card key={template.id} className="overflow-hidden">
+                        <CardHeader className="p-4 sm:p-6">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="space-y-1 min-w-0">
+                              <CardTitle className="flex flex-wrap items-center gap-2 text-base sm:text-lg">
+                                <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                                <span className="truncate">{label}</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  <Badge variant={template.platform === 'all' ? 'default' : 'secondary'} className="text-[10px] h-5">
+                                    {template.platform === 'all' ? 'Todas' : template.platform}
+                                  </Badge>
+                                  {!template.is_active && (
+                                    <Badge variant="outline" className="text-[10px] h-5">Inativo</Badge>
+                                  )}
+                                  {template.is_system && (
+                                    <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-5">
+                                      🔒 Padrão
+                                    </Badge>
+                                  )}
+                                </div>
+                              </CardTitle>
+                              {template.description && (
+                                <CardDescription className="text-xs sm:text-sm truncate">
+                                  {template.description}
+                                </CardDescription>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                                onClick={() => handlePreview(template)}
+                                title="Visualizar preview"
+                              >
+                                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                                onClick={() => handleTest(template)}
+                                title="Testar template"
+                              >
+                                <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                                onClick={() => handleDuplicate(template)}
+                                title="Duplicar template"
+                              >
+                                <CopyIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-xs"
+                                onClick={() => handleToggleActive(template.id, template.is_active)}
+                              >
+                                {template.is_active ? 'Desativar' : 'Ativar'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                                onClick={() => handleEdit(template)}
+                              >
+                                <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDelete(template.id, template.is_system)}
+                                disabled={template.is_system}
+                                className={`h-8 w-8 sm:h-9 sm:w-9 p-0 ${template.is_system ? "opacity-50" : "text-destructive hover:text-destructive"}`}
+                                title={template.is_system ? "Não pode deletar" : "Deletar"}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          {editingId === template.id ? (
+                            renderTemplateEditor(template)
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="bg-muted p-4 rounded-md">
+                                <pre className="whitespace-pre-wrap text-sm font-mono">
+                                  {template.template}
+                                </pre>
+                              </div>
+                              {template.is_active && (
+                                <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <span>Este template está ativo e será usado pelos bots</span>
+                                </div>
+                              )}
+                              {!template.is_active && (
+                                <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
+                                  <AlertCircle className="h-4 w-4" />
+                                  <span>Este template está inativo e não será usado pelos bots</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                );
+              })}
+
+              {(!templatesByType[type] || templatesByType[type].length === 0) && (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    Nenhum template encontrado para {label}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )
         ))}
       </div>

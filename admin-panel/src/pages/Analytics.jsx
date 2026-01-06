@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { 
+import {
   TrendingUp, TrendingDown, Eye, MousePointerClick, Users, ShoppingBag,
   RefreshCw, Calendar, BarChart3, PieChart as PieChartIcon, Activity, Package
 } from 'lucide-react';
@@ -34,7 +34,7 @@ export default function Analytics() {
       }
     } catch (error) {
       console.error('Erro ao carregar analytics:', error);
-      
+
       // Verificar se é erro de conexão
       if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error') || error.message.includes('CONNECTION_REFUSED')) {
         const errorMsg = 'Backend não está acessível. Verifique se o servidor está rodando na porta 3000.';
@@ -119,52 +119,49 @@ export default function Analytics() {
   const topProducts = analytics?.top_products || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <BarChart3 className="h-8 w-8" />
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8" />
             Analytics
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Análise detalhada de performance e métricas do sistema
+          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
+            Métricas e performance do sistema
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-2 border rounded-md p-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="flex bg-muted p-1 rounded-md">
             <button
               onClick={() => setPeriod('7days')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                period === '7days'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent'
-              }`}
+              className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${period === '7days'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'hover:bg-accent'
+                }`}
             >
-              7 dias
+              7d
             </button>
             <button
               onClick={() => setPeriod('30days')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                period === '30days'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent'
-              }`}
+              className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${period === '30days'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'hover:bg-accent'
+                }`}
             >
-              30 dias
+              30d
             </button>
             <button
               onClick={() => setPeriod('90days')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                period === '90days'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent'
-              }`}
+              className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${period === '90days'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'hover:bg-accent'
+                }`}
             >
-              90 dias
+              90d
             </button>
           </div>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+          <Button variant="outline" size="sm" className="h-9 sm:h-10 text-xs sm:text-sm" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
@@ -351,7 +348,7 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip 
+                <Tooltip
                   formatter={(value) => [`${value} conversões`, 'Conversões']}
                   labelFormatter={(label) => `Mês: ${label}`}
                 />
@@ -388,21 +385,21 @@ export default function Analytics() {
               </div>
             ) : (
               topProducts.map((product, index) => (
-                <div key={product.id || index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
+                <div key={product.id || index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary font-semibold">
+                    <div className="flex shrink-0 items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 text-primary font-semibold text-sm sm:text-base">
                       {index + 1}
                     </div>
-                    <div>
-                      <p className="font-medium">{product.name || `Produto ${index + 1}`}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Categoria: {product.category || 'Sem categoria'}
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm sm:text-base truncate max-w-[200px] sm:max-w-none">{product.name || `Produto ${index + 1}`}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        {product.category || 'Sem categoria'}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{product.clicks || 0} cliques</p>
-                    <Badge variant="secondary" className="mt-1">
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0">
+                    <p className="font-semibold text-sm sm:text-base">{product.clicks || 0} cliques</p>
+                    <Badge variant="secondary" className="text-[10px] sm:text-xs">
                       {product.ctr ? `${product.ctr.toFixed(1)}%` : '0%'} CTR
                     </Badge>
                   </div>

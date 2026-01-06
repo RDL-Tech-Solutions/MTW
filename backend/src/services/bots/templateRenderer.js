@@ -2136,12 +2136,10 @@ class TemplateRenderer {
     // Usar ** para negrito (será convertido automaticamente para WhatsApp)
     switch (templateType) {
       case 'new_promotion':
-        // Template específico para Shopee (ofertas/coleções)
-        if (variables.is_shopee_offer === 'true') {
-          return `🛍️ **OFERTA ESPECIAL SHOPEE**\n\n📦 **${variables.product_name || 'Oferta Shopee'}**\n\n${variables.shopee_offer_info || ''}\n🔗 **Acesse a oferta:**\n${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Explore todos os produtos disponíveis nesta oferta!`;
-        }
-        // Template padrão para outras plataformas (SEM CUPOM)
-        return `🔥 **NOVA PROMOÇÃO AUTOMÁTICA**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **${variables.current_price || 'R$ 0,00'}**${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Aproveite antes que acabe!`;
+        // Template padrão para todas as plataformas (SEM CUPOM)
+        // Incluir informações extras da Shopee se houver
+        const extraInfo = variables.shopee_offer_info ? `\n${variables.shopee_offer_info}` : '';
+        return `🔥 **NOVA PROMOÇÃO AUTOMÁTICA**\n\n📦 ${variables.product_name || 'Produto'}${extraInfo}\n\n💰 **${variables.current_price || 'R$ 0,00'}**${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Aproveite antes que acabe!`;
 
       case 'promotion_with_coupon':
         // Template padrão para promoção COM CUPOM

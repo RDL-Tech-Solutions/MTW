@@ -48,3 +48,78 @@
       sans-serif;
   }
 }
+
+/* Utilitários Responsivos Mobile-First */
+@layer utilities {
+  /* Esconder scrollbar mas manter funcionalidade */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Touch-friendly targets (min 44x44px) */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Safe area para dispositivos com notch */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+  
+  /* Prevenir zoom em inputs no iOS */
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  
+  /* Animação de slide para sidebar mobile */
+  @keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  
+  @keyframes slideOut {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+  }
+  
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+  
+  .animate-slide-out {
+    animation: slideOut 0.3s ease-in;
+  }
+}
+
+/* Estilos específicos para mobile */
+@media (max-width: 640px) {
+  /* Cards mais compactos */
+  .card-compact {
+    padding: 0.75rem;
+  }
+  
+  /* Botões em linha cheia */
+  .btn-mobile-full {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  /* Texto responsivo */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.125rem; }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { 
-  Plus, Edit, Trash2, MessageSquare, Activity, 
+import {
+  Plus, Edit, Trash2, MessageSquare, Activity,
   Play, Square, RefreshCw, CheckCircle2, XCircle,
   ExternalLink, Eye, EyeOff, Settings, Key, Power,
   Send, Shield, AlertCircle, Trash, Brain, Zap, Loader2
@@ -17,7 +17,7 @@ import { useToast } from '../hooks/use-toast';
 
 export default function TelegramChannels() {
   const { toast } = useToast();
-  
+
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -33,7 +33,7 @@ export default function TelegramChannels() {
     platform_filter: 'all',
     example_messages: []
   });
-  
+
   // Dialog de configuração de captura
   const [captureConfigDialog, setCaptureConfigDialog] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -50,7 +50,7 @@ export default function TelegramChannels() {
     coupons_extracted: 0
   });
   const [templateMode, setTemplateMode] = useState('custom');
-  
+
   // Configuração
   const [config, setConfig] = useState({
     api_id: '',
@@ -58,7 +58,7 @@ export default function TelegramChannels() {
     phone: ''
   });
   const [configLoading, setConfigLoading] = useState(false);
-  
+
   // Autenticação
   const [authStatus, setAuthStatus] = useState({
     is_authenticated: false,
@@ -70,7 +70,7 @@ export default function TelegramChannels() {
   const [authLoading, setAuthLoading] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [clearingSessions, setClearingSessions] = useState(false);
-  
+
   // Listener
   const [listenerLoading, setListenerLoading] = useState(false);
   const [savingChannel, setSavingChannel] = useState(false);
@@ -84,13 +84,13 @@ export default function TelegramChannels() {
     checkAuthStatus();
     checkListenerStatus();
     loadTemplateMode();
-    
+
     // Verificar status periodicamente (aumentado para 15 segundos para evitar muitas requisições)
     const interval = setInterval(() => {
       checkListenerStatus();
       checkAuthStatus();
     }, 15000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -118,7 +118,7 @@ export default function TelegramChannels() {
     try {
       const response = await api.get('/telegram-channels');
       setChannels(response.data.data || []);
-      
+
       // Atualizar status da IA se disponível
       if (response.data.ai) {
         setAiStatus({
@@ -146,7 +146,7 @@ export default function TelegramChannels() {
         // Isso evita que o usuário salve valores mascarados
         const apiId = data.api_id && !data.api_id.includes('****') ? data.api_id : '';
         const apiHash = data.api_hash && !data.api_hash.includes('****') ? data.api_hash : '';
-        
+
         setConfig({
           api_id: apiId,
           api_hash: apiHash,
@@ -197,7 +197,7 @@ export default function TelegramChannels() {
         description: "Configuração salva com sucesso",
         variant: "success"
       });
-      
+
       // Recarregar configuração e verificar status
       await loadConfig();
       await checkAuthStatus();
@@ -232,13 +232,13 @@ export default function TelegramChannels() {
     setClearingSessions(true);
     try {
       const response = await api.delete('/telegram-collector/sessions');
-      
+
       if (response.data.success) {
         toast({
           title: "Sessões limpas",
           description: response.data.message || "Sessões removidas com sucesso",
         });
-        
+
         // Recarregar status de autenticação
         await checkAuthStatus();
       }
@@ -267,7 +267,7 @@ export default function TelegramChannels() {
       }
 
       console.log('📱 Enviando código para:', config.phone);
-      
+
       const response = await api.post('/telegram-collector/auth/send-code', {
         phone: config.phone
       });
@@ -278,7 +278,7 @@ export default function TelegramChannels() {
         setCodeSent(true);
         const message = response.data.message || 'Código enviado com sucesso. Verifique seu Telegram.';
         const timeout = response.data.data?.timeout || 120;
-        
+
         toast({
           title: "Código Enviado",
           description: `${message} Aguarde até ${timeout} segundos. Verifique SMS e chamadas telefônicas.`,
@@ -296,12 +296,12 @@ export default function TelegramChannels() {
       console.error('❌ Erro ao enviar código:', error);
       console.error('   Response:', error.response?.data);
       console.error('   Status:', error.response?.status);
-      
-      const errorMessage = error.response?.data?.message || 
-                         error.response?.data?.error || 
-                         error.message || 
-                         "Erro ao enviar código. Verifique os logs do servidor.";
-      
+
+      const errorMessage = error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Erro ao enviar código. Verifique os logs do servidor.";
+
       toast({
         title: "Erro ao Enviar Código",
         description: errorMessage,
@@ -452,7 +452,7 @@ export default function TelegramChannels() {
         ...channelForm,
         capture_schedule_start: channelForm.capture_schedule_start === '' ? null : channelForm.capture_schedule_start,
         capture_schedule_end: channelForm.capture_schedule_end === '' ? null : channelForm.capture_schedule_end,
-        example_messages: Array.isArray(channelForm.example_messages) 
+        example_messages: Array.isArray(channelForm.example_messages)
           ? channelForm.example_messages.filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
           : []
       };
@@ -472,11 +472,11 @@ export default function TelegramChannels() {
           variant: "success"
         });
       }
-      
+
       setIsDialogOpen(false);
       setEditingChannel(null);
-      setChannelForm({ 
-        name: '', 
+      setChannelForm({
+        name: '',
         username: '',
         channel_id: '',
         is_active: true,
@@ -500,7 +500,7 @@ export default function TelegramChannels() {
 
   const handleDelete = async (id) => {
     if (!confirm('Tem certeza que deseja deletar este canal?')) return;
-    
+
     setDeletingChannel(prev => ({ ...prev, [id]: true }));
     try {
       await api.delete(`/telegram-channels/${id}`);
@@ -536,7 +536,7 @@ export default function TelegramChannels() {
     });
     setIsDialogOpen(true);
   };
-  
+
   const handleOpenCaptureConfig = (channel) => {
     setSelectedChannel(channel);
     setCaptureConfig({
@@ -547,7 +547,7 @@ export default function TelegramChannels() {
     });
     setCaptureConfigDialog(true);
   };
-  
+
   const handleSaveCaptureConfig = async (e) => {
     e.preventDefault();
     setSavingCaptureConfig(true);
@@ -558,7 +558,7 @@ export default function TelegramChannels() {
         capture_schedule_start: captureConfig.capture_schedule_start === '' ? null : captureConfig.capture_schedule_start,
         capture_schedule_end: captureConfig.capture_schedule_end === '' ? null : captureConfig.capture_schedule_end
       };
-      
+
       await api.put(`/telegram-channels/${selectedChannel.id}`, configToSave);
       toast({
         title: "Sucesso",
@@ -570,7 +570,7 @@ export default function TelegramChannels() {
       loadChannels();
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.response?.data?.error || "Erro ao salvar configuração";
-      
+
       // Verificar se é erro de migration não executada
       if (errorMessage.includes('migration') || errorMessage.includes('não encontrados')) {
         toast({
@@ -624,31 +624,31 @@ export default function TelegramChannels() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <MessageSquare className="h-8 w-8 text-blue-500" />
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <MessageSquare className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
             Canais Telegram
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Configure, autentique e gerencie a captura de cupons via Telegram
+          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
+            Configure e gerencie a captura via Telegram
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={loadChannels} variant="outline" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Atualizar
+          <Button onClick={loadChannels} variant="outline" size="sm" className="h-9 truncate text-xs sm:text-sm">
+            <RefreshCw className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Atualizar</span>
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => {
+              <Button size="sm" className="h-9 truncate text-xs sm:text-sm" onClick={() => {
                 setEditingChannel(null);
-                setChannelForm({ 
-                  name: '', 
-                  username: '', 
-                  channel_id: '', 
+                setChannelForm({
+                  name: '',
+                  username: '',
+                  channel_id: '',
                   is_active: true,
                   capture_schedule_start: '',
                   capture_schedule_end: '',
@@ -657,15 +657,15 @@ export default function TelegramChannels() {
                   example_messages: []
                 });
               }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Canal
+                <Plus className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Novo </span>Canal
               </Button>
             </DialogTrigger>
             <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
                 <DialogDescription>
-                  Adicione um canal do Telegram para monitoramento (público por username ou privado por ID)
+                  Adicione um canal do Telegram para monitoramento
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSaveChannel} className="space-y-4">
@@ -674,38 +674,30 @@ export default function TelegramChannels() {
                   <Input
                     id="name"
                     value={channelForm.name}
-                    onChange={(e) => setChannelForm({...channelForm, name: e.target.value})}
+                    onChange={(e) => setChannelForm({ ...channelForm, name: e.target.value })}
                     placeholder="Ex: Canal de Cupons"
                     required
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="username">Username do Canal (Público)</Label>
                   <Input
                     id="username"
                     value={channelForm.username}
-                    onChange={(e) => setChannelForm({...channelForm, username: e.target.value})}
+                    onChange={(e) => setChannelForm({ ...channelForm, username: e.target.value })}
                     placeholder="@canaldecupons ou canaldecupons"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Para canais públicos: digite o username (com ou sem @)
-                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="channel_id">ID do Canal (Privado) *</Label>
+                  <Label htmlFor="channel_id">ID do Canal (Privado)</Label>
                   <Input
                     id="channel_id"
                     value={channelForm.channel_id}
-                    onChange={(e) => setChannelForm({...channelForm, channel_id: e.target.value})}
+                    onChange={(e) => setChannelForm({ ...channelForm, channel_id: e.target.value })}
                     placeholder="-1001234567890"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Para canais privados: digite o ID do canal (formato: -1001234567890). 
-                    <br />
-                    <strong>Obrigatório se não informar username.</strong>
-                  </p>
                 </div>
 
                 <div className="flex items-center space-x-2">
@@ -713,7 +705,7 @@ export default function TelegramChannels() {
                     type="checkbox"
                     id="is_active"
                     checked={channelForm.is_active}
-                    onChange={(e) => setChannelForm({...channelForm, is_active: e.target.checked})}
+                    onChange={(e) => setChannelForm({ ...channelForm, is_active: e.target.checked })}
                     className="h-4 w-4 rounded"
                   />
                   <Label htmlFor="is_active">Canal ativo</Label>
@@ -721,7 +713,7 @@ export default function TelegramChannels() {
 
                 <div className="border-t pt-4 space-y-4">
                   <h3 className="font-semibold text-sm">Configurações de Captura</h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="capture_schedule_start">Horário Início</Label>
@@ -729,33 +721,33 @@ export default function TelegramChannels() {
                         id="capture_schedule_start"
                         type="time"
                         value={channelForm.capture_schedule_start}
-                        onChange={(e) => setChannelForm({...channelForm, capture_schedule_start: e.target.value})}
+                        onChange={(e) => setChannelForm({ ...channelForm, capture_schedule_start: e.target.value })}
                       />
                       <p className="text-xs text-muted-foreground">
                         Deixe vazio para capturar 24h
                       </p>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Label htmlFor="capture_schedule_end">Horário Fim</Label>
                       <Input
                         id="capture_schedule_end"
                         type="time"
                         value={channelForm.capture_schedule_end}
-                        onChange={(e) => setChannelForm({...channelForm, capture_schedule_end: e.target.value})}
+                        onChange={(e) => setChannelForm({ ...channelForm, capture_schedule_end: e.target.value })}
                       />
                       <p className="text-xs text-muted-foreground">
                         Deixe vazio para capturar 24h
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="capture_mode">Modo de Captura *</Label>
                     <select
                       id="capture_mode"
                       value={channelForm.capture_mode}
-                      onChange={(e) => setChannelForm({...channelForm, capture_mode: e.target.value})}
+                      onChange={(e) => setChannelForm({ ...channelForm, capture_mode: e.target.value })}
                       className="w-full px-3 py-2 border rounded-md bg-background"
                       required
                     >
@@ -767,13 +759,13 @@ export default function TelegramChannels() {
                       Define quantas mensagens antigas serão capturadas
                     </p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="platform_filter">Filtro de Plataforma *</Label>
                     <select
                       id="platform_filter"
                       value={channelForm.platform_filter}
-                      onChange={(e) => setChannelForm({...channelForm, platform_filter: e.target.value})}
+                      onChange={(e) => setChannelForm({ ...channelForm, platform_filter: e.target.value })}
                       className="w-full px-3 py-2 border rounded-md bg-background"
                       required
                     >
@@ -802,7 +794,7 @@ export default function TelegramChannels() {
                       <strong>💡 Dica:</strong> Quanto mais exemplos você adicionar, melhor a IA entenderá o formato deste canal.
                     </div>
                   )}
-                  
+
                   <div className="space-y-2">
                     {(!channelForm.example_messages || !Array.isArray(channelForm.example_messages) || channelForm.example_messages.length === 0) ? (
                       <div className="p-3 border-2 border-dashed rounded-lg text-center text-muted-foreground">
@@ -820,7 +812,7 @@ export default function TelegramChannels() {
                                 const currentMessages = channelForm.example_messages || [];
                                 const newMessages = [...currentMessages];
                                 newMessages[index] = e.target.value;
-                                setChannelForm({...channelForm, example_messages: newMessages});
+                                setChannelForm({ ...channelForm, example_messages: newMessages });
                               }}
                               className="w-full px-3 py-2 border rounded-md bg-background text-sm resize-y"
                               rows="3"
@@ -837,7 +829,7 @@ export default function TelegramChannels() {
                             onClick={() => {
                               const currentMessages = channelForm.example_messages || [];
                               const newMessages = currentMessages.filter((_, i) => i !== index);
-                              setChannelForm({...channelForm, example_messages: newMessages});
+                              setChannelForm({ ...channelForm, example_messages: newMessages });
                             }}
                             className="mt-0"
                           >
@@ -846,7 +838,7 @@ export default function TelegramChannels() {
                         </div>
                       ))
                     )}
-                    
+
                     <Button
                       type="button"
                       variant="outline"
@@ -884,7 +876,7 @@ export default function TelegramChannels() {
               </form>
             </DialogContent>
           </Dialog>
-          
+
           {/* Dialog de Configuração de Captura */}
           <Dialog open={captureConfigDialog} onOpenChange={setCaptureConfigDialog}>
             <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
@@ -902,33 +894,33 @@ export default function TelegramChannels() {
                       id="config_capture_schedule_start"
                       type="time"
                       value={captureConfig.capture_schedule_start}
-                      onChange={(e) => setCaptureConfig({...captureConfig, capture_schedule_start: e.target.value})}
+                      onChange={(e) => setCaptureConfig({ ...captureConfig, capture_schedule_start: e.target.value })}
                     />
                     <p className="text-xs text-muted-foreground">
                       Deixe vazio para 24h
                     </p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="config_capture_schedule_end">Horário Fim</Label>
                     <Input
                       id="config_capture_schedule_end"
                       type="time"
                       value={captureConfig.capture_schedule_end}
-                      onChange={(e) => setCaptureConfig({...captureConfig, capture_schedule_end: e.target.value})}
+                      onChange={(e) => setCaptureConfig({ ...captureConfig, capture_schedule_end: e.target.value })}
                     />
                     <p className="text-xs text-muted-foreground">
                       Deixe vazio para 24h
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="config_capture_mode">Modo de Captura *</Label>
                   <select
                     id="config_capture_mode"
                     value={captureConfig.capture_mode}
-                    onChange={(e) => setCaptureConfig({...captureConfig, capture_mode: e.target.value})}
+                    onChange={(e) => setCaptureConfig({ ...captureConfig, capture_mode: e.target.value })}
                     className="w-full px-3 py-2 border rounded-md bg-background"
                     required
                   >
@@ -940,13 +932,13 @@ export default function TelegramChannels() {
                     Define quantas mensagens antigas serão capturadas
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="config_platform_filter">Filtro de Plataforma *</Label>
                   <select
                     id="config_platform_filter"
                     value={captureConfig.platform_filter}
-                    onChange={(e) => setCaptureConfig({...captureConfig, platform_filter: e.target.value})}
+                    onChange={(e) => setCaptureConfig({ ...captureConfig, platform_filter: e.target.value })}
                     className="w-full px-3 py-2 border rounded-md bg-background"
                     required
                   >
@@ -960,7 +952,7 @@ export default function TelegramChannels() {
                     Capturar cupons apenas desta plataforma ou todas
                   </p>
                 </div>
-                
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setCaptureConfigDialog(false)}>
                     Cancelar
@@ -982,22 +974,24 @@ export default function TelegramChannels() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b">
-        {['channels', 'config', 'auth', 'listener'].map((tab) => (
+      {/* Tabs Responsivas */}
+      <div className="flex bg-muted p-1 rounded-md overflow-x-auto scrollbar-hide px-1 gap-1">
+        {[
+          { id: 'channels', label: 'Canais', icon: MessageSquare },
+          { id: 'config', label: 'Configuração', icon: Settings },
+          { id: 'auth', label: 'Autenticação', icon: Key },
+          { id: 'listener', label: 'Listener', icon: Power }
+        ].map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === tab
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-background/50'
+              }`}
           >
-            {tab === 'channels' && <><MessageSquare className="inline mr-2 h-4 w-4" />Canais</>}
-            {tab === 'config' && <><Settings className="inline mr-2 h-4 w-4" />Configuração</>}
-            {tab === 'auth' && <><Key className="inline mr-2 h-4 w-4" />Autenticação</>}
-            {tab === 'listener' && <><Power className="inline mr-2 h-4 w-4" />Listener</>}
+            <tab.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {tab.label}
           </button>
         ))}
       </div>
@@ -1021,7 +1015,7 @@ export default function TelegramChannels() {
                 id="api_id"
                 type="text"
                 value={config.api_id}
-                onChange={(e) => setConfig({...config, api_id: e.target.value})}
+                onChange={(e) => setConfig({ ...config, api_id: e.target.value })}
                 placeholder="12345678"
               />
             </div>
@@ -1032,7 +1026,7 @@ export default function TelegramChannels() {
                 id="api_hash"
                 type="text"
                 value={config.api_hash}
-                onChange={(e) => setConfig({...config, api_hash: e.target.value})}
+                onChange={(e) => setConfig({ ...config, api_hash: e.target.value })}
                 placeholder="abcdef1234567890abcdef1234567890"
               />
             </div>
@@ -1043,7 +1037,7 @@ export default function TelegramChannels() {
                 id="phone"
                 type="text"
                 value={config.phone}
-                onChange={(e) => setConfig({...config, phone: e.target.value})}
+                onChange={(e) => setConfig({ ...config, phone: e.target.value })}
                 placeholder="+5511999999999"
               />
               <p className="text-xs text-muted-foreground">
@@ -1083,7 +1077,7 @@ export default function TelegramChannels() {
                 </>
               )}
             </Button>
-            
+
             {!authStatus.has_credentials && (
               <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
@@ -1179,8 +1173,8 @@ export default function TelegramChannels() {
                         Se estiver tendo problemas de conexão, limpe as sessões para forçar uma nova conexão
                       </p>
                     </div>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={clearSessions}
                       disabled={clearingSessions}
@@ -1208,8 +1202,8 @@ export default function TelegramChannels() {
                         Certifique-se de que as credenciais estão configuradas antes de autenticar.
                       </p>
                     </div>
-                    <Button 
-                      onClick={sendAuthCode} 
+                    <Button
+                      onClick={sendAuthCode}
                       disabled={authLoading || !authStatus.has_credentials}
                       className="w-full"
                     >
@@ -1256,8 +1250,8 @@ export default function TelegramChannels() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        onClick={verifyAuthCode} 
+                      <Button
+                        onClick={verifyAuthCode}
                         disabled={authLoading || !authCode}
                         className="flex-1"
                       >
@@ -1273,8 +1267,8 @@ export default function TelegramChannels() {
                           </>
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => {
                           setCodeSent(false);
                           setAuthCode('');
@@ -1333,8 +1327,8 @@ export default function TelegramChannels() {
             )}
 
             <div className="flex gap-2">
-              <Button 
-                onClick={startListener} 
+              <Button
+                onClick={startListener}
                 disabled={listenerLoading || listenerStatus === 'running' || !authStatus.is_authenticated}
                 className="flex-1"
               >
@@ -1350,8 +1344,8 @@ export default function TelegramChannels() {
                   </>
                 )}
               </Button>
-              <Button 
-                onClick={stopListener} 
+              <Button
+                onClick={stopListener}
                 disabled={listenerLoading || listenerStatus !== 'running'}
                 variant="destructive"
                 className="flex-1"
@@ -1368,8 +1362,8 @@ export default function TelegramChannels() {
                   </>
                 )}
               </Button>
-              <Button 
-                onClick={restartListener} 
+              <Button
+                onClick={restartListener}
                 disabled={listenerLoading || !authStatus.is_authenticated}
                 variant="outline"
               >
@@ -1387,9 +1381,9 @@ export default function TelegramChannels() {
               </Button>
             </div>
 
-            <Button 
-              onClick={checkListenerStatus} 
-              variant="outline" 
+            <Button
+              onClick={checkListenerStatus}
+              variant="outline"
               className="w-full"
             >
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -1485,180 +1479,180 @@ export default function TelegramChannels() {
 
           {/* Channels Table */}
           <Card>
-        <CardHeader>
-          <CardTitle>Canais Monitorados</CardTitle>
-          <CardDescription>
-            {channels.length} canal(is) cadastrado(s)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* Informação sobre Modo de Template */}
-          <div className="mb-4 p-3 bg-muted rounded-md border">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-semibold">Modo de Template para Cupons Capturados</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Cupons capturados do Telegram serão enviados usando o template de "Novo Cupom"
-                </p>
+            <CardHeader>
+              <CardTitle>Canais Monitorados</CardTitle>
+              <CardDescription>
+                {channels.length} canal(is) cadastrado(s)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Informação sobre Modo de Template */}
+              <div className="mb-4 p-3 bg-muted rounded-md border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-semibold">Modo de Template para Cupons Capturados</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Cupons capturados do Telegram serão enviados usando o template de "Novo Cupom"
+                    </p>
+                  </div>
+                  <Badge className={getTemplateModeInfo().color}>
+                    {getTemplateModeInfo().icon} {getTemplateModeInfo().label}
+                  </Badge>
+                </div>
+                {getTemplateModeInfo().label === 'IA ADVANCED' && (
+                  <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-800 dark:text-purple-200">
+                    <Brain className="h-3 w-3 inline mr-1" />
+                    A IA irá gerar o template automaticamente baseado no cupom capturado e contexto
+                  </div>
+                )}
               </div>
-              <Badge className={getTemplateModeInfo().color}>
-                {getTemplateModeInfo().icon} {getTemplateModeInfo().label}
-              </Badge>
-            </div>
-            {getTemplateModeInfo().label === 'IA ADVANCED' && (
-              <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-800 dark:text-purple-200">
-                <Brain className="h-3 w-3 inline mr-1" />
-                A IA irá gerar o template automaticamente baseado no cupom capturado e contexto
-              </div>
-            )}
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Username</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Configurações</TableHead>
-                <TableHead className="text-center">Cupons Capturados</TableHead>
-                <TableHead>Última Mensagem</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {channels.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    Nenhum canal cadastrado. Clique em "Novo Canal" para adicionar.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                channels.map((channel) => (
-                  <TableRow key={channel.id}>
-                    <TableCell className="font-medium">{channel.name}</TableCell>
-                    <TableCell>
-                      {channel.username ? (
-                        <a
-                          href={`https://t.me/${channel.username}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-500 hover:underline flex items-center gap-1"
-                        >
-                          @{channel.username}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : channel.channel_id ? (
-                        <span className="text-muted-foreground text-xs font-mono">
-                          ID: {channel.channel_id}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={channel.is_active ? 'success' : 'destructive'}>
-                        {channel.is_active ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1 text-xs">
-                        {channel.capture_mode && (
-                          <Badge variant="outline" className="text-xs">
-                            {channel.capture_mode === 'new_only' ? 'Apenas novas' : 
-                             channel.capture_mode === '1_day' ? 'Até 1 dia' : 
-                             'Até 2 dias'}
-                          </Badge>
-                        )}
-                        {channel.platform_filter && channel.platform_filter !== 'all' && (
-                          <Badge variant="outline" className="text-xs">
-                            {channel.platform_filter}
-                          </Badge>
-                        )}
-                        {channel.capture_schedule_start && channel.capture_schedule_end && (
-                          <span className="text-muted-foreground">
-                            {channel.capture_schedule_start} - {channel.capture_schedule_end}
-                          </span>
-                        )}
-                        {channel.example_messages && Array.isArray(channel.example_messages) && channel.example_messages.length > 0 && (
-                          <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
-                            <Brain className="inline mr-1 h-3 w-3" />
-                            {channel.example_messages.length} exemplo{channel.example_messages.length > 1 ? 's' : ''} IA
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary">
-                        {channel.coupons_captured || 0}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {channel.last_message_at
-                        ? new Date(channel.last_message_at).toLocaleString('pt-BR')
-                        : 'Nunca'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleActive(channel)}
-                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
-                        >
-                          {togglingActive[channel.id] ? (
-                            <>
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              Atualizando...
-                            </>
-                          ) : channel.is_active ? (
-                            <>
-                              <Square className="mr-1 h-3 w-3" />
-                              Desativar
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                              Ativar
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenCaptureConfig(channel)}
-                          title="Configurar captura"
-                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(channel)}
-                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(channel.id)}
-                          disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
-                        >
-                          {deletingChannel[channel.id] ? (
-                            <Loader2 className="h-4 w-4 text-destructive animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          )}
-                        </Button>
-                      </div>
-                    </TableCell>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Configurações</TableHead>
+                    <TableHead className="text-center">Cupons Capturados</TableHead>
+                    <TableHead>Última Mensagem</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {channels.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        Nenhum canal cadastrado. Clique em "Novo Canal" para adicionar.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    channels.map((channel) => (
+                      <TableRow key={channel.id}>
+                        <TableCell className="font-medium">{channel.name}</TableCell>
+                        <TableCell>
+                          {channel.username ? (
+                            <a
+                              href={`https://t.me/${channel.username}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:underline flex items-center gap-1"
+                            >
+                              @{channel.username}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : channel.channel_id ? (
+                            <span className="text-muted-foreground text-xs font-mono">
+                              ID: {channel.channel_id}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={channel.is_active ? 'success' : 'destructive'}>
+                            {channel.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 text-xs">
+                            {channel.capture_mode && (
+                              <Badge variant="outline" className="text-xs">
+                                {channel.capture_mode === 'new_only' ? 'Apenas novas' :
+                                  channel.capture_mode === '1_day' ? 'Até 1 dia' :
+                                    'Até 2 dias'}
+                              </Badge>
+                            )}
+                            {channel.platform_filter && channel.platform_filter !== 'all' && (
+                              <Badge variant="outline" className="text-xs">
+                                {channel.platform_filter}
+                              </Badge>
+                            )}
+                            {channel.capture_schedule_start && channel.capture_schedule_end && (
+                              <span className="text-muted-foreground">
+                                {channel.capture_schedule_start} - {channel.capture_schedule_end}
+                              </span>
+                            )}
+                            {channel.example_messages && Array.isArray(channel.example_messages) && channel.example_messages.length > 0 && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                                <Brain className="inline mr-1 h-3 w-3" />
+                                {channel.example_messages.length} exemplo{channel.example_messages.length > 1 ? 's' : ''} IA
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary">
+                            {channel.coupons_captured || 0}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {channel.last_message_at
+                            ? new Date(channel.last_message_at).toLocaleString('pt-BR')
+                            : 'Nunca'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleActive(channel)}
+                              disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
+                            >
+                              {togglingActive[channel.id] ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  Atualizando...
+                                </>
+                              ) : channel.is_active ? (
+                                <>
+                                  <Square className="mr-1 h-3 w-3" />
+                                  Desativar
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                                  Ativar
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenCaptureConfig(channel)}
+                              title="Configurar captura"
+                              disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(channel)}
+                              disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(channel.id)}
+                              disabled={togglingActive[channel.id] || deletingChannel[channel.id]}
+                            >
+                              {deletingChannel[channel.id] ? (
+                                <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

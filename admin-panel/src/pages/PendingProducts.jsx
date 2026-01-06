@@ -29,6 +29,7 @@ export default function PendingProducts() {
   const [rejecting, setRejecting] = useState(false);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [templateModes, setTemplateModes] = useState({
     new_promotion: 'custom',
     promotion_with_coupon: 'custom'
@@ -143,9 +144,10 @@ export default function PendingProducts() {
     setSelectedProduct(product);
     setAffiliateLink(product.original_link || product.affiliate_link || '');
     setSelectedCouponId(product.coupon_id || '');
+    setSelectedCategoryId(product.category_id || '');
     setFinalPrice(null);
     setIsApprovalDialogOpen(true);
-    
+
     // Buscar cupons disponíveis para a plataforma do produto
     await fetchAvailableCoupons(product.platform);
   };
@@ -155,6 +157,7 @@ export default function PendingProducts() {
     setSelectedProduct(null);
     setAffiliateLink('');
     setSelectedCouponId('');
+    setSelectedCategoryId('');
     setAvailableCoupons([]);
     setFinalPrice(null);
   };
@@ -168,7 +171,7 @@ export default function PendingProducts() {
           limit: 100 // Buscar mais cupons para ter opções
         }
       });
-      
+
       const coupons = response.data.data?.coupons || [];
       setAvailableCoupons(coupons);
     } catch (error) {
@@ -197,10 +200,10 @@ export default function PendingProducts() {
 
     // Preço atual do produto (já com desconto)
     const currentPrice = product.current_price || 0;
-    
+
     // Aplicar desconto do cupom sobre o preço atual
     let finalPriceValue = currentPrice;
-    
+
     if (coupon.discount_type === 'percentage') {
       // Desconto percentual: preço - (preço * desconto%)
       finalPriceValue = currentPrice - (currentPrice * (coupon.discount_value / 100));
@@ -382,6 +385,11 @@ export default function PendingProducts() {
         payload.coupon_id = selectedCouponId;
       }
 
+      // Adicionar categoria se selecionada
+      if (selectedCategoryId) {
+        payload.category_id = selectedCategoryId;
+      }
+
       console.log('📤 ========== ENVIANDO PAYLOAD ==========');
       console.log('   Product ID:', selectedProduct?.id);
       console.log('   Affiliate Link:', affiliateLink.substring(0, 80) + '...');
@@ -398,7 +406,7 @@ export default function PendingProducts() {
       }
 
       const response = await api.post(`/products/pending/${selectedProduct.id}/approve`, payload);
-      
+
       console.log('✅ ========== RESPOSTA RECEBIDA ==========');
       console.log('   Status:', response.status);
       console.log('   Data:', JSON.stringify(response.data, null, 2));
@@ -413,8 +421,8 @@ export default function PendingProducts() {
 
       toast({
         title: "Sucesso",
-        description: shouldShorten 
-          ? "Link encurtado e produto publicado com sucesso!" 
+        description: shouldShorten
+          ? "Link encurtado e produto publicado com sucesso!"
           : "Produto aprovado e publicado com sucesso!",
       });
 
@@ -829,9 +837,11 @@ export default function PendingProducts() {
                   </div>
                   <div>
                     <Label>Plataforma</Label>
-                    <Badge className={getPlatformBadge(selectedProduct.platform)}>
-                      {getPlatformName(selectedProduct.platform)}
-                    </Badge>
+                    <div>
+                      <Badge className={getPlatformBadge(selectedProduct.platform)}>
+                        {getPlatformName(selectedProduct.platform)}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <Label>Preço</Label>
@@ -849,17 +859,29 @@ export default function PendingProducts() {
                   {selectedProduct.discount_percentage > 0 && (
                     <div>
                       <Label>Desconto</Label>
-                      <Badge variant="destructive" className="text-lg">
-                        {selectedProduct.discount_percentage}% OFF
-                      </Badge>
+                      <div>
+                        <Badge variant="destructive" className="text-lg">
+                          {selectedProduct.discount_percentage}% OFF
+                        </Badge>
+                      </div>
                     </div>
                   )}
-                  {selectedProduct.category_name && (
-                    <div>
-                      <Label>Categoria</Label>
-                      <p>{selectedProduct.category_name}</p>
-                    </div>
-                  )}
+                  <div>
+                    <Label htmlFor="edit-category">Categoria</Label>
+                    <select
+                      id="edit-category"
+                      value={selectedCategoryId}
+                      onChange={(e) => setSelectedCategoryId(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background mt-1"
+                    >
+                      <option value="">Sem categoria</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -899,7 +921,7 @@ export default function PendingProducts() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Selecione um cupom para aplicar desconto adicional ao produto
                 </p>
-                
+
                 {/* Preço Final com Cupom */}
                 {finalPrice !== null && selectedProduct && (
                   <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
@@ -969,7 +991,7 @@ export default function PendingProducts() {
                   <div>
                     <Label className="text-sm font-semibold">Modo de Template Ativo</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {selectedCouponId 
+                      {selectedCouponId
                         ? 'Este produto será enviado usando o template de "Promoção + Cupom"'
                         : 'Este produto será enviado usando o template de "Nova Promoção"'}
                     </p>

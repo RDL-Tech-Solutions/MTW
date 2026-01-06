@@ -395,50 +395,50 @@ export default function Bots() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header Responsivo */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Bot className="h-8 w-8" />
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Bot className="h-6 w-6 sm:h-8 sm:w-8" />
             Configuração de Bots
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Configure e gerencie os bots de Telegram e WhatsApp
+          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
+            Configure Telegram e WhatsApp
           </p>
         </div>
-        <Button onClick={loadData} variant="outline" size="sm">
+        <Button onClick={loadData} variant="outline" size="sm" className="self-start sm:self-auto">
           <RefreshCw className="mr-2 h-4 w-4" />
           Atualizar
         </Button>
       </div>
 
-      {/* Status Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Status Cards - Grid Responsivo */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
         <Card className={`border-2 ${status.telegram?.working ? 'border-green-500/50' : status.telegram?.configured ? 'border-yellow-500/50' : 'border-gray-300'}`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center justify-between">
+          <CardHeader className="p-3 sm:p-4 pb-2">
+            <CardTitle className="text-sm sm:text-lg flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-blue-500" />
+                <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
                 Telegram
               </span>
               {status.telegram?.working ? (
-                <Badge variant="success" className="flex items-center gap-1">
+                <Badge variant="success" className="flex items-center gap-1 text-xs">
                   <Wifi className="h-3 w-3" /> Online
                 </Badge>
               ) : status.telegram?.configured ? (
-                <Badge variant="warning" className="flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> Configurado
+                <Badge variant="warning" className="flex items-center gap-1 text-xs">
+                  <AlertCircle className="h-3 w-3" /> Config
                 </Badge>
               ) : (
-                <Badge variant="destructive" className="flex items-center gap-1">
-                  <WifiOff className="h-3 w-3" /> Offline
+                <Badge variant="destructive" className="flex items-center gap-1 text-xs">
+                  <WifiOff className="h-3 w-3" /> Off
                 </Badge>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-sm text-muted-foreground">
+          <CardContent className="p-3 sm:p-4 pt-0">
+            <div className="text-xs sm:text-sm text-muted-foreground">
               {status.telegram?.bot_info ? (
                 <span>Bot: @{status.telegram.bot_info.username}</span>
               ) : (
@@ -452,32 +452,32 @@ export default function Bots() {
         </Card>
 
         <Card className={`border-2 ${status.whatsapp?.working ? 'border-green-500/50' : status.whatsapp?.configured ? 'border-yellow-500/50' : 'border-gray-300'}`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center justify-between">
+          <CardHeader className="p-3 sm:p-4 pb-2">
+            <CardTitle className="text-sm sm:text-lg flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                <svg className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                 </svg>
                 WhatsApp
               </span>
               {status.whatsapp?.working ? (
-                <Badge variant="success" className="flex items-center gap-1">
+                <Badge variant="success" className="flex items-center gap-1 text-xs">
                   <Wifi className="h-3 w-3" /> Online
                 </Badge>
               ) : status.whatsapp?.configured ? (
-                <Badge variant="warning" className="flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> Configurado
+                <Badge variant="warning" className="flex items-center gap-1 text-xs">
+                  <AlertCircle className="h-3 w-3" /> Config
                 </Badge>
               ) : (
-                <Badge variant="destructive" className="flex items-center gap-1">
-                  <WifiOff className="h-3 w-3" /> Offline
+                <Badge variant="destructive" className="flex items-center gap-1 text-xs">
+                  <WifiOff className="h-3 w-3" /> Off
                 </Badge>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-sm text-muted-foreground">
-              <span>{status.whatsapp?.configured ? 'API Meta Business configurada' : 'Nenhuma API configurada'}</span>
+          <CardContent className="p-3 sm:p-4 pt-0">
+            <div className="text-xs sm:text-sm text-muted-foreground">
+              <span>{status.whatsapp?.configured ? 'API Meta configurada' : 'Nenhuma API configurada'}</span>
               <span className="block mt-1">
                 {status.whatsapp?.channels || 0} canais ativos
               </span>
@@ -486,23 +486,49 @@ export default function Bots() {
         </Card>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b">
-        {['config', 'channels', 'templates', 'logs'].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 font-medium transition-colors ${activeTab === tab
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground'
-              }`}
-          >
-            {tab === 'config' && <><Settings className="inline mr-2 h-4 w-4" />Configurações</>}
-            {tab === 'channels' && <><MessageSquare className="inline mr-2 h-4 w-4" />Canais</>}
-            {tab === 'templates' && <><FileText className="inline mr-2 h-4 w-4" />Templates</>}
-            {tab === 'logs' && <><Activity className="inline mr-2 h-4 w-4" />Logs</>}
-          </button>
-        ))}
+      {/* Tabs Responsivas */}
+      <div className="flex bg-muted p-1 rounded-md overflow-x-auto scrollbar-hide px-1 gap-1">
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'config'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-background/50'
+            }`}
+        >
+          <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">Configuração</span>
+          <span className="sm:hidden">Geral</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('channels')}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'channels'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-background/50'
+            }`}
+        >
+          <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          Canais
+        </button>
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'templates'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-background/50'
+            }`}
+        >
+          <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          Templates
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'logs'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-background/50'
+            }`}
+        >
+          <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          Logs
+        </button>
       </div>
 
       {/* Tab: Configurações */}
@@ -807,392 +833,402 @@ export default function Bots() {
             </CardContent>
           </Card>
         </div>
-      )}
+      )
+      }
 
       {/* Tab: Canais */}
-      {activeTab === 'channels' && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Canais de Notificação</CardTitle>
-              <CardDescription>Gerencie os canais que receberão as notificações</CardDescription>
-            </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
-                  setEditingChannel(null);
-                  setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
-                }}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Novo Canal
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
-                  <DialogDescription>Configure um canal para receber notificações</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSaveChannel} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="platform">Plataforma *</Label>
-                    <select
-                      id="platform"
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={channelForm.platform}
-                      onChange={(e) => setChannelForm({ ...channelForm, platform: e.target.value })}
-                    >
-                      <option value="telegram">Telegram</option>
-                      <option value="whatsapp">WhatsApp</option>
-                    </select>
-                  </div>
+      {
+        activeTab === 'channels' && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Canais de Notificação</CardTitle>
+                <CardDescription>Gerencie os canais que receberão as notificações</CardDescription>
+              </div>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingChannel(null);
+                    setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Novo Canal
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
+                    <DialogDescription>Configure um canal para receber notificações</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleSaveChannel} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="platform">Plataforma *</Label>
+                      <select
+                        id="platform"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={channelForm.platform}
+                        onChange={(e) => setChannelForm({ ...channelForm, platform: e.target.value })}
+                      >
+                        <option value="telegram">Telegram</option>
+                        <option value="whatsapp">WhatsApp</option>
+                      </select>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="channel_id">
-                      {channelForm.platform === 'telegram' ? 'Chat ID *' : 'Número do WhatsApp *'}
-                    </Label>
-                    <Input
-                      id="channel_id"
-                      value={channelForm.channel_id}
-                      onChange={(e) => setChannelForm({ ...channelForm, channel_id: e.target.value })}
-                      placeholder={channelForm.platform === 'telegram' ? '-1001234567890' : '5511999999999'}
-                      required
-                    />
-                    {channelForm.platform === 'telegram' && (
-                      <p className="text-xs text-muted-foreground">
-                        Use o @userinfobot ou @getidsbot para obter o Chat ID
-                      </p>
-                    )}
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="channel_id">
+                        {channelForm.platform === 'telegram' ? 'Chat ID *' : 'Número do WhatsApp *'}
+                      </Label>
+                      <Input
+                        id="channel_id"
+                        value={channelForm.channel_id}
+                        onChange={(e) => setChannelForm({ ...channelForm, channel_id: e.target.value })}
+                        placeholder={channelForm.platform === 'telegram' ? '-1001234567890' : '5511999999999'}
+                        required
+                      />
+                      {channelForm.platform === 'telegram' && (
+                        <p className="text-xs text-muted-foreground">
+                          Use o @userinfobot ou @getidsbot para obter o Chat ID
+                        </p>
+                      )}
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="channel_name">Nome do Canal *</Label>
-                    <Input
-                      id="channel_name"
-                      value={channelForm.channel_name}
-                      onChange={(e) => setChannelForm({ ...channelForm, channel_name: e.target.value })}
-                      placeholder="Ex: Canal Principal"
-                      required
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="is_active"
-                      checked={channelForm.is_active}
-                      onChange={(e) => setChannelForm({ ...channelForm, is_active: e.target.checked })}
-                      className="h-4 w-4 rounded"
-                    />
-                    <Label htmlFor="is_active">Canal ativo</Label>
-                  </div>
-
-                  <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
-                    <h4 className="font-medium text-sm">Configurações de Conteúdo</h4>
+                    <div className="space-y-2">
+                      <Label htmlFor="channel_name">Nome do Canal *</Label>
+                      <Input
+                        id="channel_name"
+                        value={channelForm.channel_name}
+                        onChange={(e) => setChannelForm({ ...channelForm, channel_name: e.target.value })}
+                        placeholder="Ex: Canal Principal"
+                        required
+                      />
+                    </div>
 
                     <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"
-                        id="only_coupons"
-                        checked={channelForm.only_coupons}
-                        onChange={(e) => setChannelForm({ ...channelForm, only_coupons: e.target.checked, category_filter: [] })}
+                        id="is_active"
+                        checked={channelForm.is_active}
+                        onChange={(e) => setChannelForm({ ...channelForm, is_active: e.target.checked })}
                         className="h-4 w-4 rounded"
                       />
-                      <Label htmlFor="only_coupons" className="cursor-pointer">
-                        Apenas cupons (não recebe produtos)
-                      </Label>
+                      <Label htmlFor="is_active">Canal ativo</Label>
                     </div>
-                    <p className="text-xs text-muted-foreground ml-6">
-                      Se marcado, este canal só receberá notificações de cupons, nunca de produtos
-                    </p>
 
-                    {!channelForm.only_coupons && (
-                      <div className="space-y-2">
-                        <Label>
-                          Categorias de Produtos (máximo 10)
+                    <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                      <h4 className="font-medium text-sm">Configurações de Conteúdo</h4>
+
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="only_coupons"
+                          checked={channelForm.only_coupons}
+                          onChange={(e) => setChannelForm({ ...channelForm, only_coupons: e.target.checked, category_filter: [] })}
+                          className="h-4 w-4 rounded"
+                        />
+                        <Label htmlFor="only_coupons" className="cursor-pointer">
+                          Apenas cupons (não recebe produtos)
                         </Label>
-                        <div className="max-h-[200px] overflow-y-auto border rounded-md p-2 space-y-2">
-                          {categories.length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">
-                              Carregando categorias...
-                            </p>
-                          ) : (
-                            categories.map(category => {
-                              const isSelected = channelForm.category_filter.includes(category.id);
-                              const canSelect = isSelected || channelForm.category_filter.length < 10;
+                      </div>
+                      <p className="text-xs text-muted-foreground ml-6">
+                        Se marcado, este canal só receberá notificações de cupons, nunca de produtos
+                      </p>
 
-                              return (
-                                <div key={category.id} className="flex items-center space-x-2">
-                                  <input
-                                    type="checkbox"
-                                    id={`category_${category.id}`}
-                                    checked={isSelected}
-                                    disabled={!canSelect && !isSelected}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        if (channelForm.category_filter.length < 10) {
+                      {!channelForm.only_coupons && (
+                        <div className="space-y-2">
+                          <Label>
+                            Categorias de Produtos (máximo 10)
+                          </Label>
+                          <div className="max-h-[200px] overflow-y-auto border rounded-md p-2 space-y-2">
+                            {categories.length === 0 ? (
+                              <p className="text-xs text-muted-foreground text-center py-4">
+                                Carregando categorias...
+                              </p>
+                            ) : (
+                              categories.map(category => {
+                                const isSelected = channelForm.category_filter.includes(category.id);
+                                const canSelect = isSelected || channelForm.category_filter.length < 10;
+
+                                return (
+                                  <div key={category.id} className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`category_${category.id}`}
+                                      checked={isSelected}
+                                      disabled={!canSelect && !isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          if (channelForm.category_filter.length < 10) {
+                                            setChannelForm({
+                                              ...channelForm,
+                                              category_filter: [...channelForm.category_filter, category.id]
+                                            });
+                                          }
+                                        } else {
                                           setChannelForm({
                                             ...channelForm,
-                                            category_filter: [...channelForm.category_filter, category.id]
+                                            category_filter: channelForm.category_filter.filter(id => id !== category.id)
                                           });
                                         }
-                                      } else {
-                                        setChannelForm({
-                                          ...channelForm,
-                                          category_filter: channelForm.category_filter.filter(id => id !== category.id)
-                                        });
-                                      }
-                                    }}
-                                    className="h-4 w-4 rounded"
-                                  />
-                                  <Label
-                                    htmlFor={`category_${category.id}`}
-                                    className={`cursor-pointer flex-1 ${!canSelect && !isSelected ? 'opacity-50' : ''}`}
-                                  >
-                                    <span className="mr-1">{category.icon}</span>
-                                    {category.name}
-                                  </Label>
-                                </div>
-                              );
-                            })
+                                      }}
+                                      className="h-4 w-4 rounded"
+                                    />
+                                    <Label
+                                      htmlFor={`category_${category.id}`}
+                                      className={`cursor-pointer flex-1 ${!canSelect && !isSelected ? 'opacity-50' : ''}`}
+                                    >
+                                      <span className="mr-1">{category.icon}</span>
+                                      {category.name}
+                                    </Label>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {channelForm.category_filter.length > 0
+                              ? `Selecionadas: ${channelForm.category_filter.length} categoria(s). ${channelForm.category_filter.length < 10 ? 'Você pode selecionar mais.' : 'Limite atingido.'}`
+                              : 'Selecione até 10 categorias. Se nenhuma for selecionada, o canal receberá produtos de todas as categorias.'
+                            }
+                          </p>
+                          {channelForm.category_filter.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {channelForm.category_filter.map(catId => {
+                                const category = categories.find(c => c.id === catId);
+                                return category ? (
+                                  <Badge key={catId} variant="secondary" className="cursor-pointer" onClick={() => {
+                                    setChannelForm({
+                                      ...channelForm,
+                                      category_filter: channelForm.category_filter.filter(id => id !== catId)
+                                    });
+                                  }}>
+                                    {category.icon} {category.name} ×
+                                  </Badge>
+                                ) : null;
+                              })}
+                            </div>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {channelForm.category_filter.length > 0
-                            ? `Selecionadas: ${channelForm.category_filter.length} categoria(s). ${channelForm.category_filter.length < 10 ? 'Você pode selecionar mais.' : 'Limite atingido.'}`
-                            : 'Selecione até 10 categorias. Se nenhuma for selecionada, o canal receberá produtos de todas as categorias.'
-                          }
-                        </p>
-                        {channelForm.category_filter.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {channelForm.category_filter.map(catId => {
-                              const category = categories.find(c => c.id === catId);
-                              return category ? (
-                                <Badge key={catId} variant="secondary" className="cursor-pointer" onClick={() => {
-                                  setChannelForm({
-                                    ...channelForm,
-                                    category_filter: channelForm.category_filter.filter(id => id !== catId)
-                                  });
-                                }}>
-                                  {category.icon} {category.name} ×
-                                </Badge>
-                              ) : null;
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit" disabled={savingChannel}>
-                      {savingChannel ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Salvando...
-                        </>
-                      ) : (
-                        editingChannel ? 'Salvar' : 'Criar'
                       )}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Plataforma</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>ID/Número</TableHead>
-                  <TableHead>Configuração</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {channels.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      Nenhum canal configurado. Clique em "Novo Canal" para adicionar.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  channels.map((channel) => {
-                    // Processar category_filter
-                    let categoryFilter = [];
-                    if (channel.category_filter) {
-                      if (Array.isArray(channel.category_filter)) {
-                        categoryFilter = channel.category_filter;
-                      } else if (typeof channel.category_filter === 'string') {
-                        try {
-                          categoryFilter = JSON.parse(channel.category_filter);
-                        } catch (e) {
-                          categoryFilter = [];
-                        }
-                      }
-                    }
+                    </div>
 
-                    return (
-                      <TableRow key={channel.id}>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {channel.platform === 'telegram' ? (
-                              <><MessageSquare className="mr-1 h-3 w-3 text-blue-500" />{channel.platform}</>
-                            ) : (
-                              <><span className="mr-1 text-green-500">📱</span>{channel.platform}</>
-                            )}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">{channel.name || channel.channel_name}</TableCell>
-                        <TableCell>
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {channel.identifier || channel.channel_id}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            {channel.only_coupons ? (
-                              <Badge variant="secondary" className="w-fit text-xs">
-                                🎟️ Apenas Cupons
-                              </Badge>
-                            ) : (
-                              <>
-                                {categoryFilter.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1">
-                                    {categoryFilter.slice(0, 10).map(catId => {
-                                      const category = categories.find(c => c.id === catId);
-                                      return category ? (
-                                        <Badge key={catId} variant="outline" className="text-xs">
-                                          {category.icon} {category.name}
-                                        </Badge>
-                                      ) : null;
-                                    })}
-                                  </div>
-                                ) : (
-                                  <Badge variant="outline" className="w-fit text-xs">
-                                    📦 Todas categorias
-                                  </Badge>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={channel.is_active ? 'success' : 'destructive'}>
-                            {channel.is_active ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleTestChannel(channel.id)}
-                              disabled={testingChannel[channel.id]}
-                            >
-                              {testingChannel[channel.id] ? (
-                                <>
-                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                  Testando...
-                                </>
-                              ) : (
-                                <>
-                                  <Send className="mr-1 h-3 w-3" />
-                                  Testar
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditChannel(channel)}
-                              disabled={savingChannel || deletingChannel[channel.id] || testingChannel[channel.id]}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteChannel(channel.id)}
-                              disabled={savingChannel || deletingChannel[channel.id] || testingChannel[channel.id]}
-                            >
-                              {deletingChannel[channel.id] ? (
-                                <Loader2 className="h-4 w-4 text-destructive animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              )}
-                            </Button>
-                          </div>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button type="submit" disabled={savingChannel}>
+                        {savingChannel ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Salvando...
+                          </>
+                        ) : (
+                          editingChannel ? 'Salvar' : 'Criar'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent className="p-0 sm:p-6 overflow-hidden">
+              <div className="overflow-x-auto scrollbar-hide">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[100px]">Plataforma</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead className="hidden sm:table-cell">Identificador</TableHead>
+                      <TableHead className="hidden md:table-cell">Configuração</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {channels.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          Nenhum canal configurado.
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+                    ) : (
+                      channels.map((channel) => {
+                        // Processar category_filter
+                        let categoryFilter = [];
+                        if (channel.category_filter) {
+                          if (Array.isArray(channel.category_filter)) {
+                            categoryFilter = channel.category_filter;
+                          } else if (typeof channel.category_filter === 'string') {
+                            try {
+                              categoryFilter = JSON.parse(channel.category_filter);
+                            } catch (e) {
+                              categoryFilter = [];
+                            }
+                          }
+                        }
+
+                        return (
+                          <TableRow key={channel.id}>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize text-[10px] sm:text-xs">
+                                {channel.platform === 'telegram' ? (
+                                  <><MessageSquare className="mr-1 h-3 w-3 text-blue-500" />{channel.platform}</>
+                                ) : (
+                                  <><span className="mr-1 text-green-500">📱</span>{channel.platform}</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium text-xs sm:text-sm max-w-[120px] truncate">
+                              {channel.name || channel.channel_name}
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <code className="text-[10px] bg-muted px-2 py-1 rounded">
+                                {channel.identifier || channel.channel_id}
+                              </code>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <div className="flex flex-col gap-1">
+                                {channel.only_coupons ? (
+                                  <Badge variant="secondary" className="w-fit text-[10px]">
+                                    🎟️ Apenas Cupons
+                                  </Badge>
+                                ) : (
+                                  <>
+                                    {categoryFilter.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {categoryFilter.slice(0, 3).map(catId => {
+                                          const category = categories.find(c => c.id === catId);
+                                          return category ? (
+                                            <Badge key={catId} variant="outline" className="text-[10px]">
+                                              {category.icon} {category.name}
+                                            </Badge>
+                                          ) : null;
+                                        })}
+                                        {categoryFilter.length > 3 && (
+                                          <Badge variant="outline" className="text-[10px]">+{categoryFilter.length - 3}</Badge>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <Badge variant="outline" className="w-fit text-[10px]">
+                                        📦 Todas categorias
+                                      </Badge>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={channel.is_active ? 'success' : 'destructive'} className="text-[10px] sm:text-xs">
+                                {channel.is_active ? 'Ativo' : 'Inativo'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1 sm:gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-2 text-[10px] sm:text-xs"
+                                  onClick={() => handleTestChannel(channel.id)}
+                                  disabled={testingChannel[channel.id]}
+                                >
+                                  {testingChannel[channel.id] ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <><Send className="mr-1 h-3 w-3" /> <span className="hidden sm:inline">Testar</span></>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleEditChannel(channel)}
+                                  disabled={savingChannel || deletingChannel[channel.id] || testingChannel[channel.id]}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleDeleteChannel(channel.id)}
+                                  disabled={savingChannel || deletingChannel[channel.id] || testingChannel[channel.id]}
+                                >
+                                  {deletingChannel[channel.id] ? (
+                                    <Loader2 className="h-3.5 w-3.5 text-destructive animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                  )}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      }
 
       {/* Tab: Templates */}
-      {activeTab === 'templates' && (
-        <BotTemplates />
-      )}
+      {
+        activeTab === 'templates' && (
+          <BotTemplates />
+        )
+      }
 
       {/* Tab: Logs */}
-      {activeTab === 'logs' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Histórico de Notificações</CardTitle>
-            <CardDescription>Últimas notificações enviadas pelos bots</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {logs.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">
-                  Nenhuma notificação enviada ainda
-                </div>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={log.id || index} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-3 h-3 rounded-full ${log.success ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <div>
-                        <p className="font-medium">
-                          {log.event_type === 'test' ? '🧪 Teste' :
-                            log.event_type === 'new_promotion' ? '🔥 Nova Promoção' :
-                              log.event_type === 'new_coupon' ? '🎟 Novo Cupom' :
-                                log.event_type}
+      {
+        activeTab === 'logs' && (
+          <Card>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Histórico de Notificações</CardTitle>
+              <CardDescription className="text-sm">Últimas notificações enviadas</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-3">
+                {logs.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    Nenhuma notificação enviada ainda
+                  </div>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={log.id || index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border rounded-lg gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`shrink-0 w-2.5 h-2.5 rounded-full ${log.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm sm:text-base truncate">
+                            {log.event_type === 'test' ? '🧪 Teste' :
+                              log.event_type === 'new_promotion' ? '🔥 Nova Promoção' :
+                                log.event_type === 'new_coupon' ? '🎟 Novo Cupom' :
+                                  log.event_type}
+                          </p>
+                          <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                            {log.channel_name} • {log.platform}
+                          </p>
+                          {log.error_message && (
+                            <p className="text-[10px] sm:text-xs text-destructive mt-1 italic">{log.error_message}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center sm:flex-col justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 gap-2">
+                        <Badge variant={log.success ? 'success' : 'destructive'} className="text-[10px] sm:text-xs h-6">
+                          {log.success ? <CheckCircle className="mr-1 h-3 w-3" /> : <XCircle className="mr-1 h-3 w-3" />}
+                          {log.success ? 'Enviado' : 'Falhou'}
+                        </Badge>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                          {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
                         </p>
-                        <p className="text-sm text-muted-foreground">
-                          {log.channel_name} • {log.platform}
-                        </p>
-                        {log.error_message && (
-                          <p className="text-xs text-destructive mt-1">{log.error_message}</p>
-                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <Badge variant={log.success ? 'success' : 'destructive'}>
-                        {log.success ? <CheckCircle className="mr-1 h-3 w-3" /> : <XCircle className="mr-1 h-3 w-3" />}
-                        {log.success ? 'Enviado' : 'Falhou'}
-                      </Badge>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : ''}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
     </div>
   );
 }

@@ -119,21 +119,21 @@ export default function Coupons() {
       const timeout = setTimeout(async () => {
         setIsLoadingCoupon(true);
         let couponFound = false;
-        
+
         try {
           // Primeiro tentar buscar via API da plataforma selecionada
           const platform = formData.platform;
-          
+
           if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress'].includes(platform)) {
             try {
               const apiResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}?platform=${platform}`, {
                 validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
               });
-              
+
               if (apiResponse.status === 200 && apiResponse.data.success && apiResponse.data.data) {
                 const coupon = apiResponse.data.data;
                 couponFound = true;
-                
+
                 // Preencher formulário com os dados do cupom encontrado
                 setFormData({
                   code: coupon.code || upperCode,
@@ -157,18 +157,18 @@ export default function Coupons() {
               // Não fazer nada - cupom não encontrado é esperado
             }
           }
-          
+
           // Se não encontrou via API, buscar no banco local
           if (!couponFound) {
             try {
               const localResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}`, {
                 validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
               });
-              
+
               if (localResponse.status === 200 && localResponse.data.success && localResponse.data.data) {
                 const coupon = localResponse.data.data;
                 couponFound = true;
-                
+
                 // Preencher formulário com os dados do cupom encontrado
                 setFormData({
                   code: coupon.code || upperCode,
@@ -199,7 +199,7 @@ export default function Coupons() {
           setIsLoadingCoupon(false);
         }
       }, 800); // Delay de 800ms após parar de digitar
-      
+
       setCodeSearchTimeout(timeout);
     } else {
       setIsLoadingCoupon(false);
@@ -223,7 +223,7 @@ export default function Coupons() {
       const cleanFilters = Object.fromEntries(
         Object.entries(filters).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
       );
-      
+
       const params = {
         page,
         limit: 20,
@@ -233,9 +233,9 @@ export default function Coupons() {
 
       const response = await api.get('/coupons/pending', { params });
       const data = response.data.data;
-      
+
       console.log('📋 Resposta de cupons pendentes:', data);
-      
+
       if (Array.isArray(data)) {
         setPendingCoupons(data);
         setPendingPagination(prev => ({ ...prev, page, total: data.length }));
@@ -265,12 +265,12 @@ export default function Coupons() {
     try {
       setLoading(true);
       setSelectedIds([]); // Clear selection when changing view/page
-      
+
       // Limpar filtros vazios antes de enviar
       const cleanFilters = Object.fromEntries(
         Object.entries(filters).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
       );
-      
+
       const params = {
         page,
         limit: 20,
@@ -573,15 +573,15 @@ export default function Coupons() {
         platform: formData.platform,
         discount_type: formData.discount_type,
         discount_value: parseFloat(formData.discount_value),
-        min_purchase: formData.min_purchase && formData.min_purchase !== '' 
-          ? parseFloat(formData.min_purchase) 
+        min_purchase: formData.min_purchase && formData.min_purchase !== ''
+          ? parseFloat(formData.min_purchase)
           : 0,
         max_discount_value: formData.max_discount_value && formData.max_discount_value !== ''
           ? parseFloat(formData.max_discount_value)
           : null,
         is_general: formData.is_general,
         applicable_products: formData.applicable_products || [],
-        valid_until: formData.valid_until && formData.valid_until.trim() !== '' 
+        valid_until: formData.valid_until && formData.valid_until.trim() !== ''
           ? new Date(formData.valid_until + 'T23:59:59').toISOString()
           : null,
       };
@@ -640,11 +640,11 @@ export default function Coupons() {
       fetchCoupons(1);
     } catch (error) {
       console.error('Erro ao salvar cupom:', error);
-      const errorMessage = error.response?.data?.details 
+      const errorMessage = error.response?.data?.details
         ? error.response.data.details.map(d => `${d.field}: ${d.message}`).join('\n')
         : error.response?.data?.error || 'Erro ao salvar cupom';
       alert(errorMessage);
-      
+
       // Mostrar erros de validação específicos
       if (error.response?.data?.details) {
         const validationErrors = {};
@@ -701,52 +701,42 @@ export default function Coupons() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Cupons</h1>
-          <p className="text-muted-foreground mt-1">
-            Gerencie os cupons de desconto ({pagination.total} total)
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Cupons</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
+            Gerencie cupons ({pagination.total})
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {selectedIds.length > 0 && activeTab === 'pending' && (
             <>
               <Button
                 variant="default"
+                size="sm"
                 onClick={handleApproveBatch}
                 disabled={isBatchProcessing}
-                className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 h-8 sm:h-9 text-xs sm:text-sm"
               >
                 {isBatchProcessing && processingCoupons.approving.size > 0 ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Aprovando...
-                  </>
+                  <><Loader2 className="mr-1 h-3 w-3 animate-spin" />...</>
                 ) : (
-                  <>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Aprovar ({selectedIds.length})
-                  </>
+                  <><CheckCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" /><span className="hidden sm:inline">Aprovar</span> ({selectedIds.length})</>
                 )}
               </Button>
               <Button
                 variant="destructive"
+                size="sm"
                 onClick={handleRejectBatch}
                 disabled={isBatchProcessing}
-                className="disabled:opacity-50 disabled:cursor-not-allowed"
+                className="disabled:opacity-50 h-8 sm:h-9 text-xs sm:text-sm"
               >
                 {isBatchProcessing && processingCoupons.rejecting.size > 0 ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Rejeitando...
-                  </>
+                  <><Loader2 className="mr-1 h-3 w-3 animate-spin" />...</>
                 ) : (
-                  <>
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Rejeitar ({selectedIds.length})
-                  </>
+                  <><XCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" /><span className="hidden sm:inline">Rejeitar</span> ({selectedIds.length})</>
                 )}
               </Button>
             </>
@@ -754,18 +744,19 @@ export default function Coupons() {
           {selectedIds.length > 0 && (
             <Button
               variant="destructive"
+              size="sm"
               onClick={handleBatchDelete}
               disabled={isBatchProcessing}
-              className="disabled:opacity-50 disabled:cursor-not-allowed"
+              className="disabled:opacity-50 h-8 sm:h-9 text-xs sm:text-sm"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Deletar ({selectedIds.length})
+              <Trash2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Deletar</span> ({selectedIds.length})
             </Button>
           )}
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => {
+              <Button size="sm" className="h-8 sm:h-9 text-xs sm:text-sm" onClick={() => {
                 setEditingCoupon(null);
                 setFormData({
                   code: '',
@@ -786,8 +777,8 @@ export default function Coupons() {
                 setErrors({});
                 setIsLoadingCoupon(false);
               }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Cupom
+                <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Novo </span>Cupom
               </Button>
             </DialogTrigger>
             <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -926,8 +917,8 @@ export default function Coupons() {
                     value={formData.is_general === null ? 'null' : formData.is_general ? 'true' : 'false'}
                     onChange={(e) => {
                       const value = e.target.value === 'null' ? null : e.target.value === 'true';
-                      setFormData({ 
-                        ...formData, 
+                      setFormData({
+                        ...formData,
                         is_general: value,
                         applicable_products: value === false ? formData.applicable_products : []
                       });
@@ -1068,7 +1059,7 @@ export default function Coupons() {
             <div>
               <CardTitle>Lista de Cupons</CardTitle>
               <CardDescription>
-                {activeTab === 'all' 
+                {activeTab === 'all'
                   ? `Exibindo página ${pagination.page} de ${pagination.totalPages} (${pagination.total} total)`
                   : `Exibindo página ${pendingPagination.page} de ${pendingPagination.totalPages} (${pendingPagination.total} pendentes)`
                 }
@@ -1086,26 +1077,24 @@ export default function Coupons() {
               </div>
             </div>
           </div>
-          
+
           {/* Tabs */}
           <div className="flex gap-2 mt-4 border-b">
             <button
               onClick={() => setActiveTab('all')}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'all'
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${activeTab === 'all'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Todos os Cupons
             </button>
             <button
               onClick={() => setActiveTab('pending')}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'pending'
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${activeTab === 'pending'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Pendentes de Aprovação
               {pendingPagination.total > 0 && (
@@ -1115,7 +1104,7 @@ export default function Coupons() {
               )}
             </button>
           </div>
-          
+
           {/* Informações adicionais para aba pendentes */}
           {activeTab === 'pending' && pendingCoupons.length > 0 && (
             <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -1264,21 +1253,21 @@ export default function Coupons() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant="outline"
                             className={
                               coupon.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
-                              coupon.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                              coupon.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                              coupon.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
-                              'bg-gray-100 text-gray-800 border-gray-300'
+                                coupon.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                                  coupon.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                    coupon.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
+                                      'bg-gray-100 text-gray-800 border-gray-300'
                             }
                           >
                             {coupon.platform === 'mercadolivre' ? 'Mercado Livre' :
-                             coupon.platform === 'shopee' ? 'Shopee' :
-                             coupon.platform === 'amazon' ? 'Amazon' :
-                             coupon.platform === 'aliexpress' ? 'AliExpress' :
-                             'Geral'}
+                              coupon.platform === 'shopee' ? 'Shopee' :
+                                coupon.platform === 'amazon' ? 'Amazon' :
+                                  coupon.platform === 'aliexpress' ? 'AliExpress' :
+                                    'Geral'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -1296,13 +1285,12 @@ export default function Coupons() {
                                 <div className="flex-1">
                                   <div className="w-full bg-gray-200 rounded-full h-2">
                                     <div
-                                      className={`h-2 rounded-full ${
-                                        coupon.confidence_score >= 0.90
+                                      className={`h-2 rounded-full ${coupon.confidence_score >= 0.90
                                           ? 'bg-green-500'
                                           : coupon.confidence_score >= 0.75
-                                          ? 'bg-yellow-500'
-                                          : 'bg-red-500'
-                                      }`}
+                                            ? 'bg-yellow-500'
+                                            : 'bg-red-500'
+                                        }`}
                                       style={{ width: `${coupon.confidence_score * 100}%` }}
                                     />
                                   </div>
@@ -1384,9 +1372,9 @@ export default function Coupons() {
                             {activeTab === 'pending' && coupon.verification_status && coupon.verification_status !== 'pending' && (
                               <Badge variant="outline" className="text-xs mt-1">
                                 {coupon.verification_status === 'active' ? '✅ Válido' :
-                                 coupon.verification_status === 'invalid' ? '❌ Inválido' :
-                                 coupon.verification_status === 'expired' ? '⏰ Expirado' :
-                                 '📋 ' + coupon.verification_status}
+                                  coupon.verification_status === 'invalid' ? '❌ Inválido' :
+                                    coupon.verification_status === 'expired' ? '⏰ Expirado' :
+                                      '📋 ' + coupon.verification_status}
                               </Badge>
                             )}
                           </div>

@@ -50,20 +50,20 @@ export default function Products() {
     coupon_id: '',
     platform: 'shopee'
   });
-  
+
   // Filtrar cupons ativos da plataforma selecionada
   // Usar useMemo para recalcular apenas quando coupons ou formData.platform mudarem
   const filteredCoupons = coupons.filter(coupon => {
     // Verificar se está ativo
     if (!coupon.is_active) return false;
-    
+
     // Verificar se não expirou
     if (coupon.valid_until) {
       const validUntil = new Date(coupon.valid_until);
       const now = new Date();
       if (validUntil < now) return false;
     }
-    
+
     // Verificar se é da plataforma selecionada ou geral
     const selectedPlatform = formData.platform || 'shopee';
     return coupon.platform === selectedPlatform || coupon.platform === 'general';
@@ -88,7 +88,7 @@ export default function Products() {
       if (selectedCoupon) {
         const isCompatible = selectedCoupon.platform === formData.platform || selectedCoupon.platform === 'general';
         const isActive = selectedCoupon.is_active && (!selectedCoupon.valid_until || new Date(selectedCoupon.valid_until) > new Date());
-        
+
         if (!isCompatible || !isActive) {
           setFormData(prev => ({ ...prev, coupon_id: '' }));
         }
@@ -182,12 +182,12 @@ export default function Products() {
       // Então response.data = { success: true, data: [...] }
       // E response.data.data = array de categorias
       let categoriesData = [];
-      
+
       if (response.data?.success && response.data?.data) {
         // Se response.data.data é um array, usar diretamente
         if (Array.isArray(response.data.data)) {
           categoriesData = response.data.data;
-        } 
+        }
         // Se response.data.data tem uma propriedade categories (fallback)
         else if (response.data.data.categories && Array.isArray(response.data.data.categories)) {
           categoriesData = response.data.data.categories;
@@ -199,10 +199,10 @@ export default function Products() {
         // Fallback: se response.data.data é um array
         categoriesData = response.data.data;
       }
-      
+
       // Filtrar apenas categorias ativas
       categoriesData = categoriesData.filter(cat => cat.is_active !== false);
-      
+
       setCategories(categoriesData);
       console.log('✅ Categorias carregadas:', categoriesData.length, 'categorias', categoriesData);
     } catch (error) {
@@ -305,9 +305,9 @@ export default function Products() {
 
       console.log('📦 Resposta completa da API:', response);
       console.log('📦 Dados da resposta:', response.data);
-      
+
       const productInfo = response.data.data || response.data;
-      
+
       console.log('📦 Dados do produto extraídos:', productInfo);
 
       // Verificar se há erro na resposta
@@ -324,7 +324,7 @@ export default function Products() {
       // Verificar se os dados essenciais estão presentes
       const hasName = productInfo.name && productInfo.name.trim().length > 0;
       const hasPrice = productInfo.currentPrice && productInfo.currentPrice > 0;
-      
+
       if (!hasName && !hasPrice) {
         toast({
           title: "Aviso",
@@ -337,10 +337,10 @@ export default function Products() {
 
       // Verificar se há desconto real
       // oldPrice deve ser maior que currentPrice para haver desconto
-      const hasDiscount = productInfo.oldPrice && 
-                          productInfo.oldPrice > 0 && 
-                          productInfo.currentPrice > 0 &&
-                          productInfo.oldPrice > productInfo.currentPrice;
+      const hasDiscount = productInfo.oldPrice &&
+        productInfo.oldPrice > 0 &&
+        productInfo.currentPrice > 0 &&
+        productInfo.oldPrice > productInfo.currentPrice;
 
       // Detectar categoria automaticamente baseado no nome do produto
       const detectedCategory = productInfo.name ? detectCategory(productInfo.name) : '';
@@ -382,7 +382,7 @@ export default function Products() {
       if (updatedFormData.name) extractedFields.push('nome');
       if (updatedFormData.price > 0) extractedFields.push('preço');
       if (updatedFormData.image_url) extractedFields.push('imagem');
-      
+
       const successMessage = extractedFields.length > 0
         ? `Informações extraídas: ${extractedFields.join(', ')}`
         : 'Link processado';
@@ -395,12 +395,12 @@ export default function Products() {
     } catch (error) {
       console.error('❌ Erro ao analisar link:', error);
       console.error('❌ Resposta do erro:', error.response);
-      
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          "Erro ao analisar link. Verifique se o link está correto e tente novamente.";
-      
+
+      const errorMessage = error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "Erro ao analisar link. Verifique se o link está correto e tente novamente.";
+
       toast({
         title: "Erro na Análise",
         description: errorMessage,
@@ -555,12 +555,12 @@ export default function Products() {
   // const filteredProducts = products; 
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Produtos</h1>
-          <p className="text-muted-foreground mt-1">
-            Gerencie os produtos do sistema ({pagination.total} total)
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Produtos</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
+            Gerencie produtos ({pagination.total})
           </p>
         </div>
 
@@ -693,16 +693,16 @@ export default function Products() {
                     <div className="mt-2">
                       <div className="text-sm text-muted-foreground mb-2">Preview:</div>
                       <div className="border rounded-lg p-2 bg-gray-50 dark:bg-gray-900">
-                        <img 
-                          src={formData.image_url} 
-                          alt="Preview" 
+                        <img
+                          src={formData.image_url}
+                          alt="Preview"
                           className="max-w-full h-32 object-contain rounded"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'block';
                           }}
                         />
-                        <div className="text-sm text-muted-foreground text-center py-4" style={{display: 'none'}}>
+                        <div className="text-sm text-muted-foreground text-center py-4" style={{ display: 'none' }}>
                           Imagem não encontrada ou URL inválida
                         </div>
                       </div>
@@ -733,7 +733,7 @@ export default function Products() {
                           } else {
                             discountText = `R$ ${parseFloat(coupon.discount_value || 0).toFixed(2)} OFF`;
                           }
-                          
+
                           return (
                             <option key={coupon.id} value={coupon.id}>
                               {coupon.code} - {discountText}
@@ -760,7 +760,7 @@ export default function Products() {
                       <div>
                         <Label className="text-sm font-semibold">Modo de Template Ativo</Label>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {formData.coupon_id 
+                          {formData.coupon_id
                             ? 'Este produto será enviado usando o template de "Promoção + Cupom"'
                             : 'Este produto será enviado usando o template de "Nova Promoção"'}
                         </p>
@@ -780,7 +780,7 @@ export default function Products() {
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting}>Cancelar</Button>
-                  <Button 
+                  <Button
                     type="submit"
                     disabled={processingActions.submitting}
                     className="disabled:opacity-50 disabled:cursor-not-allowed"
@@ -802,175 +802,201 @@ export default function Products() {
       </div>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className="p-3 sm:p-4 md:p-6">
+          <div className="flex flex-col gap-3">
+            {/* Título */}
             <div>
-              <CardTitle>Lista de Produtos</CardTitle>
-              <CardDescription>
-                Exibindo página {pagination.page} de {pagination.totalPages}
+              <CardTitle className="text-base sm:text-lg">Lista de Produtos</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Página {pagination.page} de {pagination.totalPages}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
-              <div className="relative w-64">
+
+            {/* Filtros Responsivos */}
+            <div className="flex flex-col gap-2 sm:gap-3">
+              {/* Busca */}
+              <div className="relative w-full">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Buscar produtos..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
+                  className="pl-8 h-9 text-sm"
                 />
               </div>
-              <select
-                value={platformFilter}
-                onChange={(e) => setPlatformFilter(e.target.value)}
-                className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Todas as Plataformas</option>
-                <option value="mercadolivre">Mercado Livre</option>
-                <option value="shopee">Shopee</option>
-                <option value="amazon">Amazon</option>
-                <option value="aliexpress">AliExpress</option>
-                <option value="general">Geral</option>
-              </select>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="flex h-10 min-w-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Todas as Categorias</option>
-                {categories.map(category => (
-                  <option key={category.id} value={category.id}>
-                    {category.icon} {category.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">Todos os Status</option>
-                <option value="pending">Pendentes</option>
-                <option value="approved">Aprovados</option>
-                <option value="published">Publicados</option>
-                <option value="rejected">Rejeitados</option>
-              </select>
+
+              {/* Filtros em Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <select
+                  value={platformFilter}
+                  onChange={(e) => setPlatformFilter(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-xs sm:text-sm"
+                >
+                  <option value="all">Plataformas</option>
+                  <option value="mercadolivre">ML</option>
+                  <option value="shopee">Shopee</option>
+                  <option value="amazon">Amazon</option>
+                  <option value="aliexpress">Ali</option>
+                  <option value="general">Geral</option>
+                </select>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-xs sm:text-sm"
+                >
+                  <option value="all">Categorias</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.icon} {category.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-xs sm:text-sm col-span-2 sm:col-span-1"
+                >
+                  <option value="all">Status</option>
+                  <option value="pending">Pendentes</option>
+                  <option value="approved">Aprovados</option>
+                  <option value="published">Publicados</option>
+                  <option value="rejected">Rejeitados</option>
+                </select>
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0 sm:p-4 md:p-6">
           {loading ? (
             <div className="flex items-center justify-center p-8">
-              <div className="text-muted-foreground">Carregando produtos...</div>
+              <div className="text-muted-foreground text-sm">Carregando produtos...</div>
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <input
-                        type="checkbox"
-                        className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
-                        checked={products.length > 0 && selectedIds.length === products.length}
-                        onChange={toggleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Plataforma</TableHead>
-                    <TableHead>Preço</TableHead>
-                    <TableHead>Desconto</TableHead>
-                    <TableHead>Score IA</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.length === 0 ? (
+              {/* Wrapper com scroll horizontal para mobile */}
+              <div className="overflow-x-auto -mx-0 sm:mx-0">
+                <Table className="min-w-[700px]">
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        Nenhum produto encontrado
-                      </TableCell>
+                      <TableHead className="w-10 sm:w-12">
+                        <input
+                          type="checkbox"
+                          className="translate-y-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded border-gray-300"
+                          checked={products.length > 0 && selectedIds.length === products.length}
+                          onChange={toggleSelectAll}
+                        />
+                      </TableHead>
+                      <TableHead className="text-xs sm:text-sm">Produto</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Plataforma</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Preço</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Desconto</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Score</TableHead>
+                      <TableHead className="text-right text-xs sm:text-sm">Ações</TableHead>
                     </TableRow>
-                  ) : (
-                    products.map((product) => (
-                      <TableRow key={product.id}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
-                            checked={selectedIds.includes(product.id)}
-                            onChange={() => toggleSelection(product.id)}
-                          />
+                  </TableHeader>
+                  <TableBody>
+                    {products.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                          Nenhum produto encontrado
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            {product.image_url && (
-                              <img
-                                src={product.image_url}
-                                alt={product.name}
-                                className="w-10 h-10 rounded object-cover"
-                              />
-                            )}
-                            <div>
-                              <div className="font-medium">
-                                {product.ai_optimized_title || product.name}
+                      </TableRow>
+                    ) : (
+                      products.map((product) => (
+                        <TableRow key={product.id}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
+                              checked={selectedIds.includes(product.id)}
+                              onChange={() => toggleSelection(product.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              {product.image_url && (
+                                <img
+                                  src={product.image_url}
+                                  alt={product.name}
+                                  className="w-10 h-10 rounded object-cover"
+                                />
+                              )}
+                              <div>
+                                <div className="font-medium">
+                                  {product.ai_optimized_title || product.name}
+                                  {product.ai_optimized_title && (
+                                    <Badge variant="outline" className="ml-2 text-xs bg-purple-50 text-purple-700">
+                                      <Brain className="h-3 w-3 inline mr-1" />
+                                      IA
+                                    </Badge>
+                                  )}
+                                </div>
                                 {product.ai_optimized_title && (
-                                  <Badge variant="outline" className="ml-2 text-xs bg-purple-50 text-purple-700">
-                                    <Brain className="h-3 w-3 inline mr-1" />
-                                    IA
+                                  <div className="text-xs text-muted-foreground line-through">
+                                    {product.name}
+                                  </div>
+                                )}
+                                {product.description && (
+                                  <div className="text-sm text-muted-foreground line-clamp-1">
+                                    {product.ai_generated_description || product.description}
+                                  </div>
+                                )}
+                                {product.offer_priority && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`mt-1 text-xs ${product.offer_priority === 'high' ? 'bg-red-100 text-red-800' :
+                                      product.offer_priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {product.offer_priority === 'high' ? '🔥 Alta' :
+                                      product.offer_priority === 'medium' ? '⚡ Média' :
+                                        '📌 Baixa'}
                                   </Badge>
                                 )}
                               </div>
-                              {product.ai_optimized_title && (
-                                <div className="text-xs text-muted-foreground line-through">
-                                  {product.name}
-                                </div>
-                              )}
-                              {product.description && (
-                                <div className="text-sm text-muted-foreground line-clamp-1">
-                                  {product.ai_generated_description || product.description}
-                                </div>
-                              )}
-                              {product.offer_priority && (
-                                <Badge 
-                                  variant="outline" 
-                                  className={`mt-1 text-xs ${
-                                    product.offer_priority === 'high' ? 'bg-red-100 text-red-800' :
-                                    product.offer_priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}
-                                >
-                                  {product.offer_priority === 'high' ? '🔥 Alta' :
-                                   product.offer_priority === 'medium' ? '⚡ Média' :
-                                   '📌 Baixa'}
-                                </Badge>
-                              )}
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant="outline" 
-                            className={`capitalize ${
-                              product.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
-                              product.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                              product.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                              product.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
-                              'bg-gray-100 text-gray-800 border-gray-300'
-                            }`}
-                          >
-                            {product.platform === 'mercadolivre' ? 'Mercado Livre' :
-                             product.platform === 'shopee' ? 'Shopee' :
-                             product.platform === 'amazon' ? 'Amazon' :
-                             product.platform === 'aliexpress' ? 'AliExpress' :
-                             product.platform}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            {product.old_price && product.old_price > (product.final_price || product.current_price) ? (
-                              <>
-                                <div className="font-medium text-green-600">
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={`capitalize ${product.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                                product.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                                  product.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                    product.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
+                                      'bg-gray-100 text-gray-800 border-gray-300'
+                                }`}
+                            >
+                              {product.platform === 'mercadolivre' ? 'Mercado Livre' :
+                                product.platform === 'shopee' ? 'Shopee' :
+                                  product.platform === 'amazon' ? 'Amazon' :
+                                    product.platform === 'aliexpress' ? 'AliExpress' :
+                                      product.platform}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {product.old_price && product.old_price > (product.final_price || product.current_price) ? (
+                                <>
+                                  <div className="font-medium text-green-600">
+                                    R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
+                                    {product.final_price && product.final_price < product.current_price && (
+                                      <Badge variant="outline" className="ml-2 text-xs">
+                                        Com cupom
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground line-through">
+                                    R$ {parseFloat(product.old_price).toFixed(2)}
+                                  </div>
+                                  {product.final_price && product.final_price < product.current_price && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Sem cupom: R$ {parseFloat(product.current_price).toFixed(2)}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="font-medium">
                                   R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
                                   {product.final_price && product.final_price < product.current_price && (
                                     <Badge variant="outline" className="ml-2 text-xs">
@@ -978,104 +1004,86 @@ export default function Products() {
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="text-sm text-muted-foreground line-through">
-                                  R$ {parseFloat(product.old_price).toFixed(2)}
-                                </div>
-                                {product.final_price && product.final_price < product.current_price && (
-                                  <div className="text-xs text-muted-foreground">
-                                    Sem cupom: R$ {parseFloat(product.current_price).toFixed(2)}
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="font-medium">
-                                R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
-                                {product.final_price && product.final_price < product.current_price && (
-                                  <Badge variant="outline" className="ml-2 text-xs">
-                                    Com cupom
-                                  </Badge>
-                                )}
-                              </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {product.discount_percentage > 0 && (
+                              <Badge variant="success">
+                                -{product.discount_percentage}%
+                              </Badge>
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {product.discount_percentage > 0 && (
-                            <Badge variant="success">
-                              -{product.discount_percentage}%
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {product.offer_score !== null && product.offer_score !== undefined ? (
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1">
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div
-                                    className={`h-2 rounded-full ${
-                                      product.offer_score >= 70
+                          </TableCell>
+                          <TableCell>
+                            {product.offer_score !== null && product.offer_score !== undefined ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1">
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className={`h-2 rounded-full ${product.offer_score >= 70
                                         ? 'bg-green-500'
                                         : product.offer_score >= 50
-                                        ? 'bg-yellow-500'
-                                        : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${product.offer_score}%` }}
-                                  />
+                                          ? 'bg-yellow-500'
+                                          : 'bg-red-500'
+                                        }`}
+                                      style={{ width: `${product.offer_score}%` }}
+                                    />
+                                  </div>
                                 </div>
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  {product.offer_score.toFixed(0)}
+                                </span>
                               </div>
-                              <span className="text-xs font-medium text-muted-foreground">
-                                {product.offer_score.toFixed(0)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">N/A</span>
-                          )}
-                          {product.is_featured_offer && (
-                            <Badge variant="default" className="mt-1 text-xs bg-yellow-500 hover:bg-yellow-600">
-                              ⭐ Oferta do Dia
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            {product.affiliate_url && (
+                            ) : (
+                              <span className="text-xs text-muted-foreground">N/A</span>
+                            )}
+                            {product.is_featured_offer && (
+                              <Badge variant="default" className="mt-1 text-xs bg-yellow-500 hover:bg-yellow-600">
+                                ⭐ Oferta do Dia
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {product.affiliate_url && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  asChild
+                                >
+                                  <a href={product.affiliate_url} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                asChild
+                                onClick={() => handleEdit(product)}
                               >
-                                <a href={product.affiliate_url} target="_blank" rel="noopener noreferrer">
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
+                                <Edit className="h-4 w-4" />
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(product)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(product.id)}
-                              disabled={processingActions.deleting.has(product.id)}
-                              className="disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {processingActions.deleting.has(product.id) ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              )}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(product.id)}
+                                disabled={processingActions.deleting.has(product.id)}
+                                className="disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {processingActions.deleting.has(product.id) ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                )}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
 
               <Pagination
                 currentPage={pagination.page}

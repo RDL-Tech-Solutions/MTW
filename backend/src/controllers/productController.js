@@ -187,12 +187,13 @@ class ProductController {
       logger.info(`==========================================`);
 
       const { id } = req.params;
-      const { affiliate_link, coupon_id, shorten_link } = req.body;
+      const { affiliate_link, coupon_id, category_id, shorten_link } = req.body;
 
       logger.info(`📝 Parâmetros extraídos do body:`);
       logger.info(`   id: ${id}`);
       logger.info(`   affiliate_link: ${affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
       logger.info(`   coupon_id: ${coupon_id || 'NÃO DEFINIDO'}`);
+      logger.info(`   category_id: ${category_id || 'NÃO DEFINIDO'}`);
       logger.info(`   shorten_link: ${shorten_link} (tipo: ${typeof shorten_link})`);
 
       if (!affiliate_link || !affiliate_link.trim()) {
@@ -304,6 +305,11 @@ class ProductController {
         affiliate_link: finalAffiliateLink, // IMPORTANTE: Usar link encurtado se aplicável
         status: 'approved'
       };
+
+      if (category_id) {
+        updateData.category_id = category_id;
+        logger.info(`📂 Categoria atualizada: ${category_id}`);
+      }
 
       logger.info(`📝 updateData.affiliate_link: ${updateData.affiliate_link.substring(0, 100)}...`);
 

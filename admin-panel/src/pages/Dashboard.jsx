@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { 
-  Package, Ticket, Users, TrendingUp, Activity, ShoppingBag, 
+import {
+  Package, Ticket, Users, TrendingUp, Activity, ShoppingBag,
   Bot, MessageSquare, RefreshCw, Clock, AlertCircle, CheckCircle,
   ArrowUp, ArrowDown, Zap, Eye, MousePointerClick, Bell
 } from 'lucide-react';
@@ -23,7 +23,7 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Buscar dados em paralelo
       const [dashboardRes, botStatsRes, syncStatsRes, productStatsRes, userStatsRes] = await Promise.allSettled([
         api.get(`/analytics/dashboard?days=${period}`),
@@ -44,7 +44,7 @@ export default function Dashboard() {
         const sent = logs.filter(log => log.status === 'sent' || log.success === true).length;
         const failed = logs.filter(log => log.status === 'failed' || log.success === false).length;
         const total = logs.length;
-        
+
         setBotStats({
           total,
           sent,
@@ -159,93 +159,93 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header Responsivo */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Visão geral do sistema PreçoCerto
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
+            Visão geral do sistema
           </p>
         </div>
         <div className="flex items-center gap-2">
           <select
             value={period}
             onChange={(e) => setPeriod(parseInt(e.target.value))}
-            className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+            className="h-9 sm:h-10 px-2 sm:px-3 rounded-md border border-input bg-background text-xs sm:text-sm flex-1 sm:flex-none"
           >
-            <option value={7}>Últimos 7 dias</option>
-            <option value={30}>Últimos 30 dias</option>
-            <option value={90}>Últimos 90 dias</option>
+            <option value={7}>7 dias</option>
+            <option value={30}>30 dias</option>
+            <option value={90}>90 dias</option>
           </select>
           <button
             onClick={fetchDashboardData}
-            className="h-10 px-4 rounded-md border border-input bg-background hover:bg-accent text-sm"
+            className="h-9 sm:h-10 px-3 sm:px-4 rounded-md border border-input bg-background hover:bg-accent text-sm flex-shrink-0"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Cards Principais */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {/* Cards Principais - Grid Responsivo */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {mainCards.map((card) => (
           <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-4">
+              <CardTitle className="text-xs sm:text-sm font-medium">
                 {card.title}
               </CardTitle>
-              <div className={`${card.color} p-2 rounded-lg`}>
-                <card.icon className="h-4 w-4 text-white" />
+              <div className={`${card.color} p-1.5 sm:p-2 rounded-lg`}>
+                <card.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{card.value}</div>
-              <div className="flex items-center text-xs mt-1">
+            <CardContent className="p-3 sm:p-4 pt-0">
+              <div className="text-xl sm:text-2xl font-bold">{card.value}</div>
+              <div className="flex items-center text-[10px] sm:text-xs mt-1">
                 {card.changeType === 'up' && (
                   <span className="text-green-600 flex items-center">
-                    <ArrowUp className="h-3 w-3 mr-1" />
+                    <ArrowUp className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
                     {card.change}
                   </span>
                 )}
                 {card.changeType === 'down' && (
                   <span className="text-red-600 flex items-center">
-                    <ArrowDown className="h-3 w-3 mr-1" />
+                    <ArrowDown className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
                     {card.change}
                   </span>
                 )}
                 {card.changeType === 'neutral' && (
                   <span className="text-muted-foreground">{card.change}</span>
                 )}
-                <span className="text-muted-foreground ml-2">vs período anterior</span>
+                <span className="text-muted-foreground ml-1 sm:ml-2 hidden sm:inline">vs anterior</span>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Gráficos */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Gráficos - Responsivos */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Produtos Mais Clicados</CardTitle>
-            <CardDescription>
+          <CardHeader className="p-3 sm:p-4 pb-2">
+            <CardTitle className="text-sm sm:text-base">Produtos Mais Clicados</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
               Top produtos com mais engajamento
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-4 pt-0">
             {clicksChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={200} className="sm:!h-[280px]">
                 <BarChart data={clicksChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Bar dataKey="cliques" fill="#3b82f6" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[200px] sm:h-[280px] text-muted-foreground text-sm">
                 Nenhum dado disponível
               </div>
             )}
@@ -253,25 +253,25 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Cupons Mais Usados</CardTitle>
-            <CardDescription>
+          <CardHeader className="p-3 sm:p-4 pb-2">
+            <CardTitle className="text-sm sm:text-base">Cupons Mais Usados</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
               Cupons com maior taxa de utilização
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-4 pt-0">
             {couponsChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={200} className="sm:!h-[280px]">
                 <BarChart data={couponsChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Bar dataKey="usos" fill="#10b981" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[200px] sm:h-[280px] text-muted-foreground text-sm">
                 Nenhum dado disponível
               </div>
             )}
@@ -307,7 +307,7 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            
+
             {botStats?.recent_logs && botStats.recent_logs.length > 0 && (
               <div className="space-y-2 mt-4">
                 <h4 className="text-sm font-medium">Atividades Recentes</h4>
@@ -322,8 +322,8 @@ export default function Dashboard() {
                         )}
                         <span className="text-muted-foreground">
                           {log.event_type === 'promotion_new' ? 'Nova Promoção' :
-                           log.event_type === 'coupon_new' ? 'Novo Cupom' :
-                           log.event_type || 'Notificação'}
+                            log.event_type === 'coupon_new' ? 'Novo Cupom' :
+                              log.event_type || 'Notificação'}
                         </span>
                       </div>
                       <Badge variant={log.status === 'sent' || log.success ? 'success' : 'destructive'}>
@@ -367,13 +367,13 @@ export default function Dashboard() {
                   <div>
                     <p className="text-sm text-muted-foreground">Última Sincronização</p>
                     <p className="text-sm font-medium">
-                      {syncStats.last_sync 
+                      {syncStats.last_sync
                         ? new Date(syncStats.last_sync).toLocaleString('pt-BR')
                         : 'Nunca'}
                     </p>
                   </div>
                 </div>
-                
+
                 {syncStats.platforms && Object.keys(syncStats.platforms).length > 0 && (
                   <div className="mt-4">
                     <h4 className="text-sm font-medium mb-2">Por Plataforma</h4>
