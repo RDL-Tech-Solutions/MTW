@@ -208,7 +208,8 @@ class PublishService {
           const result = await notificationDispatcher.sendToWhatsAppWithImage(
             message,
             product.image_url,
-            'promotion_new'
+            'promotion_new',
+            product // Passar dados do produto para segmentação
           );
 
           logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
@@ -230,7 +231,10 @@ class PublishService {
 
       // Fallback: enviar apenas mensagem
       logger.info(`📤 Enviando mensagem para WhatsApp (sem imagem)`);
-      const result = await notificationDispatcher.sendToWhatsApp(message, 'promotion_new');
+      const result = await notificationDispatcher.sendToWhatsApp(message, {
+        eventType: 'promotion_new',
+        ...product // Passar dados do produto para segmentação
+      });
 
       if (result && result.success && result.sent > 0) {
         logger.info(`✅ Notificação WhatsApp enviada para produto: ${product.name} (${result.sent} canal(is))`);

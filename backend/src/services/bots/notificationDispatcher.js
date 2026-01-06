@@ -469,8 +469,13 @@ class NotificationDispatcher {
       }
 
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
+      // IMPORTANTE: Garantir que category_id está presente nos dados para filtro
       const channels = data
-        ? await this.filterChannelsBySegmentation(allChannels, eventType, { ...data, id: data.product_id || data.coupon_id || data.id })
+        ? await this.filterChannelsBySegmentation(allChannels, eventType, { 
+            ...data, 
+            id: data.product_id || data.coupon_id || data.id,
+            category_id: data.category_id || null // Garantir que category_id está presente
+          })
         : allChannels;
 
       if (channels.length === 0) {
@@ -589,19 +594,54 @@ class NotificationDispatcher {
   /**
    * Enviar mensagem com imagem para WhatsApp
    */
-  async sendToWhatsAppWithImage(message, imagePath, eventType = 'general') {
+  async sendToWhatsAppWithImage(message, imagePath, eventType = 'general', data = null) {
     try {
-      const channels = await BotChannel.findActive('whatsapp');
+      logger.info(`📤 [NotificationDispatcher] Enviando imagem para WhatsApp`);
+      logger.info(`   imagePath: ${imagePath}`);
+      logger.info(`   message length: ${message?.length || 0}`);
+      logger.info(`   eventType: ${eventType}`);
 
-      if (!channels || channels.length === 0) {
-        logger.debug('Nenhum canal WhatsApp ativo encontrado');
+      const allChannels = await BotChannel.findActive('whatsapp');
+
+      if (!allChannels || allChannels.length === 0) {
+        logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
         return { success: false, sent: 0, total: 0 };
       }
+
+      // Filtrar canais usando segmentação inteligente (se data for fornecido)
+      // IMPORTANTE: Garantir que category_id está presente nos dados para filtro
+      const channels = data
+        ? await this.filterChannelsBySegmentation(allChannels, eventType, { 
+            ...data, 
+            id: data.product_id || data.coupon_id || data.id,
+            category_id: data.category_id || null // Garantir que category_id está presente
+          })
+        : allChannels;
+
+      if (channels.length === 0) {
+        logger.info(`⏸️ Nenhum canal WhatsApp passou nos filtros de segmentação`);
+        return { success: false, sent: 0, total: 0, filtered: allChannels.length };
+      }
+
+      logger.info(`   Canais encontrados: ${channels.length}/${allChannels.length} (${allChannels.length - channels.length} filtrados)`);
 
       let sent = 0;
       const results = [];
 
       for (const channel of channels) {
+        // Verificar duplicação antes de enviar
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id });
+        if (isDuplicate) {
+          logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
+          results.push({
+            channelId: channel.id,
+            groupId: channel.identifier,
+            success: false,
+            skipped: true,
+            reason: 'Duplicado (enviado recentemente)'
+          });
+          continue;
+        }
         try {
           // Para WhatsApp, precisamos fazer upload da imagem primeiro ou usar URL
           // Por enquanto, vamos tentar enviar como URL se for um caminho local
@@ -666,6 +706,11 @@ class NotificationDispatcher {
 
           logger.info(`✅ Mensagem com imagem WhatsApp enviada para canal ${channel.id} (grupo: ${channel.identifier})`);
 
+          // Registrar envio para controle de duplicação (se data for fornecido)
+          if (data) {
+            await this.logSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id });
+          }
+
           // Delay entre envios
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (error) {
@@ -698,6 +743,7 @@ class NotificationDispatcher {
         success: sent > 0,
         sent,
         total: channels.length,
+        filtered: allChannels.length - channels.length,
         results
       };
     } catch (error) {
@@ -846,25 +892,43 @@ class NotificationDispatcher {
       const allChannels = await BotChannel.findActive();
       logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
 
-      const whatsappChannels = allChannels?.filter(ch => ch.platform === 'whatsapp') || [];
-      logger.info(`📋 Canais WhatsApp encontrados: ${whatsappChannels.length}`);
+      const allWhatsappChannels = allChannels?.filter(ch => ch.platform === 'whatsapp') || [];
+      logger.info(`📋 Canais WhatsApp encontrados: ${allWhatsappChannels.length}`);
 
-      if (!whatsappChannels || whatsappChannels.length === 0) {
+      if (!allWhatsappChannels || allWhatsappChannels.length === 0) {
         logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
         return { success: false, message: 'Nenhum canal WhatsApp ativo', total: 0, sent: 0, failed: 0, details: [] };
       }
+
+      // Determinar eventType e dados
+      const eventType = typeof eventTypeOrData === 'string' ? eventTypeOrData : (eventTypeOrData?.eventType || 'custom_message');
+      const data = typeof eventTypeOrData === 'object' && eventTypeOrData !== null ? eventTypeOrData : null;
+
+      // Filtrar canais usando segmentação inteligente (se data for fornecido)
+      const whatsappChannels = data && data.category_id
+        ? await this.filterChannelsBySegmentation(allWhatsappChannels, eventType, {
+            ...data,
+            id: data.product_id || data.coupon_id || data.id,
+            category_id: data.category_id || null
+          })
+        : allWhatsappChannels;
+
+      if (whatsappChannels.length === 0) {
+        logger.info(`⏸️ Nenhum canal WhatsApp passou nos filtros de segmentação`);
+        return { success: false, message: 'Nenhum canal passou nos filtros', total: 0, sent: 0, failed: 0, filtered: allWhatsappChannels.length, details: [] };
+      }
+
+      logger.info(`📊 Canais WhatsApp filtrados: ${whatsappChannels.length}/${allWhatsappChannels.length} passaram na segmentação`);
 
       const results = {
         total: whatsappChannels.length,
         sent: 0,
         failed: 0,
+        filtered: allWhatsappChannels.length - whatsappChannels.length,
         details: []
       };
 
-      // Determinar eventType
-      const eventType = typeof eventTypeOrData === 'string' ? eventTypeOrData : 'custom_message';
-
-      // Enviar para cada canal WhatsApp
+      // Enviar para cada canal WhatsApp filtrado
       for (const channel of whatsappChannels) {
         let log = null;
         try {

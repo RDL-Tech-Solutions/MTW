@@ -53,7 +53,7 @@ class BotController {
         });
       }
 
-      // Validar category_filter (deve ser array com máximo 2 categorias)
+      // Validar category_filter (deve ser array com máximo 10 categorias)
       if (category_filter !== undefined && category_filter !== null) {
         let categories = category_filter;
         if (typeof category_filter === 'string') {
