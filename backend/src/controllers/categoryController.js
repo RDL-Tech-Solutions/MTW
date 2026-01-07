@@ -4,6 +4,7 @@ import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
 
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
+import { cacheSet, cacheGet, cacheDel, cacheDelByPattern } from '../utils/cache.js';
 
 class CategoryController {
   // Listar categorias

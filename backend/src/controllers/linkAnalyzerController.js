@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
 
 import { CACHE_TTL } from '../config/constants.js';
+import { cacheSet, cacheGet } from '../utils/cache.js';
 
 class LinkAnalyzerController {
   // Analisar link de afiliado
