@@ -89,8 +89,8 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
         is_relevant: response.is_relevant === true || response.is_relevant === 'true',
         should_publish: response.should_publish === true || response.should_publish === 'true',
         suggested_category: response.suggested_category || null,
-        suggested_keywords: Array.isArray(response.suggested_keywords) 
-          ? response.suggested_keywords 
+        suggested_keywords: Array.isArray(response.suggested_keywords)
+          ? response.suggested_keywords
           : [],
         issues: Array.isArray(response.issues) ? response.issues : [],
         strengths: Array.isArray(response.strengths) ? response.strengths : [],
@@ -102,8 +102,20 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
       return analysis;
 
     } catch (error) {
+      // Re-throw critical errors that should stop processing
+      const criticalErrors = [
+        'OpenRouter API Key inválida',
+        'Rate limit',
+        'Créditos insuficientes',
+        'OpenRouter está desabilitado'
+      ];
+
+      if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+        throw error;
+      }
+
       logger.error(`❌ Erro ao analisar produto: ${error.message}`);
-      // Retornar análise padrão em caso de erro
+      // Retornar análise padrão em caso de erro não crítico
       return this.getDefaultAnalysis(product);
     }
   }

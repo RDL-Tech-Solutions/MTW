@@ -174,10 +174,10 @@ class AutoSyncCron {
     try {
       logger.info(`🤖 Analisando produto estrategicamente: ${product.name?.substring(0, 50)}...`);
       const analysis = await productAnalyzer.analyzeProduct(product);
-      
+
       logger.info(`📊 Análise estratégica: should_publish=${analysis.should_publish}, confidence=${analysis.confidence.toFixed(2)}`);
       const shouldPublish = analysis.should_publish === true && analysis.confidence >= 0.7;
-      
+
       if (shouldPublish) {
         logger.info(`✅ Produto aprovado pela IA para publicação automática`);
       } else {
@@ -186,6 +186,18 @@ class AutoSyncCron {
 
       return { shouldPublish, analysis };
     } catch (error) {
+      // Re-throw critical errors
+      const criticalErrors = [
+        'OpenRouter API Key inválida',
+        'Rate limit',
+        'Créditos insuficientes',
+        'OpenRouter está desabilitado'
+      ];
+
+      if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+        throw error;
+      }
+
       logger.error(`❌ Erro na análise estratégica: ${error.message}`);
       return { shouldPublish: false, analysis: null };
     }
@@ -220,16 +232,16 @@ class AutoSyncCron {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.mercadolivre_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               // Fazer análise estratégica com IA
               const { shouldPublish } = await this.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
                 // Publicar automaticamente no app e enviar para bots
                 const publishResult = await publishService.publishAll(product);
                 await Product.update(product.id, { status: 'active' });
-                
+
                 await SyncLog.create({
                   platform: 'mercadolivre',
                   product_name: product.name,
@@ -238,7 +250,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 await SyncLog.create({
@@ -249,7 +261,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -262,11 +274,23 @@ class AutoSyncCron {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           }
         } catch (error) {
+          // Check for critical errors to abort loop
+          const criticalErrors = [
+            'OpenRouter API Key inválida',
+            'Rate limit',
+            'Créditos insuficientes',
+            'OpenRouter está desabilitado'
+          ];
+          if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+            logger.error(`⛔ Erro crítico na IA. Abortando sincronização ML para evitar loop: ${error.message}`);
+            break;
+          }
+
           results.errors++;
           logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
         }
@@ -308,14 +332,14 @@ class AutoSyncCron {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.shopee_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               const { shouldPublish } = await this.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
                 const publishResult = await publishService.publishAll(product);
                 await Product.update(product.id, { status: 'active' });
-                
+
                 await SyncLog.create({
                   platform: 'shopee',
                   product_name: product.name,
@@ -324,7 +348,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 await SyncLog.create({
@@ -335,7 +359,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -347,11 +371,23 @@ class AutoSyncCron {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           }
         } catch (error) {
+          // Check for critical errors to abort loop
+          const criticalErrors = [
+            'OpenRouter API Key inválida',
+            'Rate limit',
+            'Créditos insuficientes',
+            'OpenRouter está desabilitado'
+          ];
+          if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+            logger.error(`⛔ Erro crítico na IA. Abortando sincronização Shopee para evitar loop: ${error.message}`);
+            break;
+          }
+
           results.errors++;
           logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
         }
@@ -393,15 +429,15 @@ class AutoSyncCron {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.amazon_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               const fullProduct = await Product.findById(product.id);
               const { shouldPublish } = await this.analyzeAndDecidePublish(fullProduct, true);
-              
+
               if (shouldPublish) {
                 const publishResult = await publishService.publishAll(fullProduct);
                 await Product.update(fullProduct.id, { status: 'active' });
-                
+
                 await SyncLog.create({
                   platform: 'amazon',
                   product_name: fullProduct.name,
@@ -410,7 +446,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${fullProduct.name}`);
               } else {
                 await SyncLog.create({
@@ -421,7 +457,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -433,11 +469,23 @@ class AutoSyncCron {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           }
         } catch (error) {
+          // Check for critical errors to abort loop
+          const criticalErrors = [
+            'OpenRouter API Key inválida',
+            'Rate limit',
+            'Créditos insuficientes',
+            'OpenRouter está desabilitado'
+          ];
+          if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+            logger.error(`⛔ Erro crítico na IA. Abortando sincronização Amazon para evitar loop: ${error.message}`);
+            break;
+          }
+
           results.errors++;
           logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
         }
@@ -461,9 +509,9 @@ class AutoSyncCron {
       const AppSettings = (await import('../models/AppSettings.js')).default;
       const aliExpressConfig = await AppSettings.getAliExpressConfig();
       const productOrigin = aliExpressConfig.productOrigin || 'both';
-      
+
       logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
-      
+
       // 1. Buscar produtos com origem especificada
       const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50, productOrigin);
 
@@ -486,14 +534,14 @@ class AutoSyncCron {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.aliexpress_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               const { shouldPublish } = await this.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
                 const publishResult = await publishService.publishAll(product);
                 await Product.update(product.id, { status: 'active' });
-                
+
                 await SyncLog.create({
                   platform: 'aliexpress',
                   product_name: product.name,
@@ -502,7 +550,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 await SyncLog.create({
@@ -513,7 +561,7 @@ class AutoSyncCron {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -525,11 +573,23 @@ class AutoSyncCron {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           }
         } catch (error) {
+          // Check for critical errors to abort loop
+          const criticalErrors = [
+            'OpenRouter API Key inválida',
+            'Rate limit',
+            'Créditos insuficientes',
+            'OpenRouter está desabilitado'
+          ];
+          if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+            logger.error(`⛔ Erro crítico na IA. Abortando sincronização AliExpress para evitar loop: ${error.message}`);
+            break;
+          }
+
           results.errors++;
           logger.error(`❌ Erro ao processar ${promo.name}: ${error.message}`);
         }
