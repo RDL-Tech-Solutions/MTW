@@ -4,12 +4,14 @@ import {
   Plus, Edit, Trash2, MessageSquare, Activity,
   Play, Square, RefreshCw, CheckCircle2, XCircle,
   ExternalLink, Eye, EyeOff, Settings, Key, Power,
-  Send, Shield, AlertCircle, Trash, Brain, Zap, Loader2
+  Send, Shield, AlertCircle, Trash, Brain, Zap, Loader2,
+  Clock, Timer
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
+import { Switch } from '../components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
@@ -55,7 +57,12 @@ export default function TelegramChannels() {
   const [config, setConfig] = useState({
     api_id: '',
     api_hash: '',
-    phone: ''
+    phone: '',
+    is_automatic_mode: false,
+    schedule_start: '08:00',
+    schedule_end: '22:00',
+    work_duration: 5,
+    pause_duration: 5
   });
   const [configLoading, setConfigLoading] = useState(false);
 
@@ -150,7 +157,12 @@ export default function TelegramChannels() {
         setConfig({
           api_id: apiId,
           api_hash: apiHash,
-          phone: data.phone || ''
+          phone: data.phone || '',
+          is_automatic_mode: data.is_automatic_mode || false,
+          schedule_start: data.schedule_start || '08:00',
+          schedule_end: data.schedule_end || '22:00',
+          work_duration: data.work_duration || 5,
+          pause_duration: data.pause_duration || 5
         });
       }
     } catch (error) {
@@ -161,28 +173,28 @@ export default function TelegramChannels() {
   const saveConfig = async () => {
     setConfigLoading(true);
     try {
-      if (!config.api_id || !config.api_hash) {
-        toast({
-          title: "Erro",
-          description: "API ID e API Hash são obrigatórios",
-          variant: "destructive"
-        });
-        return;
+      const updateData = { ...config };
+
+      // Se api_id ou api_hash contêm máscaras ou estão vazios após o load mascarado, 
+      // removemos para não enviar valores inválidos ao backend.
+      if (!updateData.api_id || updateData.api_id.includes('****')) delete updateData.api_id;
+      if (!updateData.api_hash || updateData.api_hash.includes('****')) delete updateData.api_hash;
+
+      // Se o usuário preencheu o api_id, validar se é número
+      if (updateData.api_id) {
+        const apiIdNum = parseInt(updateData.api_id);
+        if (isNaN(apiIdNum) || apiIdNum <= 0) {
+          toast({
+            title: "Erro",
+            description: "API ID deve ser um número válido",
+            variant: "destructive"
+          });
+          return;
+        }
       }
 
-      // Validar formato do API ID (deve ser número)
-      const apiIdNum = parseInt(config.api_id);
-      if (isNaN(apiIdNum) || apiIdNum <= 0) {
-        toast({
-          title: "Erro",
-          description: "API ID deve ser um número válido",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Validar formato do API Hash (deve ter pelo menos 32 caracteres)
-      if (config.api_hash.length < 32) {
+      // Se o usuário preencheu o api_hash, validar tamanho
+      if (updateData.api_hash && updateData.api_hash.length < 32) {
         toast({
           title: "Erro",
           description: "API Hash deve ter pelo menos 32 caracteres",
@@ -191,7 +203,7 @@ export default function TelegramChannels() {
         return;
       }
 
-      await api.put('/telegram-collector/config', config);
+      await api.put('/telegram-collector/config', updateData);
       toast({
         title: "Sucesso",
         description: "Configuração salva com sucesso",
@@ -986,8 +998,8 @@ export default function TelegramChannels() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-background/50'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-background/50'
               }`}
           >
             <tab.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1389,6 +1401,107 @@ export default function TelegramChannels() {
               <RefreshCw className="mr-2 h-4 w-4" />
               Atualizar Status
             </Button>
+
+            <div className="border-t pt-4 mt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Agendamento Automático</Label>
+                  <CardDescription>
+                    O listener ligará e desligará sozinho conforme os horários abaixo
+                  </CardDescription>
+                </div>
+                <Switch
+                  checked={config.is_automatic_mode}
+                  onCheckedChange={(checked) => setConfig({ ...config, is_automatic_mode: checked })}
+                />
+              </div>
+
+              {config.is_automatic_mode && (
+                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-primary" />
+                        Início Diário
+                      </Label>
+                      <Input
+                        type="time"
+                        value={config.schedule_start}
+                        onChange={(e) => setConfig({ ...config, schedule_start: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-primary" />
+                        Término Diário
+                      </Label>
+                      <Input
+                        type="time"
+                        value={config.schedule_end}
+                        onChange={(e) => setConfig({ ...config, schedule_end: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Play className="h-4 w-4 text-green-500" />
+                        Trabalho (Min)
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={config.work_duration}
+                        onChange={(e) => setConfig({ ...config, work_duration: e.target.value })}
+                        placeholder="Ex: 5"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Timer className="h-4 w-4 text-orange-500" />
+                        Pausa (Min)
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={config.pause_duration}
+                        onChange={(e) => setConfig({ ...config, pause_duration: e.target.value })}
+                        placeholder="Ex: 5"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-xs text-blue-800 dark:text-blue-300 flex gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <p>
+                      Com essa configuração, o listener trabalhará por {config.work_duration} minutos e pausará por {config.pause_duration} minutos repetidamente entre {config.schedule_start} e {config.schedule_end}.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={saveConfig}
+                disabled={configLoading}
+                className="w-full"
+                variant={config.is_automatic_mode ? "default" : "outline"}
+              >
+                {configLoading ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando Agendamento...
+                  </>
+                ) : (
+                  <>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Salvar Configurações de Agendamento
+                  </>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

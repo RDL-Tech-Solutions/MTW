@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS telegram_channels (
   capture_schedule_end TIME,
   capture_mode VARCHAR(20) DEFAULT 'new_only',
   platform_filter VARCHAR(50) DEFAULT 'all',
-  example_messages TEXT,
+  example_messages JSONB DEFAULT '[]'::jsonb,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -276,6 +276,11 @@ CREATE TABLE IF NOT EXISTS telegram_collector_config (
     password VARCHAR(100),
     session_path VARCHAR(255) DEFAULT 'telegram_session.session',
     is_authenticated BOOLEAN DEFAULT FALSE,
+    is_automatic_mode BOOLEAN DEFAULT FALSE,
+    schedule_start TIME DEFAULT '08:00',
+    schedule_end TIME DEFAULT '22:00',
+    work_duration INTEGER DEFAULT 5,
+    pause_duration INTEGER DEFAULT 5,
     listener_status VARCHAR(20) DEFAULT 'stopped' CHECK (listener_status IN ('running', 'stopped', 'error')),
     listener_pid INTEGER,
     last_error TEXT,

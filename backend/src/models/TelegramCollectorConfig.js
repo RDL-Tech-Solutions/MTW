@@ -35,6 +35,11 @@ class TelegramCollectorConfig {
         phone: null,
         session_path: 'telegram_session.session',
         is_authenticated: false,
+        is_automatic_mode: false,
+        schedule_start: '08:00',
+        schedule_end: '22:00',
+        work_duration: 5,
+        pause_duration: 5,
         listener_status: 'stopped',
         listener_pid: null
       }])

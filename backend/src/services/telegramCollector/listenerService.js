@@ -26,6 +26,9 @@ class TelegramListenerService {
     this.timeoutErrorHandlerAdded = false; // Flag para evitar múltiplos handlers
     this.pollingInterval = null; // Intervalo para verificação periódica de mensagens
     this.pollingIntervalMs = 30000; // 30 segundos
+    this.listenerStartTime = null; // Timestamp de quando o listener foi iniciado
+    this.schedulerInterval = null; // Intervalo do agendador automático
+    this.isPausedByCycle = false; // Flag para indicar se está em pausa pelo ciclo de trabalho
   }
 
   /**
@@ -65,18 +68,18 @@ class TelegramListenerService {
 
       // Adicionar hash da mensagem
       couponData.message_hash = messageHash;
-      
+
       // Marcar como capturado do Telegram
       couponData.origem = 'telegram';
       couponData.auto_captured = true;
       couponData.capture_source = 'telegram';
-      
+
       // NOVO: Verificar se o mesmo código aparece em outros canais
       let confidenceScore = couponData.confidence_score || couponData.confidence || 0.0;
       let multiChannelBoost = 0.0;
       let channelCount = 1;
       let existingChannels = new Set();
-      
+
       if (couponData.code && couponData.channel_origin) {
         try {
           // Buscar cupons com o mesmo código em outros canais do Telegram
@@ -84,7 +87,7 @@ class TelegramListenerService {
             onlyFromTelegram: true,
             onlyPending: true // Apenas cupons pendentes (ainda não aprovados)
           });
-          
+
           // Contar canais únicos
           existingChannels.add(couponData.channel_origin);
           existingCoupons.forEach(coupon => {
@@ -92,9 +95,9 @@ class TelegramListenerService {
               existingChannels.add(coupon.channel_origin);
             }
           });
-          
+
           channelCount = existingChannels.size;
-          
+
           // Aumentar confidence_score baseado no número de canais
           // 2 canais: +0.15, 3+ canais: +0.25
           if (channelCount >= 3) {
@@ -104,10 +107,10 @@ class TelegramListenerService {
             multiChannelBoost = 0.15;
             logger.info(`🎯 Cupom ${couponData.code} encontrado em ${channelCount} canais diferentes! Boost de confiança: +${multiChannelBoost}`);
           }
-          
+
           // Aplicar boost ao confidence_score (máximo 1.0)
           confidenceScore = Math.min(1.0, confidenceScore + multiChannelBoost);
-          
+
           if (multiChannelBoost > 0) {
             logger.info(`   Confidence Score original: ${(couponData.confidence_score || 0).toFixed(2)}`);
             logger.info(`   Boost por múltiplos canais: +${multiChannelBoost.toFixed(2)}`);
@@ -119,34 +122,34 @@ class TelegramListenerService {
           // Continuar mesmo se houver erro na verificação
         }
       }
-      
+
       // Atualizar confidence_score com o boost
       couponData.confidence_score = confidenceScore;
-      
+
       // Obter configurações de IA para determinar threshold de publicação automática
       const AppSettings = (await import('../../models/AppSettings.js')).default;
       const settings = await AppSettings.get();
       const confidenceThreshold = settings.ai_auto_publish_confidence_threshold || 0.90;
       const aiAutoPublishEnabled = settings.ai_enable_auto_publish !== false; // Default true
-      
+
       // Determinar se deve publicar automaticamente baseado em confidence_score
       const shouldAutoPublish = aiAutoPublishEnabled && confidenceScore >= confidenceThreshold;
-      
+
       // Definir is_pending_approval baseado em confidence_score
       couponData.is_pending_approval = !shouldAutoPublish;
-      
+
       // Adicionar motivo da decisão da IA
       let decisionReason = '';
       if (multiChannelBoost > 0) {
         decisionReason = `Cupom encontrado em ${channelCount} canal(is) diferente(s). `;
       }
-      
+
       if (confidenceScore >= confidenceThreshold) {
         couponData.ai_decision_reason = `${decisionReason}Confiança alta (${confidenceScore.toFixed(2)} >= ${confidenceThreshold}). Publicação automática.`;
       } else {
         couponData.ai_decision_reason = `${decisionReason}Confiança abaixo do threshold (${confidenceScore.toFixed(2)} < ${confidenceThreshold}). Requer revisão manual.`;
       }
-      
+
       logger.info(`💾 Salvando cupom capturado: ${couponData.code} (${couponData.platform})`);
       logger.info(`   Confidence Score: ${confidenceScore.toFixed(2)}`);
       logger.info(`   Threshold: ${confidenceThreshold}`);
@@ -220,10 +223,10 @@ class TelegramListenerService {
             onlyPending: true,
             excludeId: coupon.id
           });
-          
+
           if (pendingCoupons.length > 0) {
             logger.info(`   Encontrados ${pendingCoupons.length} cupom(ns) pendente(s) com o mesmo código`);
-            
+
             for (const pendingCoupon of pendingCoupons) {
               try {
                 // Aprovar cupom pendente com boost de confiança
@@ -232,14 +235,14 @@ class TelegramListenerService {
                   confidence_score: newConfidence,
                   ai_decision_reason: `Aprovado automaticamente: mesmo código encontrado em ${channelCount} canais diferentes. Boost: +${multiChannelBoost.toFixed(2)}`
                 });
-                
+
                 logger.info(`   ✅ Cupom ${approvedCoupon.code} aprovado automaticamente (ID: ${approvedCoupon.id})`);
                 logger.info(`      Confidence Score: ${(pendingCoupon.confidence_score || 0).toFixed(2)} → ${newConfidence.toFixed(2)}`);
-                
+
                 // Notificar o cupom aprovado
                 const CouponSettings = (await import('../../models/CouponSettings.js')).default;
                 const couponSettings = await CouponSettings.get();
-                
+
                 if (couponSettings.notify_bots_on_new_coupon) {
                   await couponNotificationService.notifyNewCoupon(approvedCoupon);
                   logger.info(`   📢 Cupom ${approvedCoupon.code} notificado após aprovação automática`);
@@ -262,7 +265,7 @@ class TelegramListenerService {
           const CouponSettings = (await import('../../models/CouponSettings.js')).default;
           const couponSettings = await CouponSettings.get();
           logger.debug(`   Configuração notify_bots_on_new_coupon: ${couponSettings.notify_bots_on_new_coupon}`);
-          
+
           if (couponSettings.notify_bots_on_new_coupon) {
             logger.info(`📢 ========== INICIANDO ENVIO DE NOTIFICAÇÃO ==========`);
             logger.info(`   Cupom: ${coupon.code}`);
@@ -272,10 +275,10 @@ class TelegramListenerService {
               logger.info(`   Boost por múltiplos canais: +${multiChannelBoost.toFixed(2)} (${channelCount} canais)`);
             }
             logger.info(`   ID: ${coupon.id}`);
-            
+
             // Notificar via serviço de notificação de cupons (envia para bots, app e push notifications)
             const notifyResult = await couponNotificationService.notifyNewCoupon(coupon);
-            
+
             logger.info(`✅ ========== NOTIFICAÇÃO CONCLUÍDA ==========`);
             logger.info(`   Resultado: ${JSON.stringify(notifyResult)}`);
             logger.info(`   Cupom ${coupon.code} notificado com sucesso!`);
@@ -320,10 +323,10 @@ class TelegramListenerService {
       if (this.monitoredChannels.size === 0) {
         this.monitoredChannels.clear();
       }
-      
+
       // Armazenar canais que precisam ser resolvidos
       this.pendingChannels = activeChannels.filter(ch => !ch.channel_id && ch.username);
-      
+
       // Adicionar canais que já têm channel_id
       for (const channel of activeChannels) {
         if (channel.channel_id) {
@@ -361,8 +364,8 @@ class TelegramListenerService {
           continue;
         }
 
-        const username = channel.username.startsWith('@') 
-          ? channel.username 
+        const username = channel.username.startsWith('@')
+          ? channel.username
           : `@${channel.username}`;
 
         logger.info(`   🔍 Resolvendo: ${username}...`);
@@ -370,7 +373,7 @@ class TelegramListenerService {
         // Verificar se cliente ainda está conectado antes de resolver
         let currentClient = client;
         const isConnected = currentClient && (currentClient.connected || currentClient._connected);
-        
+
         if (!isConnected) {
           logger.warn(`   ⚠️ Cliente desconectado durante resolução, reconectando...`);
           // Garantir que listener está marcado como ativo antes de reconectar
@@ -387,25 +390,25 @@ class TelegramListenerService {
 
         // Resolver username usando gramjs com timeout
         logger.debug(`   Tentando getEntity(${username})...`);
-        
+
         const getEntityPromise = currentClient.getEntity(username);
         const entityTimeout = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Timeout ao resolver username')), 15000); // Aumentado para 15s
         });
-        
+
         const entity = await Promise.race([getEntityPromise, entityTimeout]);
-        
+
         if (!entity) {
           logger.warn(`   ⚠️ Não foi possível resolver: ${username} (entity é null)`);
           continue;
         }
-        
+
         logger.debug(`   ✅ Entity obtido: ${entity.constructor?.name || 'desconhecido'}`);
         logger.debug(`   Entity keys: ${Object.keys(entity).join(', ')}`);
 
         // Obter channel_id do entity
         let channelId = null;
-        
+
         // Método 1: Tentar obter do ID direto
         if (entity.id !== undefined && entity.id !== null) {
           const rawId = entity.id;
@@ -417,13 +420,13 @@ class TelegramListenerService {
             logger.debug(`   Entity ID encontrado (string): ${channelId}`);
           }
         }
-        
+
         // Método 2: Tentar obter do channelId específico
         if (!channelId && entity.channelId !== undefined && entity.channelId !== null) {
           channelId = entity.channelId.toString();
           logger.debug(`   Channel ID encontrado: ${channelId}`);
         }
-        
+
         // Método 3: Tentar obter do accessHash e calcular ID
         if (!channelId && entity.accessHash !== undefined) {
           // Para alguns casos, podemos precisar usar o accessHash
@@ -493,13 +496,13 @@ class TelegramListenerService {
       // Se não tem horário configurado, capturar 24h
       return true;
     }
-    
+
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
+
     const startTime = channel.capture_schedule_start;
     const endTime = channel.capture_schedule_end;
-    
+
     // Se o horário de fim é menor que o de início, significa que cruza a meia-noite
     if (endTime < startTime) {
       return currentTime >= startTime || currentTime <= endTime;
@@ -513,12 +516,10 @@ class TelegramListenerService {
    */
   isMessageWithinTimeRange(message, channel) {
     const captureMode = channel.capture_mode || 'new_only';
-    
+
     if (captureMode === 'new_only') {
-      // Para apenas novas mensagens, verificar:
-      // 1. Se a mensagem é mais recente que last_message_id
-      // 2. Se a mensagem foi enviada recentemente (últimas 24 horas)
-      
+      // 3. Se a mensagem foi enviada após o início do listener (se disponível)
+
       // Verificar last_message_id primeiro
       const lastMessageId = channel.last_message_id || 0;
       if (lastMessageId > 0) {
@@ -528,8 +529,8 @@ class TelegramListenerService {
           return false;
         }
       }
-      
-      // Verificar data da mensagem (deve ser das últimas 24 horas)
+
+      // Verificar data da mensagem
       let messageDate;
       if (message.date) {
         if (typeof message.date === 'number') {
@@ -543,20 +544,26 @@ class TelegramListenerService {
         // Se não tem data, assumir que é nova (foi recebida agora)
         return true;
       }
-      
+
+      // NOVO: Verificar se a mensagem é anterior ao início do listener
+      if (this.listenerStartTime && messageDate < this.listenerStartTime) {
+        logger.debug(`   ⚠️ Mensagem de ${messageDate.toISOString()} é anterior ao início do listener (${this.listenerStartTime.toISOString()}), ignorando no modo new_only`);
+        return false;
+      }
+
       const now = new Date();
       const diffMs = now - messageDate;
       const diffHours = diffMs / (1000 * 60 * 60);
-      
+
       // Se a mensagem tem mais de 24 horas, é antiga
       if (diffHours > 24) {
         logger.debug(`   ⚠️ Mensagem tem ${diffHours.toFixed(1)} horas, é antiga (modo: new_only), ignorando`);
         return false;
       }
-      
+
       return true;
     }
-    
+
     // Obter data da mensagem (pode estar em segundos Unix ou já ser Date)
     let messageDate;
     if (message.date) {
@@ -573,17 +580,17 @@ class TelegramListenerService {
       // Se não tem data, assumir que é nova
       return true;
     }
-    
+
     const now = new Date();
     const diffMs = now - messageDate;
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    
+
     if (channel.capture_mode === '1_day') {
       return diffDays <= 1;
     } else if (channel.capture_mode === '2_days') {
       return diffDays <= 2;
     }
-    
+
     return true;
   }
 
@@ -594,12 +601,110 @@ class TelegramListenerService {
     if (!channel.platform_filter || channel.platform_filter === 'all') {
       return true;
     }
-    
+
     // Verificar se a plataforma do cupom corresponde ao filtro
     const couponPlatform = couponData.platform?.toLowerCase() || '';
     const filterPlatform = channel.platform_filter.toLowerCase();
-    
+
     return couponPlatform === filterPlatform || couponPlatform.includes(filterPlatform);
+  }
+
+  /**
+   * Iniciar agendador automático
+   * Verifica a cada 1 minuto se o listener deve estar rodando
+   */
+  async startScheduler() {
+    if (this.schedulerInterval) {
+      return;
+    }
+
+    logger.info('📅 Iniciando agendador automático do Telegram Listener...');
+
+    // Executar verificação inicial
+    await this.checkScheduler();
+
+    // Definir intervalo de verificação (a cada 1 minuto)
+    this.schedulerInterval = setInterval(async () => {
+      await this.checkScheduler();
+    }, 60000);
+  }
+
+  /**
+   * Parar agendador automático
+   */
+  stopScheduler() {
+    if (this.schedulerInterval) {
+      clearInterval(this.schedulerInterval);
+      this.schedulerInterval = null;
+      logger.info('🛑 Agendador automático parado');
+    }
+  }
+
+  /**
+   * Verificar se o listener deve estar rodando baseado no agendamento automático
+   */
+  async checkScheduler() {
+    try {
+      const config = await TelegramCollectorConfig.get();
+
+      // Se não estiver no modo automático, não faz nada (mantém estado manual)
+      if (!config.is_automatic_mode) {
+        return;
+      }
+
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+      const startTime = config.schedule_start || '08:00';
+      const endTime = config.schedule_end || '22:00';
+
+      // 1. Verificar Janela de Horário Global
+      let isWithinTimeWindow = false;
+      if (endTime < startTime) {
+        // Cruza a meia-noite
+        isWithinTimeWindow = currentTime >= startTime || currentTime <= endTime;
+      } else {
+        isWithinTimeWindow = currentTime >= startTime && currentTime <= endTime;
+      }
+
+      if (!isWithinTimeWindow) {
+        if (this.isRunning) {
+          logger.info(`⏰ [Agendador] Fora do horário configurado (${currentTime} não está entre ${startTime} e ${endTime}). Parando listener...`);
+          await this.stop();
+        }
+        return;
+      }
+
+      // 2. Verificar Ciclo de Trabalho/Pausa (Duty Cycle)
+      const workDuration = parseInt(config.work_duration) || 5; // minutos
+      const pauseDuration = parseInt(config.pause_duration) || 5; // minutos
+      const totalCycle = workDuration + pauseDuration;
+
+      // Minutos totais desde a meia-noite
+      const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+      const positionInCycle = minutesSinceMidnight % totalCycle;
+
+      const shouldBeWorking = positionInCycle < workDuration;
+
+      if (shouldBeWorking) {
+        if (!this.isRunning) {
+          logger.info(`⏰ [Agendador] Iniciando ciclo de trabalho (${positionInCycle + 1}/${workDuration} min). Ligando listener...`);
+          this.isPausedByCycle = false;
+          await this.start();
+        } else if (this.isPausedByCycle) {
+          this.isPausedByCycle = false;
+        }
+      } else {
+        if (this.isRunning) {
+          const pauseProgress = positionInCycle - workDuration + 1;
+          logger.info(`⏰ [Agendador] Iniciando ciclo de pausa (${pauseProgress}/${pauseDuration} min). Desligando listener temporariamente...`);
+          this.isPausedByCycle = true;
+          await this.stop();
+        }
+      }
+    } catch (error) {
+      logger.error(`❌ Erro no checkScheduler: ${error.message}`);
+    }
   }
 
   /**
@@ -608,14 +713,14 @@ class TelegramListenerService {
   async processMessage(message, channelId) {
     try {
       logger.info(`📥 Processando mensagem do canal: ${channelId}`);
-      
+
       // Garantir que channelId seja uma string
       const channelIdStr = channelId ? channelId.toString() : null;
       if (!channelIdStr) {
         logger.warn(`⚠️ Mensagem recebida sem channelId válido`);
         return;
       }
-      
+
       // Função auxiliar para normalizar IDs para comparação
       const normalizeIdForComparison = (id) => {
         let normalized = id.toString();
@@ -629,10 +734,10 @@ class TelegramListenerService {
         // Remover sinal negativo para comparação numérica
         return normalized.replace(/^-/, '');
       };
-      
+
       // Buscar canal com comparação flexível de IDs
       let channel = this.monitoredChannels.get(channelIdStr);
-      
+
       if (!channel) {
         // Tentar normalizar e buscar novamente
         const normalizedChatId = normalizeIdForComparison(channelIdStr);
@@ -649,7 +754,7 @@ class TelegramListenerService {
           }
         }
       }
-      
+
       if (!channel) {
         logger.debug(`📭 Mensagem de canal não monitorado: ${channelIdStr}`);
         logger.debug(`   Canais monitorados: ${Array.from(this.monitoredChannels.keys()).join(', ')}`);
@@ -657,24 +762,24 @@ class TelegramListenerService {
       }
 
       logger.info(`   Canal: ${channel.name || 'Sem nome'} (@${channel.username || channelIdStr})`);
-      
+
       // Verificar se está no horário de captura configurado
       if (!this.isWithinCaptureSchedule(channel)) {
         logger.debug(`   ⏰ Fora do horário de captura configurado (${channel.capture_schedule_start || 'N/A'} - ${channel.capture_schedule_end || 'N/A'})`);
         return;
       }
-      
+
       // Para modo 'new_only', verificar last_message_id ANTES de processar
       const captureMode = channel.capture_mode || 'new_only';
       if (captureMode === 'new_only') {
         const lastMessageId = channel.last_message_id || 0;
         const messageId = message.id ? (typeof message.id === 'bigint' ? Number(message.id) : message.id) : 0;
-        
+
         if (lastMessageId > 0 && messageId > 0 && messageId <= lastMessageId) {
           logger.debug(`   ⚠️ Mensagem ${messageId} já foi processada (última: ${lastMessageId}), ignorando (modo: new_only)`);
           return;
         }
-        
+
         // Verificar também a data da mensagem
         let messageDate;
         if (message.date) {
@@ -685,18 +790,24 @@ class TelegramListenerService {
           } else {
             messageDate = new Date(message.date);
           }
-          
+
           const now = new Date();
           const diffMs = now - messageDate;
           const diffHours = diffMs / (1000 * 60 * 60);
-          
+
           if (diffHours > 24) {
             logger.debug(`   ⚠️ Mensagem tem ${diffHours.toFixed(1)} horas, é antiga (modo: new_only), ignorando`);
             return;
           }
+
+          // NOVO: Verificar se a mensagem é anterior ao início do listener
+          if (this.listenerStartTime && messageDate < this.listenerStartTime) {
+            logger.debug(`   ⚠️ Mensagem de ${messageDate.toISOString()} é anterior ao início do listener (${this.listenerStartTime.toISOString()}), ignorando no modo new_only`);
+            return;
+          }
         }
       }
-      
+
       // Verificar se a mensagem está dentro do período permitido
       if (!this.isMessageWithinTimeRange(message, channel)) {
         logger.debug(`   ⏰ Mensagem fora do período permitido (modo: ${channel.capture_mode || 'new_only'})`);
@@ -705,13 +816,13 @@ class TelegramListenerService {
 
       // Obter texto da mensagem de várias formas (métodos melhorados)
       let text = '';
-      
+
       // Método 1: Tentar obter do campo message diretamente (string)
       if (message.message && typeof message.message === 'string') {
         text = message.message;
         logger.debug(`   Texto extraído do campo message (string)`);
       }
-      
+
       // Método 2: Tentar obter do campo text
       if (!text && message.text) {
         if (typeof message.text === 'string') {
@@ -725,13 +836,13 @@ class TelegramListenerService {
           logger.debug(`   Texto extraído do campo text.message`);
         }
       }
-      
+
       // Método 3: Tentar obter do rawText
       if (!text && message.rawText) {
         text = message.rawText;
         logger.debug(`   Texto extraído do campo rawText`);
       }
-      
+
       // Método 4: Tentar obter de message.text (pode estar aninhado)
       if (!text && message.message && typeof message.message === 'object') {
         if (message.message.text) {
@@ -742,7 +853,7 @@ class TelegramListenerService {
           logger.debug(`   Texto extraído de message.message.message`);
         }
       }
-      
+
       // Método 5: Tentar usar getMessageText() se disponível (método do gramjs)
       if (!text && typeof message.getMessageText === 'function') {
         try {
@@ -754,7 +865,7 @@ class TelegramListenerService {
           logger.debug(`   Erro ao usar getMessageText(): ${getTextError.message}`);
         }
       }
-      
+
       // Método 6: Tentar extrair do campo media (mensagens com foto/vídeo podem ter caption)
       if (!text && message.media) {
         if (message.media.caption) {
@@ -800,7 +911,7 @@ class TelegramListenerService {
           }
         }
       }
-      
+
       // Método 9: Tentar converter a mensagem para string (último recurso)
       if (!text && message.toString) {
         try {
@@ -815,7 +926,7 @@ class TelegramListenerService {
       }
 
       logger.debug(`   Texto da mensagem: ${text ? text.substring(0, 100) + '...' : 'vazio'}`);
-      
+
       // Log detalhado se não conseguiu extrair texto
       if (!text) {
         logger.warn(`   ⚠️ Não foi possível extrair texto da mensagem`);
@@ -835,7 +946,7 @@ class TelegramListenerService {
         logger.debug(`   Mensagem muito curta ou vazia (${text ? text.length : 0} caracteres), ignorando`);
         return;
       }
-      
+
       // Limpar texto (remover espaços extras, quebras de linha desnecessárias)
       text = text.trim().replace(/\s+/g, ' ');
 
@@ -845,13 +956,13 @@ class TelegramListenerService {
       // Extrair informações do cupom
       logger.debug(`   Extraindo informações do cupom...`);
       logger.debug(`   Texto completo: ${text.substring(0, 200)}...`);
-      
+
       let couponData = null;
 
       // IMPORTANTE: Sempre verificar múltiplos cupons primeiro (tanto IA quanto método tradicional)
       // Isso garante que todos os cupons sejam capturados, mesmo quando há 2+ cupons na mesma mensagem
       logger.debug(`   🔍 Verificando múltiplos cupons na mensagem...`);
-      
+
       // Tentar extrair múltiplos cupons usando método tradicional (mais confiável para múltiplos)
       const multipleCoupons = couponExtractor.extractMultipleCoupons(
         text,
@@ -861,7 +972,7 @@ class TelegramListenerService {
 
       if (multipleCoupons && multipleCoupons.length > 1) {
         logger.info(`   🎟️ ${multipleCoupons.length} cupom(ns) detectado(s) na mensagem - capturando todos!`);
-        
+
         // Salvar cada cupom encontrado
         for (const coupon of multipleCoupons) {
           // Verificar filtro de plataforma antes de salvar
@@ -869,16 +980,16 @@ class TelegramListenerService {
             logger.debug(`   🚫 Cupom ${coupon.code} de plataforma '${coupon.platform}' não corresponde ao filtro '${channel.platform_filter}'`);
             continue;
           }
-          
+
           logger.info(`   🎟️ Cupom: ${coupon.code || 'sem código'} - ${coupon.platform || 'plataforma desconhecida'}`);
-          
+
           // Gerar hash único para cada cupom (incluindo código para diferenciar)
           const couponHash = this.generateMessageHash(
             `${text}:${coupon.code}`,
             messageId,
             channelId.toString()
           );
-          
+
           // Salvar cupom
           await this.saveCoupon(coupon, couponHash);
         }
@@ -889,31 +1000,31 @@ class TelegramListenerService {
       // Se há múltiplos códigos, garantir que todos sejam processados
       const allCodes = couponExtractor.extractAllCouponCodes(text);
       const hasMultipleCodes = allCodes.length > 1;
-      
+
       if (hasMultipleCodes && (!multipleCoupons || multipleCoupons.length < allCodes.length)) {
         logger.info(`   🔍 Detectados ${allCodes.length} código(s) na mensagem, mas apenas ${multipleCoupons?.length || 0} cupom(ns) extraído(s). Tentando extrair os restantes...`);
-        
+
         // Tentar extrair cupons para cada código que ainda não foi processado
         const processedCodes = new Set(multipleCoupons?.map(c => c.code) || []);
-        
+
         for (const code of allCodes) {
           if (processedCodes.has(code)) {
             continue; // Já foi processado
           }
-          
+
           // Criar contexto ao redor do código
           const codePattern = new RegExp(`\`${code}\``);
           let codeMatch = text.match(codePattern);
-          
+
           if (!codeMatch) {
             codeMatch = text.match(new RegExp(`\\b${code}\\b`));
           }
-          
+
           if (codeMatch && codeMatch.index !== undefined) {
             const start = Math.max(0, codeMatch.index - 300);
             const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
             const context = text.substring(start, end);
-            
+
             const coupon = couponExtractor.extractCouponInfo(context, messageId, channel.username || channel.name);
             if (coupon && coupon.code === code) {
               // Verificar filtro de plataforma
@@ -921,19 +1032,19 @@ class TelegramListenerService {
                 logger.debug(`   🚫 Cupom ${coupon.code} de plataforma '${coupon.platform}' não corresponde ao filtro`);
                 continue;
               }
-              
+
               const couponHash = this.generateMessageHash(
                 `${text}:${coupon.code}`,
                 messageId,
                 channelId.toString()
               );
-              
+
               await this.saveCoupon(coupon, couponHash);
               logger.info(`   ✅ Cupom adicional extraído: ${coupon.code}`);
             }
           }
         }
-        
+
         // Se processou múltiplos cupons, retornar
         if (allCodes.length > 1) {
           return;
@@ -946,24 +1057,24 @@ class TelegramListenerService {
         try {
           logger.info(`   🤖 Tentando extrair cupom via IA...`);
           // Obter mensagens de exemplo do canal se disponíveis
-          const exampleMessages = channel.example_messages && Array.isArray(channel.example_messages) 
+          const exampleMessages = channel.example_messages && Array.isArray(channel.example_messages)
             ? channel.example_messages.filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
             : [];
-          
+
           const aiExtraction = await couponAnalyzer.analyze(text, exampleMessages);
-          
+
           if (aiExtraction && aiExtraction.code) {
             logger.info(`   ✅ IA extraiu cupom: ${aiExtraction.code} - ${aiExtraction.platform}`);
-            
+
             // IMPORTANTE: Verificar se há outros códigos na mensagem que a IA não capturou
             const aiCode = aiExtraction.code;
             const otherCodes = allCodes.filter(code => code !== aiCode);
-            
+
             if (otherCodes.length > 0) {
               logger.info(`   🔍 IA extraiu ${aiCode}, mas há ${otherCodes.length} outro(s) código(s) na mensagem: ${otherCodes.join(', ')}`);
               logger.info(`   📋 Processando cupom da IA e depois os outros códigos...`);
             }
-            
+
             // Preparar dados do cupom no formato esperado
             // IMPORTANTE: confidence_score será usado em saveCoupon para decidir publicação automática
             couponData = {
@@ -986,34 +1097,34 @@ class TelegramListenerService {
               capture_source: 'telegram_ai',
               auto_captured: true
             };
-            
+
             // Se há outros códigos, processá-los também
             if (otherCodes.length > 0) {
               for (const otherCode of otherCodes) {
                 const codePattern = new RegExp(`\`${otherCode}\``);
                 let codeMatch = text.match(codePattern);
-                
+
                 if (!codeMatch) {
                   codeMatch = text.match(new RegExp(`\\b${otherCode}\\b`));
                 }
-                
+
                 if (codeMatch && codeMatch.index !== undefined) {
                   const start = Math.max(0, codeMatch.index - 300);
                   const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
                   const context = text.substring(start, end);
-                  
+
                   const otherCoupon = couponExtractor.extractCouponInfo(context, messageId, channel.username || channel.name);
                   if (otherCoupon && otherCoupon.code === otherCode) {
                     if (!this.matchesPlatformFilter(otherCoupon, channel)) {
                       continue;
                     }
-                    
+
                     const otherCouponHash = this.generateMessageHash(
                       `${text}:${otherCoupon.code}`,
                       messageId,
                       channelId.toString()
                     );
-                    
+
                     await this.saveCoupon(otherCoupon, otherCouponHash);
                     logger.info(`   ✅ Cupom adicional processado: ${otherCoupon.code}`);
                   }
@@ -1037,7 +1148,7 @@ class TelegramListenerService {
       // FALLBACK: Método tradicional (Regex) se IA não funcionou ou não está habilitada
       if (!couponData) {
         logger.debug(`   🔍 Usando método tradicional de extração (Regex)...`);
-        
+
         // Tentar extrair um único cupom
         couponData = couponExtractor.extractCouponInfo(
           text,
@@ -1065,38 +1176,38 @@ class TelegramListenerService {
       const allCodesInMessage = couponExtractor.extractAllCouponCodes(text);
       const currentCode = couponData.code;
       const otherCodes = allCodesInMessage.filter(code => code !== currentCode);
-      
+
       if (otherCodes.length > 0) {
         logger.info(`   🔍 Detectado cupom ${currentCode}, mas há ${otherCodes.length} outro(s) código(s) na mensagem: ${otherCodes.join(', ')}`);
         logger.info(`   📋 Processando cupom atual e depois os outros códigos...`);
-        
+
         // Processar outros códigos também
         for (const otherCode of otherCodes) {
           const codePattern = new RegExp(`\`${otherCode}\``);
           let codeMatch = text.match(codePattern);
-          
+
           if (!codeMatch) {
             codeMatch = text.match(new RegExp(`\\b${otherCode}\\b`));
           }
-          
+
           if (codeMatch && codeMatch.index !== undefined) {
             const start = Math.max(0, codeMatch.index - 300);
             const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
             const context = text.substring(start, end);
-            
+
             const otherCoupon = couponExtractor.extractCouponInfo(context, messageId, channel.username || channel.name);
             if (otherCoupon && otherCoupon.code === otherCode) {
               if (!this.matchesPlatformFilter(otherCoupon, channel)) {
                 logger.debug(`   🚫 Cupom ${otherCoupon.code} de plataforma '${otherCoupon.platform}' não corresponde ao filtro`);
                 continue;
               }
-              
+
               const otherCouponHash = this.generateMessageHash(
                 `${text}:${otherCoupon.code}`,
                 messageId,
                 channelId.toString()
               );
-              
+
               await this.saveCoupon(otherCoupon, otherCouponHash);
               logger.info(`   ✅ Cupom adicional processado: ${otherCoupon.code}`);
             }
@@ -1130,13 +1241,13 @@ class TelegramListenerService {
    */
   async setupEventHandlers(client) {
     logger.info(`📡 Configurando handlers de eventos...`);
-    
+
     // Se cliente não foi passado, tentar obter do telegramClient
     if (!client) {
       logger.warn(`⚠️ Cliente não foi passado, tentando obter do telegramClient...`);
       client = telegramClient.getClient();
     }
-    
+
     // Verificar se cliente está disponível
     if (!client) {
       logger.warn(`⚠️ Cliente não disponível, tentando conectar...`);
@@ -1148,12 +1259,12 @@ class TelegramListenerService {
       }
       client = telegramClient.getClient();
     }
-    
+
     // Verificar novamente após tentativa de conexão
     if (!client) {
       throw new Error('Cliente não disponível para configurar handlers após tentativa de conexão');
     }
-    
+
     // Verificar se cliente está conectado
     const isConnected = client.connected || client._connected;
     if (!isConnected) {
@@ -1171,9 +1282,9 @@ class TelegramListenerService {
         // Continuar mesmo assim, pois pode ser um problema de flag interna
       }
     }
-    
+
     logger.info(`✅ Cliente obtido e pronto para receber eventos`);
-    
+
     // Adicionar handler global para erros não capturados do loop de atualizações
     // Isso evita que erros de TIMEOUT quebrem o listener
     // Usar uma flag para evitar múltiplos handlers
@@ -1185,12 +1296,12 @@ class TelegramListenerService {
           if (error.stack && error.stack.includes('telegram/client/updates')) {
             // Incrementar contador de timeouts
             this.timeoutErrors = (this.timeoutErrors || 0) + 1;
-            
+
             // Log apenas a cada 10 timeouts para não poluir muito os logs
             if (this.timeoutErrors % 10 === 0) {
               logger.debug(`⏰ Timeout no loop de atualizações (${this.timeoutErrors} ocorrências, não crítico): ${error.message}`);
             }
-            
+
             // Se muitos timeouts consecutivos, pode ser problema de conexão
             if (this.timeoutErrors >= this.maxTimeoutErrors) {
               logger.warn(`⚠️ Muitos timeouts consecutivos (${this.timeoutErrors}). Verificando conexão...`);
@@ -1205,14 +1316,14 @@ class TelegramListenerService {
         // Para outros erros, deixar o handler padrão tratar (não fazer nada)
         // O Node.js vai logar automaticamente
       };
-      
+
       process.on('unhandledRejection', timeoutErrorHandler);
       this.timeoutErrorHandlerAdded = true;
       logger.info(`📡 Handler de erros de timeout configurado`);
       logger.info(`   ℹ️ Erros de TIMEOUT do loop de atualizações são normais e serão suprimidos dos logs`);
       logger.info(`   ℹ️ O sistema usa verificação periódica (30s) como backup para garantir captura`);
     }
-    
+
     const { NewMessage } = await import('telegram/events/index.js');
     const { PeerChannel } = await import('telegram/tl/index.js');
 
@@ -1228,21 +1339,21 @@ class TelegramListenerService {
 
     // Handler para novas mensagens - capturar todas as mensagens primeiro para debug
     logger.info(`📡 Registrando handler de eventos...`);
-    
+
     this.eventCount = 0;
     this.messageCount = 0;
     this.timeoutErrors = 0; // Contador de erros de timeout (inicializado no setupEventHandlers)
     this.maxTimeoutErrors = 10; // Máximo de timeouts antes de verificar conexão
-    
+
     const handler = async (event) => {
       try {
         // Incrementar contador de eventos
         this.eventCount++;
-        
+
         // Log mais detalhado para debug
         const eventType = event.constructor?.name || 'desconhecido';
         logger.info(`📨 EVENTO #${this.eventCount} RECEBIDO: ${eventType}`);
-        
+
         const message = event.message;
         if (!message) {
           logger.debug('📭 Evento sem mensagem, ignorando');
@@ -1251,7 +1362,7 @@ class TelegramListenerService {
 
         // Incrementar contador de mensagens
         this.messageCount++;
-        
+
         // Extrair ID e data da mensagem ANTES de processar (para validação de mensagens antigas)
         const messageId = message.id ? (typeof message.id === 'bigint' ? Number(message.id) : message.id) : 0;
         let messageDate = null;
@@ -1264,7 +1375,7 @@ class TelegramListenerService {
             messageDate = new Date(message.date);
           }
         }
-        
+
         // Log detalhado da mensagem
         logger.info(`📨 MENSAGEM #${this.messageCount} recebida!`);
         logger.debug(`   Message ID: ${messageId || 'N/A'}`);
@@ -1273,7 +1384,7 @@ class TelegramListenerService {
 
         // Obter ID do chat/canal de várias formas
         let chatId = null;
-        
+
         // Método 1: Tentar obter do peerId (mais confiável para canais)
         if (message.peerId) {
           // Para canais públicos, o peerId pode ser um objeto Channel ou PeerChannel
@@ -1378,7 +1489,7 @@ class TelegramListenerService {
         // Canais públicos têm IDs no formato -100XXXXXXXXX
         // Precisamos normalizar para comparar corretamente
         let normalizedChatId = chatId.toString();
-        
+
         // Função auxiliar para normalizar IDs
         const normalizeId = (id) => {
           let normalized = id.toString();
@@ -1392,7 +1503,7 @@ class TelegramListenerService {
           // Remover sinal negativo para comparação numérica
           return normalized.replace(/^-/, '');
         };
-        
+
         // Se o chatId não começa com -, pode ser um canal que precisa do prefixo
         if (!normalizedChatId.startsWith('-')) {
           // Se o número é grande o suficiente para ser um canal, adicionar -100
@@ -1412,16 +1523,16 @@ class TelegramListenerService {
             logger.debug(`   ChatId ajustado para formato de canal público: ${normalizedChatId}`);
           }
         }
-        
+
         const normalizedForComparison = normalizeId(normalizedChatId);
-        
+
         let foundChannel = null;
-        
+
         // Verificar se o canal está sendo monitorado (comparação flexível)
         for (const [monitoredId, channel] of this.monitoredChannels.entries()) {
           const monitoredIdStr = monitoredId.toString();
           const monitoredNormalized = normalizeId(monitoredIdStr);
-          
+
           // Comparar de várias formas
           if (
             normalizedChatId === monitoredIdStr ||
@@ -1440,7 +1551,7 @@ class TelegramListenerService {
           logger.info(`✅ MATCH! Mensagem de canal monitorado: ${chatId}`);
           logger.info(`   Canal: ${foundChannel.name || foundChannel.username}`);
           logger.info(`   Username: @${foundChannel.username || 'N/A'}`);
-          
+
           // IMPORTANTE: Para modo 'new_only', verificar se a mensagem é realmente nova
           // ANTES de processar. Isso evita processar mensagens antigas que podem chegar
           // via eventos do Telegram.
@@ -1452,22 +1563,22 @@ class TelegramListenerService {
               logger.debug(`   ⚠️ Mensagem ${messageId} já foi processada (última: ${lastMessageId}), ignorando (modo: new_only)`);
               return; // Ignorar mensagem antiga completamente
             }
-            
+
             // Verificar data da mensagem (deve ser das últimas 24 horas)
             if (messageDate) {
               const now = new Date();
               const diffMs = now - messageDate;
               const diffHours = diffMs / (1000 * 60 * 60);
-              
+
               if (diffHours > 24) {
                 logger.debug(`   ⚠️ Mensagem tem ${diffHours.toFixed(1)} horas, é antiga (modo: new_only), ignorando`);
                 return; // Ignorar mensagem antiga completamente
               }
-              
+
               logger.debug(`   ✅ Mensagem é nova (${diffHours.toFixed(2)} horas atrás), processando...`);
             }
           }
-          
+
           await this.processMessage(message, chatId);
         } else {
           // Log mais detalhado para debug quando não encontra o canal
@@ -1477,12 +1588,12 @@ class TelegramListenerService {
           for (const [monId, monChannel] of this.monitoredChannels.entries()) {
             logger.debug(`     - ${monId} (${monChannel.name || monChannel.username})`);
           }
-          
+
           // Tentar buscar o canal pelo username se disponível na mensagem
           if (message.chat && message.chat.username) {
             const msgUsername = message.chat.username.startsWith('@') ? message.chat.username : `@${message.chat.username}`;
             logger.debug(`   Tentando encontrar canal pelo username: ${msgUsername}`);
-            
+
             // Verificar se algum canal monitorado tem esse username
             for (const [monId, monChannel] of this.monitoredChannels.entries()) {
               const monUsername = monChannel.username ? (monChannel.username.startsWith('@') ? monChannel.username : `@${monChannel.username}`) : null;
@@ -1490,7 +1601,7 @@ class TelegramListenerService {
                 logger.info(`   ✅ Canal encontrado pelo username! ${msgUsername} → ${monId}`);
                 logger.info(`   ⚠️ Possível problema: channel_id no banco (${monId}) não corresponde ao ID da mensagem (${chatId})`);
                 logger.info(`   💡 Solução: Atualizar channel_id do canal ${monChannel.name} para ${chatId}`);
-                
+
                 // Tentar atualizar o channel_id no banco
                 try {
                   await TelegramChannel.update(monChannel.id, { channel_id: chatId });
@@ -1498,7 +1609,7 @@ class TelegramListenerService {
                   this.monitoredChannels.delete(monId);
                   this.monitoredChannels.set(chatId, { ...monChannel, channel_id: chatId });
                   logger.info(`   ✅ channel_id atualizado no banco de dados`);
-                  
+
                   // Processar a mensagem agora que encontramos o canal
                   await this.processMessage(message, chatId);
                   return;
@@ -1517,29 +1628,29 @@ class TelegramListenerService {
           this.timeoutErrors = (this.timeoutErrors || 0) + 1;
           return; // Continuar processando outras mensagens
         }
-        
+
         // Para outros erros, logar mas não quebrar o listener
         logger.error(`❌ Erro no handler de mensagens: ${error.message}`);
         logger.error(`   Stack: ${error.stack}`);
         // Não lançar erro - continuar processando outras mensagens
       }
     };
-    
+
     // Registrar handler com NewMessage
     // Usar filtro vazio para capturar todas as mensagens (incluindo canais públicos)
     try {
       // IMPORTANTE: Para canais públicos, precisamos capturar TODAS as mensagens primeiro
       // porque o gramjs pode não expor corretamente os IDs dos canais no filtro
       // Vamos usar um handler geral que captura tudo e depois filtra
-      
+
       // Handler geral - captura TODAS as mensagens
       client.addEventHandler(handler, new NewMessage({}));
       logger.info(`✅ Handler geral registrado (captura TODAS as mensagens para filtrar depois)`);
-      
+
       // Adicionar contador de eventos recebidos para debug
       this.eventCount = 0;
       this.messageCount = 0;
-      
+
       // Handler adicional para contar eventos (debug)
       client.addEventHandler(async (event) => {
         this.eventCount++;
@@ -1551,33 +1662,33 @@ class TelegramListenerService {
           logger.debug(`📊 Estatísticas: ${this.eventCount} eventos recebidos, ${this.messageCount} mensagens`);
         }
       }, new NewMessage({}));
-      
+
       // Também tentar registrar handlers específicos para cada canal
       // Isso pode ajudar em alguns casos, mas o handler geral é mais confiável
       try {
         logger.info(`📡 Tentando registrar handlers específicos para ${this.monitoredChannels.size} canal(is)...`);
         let specificHandlersCount = 0;
-        
+
         for (const [channelIdStr, channel] of this.monitoredChannels.entries()) {
           try {
             // Tentar usar username se disponível (mais confiável que ID)
             if (channel.username) {
               const username = channel.username.startsWith('@') ? channel.username : `@${channel.username}`;
-              
+
               // Criar filtro usando username
               const usernameFilter = new NewMessage({
                 chats: [username]
               });
-              
+
               client.addEventHandler(async (event) => {
                 logger.debug(`📨 Mensagem recebida do canal específico (username): ${username}`);
                 await handler(event);
               }, usernameFilter);
-              
+
               specificHandlersCount++;
               logger.debug(`   ✅ Handler específico (username) registrado: ${username}`);
             }
-            
+
             // Também tentar com channel_id se disponível
             if (channelIdStr) {
               try {
@@ -1585,12 +1696,12 @@ class TelegramListenerService {
                 const channelFilter = new NewMessage({
                   chats: [channelId]
                 });
-                
+
                 client.addEventHandler(async (event) => {
                   logger.debug(`📨 Mensagem recebida do canal específico (ID): ${channelIdStr}`);
                   await handler(event);
                 }, channelFilter);
-                
+
                 specificHandlersCount++;
                 logger.debug(`   ✅ Handler específico (ID) registrado: ${channelIdStr}`);
               } catch (idFilterError) {
@@ -1602,7 +1713,7 @@ class TelegramListenerService {
             // Continuar mesmo se falhar - o handler geral deve capturar
           }
         }
-        
+
         logger.info(`✅ ${specificHandlersCount} handler(s) específico(s) registrado(s) (além do handler geral)`);
       } catch (specificHandlerError) {
         logger.warn(`⚠️ Erro ao registrar handlers específicos: ${specificHandlerError.message}`);
@@ -1612,11 +1723,11 @@ class TelegramListenerService {
       logger.error(`❌ Erro ao registrar handler: ${handlerError.message}`);
       throw handlerError;
     }
-    
+
     // Verificar se o cliente está realmente conectado e pronto para receber atualizações
     const clientConnected = client && (client.connected || client._connected);
     logger.info(`📡 Status da conexão: ${clientConnected ? '✅ Conectado' : '❌ Desconectado'}`);
-    
+
     // Verificar se o cliente tem o método de atualizações ativo
     if (client._updateLoop) {
       logger.info(`✅ Loop de atualizações ativo`);
@@ -1624,7 +1735,7 @@ class TelegramListenerService {
       logger.warn(`⚠️ Loop de atualizações não detectado - pode não receber mensagens`);
       logger.warn(`   Isso é normal se o cliente ainda não iniciou o loop`);
     }
-    
+
     // Forçar início do loop de atualizações se necessário
     // O gramjs inicia automaticamente, mas vamos garantir
     if (client && clientConnected && !client._updateLoop) {
@@ -1642,7 +1753,7 @@ class TelegramListenerService {
         logger.warn(`⚠️ Erro ao verificar loop de atualizações: ${loopError.message}`);
       }
     }
-    
+
     logger.info(`✅ Handlers configurados com sucesso`);
     logger.info(`   📡 Listener pronto para receber mensagens de ${this.monitoredChannels.size} canal(is)`);
     logger.info(`   💡 O cliente deve permanecer conectado para receber atualizações`);
@@ -1669,14 +1780,18 @@ class TelegramListenerService {
 
       logger.info('🚀 Iniciando Telegram Listener...');
 
+      // Definir horário de início para filtrar mensagens antigas no modo 'new_only'
+      this.listenerStartTime = new Date();
+      logger.info(`   🕒 Timestamp de início do listener: ${this.listenerStartTime.toISOString()}`);
+
       // IMPORTANTE: Marcar listener como ativo ANTES de conectar
       // Isso evita que isAuthenticated() desconecte o cliente
       telegramClient.setListenerActive(true);
-      
+
       // Conectar cliente primeiro (precisamos estar conectados para resolver usernames)
       await telegramClient.loadConfig();
       telegramClient.createClient();
-      
+
       logger.info(`🔌 Conectando ao Telegram para listener...`);
       const connected = await telegramClient.connect();
 
@@ -1686,7 +1801,7 @@ class TelegramListenerService {
       }
 
       let client = telegramClient.getClient();
-      
+
       // Verificar se cliente está realmente conectado e disponível
       if (!client) {
         logger.warn(`⚠️ Cliente não foi obtido após conexão, tentando novamente...`);
@@ -1698,7 +1813,7 @@ class TelegramListenerService {
           throw new Error('Não foi possível obter cliente após conexão');
         }
       }
-      
+
       const isConnected = client.connected || client._connected;
       if (!isConnected) {
         logger.warn(`⚠️ Cliente não está marcado como conectado, mas continuando...`);
@@ -1714,20 +1829,20 @@ class TelegramListenerService {
       } else {
         logger.info(`✅ Cliente conectado e pronto para uso`);
       }
-      
+
       // IMPORTANTE: Não desconectar o cliente - o listener precisa manter a conexão aberta
       logger.info(`📡 Mantendo conexão aberta para receber atualizações...`);
 
       // Carregar canais e resolver usernames para channel_id
       await this.loadChannels();
-      
+
       // Verificar novamente se cliente ainda está disponível antes de resolver canais
       client = telegramClient.getClient();
       if (!client) {
         telegramClient.setListenerActive(false);
         throw new Error('Cliente não disponível após carregar canais');
       }
-      
+
       await this.resolveChannelIds(client);
 
       if (this.monitoredChannels.size === 0) {
@@ -1740,14 +1855,14 @@ class TelegramListenerService {
 
       // IMPORTANTE: Garantir que estamos inscritos nos canais para receber mensagens
       logger.info(`📡 Garantindo inscrição nos canais...`);
-      
+
       // Verificar novamente se cliente ainda está disponível
       client = telegramClient.getClient();
       if (!client) {
         telegramClient.setListenerActive(false);
         throw new Error('Cliente não disponível antes de garantir inscrição');
       }
-      
+
       await this.ensureChannelSubscription(client);
 
       // Configurar handlers ANTES de marcar como running
@@ -1770,7 +1885,7 @@ class TelegramListenerService {
         }
         logger.info(`✅ Cliente obtido após reconexão`);
       }
-      
+
       // Verificar se cliente está realmente conectado antes de configurar handlers
       const finalCheck = client.connected || client._connected;
       if (!finalCheck) {
@@ -1790,9 +1905,9 @@ class TelegramListenerService {
           }
         }
       }
-      
+
       await this.setupEventHandlers(client);
-      
+
       // IMPORTANTE: Capturar mensagens antigas de todos os canais ao iniciar
       logger.info(`📥 Capturando mensagens antigas de todos os canais...`);
       await this.fetchAllHistoricalMessages(client);
@@ -1827,14 +1942,14 @@ class TelegramListenerService {
       // O gramjs deve iniciar automaticamente, mas vamos garantir
       try {
         logger.info(`📡 Verificando se loop de atualizações está ativo...`);
-        
+
         // Aguardar um pouco para o loop iniciar
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         // Verificar se o cliente tem handlers registrados
         const handlersCount = client._eventBuilders?.size || 0;
         logger.info(`   Handlers registrados: ${handlersCount}`);
-        
+
         // Verificar se o loop de atualizações está rodando
         if (client._updateLoop) {
           logger.info(`✅ Loop de atualizações detectado e ativo`);
@@ -1849,7 +1964,7 @@ class TelegramListenerService {
 
       this.isRunning = true;
       this.reconnectAttempts = 0;
-      
+
       // Listener já está marcado como ativo (foi feito antes de conectar)
       // Garantir novamente que está marcado
       telegramClient.setListenerActive(true);
@@ -1875,17 +1990,17 @@ class TelegramListenerService {
       logger.error(`Erro ao iniciar listener: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
       this.isRunning = false;
-      
+
       // Marcar listener como inativo
       telegramClient.setListenerActive(false);
-      
+
       // Desconectar se houver cliente
       try {
         await telegramClient.disconnect();
       } catch (disconnectError) {
         // Ignorar erros de desconexão
       }
-      
+
       throw error;
     }
   }
@@ -1897,7 +2012,7 @@ class TelegramListenerService {
     logger.info(`💓 Iniciando keepAlive para manter conexão ativa...`);
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
-    
+
     while (this.isRunning) {
       try {
         await new Promise(resolve => setTimeout(resolve, 60000)); // 60 segundos (aumentado)
@@ -1906,21 +2021,21 @@ class TelegramListenerService {
         try {
           const client = telegramClient.getClient();
           const isConnected = client && (client.connected || client._connected);
-          
+
           if (!isConnected) {
             consecutiveErrors++;
             logger.warn(`⚠️ Conexão perdida (erro ${consecutiveErrors}/${maxConsecutiveErrors}). Tentando reconectar...`);
-            
+
             if (consecutiveErrors >= maxConsecutiveErrors) {
               logger.error(`❌ Muitos erros consecutivos. Parando keepAlive para evitar loops infinitos.`);
               this.stop();
               break;
             }
-            
+
             await this.reconnect();
           } else {
             consecutiveErrors = 0; // Reset contador se conectado
-            
+
             // Chamar getMe() periodicamente para manter a sessão ativa
             // Isso ajuda a evitar que o loop de atualizações pare de receber mensagens
             try {
@@ -1930,13 +2045,13 @@ class TelegramListenerService {
               logger.warn(`   ⚠️ Erro ao chamar getMe(): ${getMeError.message}`);
               consecutiveErrors++;
             }
-            
+
             // Reset contador de timeouts se conexão está estável
             if (this.timeoutErrors > 0) {
               this.timeoutErrors = 0;
               logger.debug(`   ✅ Conexão estável, resetando contador de timeouts`);
             }
-            
+
             // Log adicional para debug (menos frequente)
             if (this.eventCount % 100 === 0) {
               if (client._updateLoop) {
@@ -1949,13 +2064,13 @@ class TelegramListenerService {
         } catch (clientError) {
           consecutiveErrors++;
           logger.warn(`⚠️ Erro ao verificar conexão: ${clientError.message} (erro ${consecutiveErrors}/${maxConsecutiveErrors})`);
-          
+
           if (consecutiveErrors >= maxConsecutiveErrors) {
             logger.error(`❌ Muitos erros consecutivos. Parando keepAlive.`);
             this.stop();
             break;
           }
-          
+
           // Aguardar mais tempo antes de tentar reconectar novamente
           await new Promise(resolve => setTimeout(resolve, 10000)); // 10 segundos
           await this.reconnect();
@@ -1963,18 +2078,18 @@ class TelegramListenerService {
       } catch (error) {
         consecutiveErrors++;
         logger.error(`Erro no keepAlive: ${error.message} (erro ${consecutiveErrors}/${maxConsecutiveErrors})`);
-        
+
         if (consecutiveErrors >= maxConsecutiveErrors) {
           logger.error(`❌ Muitos erros consecutivos. Parando keepAlive.`);
           this.stop();
           break;
         }
-        
+
         // Aguardar antes de continuar
         await new Promise(resolve => setTimeout(resolve, 10000));
       }
     }
-    
+
     logger.info(`💓 keepAlive finalizado`);
   }
 
@@ -2000,35 +2115,35 @@ class TelegramListenerService {
         logger.warn(`   ⚠️ Erro ao desconectar: ${disconnectError.message}`);
         // Continuar mesmo se falhar
       }
-      
+
       // Aguardar mais tempo para garantir que a conexão anterior foi fechada
       await new Promise(resolve => setTimeout(resolve, 10000)); // 10 segundos
-      
+
       // Limpar cliente antigo
       telegramClient.client = null;
-      
+
       // Recriar cliente
       await telegramClient.loadConfig();
       telegramClient.createClient();
-      
+
       // Conectar
       const connected = await telegramClient.connect();
 
       if (connected) {
         const client = telegramClient.getClient();
-        
+
         // Verificar se cliente está realmente conectado
         if (!client || (!client.connected && !client._connected)) {
           throw new Error('Cliente não está conectado após reconexão');
         }
-        
+
         // Reconfigurar handlers
         await this.setupEventHandlers(client);
-        
+
         // Recarregar canais
         await this.loadChannels();
         await this.resolveChannelIds(client);
-        
+
         this.reconnectAttempts = 0;
         logger.info('✅ Reconectado com sucesso');
       } else {
@@ -2135,7 +2250,7 @@ class TelegramListenerService {
         // Buscar apenas mensagens muito recentes (últimas 5 mensagens)
         // Isso é mais eficiente que buscar muitas mensagens
         const newMessages = await this.fetchRecentMessages(client, channelIdStr, channel, 5);
-        
+
         if (newMessages && newMessages.length > 0) {
           totalNewMessages += newMessages.length;
           logger.debug(`   ✅ ${newMessages.length} nova(s) mensagem(ns) encontrada(s) no canal ${channel.name || channelIdStr}`);
@@ -2161,7 +2276,7 @@ class TelegramListenerService {
     try {
       // Obter entidade do canal
       let entity = null;
-      
+
       // Tentar pelo channelId diretamente
       try {
         const channelIdNum = typeof channelIdStr === 'string' ? BigInt(channelIdStr) : channelIdStr;
@@ -2201,10 +2316,10 @@ class TelegramListenerService {
         // Verificar se a mensagem é mais recente que a última processada
         if (!msg.id) return false;
         const msgId = typeof msg.id === 'bigint' ? Number(msg.id) : msg.id;
-        
+
         // Se não temos last_message_id, processar todas
         if (!lastMessageId) return true;
-        
+
         // Processar apenas mensagens mais recentes
         return msgId > lastMessageId;
       });
@@ -2241,21 +2356,21 @@ class TelegramListenerService {
   async ensureChannelSubscription(client) {
     try {
       logger.info(`📡 Verificando inscrição em ${this.monitoredChannels.size} canal(is)...`);
-      
+
       for (const [channelIdStr, channel] of this.monitoredChannels.entries()) {
         try {
           const username = channel.username ? (channel.username.startsWith('@') ? channel.username : `@${channel.username}`) : null;
-          
+
           if (!username) {
             logger.warn(`   ⚠️ Canal ${channelIdStr} sem username, pulando verificação de inscrição`);
             continue;
           }
 
           logger.debug(`   Verificando inscrição em: ${username} (${channelIdStr})`);
-          
+
           // Tentar obter a entidade do canal
           const entity = await client.getEntity(username);
-          
+
           if (!entity) {
             logger.warn(`   ⚠️ Não foi possível obter entidade de ${username}`);
             continue;
@@ -2285,7 +2400,7 @@ class TelegramListenerService {
           // Continuar com próximo canal mesmo se este falhar
         }
       }
-      
+
       logger.info(`✅ Verificação de inscrição concluída`);
     } catch (error) {
       logger.error(`Erro ao garantir inscrição nos canais: ${error.message}`);
@@ -2322,7 +2437,7 @@ class TelegramListenerService {
       // Determinar limite baseado no capture_mode
       let messagesLimit = limit;
       let maxDaysBack = null;
-      
+
       if (channel.capture_mode === '1_day') {
         maxDaysBack = 1;
       } else if (channel.capture_mode === '2_days') {
@@ -2339,14 +2454,14 @@ class TelegramListenerService {
 
       // Tentar obter entidade do canal de várias formas
       let entity = null;
-      
+
       // Método 1: Tentar pelo channelId diretamente
       try {
         entity = await client.getEntity(channelId);
       } catch (idError) {
         logger.debug(`   Não foi possível obter entidade pelo ID: ${idError.message}`);
       }
-      
+
       // Método 2: Tentar pelo username se disponível
       if (!entity && channel.username) {
         try {
@@ -2357,7 +2472,7 @@ class TelegramListenerService {
           logger.debug(`   Não foi possível obter entidade pelo username: ${usernameError.message}`);
         }
       }
-      
+
       if (!entity) {
         logger.warn(`⚠️ Não foi possível obter entidade do canal ${channelId}`);
         return [];
@@ -2375,13 +2490,13 @@ class TelegramListenerService {
       if (maxDaysBack) {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - maxDaysBack);
-        
+
         filteredMessages = messages.filter(msg => {
           if (!msg.date) return false;
           const msgDate = new Date(msg.date * 1000);
           return msgDate >= cutoffDate;
         });
-        
+
         logger.info(`   ${filteredMessages.length} mensagens dentro do período de ${maxDaysBack} dia(s)`);
       }
 
@@ -2393,7 +2508,7 @@ class TelegramListenerService {
           if (!this.isMessageWithinTimeRange(msg, channel)) {
             continue;
           }
-          
+
           await this.processMessage(msg, channelId);
           processedCount++;
         } catch (processError) {
@@ -2439,22 +2554,22 @@ class TelegramListenerService {
             skippedCount++;
             continue;
           }
-          
+
           // Se o modo é 'new_only', não buscar mensagens antigas
           if (channel.capture_mode === 'new_only') {
             logger.info(`📥 Canal ${channel.name || channelId} configurado para apenas novas mensagens, pulando busca histórica...`);
             skippedCount++;
             continue;
           }
-          
+
           logger.info(`📥 Buscando mensagens antigas do canal: ${channel.name || channel.username || channelId}...`);
           logger.info(`   Modo: ${channel.capture_mode || 'new_only'}`);
           logger.info(`   Filtro plataforma: ${channel.platform_filter || 'all'}`);
-          
+
           const messages = await this.fetchHistoricalMessages(channelId, limitPerChannel);
           totalMessages += messages.length;
           successCount++;
-          
+
           // Pequeno delay entre canais para não sobrecarregar
           await new Promise(resolve => setTimeout(resolve, 2000));
         } catch (error) {
@@ -2524,5 +2639,15 @@ class TelegramListenerService {
   }
 }
 
-export default new TelegramListenerService();
+const listenerInstance = new TelegramListenerService();
+
+// Iniciar o agendador automático em background
+// Aguarda 10 segundos para garantir que o sistema de banco de dados e logger estejam prontos
+setTimeout(() => {
+  listenerInstance.startScheduler().catch(err => {
+    logger.error(`Erro ao iniciar agendador automático: ${err.message}`);
+  });
+}, 10000);
+
+export default listenerInstance;
 

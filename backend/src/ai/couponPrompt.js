@@ -15,8 +15,8 @@ class CouponPrompt {
    */
   generatePrompt(message, exampleMessages = []) {
     // Limitar tamanho da mensagem para evitar problemas
-    const truncatedMessage = message.length > 1000
-      ? message.substring(0, 1000) + '...'
+    const truncatedMessage = message.length > 2000
+      ? message.substring(0, 2000) + '...'
       : message;
 
     // Exemplos opcionais (limitar para não sobrecarregar)
@@ -24,22 +24,31 @@ class CouponPrompt {
     if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
       const validExamples = exampleMessages
         .filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
-        .slice(0, 2); // Máximo 2 exemplos
+        .slice(0, 5); // Aumentado para 5 exemplos
 
       if (validExamples.length > 0) {
         examplesSection = `
-EXEMPLOS DO CANAL:
-${validExamples.map((ex, i) => `${i + 1}. ${ex.substring(0, 200)}`).join('\n')}
+ESTUDE OS PADRÕES DE MENSAGEM DESTE CANAL:
+As mensagens abaixo são exemplos reais de como este canal envia promoções. 
+Analise como eles costumam escrever o código do cupom, onde colocam o link e como descrevem o desconto.
+
+EXEMPLOS ATUAIS:
+${validExamples.map((ex, i) => `${i + 1}. ${ex.substring(0, 600)}`).join('\n\n')}
 ---
 `;
       }
     }
 
     // Prompt SIMPLIFICADO para melhor compatibilidade
-    return `Extraia informações de cupom da mensagem abaixo.
+    return `Você é um especialista em extração de dados de e-commerce. Extraia as informações de cupom da mensagem abaixo.
 
-${examplesSection}MENSAGEM:
+${examplesSection}MENSAGEM PARA ANALISAR:
 ${truncatedMessage}
+
+REGRAS DE EXTRAÇÃO:
+- Verifique se a MENSAGEM PARA ANALISAR segue algum dos padrões dos EXEMPLOS ATUAIS acima.
+- O código do cupom (coupon_code) geralmente está em negrito, entre crases ou em destaque.
+- Se houver múltiplos códigos, tente identificar o principal.
 
 RETORNE APENAS JSON NO FORMATO:
 {
@@ -53,21 +62,7 @@ RETORNE APENAS JSON NO FORMATO:
   "confidence": 0.0 a 1.0
 }
 
-REGRAS:
-- platform: Shopee, MercadoLivre, Amazon, AliExpress, Outro ou Desconhecido
-- coupon_code: código alfanumérico 4-15 caracteres (ex: MELI20, SHOPEE50)
-- discount: percentual (20%) ou valor fixo (R$ 50)
-- confidence: 0.9+ se código claro, 0.5-0.8 se incerto, 0.3 se duvidoso
-- is_valid_coupon: true se encontrou código válido
-
-EXEMPLOS:
-Entrada: "🎟️ Cupom Shopee SAVE20 - 20% OFF acima R$50"
-Saída: {"platform":"Shopee","coupon_code":"SAVE20","discount":"20%","min_purchase":"R$ 50","usage_limit":null,"expiration_date":null,"is_valid_coupon":true,"confidence":0.95}
-
-Entrada: "Promoção incrível! Corre lá!"
-Saída: {"platform":"Desconhecido","coupon_code":null,"discount":null,"min_purchase":null,"usage_limit":null,"expiration_date":null,"is_valid_coupon":false,"confidence":0.1}
-
-IMPORTANTE: Retorne APENAS o JSON, sem explicações.`;
+IMPORTANTE: Retorne APENAS o JSON, sem textos explicativos.`;
   }
 
   /**

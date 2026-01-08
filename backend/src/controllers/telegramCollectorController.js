@@ -12,7 +12,7 @@ class TelegramCollectorController {
   async getConfig(req, res) {
     try {
       const config = await TelegramCollectorConfig.get();
-      
+
       // Não retornar valores sensíveis completos
       const safeConfig = {
         ...config,
@@ -41,55 +41,93 @@ class TelegramCollectorController {
    */
   async updateConfig(req, res) {
     try {
-      let { api_id, api_hash, phone } = req.body;
-
-      if (!api_id || !api_hash) {
-        return res.status(400).json({
-          success: false,
-          message: 'API ID e API Hash são obrigatórios'
-        });
-      }
-
-      // Limpar e validar API ID (remover espaços, garantir que é número)
-      api_id = String(api_id).trim();
-      const apiIdNum = parseInt(api_id);
-      if (isNaN(apiIdNum) || apiIdNum <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'API ID deve ser um número válido'
-        });
-      }
-
-      // Limpar API Hash (remover espaços)
-      api_hash = String(api_hash).trim();
-      if (api_hash.length < 32) {
-        return res.status(400).json({
-          success: false,
-          message: 'API Hash inválido. Deve ter pelo menos 32 caracteres'
-        });
-      }
-
-      const config = await TelegramCollectorConfig.update({
+      const {
         api_id,
         api_hash,
-        phone: phone ? String(phone).trim() : null
-      });
+        phone,
+        is_automatic_mode,
+        schedule_start,
+        schedule_end,
+        work_duration,
+        pause_duration
+      } = req.body;
+
+      const updateData = {};
+
+      if (api_id !== undefined) {
+        const apiIdStr = String(api_id).trim();
+        if (apiIdStr && !apiIdStr.includes('****')) {
+          const apiIdNum = parseInt(apiIdStr);
+          if (isNaN(apiIdNum) || apiIdNum <= 0) {
+            return res.status(400).json({
+              success: false,
+              message: 'API ID deve ser um número válido'
+            });
+          }
+          updateData.api_id = apiIdStr;
+        }
+      }
+
+      if (api_hash !== undefined) {
+        const apiHashStr = String(api_hash).trim();
+        if (apiHashStr && !apiHashStr.includes('****')) {
+          if (apiHashStr.length < 32) {
+            return res.status(400).json({
+              success: false,
+              message: 'API Hash inválido. Deve ter pelo menos 32 caracteres'
+            });
+          }
+          updateData.api_hash = apiHashStr;
+        }
+      }
+
+      if (phone !== undefined) {
+        updateData.phone = phone ? String(phone).trim() : null;
+      }
+
+      // Novos campos de agendamento
+      if (is_automatic_mode !== undefined) updateData.is_automatic_mode = !!is_automatic_mode;
+      if (schedule_start !== undefined) updateData.schedule_start = schedule_start;
+      if (schedule_end !== undefined) updateData.schedule_end = schedule_end;
+      if (work_duration !== undefined) updateData.work_duration = parseInt(work_duration);
+      if (pause_duration !== undefined) updateData.pause_duration = parseInt(pause_duration);
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Nenhum dado válido para atualizar'
+        });
+      }
+
+      const config = await TelegramCollectorConfig.update(updateData);
 
       logger.info('✅ Configuração do Telegram Collector atualizada');
-      logger.info(`   API ID: ${apiIdNum} (${api_id.length} caracteres)`);
-      logger.info(`   API Hash: ${api_hash.substring(0, 8)}**** (${api_hash.length} caracteres)`);
-      logger.info(`   Phone: ${phone ? phone : 'não configurado'}`);
+      if (updateData.api_id) logger.info(`   API ID atualizado`);
+      if (updateData.api_hash) logger.info(`   API Hash atualizado`);
+      if (updateData.is_automatic_mode !== undefined) logger.info(`   Modo Automático: ${updateData.is_automatic_mode ? 'LIGADO' : 'DESLIGADO'}`);
 
-      // Limpar cache de autenticação para forçar nova verificação
-      telegramClient.clearAuthCache();
+      // Se mudou algo na autenticação, limpar cache
+      if (updateData.api_id || updateData.api_hash) {
+        telegramClient.clearAuthCache();
+      }
+
+      // Notificar o agendador do listener sobre a mudança (se já estiver rodando)
+      const listenerService = (await import('../services/telegramCollector/listenerService.js')).default;
+      if (updateData.is_automatic_mode !== undefined) {
+        if (updateData.is_automatic_mode) {
+          await listenerService.startScheduler();
+        } else {
+          listenerService.stopScheduler();
+        }
+      }
 
       res.json({
         success: true,
         message: 'Configuração salva com sucesso',
         data: {
           ...config,
-          api_id: `${config.api_id.substring(0, 4)}****`,
-          api_hash: `${config.api_hash.substring(0, 8)}****`
+          api_id: config.api_id ? `${config.api_id.substring(0, 4)}****` : null,
+          api_hash: config.api_hash ? `${config.api_hash.substring(0, 8)}****` : null
         }
       });
     } catch (error) {
@@ -109,7 +147,7 @@ class TelegramCollectorController {
   async sendCode(req, res) {
     try {
       const { phone } = req.body;
-      
+
       if (!phone) {
         return res.status(400).json({
           success: false,
@@ -118,7 +156,7 @@ class TelegramCollectorController {
       }
 
       logger.info(`📱 Recebida requisição para enviar código para: ${phone}`);
-      
+
       try {
         const result = await authService.sendCode(phone);
 
@@ -137,10 +175,10 @@ class TelegramCollectorController {
       } catch (serviceError) {
         logger.error(`❌ Erro no serviço de autenticação: ${serviceError.message}`);
         logger.error(`   Stack: ${serviceError.stack}`);
-        
+
         // Verificar tipos específicos de erro
         const errorMessage = serviceError.message || 'Erro ao enviar código';
-        
+
         // Se for erro de timeout, dar mensagem mais específica
         if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
           return res.status(504).json({
@@ -149,7 +187,7 @@ class TelegramCollectorController {
             error: errorMessage
           });
         }
-        
+
         // Se for erro de rate limiting
         if (errorMessage.includes('rate') || errorMessage.includes('RATE') || errorMessage.includes('muitas tentativas')) {
           return res.status(429).json({
@@ -158,7 +196,7 @@ class TelegramCollectorController {
             error: errorMessage
           });
         }
-        
+
         // Outros erros
         return res.status(500).json({
           success: false,
@@ -169,7 +207,7 @@ class TelegramCollectorController {
     } catch (error) {
       logger.error(`❌ Erro inesperado ao enviar código: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
-      
+
       // Garantir que sempre retornamos uma resposta
       if (!res.headersSent) {
         return res.status(500).json({
@@ -219,7 +257,7 @@ class TelegramCollectorController {
   async getAuthStatus(req, res) {
     try {
       const status = await authService.checkAuthStatus();
-      
+
       // Adicionar informações do servidor MTProto
       const serverInfo = telegramClient.getServerInfo();
       status.server_info = serverInfo;
@@ -231,11 +269,11 @@ class TelegramCollectorController {
     } catch (error) {
       // Tratar erros de rede/502 especificamente
       const errorMessage = error.message || String(error);
-      const isNetworkError = errorMessage.includes('502') || 
-                            errorMessage.includes('Bad Gateway') ||
-                            errorMessage.includes('<html>') ||
-                            errorMessage.includes('cloudflare');
-      
+      const isNetworkError = errorMessage.includes('502') ||
+        errorMessage.includes('Bad Gateway') ||
+        errorMessage.includes('<html>') ||
+        errorMessage.includes('cloudflare');
+
       if (isNetworkError) {
         logger.warn(`⚠️ Erro de rede ao verificar status (pode ser temporário): ${errorMessage.substring(0, 100)}`);
         // Retornar status básico mesmo com erro de rede
@@ -402,7 +440,7 @@ class TelegramCollectorController {
 
       const listenerService = (await import('../services/telegramCollector/listenerService.js')).default;
       const client = telegramClient.getClient();
-      
+
       if (!client || (!client.connected && !client._connected)) {
         return res.status(400).json({
           success: false,
@@ -440,7 +478,7 @@ class TelegramCollectorController {
   async clearCurrentSession(req, res) {
     try {
       logger.info('🗑️ Limpando sessão atual do Telegram...');
-      
+
       // Parar listener primeiro se estiver rodando
       try {
         await collectorService.stop();
@@ -448,13 +486,13 @@ class TelegramCollectorController {
       } catch (stopError) {
         logger.warn(`⚠️ Erro ao parar listener: ${stopError.message}`);
       }
-      
+
       // Limpar sessão atual
       const result = await telegramClient.clearSession();
-      
+
       if (result) {
         logger.info(`✅ Sessão atual limpa com sucesso`);
-        
+
         res.json({
           success: true,
           message: 'Sessão limpa com sucesso. Reinicie o listener para criar nova conexão.',
@@ -479,12 +517,12 @@ class TelegramCollectorController {
   async clearSessions(req, res) {
     try {
       logger.info('🗑️ Limpando sessões do Telegram...');
-      
+
       // Limpar sessões usando o telegramClient
       const result = await telegramClient.clearSessions();
-      
+
       logger.info(`✅ Sessões limpas: ${result.deletedCount} arquivo(s) removido(s)`);
-      
+
       res.json({
         success: true,
         message: `Sessões limpas com sucesso. ${result.deletedCount} arquivo(s) removido(s).`,
@@ -521,7 +559,7 @@ class TelegramCollectorController {
 
       // Importar extrator
       const couponExtractor = (await import('../services/telegramCollector/couponExtractor.js')).default;
-      
+
       // Testar extração
       const couponData = couponExtractor.extractCouponInfo(
         text,
@@ -561,7 +599,7 @@ class TelegramCollectorController {
   async getMonitoredChannels(req, res) {
     try {
       const listenerService = (await import('../services/telegramCollector/listenerService.js')).default;
-      
+
       const channels = Array.from(listenerService.monitoredChannels.values()).map(ch => ({
         id: ch.id,
         name: ch.name,
