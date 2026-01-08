@@ -833,6 +833,49 @@ class Product {
       throw error;
     }
   }
+
+  /**
+   * Limpeza automática de produtos antigos
+   * - Pendentes > 24h
+   * - Aprovados/Publicados/Rejeitados > 7 dias
+   */
+  static async cleanupOldItems() {
+    try {
+      logger.info('🔄 Iniciando limpeza automática de produtos...');
+
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      // 1. Excluir pendentes com mais de 24h
+      const { count: pendingCount, error: pendingError } = await supabase
+        .from('products')
+        .delete({ count: 'exact' })
+        .eq('status', 'pending')
+        .lt('created_at', twentyFourHoursAgo);
+
+      if (pendingError) throw pendingError;
+      if (pendingCount > 0) {
+        logger.info(`✅ Removidos ${pendingCount} produtos pendentes antigos (>24h)`);
+      }
+
+      // 2. Excluir processados (approved/published/rejected) com mais de 7 dias
+      const { count: processedCount, error: processedError } = await supabase
+        .from('products')
+        .delete({ count: 'exact' })
+        .in('status', ['approved', 'published', 'rejected'])
+        .lt('updated_at', sevenDaysAgo);
+
+      if (processedError) throw processedError;
+      if (processedCount > 0) {
+        logger.info(`✅ Removidos ${processedCount} produtos antigos (>7 dias)`);
+      }
+
+      return { pendingCount, processedCount };
+    } catch (error) {
+      logger.error(`❌ Erro na limpeza automática de produtos: ${error.message}`);
+      throw error;
+    }
+  }
 }
 
 export default Product;

@@ -1,5 +1,7 @@
 import Notification from '../../models/Notification.js';
 import ClickTracking from '../../models/ClickTracking.js';
+import Product from '../../models/Product.js';
+import Coupon from '../../models/Coupon.js';
 import logger from '../../config/logger.js';
 
 export const cleanupOldData = async () => {
@@ -14,7 +16,11 @@ export const cleanupOldData = async () => {
     await ClickTracking.deleteOld(90);
     logger.info('Cliques antigos removidos');
 
-    // Aqui você pode adicionar mais limpezas conforme necessário
+    // Deletar produtos antigos (24h pendentes / 7 dias aprovados)
+    await Product.cleanupOldItems();
+
+    // Deletar cupons antigos (24h pendentes / 7 dias aprovados)
+    await Coupon.cleanupOldItems();
 
     logger.info('✅ Limpeza de dados concluída');
   } catch (error) {

@@ -188,7 +188,7 @@ class AmazonSync {
       const title = item.ItemInfo?.Title?.DisplayValue || 'Produto Amazon';
       const images = item.ItemInfo?.Images;
       const primaryImage = images?.Primary?.Large?.URL || images?.Primary?.Medium?.URL || '';
-      
+
       const offers = item.Offers?.Listings?.[0];
       const price = offers?.Price?.Amount || 0;
       const currency = offers?.Price?.Currency || 'BRL';
@@ -316,10 +316,10 @@ class AmazonSync {
       }
 
       // Verificar se a imagem é válida
-      if (!product.image_url || 
-          product.image_url.includes('data:image') || 
-          product.image_url.includes('placeholder') ||
-          !product.image_url.startsWith('http')) {
+      if (!product.image_url ||
+        product.image_url.includes('data:image') ||
+        product.image_url.includes('placeholder') ||
+        !product.image_url.startsWith('http')) {
         logger.warn(`⚠️ Produto ${product.name} sem imagem válida`);
         product.image_url = product.image_url || 'https://via.placeholder.com/300x300?text=Sem+Imagem';
       }
@@ -327,7 +327,7 @@ class AmazonSync {
       // Detectar categoria automaticamente se não tiver
       if (!product.category_id) {
         try {
-          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          const detectedCategory = await categoryDetector.detectWithAI(product.name);
           if (detectedCategory) {
             product.category_id = detectedCategory.id;
             logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);
@@ -339,7 +339,7 @@ class AmazonSync {
 
       // Preservar link original antes de gerar link de afiliado
       const originalLink = product.affiliate_link || product.link || '';
-      
+
       // Gerar link de afiliado (async)
       product.affiliate_link = await this.generateAmazonAffiliateLink(originalLink);
 

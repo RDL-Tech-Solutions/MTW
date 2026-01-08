@@ -398,14 +398,16 @@ class TemplateRenderer {
         // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
         .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi,
           '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
+        // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo
+        .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~')
         // Garantir que emojis de preço tenham espaço antes
         .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
         // Garantir que emojis de preço tenham espaço depois se não tiver quebra de linha
         .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(?!\s|\n)/g, '$1 $2')
         // Corrigir "🔗 Link:" que pode estar junto
         .replace(/(🔗|👉)\s*(Link:|link:|LINK:)\s*(https?:\/\/[^\s]+)/gi, '$1 $3')
-        // Garantir quebra de linha antes de emojis de seção
-        .replace(/([^\n])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2');
+        // Garantir quebra de linha antes de emojis de seção (apenas se não houver espaço/quebra antes)
+        .replace(/([^\n\s])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2');
 
       // Primeiro, substituir todas as variáveis (mesmo as vazias)
       // IMPORTANTE: Preservar quebras de linha durante substituição
@@ -516,12 +518,14 @@ class TemplateRenderer {
           // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
           .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi,
             '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
+          // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo
+          .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~')
           // Garantir que emojis de preço tenham espaço antes
           .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
           // Corrigir "🔗 Link:" que pode estar junto
           .replace(/(🔗|👉)\s*(Link:|link:|LINK:)\s*(https?:\/\/[^\s]+)/gi, '$1 $3')
-          // Garantir quebra de linha antes de emojis de seção importantes
-          .replace(/([^\n])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2')
+          // Garantir quebra de linha antes de emojis de seção (apenas se não houver espaço/quebra antes)
+          .replace(/([^\n\s])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2')
           // Limpar múltiplas quebras de linha
           .replace(/\n{4,}/g, '\n\n\n');
       }
@@ -766,6 +770,8 @@ class TemplateRenderer {
         // Corrigir padrão "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)" - remover "(de" e manter apenas o preço
         .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
         .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+        // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo (final absolute check)
+        .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~')
         // Remover texto "mensagem truncada" que a IA pode adicionar
         .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
         .replace(/\s*\(mensagem\s+truncada\)/gi, '')
@@ -2086,6 +2092,13 @@ class TemplateRenderer {
       };
 
       const mode = modeMap[templateType];
+
+      // Bloqueio Estratégico: O modelo Mixtral 8x7B (Gratuito) tem dificuldades com a IA ADVANCED
+      // Se ele estiver sendo usado, forçamos o modo 'default' para garantir estabilidade
+      if (settings.openrouter_model === 'mistralai/mixtral-8x7b-instruct' && mode === 'ai_advanced') {
+        logger.warn('⚠️ IA ADVANCED desabilitada para o modelo Mixtral (Gratuito) - Usando template padrão para garantir estabilidade');
+        return 'default';
+      }
 
       // Validar que o modo é um dos valores permitidos
       const validModes = ['default', 'custom', 'ai_advanced'];

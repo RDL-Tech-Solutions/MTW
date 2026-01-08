@@ -51,7 +51,7 @@ class ShopeeSync {
             try {
               // Usar itemId como identificador único
               const offerId = `product-${productOffer.itemId}`;
-              
+
               if (processedOfferIds.has(offerId)) {
                 continue; // Já processado
               }
@@ -60,7 +60,7 @@ class ShopeeSync {
               // Usar offerLink (link de afiliado) ou productLink (link original)
               const affiliateLink = productOffer.offerLink || productOffer.productLink;
               const originalLink = productOffer.productLink || productOffer.offerLink;
-              
+
               // Calcular preço médio se tiver priceMax e priceMin
               let price = 0;
               if (productOffer.priceMin && productOffer.priceMax) {
@@ -87,8 +87,8 @@ class ShopeeSync {
                 available_quantity: 0,
                 shop_id: productOffer.shopId ? String(productOffer.shopId) : null,
                 category_id: null, // Será detectado automaticamente pelo categoryDetector
-                shopee_category_id: productOffer.productCatIds && productOffer.productCatIds.length > 0 
-                  ? productOffer.productCatIds[0] 
+                shopee_category_id: productOffer.productCatIds && productOffer.productCatIds.length > 0
+                  ? productOffer.productCatIds[0]
                   : null, // ID da categoria nível 1
                 shopee_category_ids: productOffer.productCatIds || [], // Todos os níveis de categoria
                 shop_name: productOffer.shopName || null,
@@ -131,17 +131,17 @@ class ShopeeSync {
 
           if (additionalProducts.nodes && additionalProducts.nodes.length > 0) {
             logger.info(`   ✅ ${additionalProducts.nodes.length} produtos adicionais encontrados`);
-            
+
             for (const productOffer of additionalProducts.nodes) {
               try {
                 const offerId = `product-${productOffer.itemId}`;
-                
+
                 if (!processedOfferIds.has(offerId)) {
                   processedOfferIds.add(offerId);
 
                   const affiliateLink = productOffer.offerLink || productOffer.productLink;
                   const originalLink = productOffer.productLink || productOffer.offerLink;
-                  
+
                   let price = 0;
                   if (productOffer.priceMin && productOffer.priceMax) {
                     price = (parseFloat(productOffer.priceMin) + parseFloat(productOffer.priceMax)) / 2;
@@ -161,8 +161,8 @@ class ShopeeSync {
                     available_quantity: 0,
                     shop_id: productOffer.shopId ? String(productOffer.shopId) : null,
                     category_id: null,
-                    shopee_category_id: productOffer.productCatIds && productOffer.productCatIds.length > 0 
-                      ? productOffer.productCatIds[0] 
+                    shopee_category_id: productOffer.productCatIds && productOffer.productCatIds.length > 0
+                      ? productOffer.productCatIds[0]
                       : null,
                     shopee_category_ids: productOffer.productCatIds || [],
                     shop_name: productOffer.shopName || null,
@@ -187,7 +187,7 @@ class ShopeeSync {
               }
             }
           }
-          
+
           // Aguardar entre requisições para não exceder rate limit
           await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (error) {
@@ -291,7 +291,7 @@ class ShopeeSync {
       try {
         // Não passar subIds para evitar erro "invalid sub id"
         const shortLink = await shopeeService.generateShortLink(productUrl, []);
-        
+
         if (shortLink && shortLink !== productUrl) {
           logger.info(`✅ Link de afiliado Shopee gerado via API: ${shortLink.substring(0, 50)}...`);
           return shortLink;
@@ -348,10 +348,10 @@ class ShopeeSync {
       }
 
       // Verificar se a imagem é válida
-      if (!product.image_url || 
-          product.image_url.includes('data:image') || 
-          product.image_url.includes('placeholder') ||
-          !product.image_url.startsWith('http')) {
+      if (!product.image_url ||
+        product.image_url.includes('data:image') ||
+        product.image_url.includes('placeholder') ||
+        !product.image_url.startsWith('http')) {
         logger.warn(`⚠️ Produto ${product.name} sem imagem válida`);
         product.image_url = product.image_url || 'https://via.placeholder.com/300x300?text=Sem+Imagem';
       }
@@ -359,7 +359,7 @@ class ShopeeSync {
       // Detectar categoria automaticamente se não tiver
       if (!product.category_id) {
         try {
-          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          const detectedCategory = await categoryDetector.detectWithAI(product.name);
           if (detectedCategory) {
             product.category_id = detectedCategory.id;
             logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);
@@ -371,13 +371,13 @@ class ShopeeSync {
 
       // Preservar link original antes de gerar link de afiliado
       const originalLink = product.permalink || product.link || product.affiliate_link || '';
-      
+
       // Garantir que o link de afiliado está gerado
       // Se não tiver, gerar agora
       if (!product.affiliate_link || product.affiliate_link === product.permalink) {
         logger.info(`🔗 Gerando link de afiliado para: ${product.name}`);
         product.affiliate_link = await this.generateShopeeAffiliateLink(originalLink);
-        
+
         if (product.affiliate_link && product.affiliate_link !== originalLink) {
           logger.info(`   ✅ Link de afiliado gerado: ${product.affiliate_link.substring(0, 60)}...`);
         } else {
@@ -405,7 +405,7 @@ class ShopeeSync {
         status: 'pending',
         original_link: originalLink
       };
-      
+
       // Remover campos null que não devem ser salvos
       if (!productData.category_id) delete productData.category_id;
       if (!productData.coupon_id) delete productData.coupon_id;
@@ -413,7 +413,7 @@ class ShopeeSync {
 
       // Criar novo produto
       const newProduct = await Product.create(productData);
-      
+
       // Adicionar dados extras da Shopee ao objeto retornado (não salvos no banco)
       // Esses dados serão usados no template
       if (product.platform === 'shopee') {
@@ -423,7 +423,7 @@ class ShopeeSync {
         newProduct.period_start = product.period_start || null;
         newProduct.collection_id = product.collection_id || null;
       }
-      
+
       logger.info(`✅ Novo produto salvo com link de afiliado: ${product.name}`);
       logger.info(`   Link: ${newProduct.affiliate_link?.substring(0, 60)}...`);
 

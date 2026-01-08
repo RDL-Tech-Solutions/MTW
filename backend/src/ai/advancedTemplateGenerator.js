@@ -136,7 +136,7 @@ class AdvancedTemplateGenerator {
 
 [DESCRIÇÃO CRIATIVA AQUI - 2-3 linhas sobre o produto]
 
-💰 **Preço:** {current_price} {old_price}
+💰 **Preço:** {current_price} ~~{old_price}~~
 🎟️ **Com Cupom:** {final_price}
 🏷️ **{discount_percentage}% OFF!**
 
@@ -153,7 +153,7 @@ class AdvancedTemplateGenerator {
 
 [DESCRIÇÃO CRIATIVA AQUI - 2-3 linhas sobre o produto]
 
-💰 **Preço:** {current_price} {old_price}
+💰 **Preço:** {current_price} ~~{old_price}~~
 🏷️ **{discount_percentage}% OFF!**
 
 👉 {affiliate_link}
@@ -177,9 +177,10 @@ ${templateBase}
 
 2. Substitua [DESCRIÇÃO CRIATIVA AQUI...] por 2-3 linhas vendedoras sobre o produto
 3. MANTENHA todas as variáveis entre chaves: {product_name}, {current_price}, {old_price}, {discount_percentage}, {affiliate_link}${context.hasCoupon ? ', {final_price}, {coupon_code}, {coupon_discount}' : ''}
-4. Use ** para negrito e \` para código
-5. Use emojis estratégicos (4-6 no total)
-6. NÃO adicione explicações, apenas retorne a mensagem
+4. Use ** para negrito, \` para código e ~~ para riscar (strikethrough) o preço antigo
+5. MANTENHA o riscado (~~) ao redor do preço antigo se ele existir
+6. Use emojis estratégicos (4-6 no total)
+7. NÃO adicione explicações, apenas retorne a mensagem
 
 Retorne APENAS a mensagem promocional:`;
   }
@@ -202,7 +203,7 @@ ${context.hasMaxDiscount ? `- Limite: R$ ${coupon.max_discount_value}` : ''}
 ${context.isGeneral ? '- Válido para TODOS os produtos' : ''}
 
 FORMATO OBRIGATÓRIO:
-🎟️ **NOVO CUPOM!** 🎟️
+🎟️ **NOVO CUPOM!**
 
 💰 **{discount_value} OFF**
 
@@ -218,8 +219,9 @@ REGRAS:
 1. Siga o formato acima EXATAMENTE
 2. Mantenha as variáveis: {discount_value}, {coupon_code}, {min_purchase}, {affiliate_link}
 3. Use ** para negrito e \` para código do cupom
-4. NÃO mencione data de validade
-5. NÃO adicione explicações
+4. NUNCA pule a linha de desconto (💰 **{discount_value} OFF**)
+5. NÃO mencione data de validade
+6. NÃO adicione explicações
 
 Retorne APENAS a mensagem:`;
   }
@@ -323,7 +325,9 @@ Retorne APENAS a mensagem:`;
     // 5. Corrigir padrões de preço antigo mal formatados
     template = template
       .replace(/\(de\s+~~([^~]+)~~\)/gi, ' ~~$1~~')
-      .replace(/\bde\s+~~([^~]+)~~/gi, ' ~~$1~~');
+      .replace(/\bde\s+~~([^~]+)~~/gi, ' ~~$1~~')
+      // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo
+      .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~');
 
     // 6. Remover texto de truncamento
     template = template

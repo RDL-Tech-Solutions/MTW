@@ -4,10 +4,69 @@
  */
 import logger from '../config/logger.js';
 import Category from '../models/Category.js';
+import openRouterClient from '../ai/openrouterClient.js';
 
 class CategoryDetector {
   /**
-   * Detectar categoria pelo nome
+   * Detectar categoria usando IA
+   * @param {string} productName - Nome do produto
+   * @returns {Promise<Object|null>} - Categoria encontrada ou null
+   */
+  async detectWithAI(productName) {
+    if (!productName || typeof productName !== 'string') {
+      return this.detectCategory(productName);
+    }
+
+    try {
+      // 1. Buscar categorias do banco
+      const categories = await Category.findAll(true);
+      if (!categories || categories.length === 0) {
+        return this.detectCategory(productName);
+      }
+
+      // 2. Tentar detectar via IA
+      const config = await openRouterClient.getConfig();
+      if (!config.enabled) {
+        logger.debug('🤖 IA desabilitada, usando método antigo de detecção de categoria');
+        return this.detectCategory(productName);
+      }
+
+      const categoriesList = categories.map(c => `- ${c.name} (slug: ${c.slug})`).join('\n');
+
+      const prompt = `Analise o nome do produto abaixo e escolha a melhor categoria da lista fornecida.
+Responda APENAS com o "slug" da categoria escolhida, sem explicações.
+Se nenhuma categoria for minimamente parecida, responda "others".
+
+Produto: ${productName}
+
+Categorias Disponíveis:
+${categoriesList}`;
+
+      logger.info(`🤖 IA analisando categoria para: ${productName.substring(0, 50)}...`);
+
+      const response = await openRouterClient.makeRequest(prompt, { forceTextMode: true });
+      const slug = response.trim().toLowerCase().replace(/['"]/g, '');
+
+      logger.info(`🤖 IA sugeriu categoria: ${slug}`);
+
+      // 3. Buscar a categoria pelo slug retornado
+      const category = categories.find(c => c.slug === slug);
+      if (category) {
+        return category;
+      }
+
+      // Fallback para o método antigo se a IA sugerir algo inválido
+      logger.warn(`⚠️ IA sugeriu slug inválido: "${slug}". Usando método antigo.`);
+      return this.detectCategory(productName);
+
+    } catch (error) {
+      logger.error(`❌ Erro na detecção por IA: ${error.message}. Usando método antigo.`);
+      return this.detectCategory(productName);
+    }
+  }
+
+  /**
+   * Detectar categoria pelo nome (Método Antigo/Fallback)
    * @param {string} categoryName - Nome da categoria
    * @returns {Promise<Object|null>} - Categoria encontrada ou null
    */

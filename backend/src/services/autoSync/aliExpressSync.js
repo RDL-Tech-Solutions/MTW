@@ -34,18 +34,18 @@ class AliExpressSync {
     // Remover 'sign' se existir
     const paramsWithoutSign = { ...params };
     delete paramsWithoutSign.sign;
-    
+
     // Ordenar parâmetros por nome em ordem ASCII
     const sortedKeys = Object.keys(paramsWithoutSign).sort();
-    
+
     // Concatenar: key1value1key2value2...
     const concatenatedParams = sortedKeys
       .map(key => `${key}${paramsWithoutSign[key]}`)
       .join('');
-    
+
     // Prepend o método da API conforme documentação
     const stringToSign = `${method}${concatenatedParams}`;
-    
+
     // Gerar HMAC-SHA256
     return crypto
       .createHmac('sha256', appSecret)
@@ -68,7 +68,7 @@ class AliExpressSync {
       // Timestamp no formato requerido pela API AliExpress: milissegundos desde epoch
       // A API espera timestamp em milissegundos, não em formato ISO 8601
       const timestamp = Date.now();
-      
+
       const requestParams = {
         app_key: config.appKey,
         method,
@@ -84,7 +84,7 @@ class AliExpressSync {
       requestParams.sign = sign;
 
       const baseUrl = config.apiUrl || this.defaultBaseUrl;
-      
+
       // Log para debug (sem mostrar secrets)
       const debugParams = { ...requestParams };
       if (debugParams.app_key) {
@@ -92,7 +92,7 @@ class AliExpressSync {
       }
       delete debugParams.sign;
       logger.debug(`📡 Requisição AliExpress: ${method} - ${JSON.stringify(debugParams).substring(0, 200)}`);
-      
+
       const response = await axios.get(baseUrl, {
         params: requestParams,
         timeout: 30000
@@ -162,7 +162,7 @@ class AliExpressSync {
           try {
             // Buscar produtos usando aliexpress.affiliate.product.query
             logger.info(`   📡 Chamando API AliExpress para: "${term}" (${search.label})`);
-            
+
             // Preparar parâmetros base
             const requestParams = {
               keywords: term,
@@ -177,14 +177,14 @@ class AliExpressSync {
             if (search.ship_to_country) {
               requestParams.ship_to_country = search.ship_to_country;
             }
-            
+
             const response = await this.makeRequest('aliexpress.affiliate.product.query', requestParams);
 
             logger.debug(`   📦 Resposta recebida (${search.label}). Chaves: ${JSON.stringify(Object.keys(response || {})).substring(0, 200)}`);
 
             // Tentar diferentes formatos de resposta
             let products = null;
-            
+
             // Formato principal: aliexpress_affiliate_product_query_response.resp_result.result.products
             if (response && response.aliexpress_affiliate_product_query_response) {
               const respResult = response.aliexpress_affiliate_product_query_response.resp_result;
@@ -221,7 +221,7 @@ class AliExpressSync {
 
             if (products && Array.isArray(products) && products.length > 0) {
               logger.info(`   ✅ ${products.length} produtos encontrados no AliExpress (${search.label})`);
-              
+
               for (const item of products) {
                 try {
                   const product = this.parseAliExpressItem(item);
@@ -244,7 +244,7 @@ class AliExpressSync {
           } catch (error) {
             logger.error(`   ❌ Erro ao buscar "${term}" (${search.label}): ${error.message}`);
             logger.error(`   Stack: ${error.stack}`);
-            
+
             // Se for erro de API, logar mais detalhes
             if (error.response) {
               logger.error(`   Resposta HTTP: ${error.response.status} - ${JSON.stringify(error.response.data).substring(0, 500)}`);
@@ -262,7 +262,7 @@ class AliExpressSync {
       } else {
         logger.info(`✅ Total de ${allProducts.length} produtos AliExpress processados`);
       }
-      
+
       return allProducts;
     } catch (error) {
       logger.error(`❌ Erro ao buscar produtos no AliExpress: ${error.message}`);
@@ -298,7 +298,7 @@ class AliExpressSync {
 
       // A resposta pode vir em diferentes formatos conforme a documentação
       let productData = null;
-      
+
       // Formato 1: aliexpress_affiliate_productdetail_get_response.resp_result.result
       if (response && response.aliexpress_affiliate_productdetail_get_response) {
         const respResult = response.aliexpress_affiliate_productdetail_get_response.resp_result;
@@ -313,7 +313,7 @@ class AliExpressSync {
             productData = respResult.data;
           }
         }
-      } 
+      }
       // Formato 2: resposta direta
       else if (response && response.result) {
         productData = response.result;
@@ -324,7 +324,7 @@ class AliExpressSync {
       } else if (response && response.data) {
         productData = response.data;
       }
-      
+
       // Log para debug
       if (!productData) {
         logger.warn(`   ⚠️ Estrutura de resposta não reconhecida`);
@@ -357,80 +357,80 @@ class AliExpressSync {
 
       const productId = item.product_id?.toString() || item.productId?.toString() || item.productId;
       const title = item.product_title || item.title || item.productTitle || item.product_name || 'Produto AliExpress';
-      
+
       if (!productId) {
         logger.warn(`   ⚠️ Produto sem ID: ${title.substring(0, 50)}`);
         return null;
       }
-      
+
       // Preços - A API retorna preços em diferentes moedas
       // Priorizar campos "target_*" que já estão na moeda de destino (BRL)
       let salePrice = 0;
       let originalPrice = 0;
-      
+
       // Prioridade 1: target_app_sale_price (preço com desconto já em BRL)
       if (item.target_app_sale_price !== undefined && item.target_app_sale_price !== null) {
-        salePrice = typeof item.target_app_sale_price === 'string' 
+        salePrice = typeof item.target_app_sale_price === 'string'
           ? parseFloat(item.target_app_sale_price.replace(/[^\d.,]/g, '').replace(',', '.'))
           : parseFloat(item.target_app_sale_price);
       }
       // Prioridade 2: target_sale_price (preço de venda em BRL)
       else if (item.target_sale_price !== undefined && item.target_sale_price !== null) {
-        salePrice = typeof item.target_sale_price === 'string' 
+        salePrice = typeof item.target_sale_price === 'string'
           ? parseFloat(item.target_sale_price.replace(/[^\d.,]/g, '').replace(',', '.'))
           : parseFloat(item.target_sale_price);
       }
       // Prioridade 3: app_sale_price (pode estar em outra moeda, mas usar como fallback)
       else if (item.app_sale_price !== undefined && item.app_sale_price !== null) {
-        const priceValue = typeof item.app_sale_price === 'string' 
+        const priceValue = typeof item.app_sale_price === 'string'
           ? parseFloat(item.app_sale_price.replace(/[^\d.,]/g, '').replace(',', '.'))
           : parseFloat(item.app_sale_price);
         salePrice = priceValue;
       }
       // Prioridade 4: sale_price
       else if (item.sale_price !== undefined && item.sale_price !== null) {
-        const priceValue = typeof item.sale_price === 'string' 
+        const priceValue = typeof item.sale_price === 'string'
           ? parseFloat(item.sale_price.replace(/[^\d.,]/g, '').replace(',', '.'))
           : parseFloat(item.sale_price);
         salePrice = priceValue;
       }
-      
+
       // Preço original - Priorizar target_original_price (já em BRL)
       if (item.target_original_price !== undefined && item.target_original_price !== null) {
-        originalPrice = typeof item.target_original_price === 'string' 
+        originalPrice = typeof item.target_original_price === 'string'
           ? parseFloat(item.target_original_price.replace(/[^\d.,]/g, '').replace(',', '.'))
           : parseFloat(item.target_original_price);
       }
       // Fallback: original_price
       else if (item.original_price !== undefined && item.original_price !== null) {
-        const priceValue = typeof item.original_price === 'string' 
+        const priceValue = typeof item.original_price === 'string'
           ? parseFloat(item.original_price.replace(/[^\d.,]/g, '').replace(',', '.'))
           : parseFloat(item.original_price);
         originalPrice = priceValue;
       }
-      
+
       // Validar preços
       if (salePrice <= 0) {
         logger.debug(`   ⚠️ Produto sem preço válido: ${title.substring(0, 50)} (ID: ${productId})`);
         return null;
       }
-      
+
       // Imagem - Priorizar product_main_image_url (imagem principal de alta qualidade)
       // A API retorna product_main_image_url que é a melhor qualidade
-      let imageUrl = item.product_main_image_url || 
-                     item.productMainImageUrl || 
-                     item.product_main_image ||
-                     item.product_small_image_url || 
-                     item.productSmallImageUrl || 
-                     item.image_url || 
-                     item.imageUrl ||
-                     '';
-      
+      let imageUrl = item.product_main_image_url ||
+        item.productMainImageUrl ||
+        item.product_main_image ||
+        item.product_small_image_url ||
+        item.productSmallImageUrl ||
+        item.image_url ||
+        item.imageUrl ||
+        '';
+
       // Se tiver product_small_image_urls (array), pegar a primeira
       if (!imageUrl && item.product_small_image_urls && Array.isArray(item.product_small_image_urls) && item.product_small_image_urls.length > 0) {
         imageUrl = item.product_small_image_urls[0];
       }
-      
+
       // Validar URL da imagem
       if (imageUrl && (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://'))) {
         // Se a URL não começa com http, pode ser um caminho relativo - tentar construir URL completa
@@ -443,26 +443,26 @@ class AliExpressSync {
           imageUrl = '';
         }
       }
-      
+
       // Link - Priorizar product_detail_url (link original) sobre promotion_link (já tem tracking)
       // Mas manter ambos disponíveis para uso posterior
-      const originalProductUrl = item.product_detail_url || 
-                                 item.productDetailUrl || 
-                                 item.product_url ||
-                                 (productId ? `https://pt.aliexpress.com/item/${productId}.html` : '');
-      
+      const originalProductUrl = item.product_detail_url ||
+        item.productDetailUrl ||
+        item.product_url ||
+        (productId ? `https://pt.aliexpress.com/item/${productId}.html` : '');
+
       // promotion_link pode ter tracking, mas vamos usar como fallback se não tiver product_detail_url
       const promotionLink = item.promotion_link || originalProductUrl;
-      
+
       // Usar promotion_link como permalink (pode ter tracking), mas salvar original separadamente
       const productUrl = promotionLink;
-      
+
       // Verificar se tem desconto
       const hasDiscount = originalPrice > salePrice && originalPrice > 0 && salePrice > 0;
-      
+
       logger.debug(`   ✅ Produto parseado: ${title.substring(0, 40)} - R$ ${salePrice.toFixed(2)}${hasDiscount ? ` (Original: R$ ${originalPrice.toFixed(2)})` : ''}`);
       logger.debug(`   📸 Imagem extraída: ${imageUrl ? imageUrl.substring(0, 80) + '...' : 'NÃO ENCONTRADA'}`);
-      
+
       return {
         id: productId,
         title,
@@ -506,13 +506,13 @@ class AliExpressSync {
         // Usar image_url ou thumbnail do produto (já vem do parseAliExpressItem com validação)
         // Priorizar image_url se existir, senão usar thumbnail
         let imageUrl = product.image_url || product.thumbnail || '';
-        
+
         // Log para debug
         logger.debug(`   📸 Processando imagem para promoção: ${product.title}`);
         logger.debug(`      image_url: ${product.image_url || 'NÃO DEFINIDA'}`);
         logger.debug(`      thumbnail: ${product.thumbnail || 'NÃO DEFINIDA'}`);
         logger.debug(`      imageUrl final: ${imageUrl || 'NÃO DEFINIDA'}`);
-        
+
         // Validar e melhorar URL da imagem
         if (!imageUrl || imageUrl.trim().length === 0) {
           logger.warn(`   ⚠️ Produto sem imagem: ${product.title}`);
@@ -528,7 +528,7 @@ class AliExpressSync {
         // Priorizar original_url se disponível (já é o link limpo)
         // Senão, tentar extrair do permalink removendo parâmetros de tracking
         let originalLink = product.original_url || product.permalink || '';
-        
+
         // Se o link tiver parâmetros de tracking (aff_trace_key, etc), remover para ter o link original
         if (originalLink && !product.original_url) {
           try {
@@ -544,15 +544,15 @@ class AliExpressSync {
             logger.debug(`   Link não é URL válida, usando como está: ${originalLink}`);
           }
         }
-        
+
         // Se não tiver link original, tentar construir a partir do product_id
         if (!originalLink && product.id) {
           originalLink = `https://pt.aliexpress.com/item/${product.id}.html`;
         }
-        
+
         logger.debug(`   🔗 Link original capturado: ${originalLink.substring(0, 80)}...`);
         logger.debug(`   🔗 Permalink (pode ter tracking): ${product.permalink ? product.permalink.substring(0, 80) + '...' : 'NÃO DEFINIDO'}`);
-        
+
         promotions.push({
           external_id: `aliexpress-${product.id}`,
           name: product.title,
@@ -626,24 +626,24 @@ class AliExpressSync {
       // Verificar se a imagem é válida
       // IMPORTANTE: A imagem é obrigatória para envio nos bots
       // Se não tiver imagem válida, tentar buscar do raw_data
-      if (!product.image_url || 
-          product.image_url.includes('data:image') || 
-          product.image_url.includes('placeholder') ||
-          !product.image_url.startsWith('http')) {
-        
+      if (!product.image_url ||
+        product.image_url.includes('data:image') ||
+        product.image_url.includes('placeholder') ||
+        !product.image_url.startsWith('http')) {
+
         logger.warn(`⚠️ Produto ${product.name} sem imagem válida, tentando buscar do raw_data...`);
-        
+
         // Tentar buscar imagem do raw_data (dados brutos da API)
         if (product.raw_data) {
-          const rawImage = product.raw_data.product_main_image_url || 
-                          product.raw_data.productMainImageUrl ||
-                          product.raw_data.product_small_image_url ||
-                          product.raw_data.productSmallImageUrl ||
-                          (product.raw_data.product_small_image_urls && 
-                           Array.isArray(product.raw_data.product_small_image_urls) && 
-                           product.raw_data.product_small_image_urls.length > 0 
-                           ? product.raw_data.product_small_image_urls[0] : null);
-          
+          const rawImage = product.raw_data.product_main_image_url ||
+            product.raw_data.productMainImageUrl ||
+            product.raw_data.product_small_image_url ||
+            product.raw_data.productSmallImageUrl ||
+            (product.raw_data.product_small_image_urls &&
+              Array.isArray(product.raw_data.product_small_image_urls) &&
+              product.raw_data.product_small_image_urls.length > 0
+              ? product.raw_data.product_small_image_urls[0] : null);
+
           if (rawImage && rawImage.startsWith('http')) {
             product.image_url = rawImage;
             logger.info(`   ✅ Imagem recuperada do raw_data: ${rawImage.substring(0, 80)}...`);
@@ -663,7 +663,7 @@ class AliExpressSync {
       // Detectar categoria automaticamente se não tiver
       if (!product.category_id) {
         try {
-          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          const detectedCategory = await categoryDetector.detectWithAI(product.name);
           if (detectedCategory) {
             product.category_id = detectedCategory.id;
             logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);
@@ -675,26 +675,26 @@ class AliExpressSync {
 
       // Preservar link original antes de gerar link de afiliado
       // Priorizar original_link se já foi capturado, senão usar affiliate_link ou link
-      const originalLink = product.original_link || 
-                          (product.affiliate_link ? (() => {
-                            // Se affiliate_link tiver parâmetros de tracking, remover para obter original
-                            try {
-                              const url = new URL(product.affiliate_link);
-                              url.searchParams.delete('aff_trace_key');
-                              url.searchParams.delete('terminal_id');
-                              url.searchParams.delete('aff_platform');
-                              url.searchParams.delete('aff_short_key');
-                              return url.toString();
-                            } catch (e) {
-                              return product.affiliate_link;
-                            }
-                          })() : '') ||
-                          product.link || 
-                          '';
-      
+      const originalLink = product.original_link ||
+        (product.affiliate_link ? (() => {
+          // Se affiliate_link tiver parâmetros de tracking, remover para obter original
+          try {
+            const url = new URL(product.affiliate_link);
+            url.searchParams.delete('aff_trace_key');
+            url.searchParams.delete('terminal_id');
+            url.searchParams.delete('aff_platform');
+            url.searchParams.delete('aff_short_key');
+            return url.toString();
+          } catch (e) {
+            return product.affiliate_link;
+          }
+        })() : '') ||
+        product.link ||
+        '';
+
       // Gerar link de afiliado a partir do link original limpo
       product.affiliate_link = await this.generateAliExpressAffiliateLink(originalLink);
-      
+
       // Log dos links
       logger.info(`   🔗 Link original: ${originalLink || 'NÃO DEFINIDO'}`);
       logger.info(`   🔗 Link de afiliado: ${product.affiliate_link || 'NÃO DEFINIDO'}`);
@@ -706,14 +706,14 @@ class AliExpressSync {
       logger.info(`   image_url válida: ${product.image_url && product.image_url.startsWith('http') ? 'SIM' : 'NÃO'}`);
       logger.info(`   original_link: ${originalLink || 'NÃO DEFINIDO'}`);
       logger.info(`   affiliate_link: ${product.affiliate_link || 'NÃO DEFINIDO'}`);
-      
+
       // Criar novo produto com status 'pending' e original_link
       const newProduct = await Product.create({
         ...product,
         status: 'pending',
         original_link: originalLink // Salvar link original limpo
       });
-      
+
       logger.info(`✅ Novo produto salvo (pendente): ${product.name}`);
       logger.info(`   ID do produto: ${newProduct.id}`);
       logger.info(`   image_url salva: ${newProduct.image_url || 'NÃO DEFINIDA'}`);

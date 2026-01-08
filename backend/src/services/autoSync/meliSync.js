@@ -84,7 +84,7 @@ class MeliSync {
               if (status === 403) {
                 const errorCode = errorData?.code || errorData?.error;
                 const errorMessage = errorData?.message || apiError.message;
-                
+
                 logger.warn(`   ⚠️ Erro 403 na busca: ${errorMessage}`);
                 logger.warn(`   💡 Verifique: scopes, IPs permitidos, aplicação ativa, usuário validado`);
               } else if (status === 401) {
@@ -171,7 +171,7 @@ class MeliSync {
           // Imagem (Tentar múltiplos seletores e atributos lazy load)
           let thumbnail = null;
           const imgElement = container.find('img.ui-search-result-image__element').first();
-          
+
           // Tentar atributos em ordem de preferência
           const imgAttrs = ['data-src', 'data-lazy', 'data-original', 'src'];
           for (const attr of imgAttrs) {
@@ -181,7 +181,7 @@ class MeliSync {
               break;
             }
           }
-          
+
           // Fallback: tentar outros seletores de imagem
           if (!thumbnail) {
             const altImgSelectors = [
@@ -201,7 +201,7 @@ class MeliSync {
               if (thumbnail) break;
             }
           }
-          
+
           // Último fallback: converter thumbnail pequeno para tamanho maior
           if (thumbnail && thumbnail.includes('-I.jpg')) {
             thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
@@ -315,7 +315,7 @@ class MeliSync {
               'img'
             ];
             const imgAttrs = ['data-src', 'data-lazy', 'data-original', 'src'];
-            
+
             for (const sel of imgSelectors) {
               const img = container.find(sel).first();
               for (const attr of imgAttrs) {
@@ -327,7 +327,7 @@ class MeliSync {
               }
               if (thumbnail) break;
             }
-            
+
             // Converter thumbnail pequeno para tamanho maior se possível
             if (thumbnail && thumbnail.includes('-I.jpg')) {
               thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
@@ -435,29 +435,29 @@ class MeliSync {
    */
   improveImageUrl(imageUrl) {
     if (!imageUrl) return null;
-    
+
     // Se for placeholder (data:image), retornar null
     if (imageUrl.includes('data:image')) {
       return null;
     }
-    
+
     // Se não começar com http, retornar null
     if (!imageUrl.startsWith('http')) {
       return null;
     }
-    
+
     // Converter thumbnail do ML para tamanho maior
     // Padrão ML: -I.jpg (pequeno) -> -O.jpg (original/grande)
     let improvedUrl = imageUrl;
     if (improvedUrl.includes('-I.jpg')) {
       improvedUrl = improvedUrl.replace('-I.jpg', '-O.jpg');
     }
-    
+
     // Garantir HTTPS
     if (improvedUrl.startsWith('http://')) {
       improvedUrl = improvedUrl.replace('http://', 'https://');
     }
-    
+
     return improvedUrl;
   }
 
@@ -487,7 +487,7 @@ class MeliSync {
 
       // Melhorar URL da imagem
       let imageUrl = this.improveImageUrl(product.thumbnail);
-      
+
       // Se não conseguiu imagem válida, tentar buscar via API do item
       if (!imageUrl && product.id) {
         logger.warn(`⚠️ Produto ${product.id} sem imagem válida, será necessário buscar via API`);
@@ -660,15 +660,15 @@ class MeliSync {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
       });
-      
+
       const item = response.data;
-      
+
       // Prioridade: pictures[0].secure_url > pictures[0].url > thumbnail
       if (item.pictures && item.pictures.length > 0) {
         const pic = item.pictures[0];
         return pic.secure_url || pic.url || item.thumbnail;
       }
-      
+
       return item.thumbnail;
     } catch (error) {
       logger.warn(`⚠️ Não foi possível buscar imagem de alta qualidade para ${productId}`);
@@ -730,10 +730,10 @@ class MeliSync {
       }
 
       // Verificar se a imagem é válida, se não, buscar via API
-      if (!product.image_url || 
-          product.image_url.includes('data:image') || 
-          product.image_url.includes('placeholder') ||
-          !product.image_url.startsWith('http')) {
+      if (!product.image_url ||
+        product.image_url.includes('data:image') ||
+        product.image_url.includes('placeholder') ||
+        !product.image_url.startsWith('http')) {
         logger.info(`🖼️ Buscando imagem de alta qualidade para: ${product.name}`);
         const highQualityImage = await this.fetchHighQualityImage(product.external_id);
         if (highQualityImage) {
@@ -764,7 +764,7 @@ class MeliSync {
       // Detectar categoria automaticamente se não tiver
       if (!product.category_id) {
         try {
-          const detectedCategory = await categoryDetector.detectCategory(product.name);
+          const detectedCategory = await categoryDetector.detectWithAI(product.name);
           if (detectedCategory) {
             product.category_id = detectedCategory.id;
             logger.info(`📂 Categoria detectada: ${detectedCategory.name} para ${product.name}`);

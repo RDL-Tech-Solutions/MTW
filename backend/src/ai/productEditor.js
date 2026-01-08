@@ -152,7 +152,7 @@ Retorne APENAS JSON válido (sem markdown, sem comentários):
     // Detectar e aplicar categoria
     if (aiResponse.ai_detected_category) {
       try {
-        const detectedCategory = await categoryDetector.detectCategory(aiResponse.ai_detected_category);
+        const detectedCategory = await categoryDetector.detectWithAI(aiResponse.ai_detected_category);
         if (detectedCategory) {
           edited.ai_detected_category_id = detectedCategory.id;
           logger.debug(`   ✅ Categoria detectada: ${detectedCategory.name}`);

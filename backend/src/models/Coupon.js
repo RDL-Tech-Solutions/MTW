@@ -1,5 +1,6 @@
 import supabase from '../config/database.js';
 import { isCouponValid } from '../utils/helpers.js';
+import logger from '../config/logger.js';
 
 class Coupon {
   // Plataformas válidas no banco de dados
@@ -552,6 +553,49 @@ class Coupon {
 
     if (error) throw error;
     return data;
+  }
+
+  /**
+   * Limpeza automática de cupons antigos
+   * - Pendentes > 24h
+   * - Aprovados/Ativos > 7 dias
+   */
+  static async cleanupOldItems() {
+    try {
+      logger.info('🔄 Iniciando limpeza automática de cupons...');
+
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      // 1. Excluir pendentes com mais de 24h
+      const { count: pendingCount, error: pendingError } = await supabase
+        .from('coupons')
+        .delete({ count: 'exact' })
+        .eq('is_pending_approval', true)
+        .lt('created_at', twentyFourHoursAgo);
+
+      if (pendingError) throw pendingError;
+      if (pendingCount > 0) {
+        logger.info(`✅ Removidos ${pendingCount} cupons pendentes antigos (>24h)`);
+      }
+
+      // 2. Excluir processados (não pendentes) com mais de 7 dias
+      const { count: processedCount, error: processedError } = await supabase
+        .from('coupons')
+        .delete({ count: 'exact' })
+        .eq('is_pending_approval', false)
+        .lt('updated_at', sevenDaysAgo);
+
+      if (processedError) throw processedError;
+      if (processedCount > 0) {
+        logger.info(`✅ Removidos ${processedCount} cupons antigos (>7 dias)`);
+      }
+
+      return { pendingCount, processedCount };
+    } catch (error) {
+      logger.error(`❌ Erro na limpeza automática de cupons: ${error.message}`);
+      throw error;
+    }
   }
 }
 
