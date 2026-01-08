@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
-import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles, Loader2 } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles, Loader2, Activity } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -68,6 +68,13 @@ export default function Settings() {
     ai_enable_quality_scoring: true
   });
 
+  // Novos estados para teste de modelos de IA
+  const [modelStatus, setModelStatus] = useState([]);
+  const [lastTest, setLastTest] = useState(null);
+  const [testingModels, setTestingModels] = useState(false);
+  const [canTest, setCanTest] = useState(true);
+
+
   const [showSecrets, setShowSecrets] = useState({
     meli_client_secret: false,
     meli_access_token: false,
@@ -95,7 +102,53 @@ export default function Settings() {
 
   useEffect(() => {
     loadSettings();
+    loadModelStatus();
   }, []);
+
+  const loadModelStatus = async () => {
+    try {
+      const response = await api.get('/ai/models/status');
+      if (response.data.success) {
+        setModelStatus(response.data.models || []);
+        setLastTest(response.data.lastTest);
+        setCanTest(response.data.canTest);
+      }
+    } catch (error) {
+      console.warn('Erro ao carregar status dos modelos:', error);
+    }
+  };
+
+  const handleTestModels = async () => {
+    if (!settings.openrouter_api_key && !hasSavedValue.openrouter_api_key) {
+      toast({
+        title: "Erro",
+        description: "Configure a API Key do OpenRouter antes de testar.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setTestingModels(true);
+    try {
+      const response = await api.post('/ai/models/test');
+      if (response.data.success) {
+        toast({
+          title: "Teste Concluído",
+          description: "A disponibilidade dos modelos foi verificada.",
+        });
+        loadModelStatus();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro no Teste",
+        description: error.response?.data?.error || "Falha ao testar modelos.",
+        variant: "destructive"
+      });
+    } finally {
+      setTestingModels(false);
+    }
+  };
+
 
   const loadSettings = async () => {
     setLoading(true);
@@ -1250,10 +1303,104 @@ export default function Settings() {
                     </p>
                   </div>
                 </div>
+
+                {/* Área de Teste de Modelos Online/Offline */}
+                <div className="mt-8 pt-8 border-t">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Activity className="h-5 w-5 text-primary" />
+                        Status de Disponibilidade dos Modelos
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Verifique quais modelos da OpenRouter estão online no momento.
+                      </p>
+                      {lastTest && (
+                        <p className="text-xs text-primary mt-1 font-medium">
+                          Último teste realizado em: {new Date(lastTest).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleTestModels}
+                      disabled={testingModels || !canTest}
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      type="button"
+                    >
+                      {testingModels ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Testando...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          {canTest ? 'Testar Modelos Agora' : 'Teste Disponível em 24h'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {OPENROUTER_MODELS.map(model => {
+                      const statusInfo = modelStatus.find(s => s.model_id === model.id);
+                      const isOnline = statusInfo?.status === 'online';
+                      const isOffline = statusInfo?.status === 'offline';
+                      const isError = statusInfo?.status === 'error';
+
+                      return (
+                        <div
+                          key={model.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-white shadow-sm"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate">{model.name}</span>
+                              <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">{model.id}</span>
+                            </div>
+                            {statusInfo?.error_message && (isOffline || isError) && (
+                              <p className="text-[11px] text-red-500 truncate mt-0.5">
+                                ❌ {statusInfo.error_message}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-4 shrink-0">
+                            {statusInfo?.latency_ms && isOnline && (
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {statusInfo.latency_ms}ms
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5 min-w-[80px] justify-end">
+                              <div className={`h-2 w-2 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
+                                  (isOffline || isError) ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
+                                    'bg-gray-300'
+                                }`} />
+                              <span className={`text-xs font-semibold ${isOnline ? 'text-green-600' :
+                                  (isOffline || isError) ? 'text-red-600' :
+                                    'text-gray-400'
+                                }`}>
+                                {isOnline ? 'Online' : (isOffline || isError) ? 'Offline' : 'Não testado'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!canTest && (
+                    <p className="text-[11px] text-center text-gray-400 mt-4">
+                      * O teste de disponibilidade consome tokens e é limitado a uma vez por dia para evitar custos excessivos.
+                    </p>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+
 
         {/* Outros */}
         <TabsContent value="other">

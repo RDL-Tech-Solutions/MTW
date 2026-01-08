@@ -127,14 +127,17 @@ class AdvancedTemplateGenerator {
    */
   buildPromotionPrompt(product, platform, context) {
     // Template base que a IA vai preencher
+    // Para produtos COM CUPOM: current_price = preço atual, final_price = preço com cupom
+    // Para produtos SEM CUPOM: current_price = preço atual
     const templateBase = context.hasCoupon ? `
-🔥 **OFERTA ESPECIAL!** 🔥
+🔥 **OFERTA ESPECIAL + CUPOM!** 🔥
 
 📦 **{product_name}**
 
 [DESCRIÇÃO CRIATIVA AQUI - 2-3 linhas sobre o produto]
 
 💰 **Preço:** {current_price} {old_price}
+🎟️ **Com Cupom:** {final_price}
 🏷️ **{discount_percentage}% OFF!**
 
 🎟️ **CUPOM:** \`{coupon_code}\`
@@ -142,7 +145,7 @@ class AdvancedTemplateGenerator {
 
 👉 {affiliate_link}
 
-⚡ **Corra, oferta por tempo limitado!**
+⚡ **Economia dupla! Corra!**
 ` : `
 🔥 **OFERTA IMPERDÍVEL!** 🔥
 
@@ -162,8 +165,9 @@ class AdvancedTemplateGenerator {
 
 PRODUTO:
 - Nome: ${product.name || 'Produto'}
-- Preço: R$ ${product.current_price}
+- Preço atual: R$ ${product.current_price}
 ${context.hasOldPrice ? `- Preço antigo: R$ ${product.old_price}` : ''}
+${context.hasCoupon && context.finalPrice ? `- Preço com cupom: R$ ${context.finalPrice}` : ''}
 - Desconto: ${context.discount}%
 ${context.hasCoupon ? '- TEM CUPOM DE DESCONTO EXTRA!' : ''}
 
@@ -172,7 +176,7 @@ INSTRUÇÕES SIMPLES:
 ${templateBase}
 
 2. Substitua [DESCRIÇÃO CRIATIVA AQUI...] por 2-3 linhas vendedoras sobre o produto
-3. MANTENHA todas as variáveis entre chaves: {product_name}, {current_price}, {old_price}, {discount_percentage}, {affiliate_link}${context.hasCoupon ? ', {coupon_code}, {coupon_discount}' : ''}
+3. MANTENHA todas as variáveis entre chaves: {product_name}, {current_price}, {old_price}, {discount_percentage}, {affiliate_link}${context.hasCoupon ? ', {final_price}, {coupon_code}, {coupon_discount}' : ''}
 4. Use ** para negrito e \` para código
 5. Use emojis estratégicos (4-6 no total)
 6. NÃO adicione explicações, apenas retorne a mensagem

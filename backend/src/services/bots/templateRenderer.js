@@ -213,19 +213,27 @@ class TemplateRenderer {
 
           // Verificar se {product_name} está presente (como variável ou já substituído)
           const hasProductNameVar = message.includes('{product_name}');
-          const hasProductNameText = message.includes(productName);
+          const hasProductNameText = message.includes(productName) ||
+            message.toLowerCase().includes(productName.toLowerCase()) ||
+            (productName.length > 20 && message.includes(productName.substring(0, 20)));
 
           if (!hasProductNameVar && !hasProductNameText) {
             logger.warn(`⚠️ Título do produto não encontrado na mensagem da IA, adicionando...`);
-            // Adicionar título após o cabeçalho da oferta
-            const headerPattern = /(🔥|⚡|🎯).*\*\*.*\*\*.*(🔥|⚡|🎯)/;
-            if (headerPattern.test(message)) {
-              message = message.replace(headerPattern, `$&\n\n📦 **{product_name}**`);
+            // Se o Mixtral já retornou algo que se parece com um título mas não é idêntico, 
+            // vamos pesquisar por padrões comuns de títulos no início (📦, **Título**)
+            const hasInitialTitlePattern = message.trim().startsWith('📦') || message.trim().startsWith('**');
+
+            if (!hasInitialTitlePattern) {
+              const headerPattern = /(🔥|⚡|🎯).*\*\*.*\*\*.*(🔥|⚡|🎯)/;
+              if (headerPattern.test(message)) {
+                message = message.replace(headerPattern, `$&\n\n📦 **{product_name}**`);
+              } else {
+                message = `📦 **{product_name}**\n\n${message}`;
+              }
+              logger.info(`✅ Título do produto adicionado: "{product_name}"`);
             } else {
-              // Se não encontrou o padrão, adicionar no início
-              message = `📦 **{product_name}**\n\n${message}`;
+              logger.info(`✅ Detectado padrão de título inicial na IA, assumindo que product_name já está lá.`);
             }
-            logger.info(`✅ Título do produto adicionado: "{product_name}"`);
           } else {
             logger.debug(`✅ Título do produto encontrado na mensagem`);
           }
@@ -802,7 +810,7 @@ class TemplateRenderer {
       // Verificar se o template já está em HTML ou Markdown (após conversão)
       const hasHtmlTagsAfter = /<[a-z][\s\S]*>/i.test(message);
       // Detectar Markdown: **texto** ou *texto* (mas não dentro de tags HTML)
-      const hasMarkdownBold = (/\*\*[^*]+\*\*/.test(message) || /\*[^*\n<]+\*/.test(message)) && !hasHtmlTagsAfter;
+      const hasMarkdownBold = (/\*\*([\s\S]+?)\*\*/.test(message) || /\*[^*\n<]+\*/.test(message)) && !hasHtmlTagsAfter;
       // Detectar backticks que precisam ser convertidos
       const hasBackticks = /`[^`]+`/.test(message);
 
@@ -861,17 +869,10 @@ class TemplateRenderer {
           message = this.convertBoldFormatting(message, platform, parseMode);
         }
 
-        // IMPORTANTE: Verificação final - garantir que não há tags HTML não renderizadas
-        // Se ainda houver tags HTML após todas as conversões, converter para Markdown e depois para HTML
-        if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
-          logger.warn(`⚠️ Tags HTML ainda presentes após conversão, fazendo limpeza final...`);
-          message = message
-            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
-            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
-          // Converter novamente para HTML
+        // IMPORTANTE: Verificação final - garantir que não há Markdown não convertido
+        const hasMarkdownLeft = message.includes('**') || /`[^`]+`/.test(message);
+        if (hasMarkdownLeft) {
+          logger.warn(`⚠️ Markdown ainda presente após conversão, forçando processamento final...`);
           message = this.convertBoldFormatting(message, platform, parseMode);
         }
 
@@ -937,38 +938,11 @@ class TemplateRenderer {
             }
           }
 
-          // Verificar se ainda há tags HTML que precisam ser processadas
-          if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
-            // Se ainda há tags HTML, pode ser que a conversão não funcionou
-            // Tentar converter uma última vez
-            logger.warn(`⚠️ Verificação final: tags HTML ainda presentes, convertendo...`);
-            try {
-              message = message
-                .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
-                .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-                .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-                .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-                .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
-              // Converter para HTML novamente
-              message = this.convertBoldFormatting(message, platform, parseMode);
-
-              // Verificar novamente se ainda há backticks
-              const remainingBackticks = message.match(/`([^`]+)`/g);
-              if (remainingBackticks && remainingBackticks.length > 0) {
-                logger.warn(`⚠️ Ainda há ${remainingBackticks.length} backtick(s) após conversão, convertendo diretamente...`);
-                message = message.replace(/`([^`]+)`/g, (match, content) => {
-                  if (!content) return match;
-                  const escaped = content
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
-                  return `<code>${escaped}</code>`;
-                });
-              }
-            } catch (convertError) {
-              logger.error(`❌ Erro ao converter HTML final: ${convertError.message}`);
-              // Continuar mesmo com erro
-            }
+          // Verificação final de Markdown pendente
+          const hasMarkdownFinal = message.includes('**') || /`[^`]+`/.test(message);
+          if (hasMarkdownFinal) {
+            logger.warn(`⚠️ Verificação final: Markdown ainda presente, convertendo...`);
+            message = this.convertBoldFormatting(message, platform, parseMode);
           }
         } catch (finalError) {
           logger.error(`❌ Erro na verificação final de formatação: ${finalError.message}`);
@@ -1208,46 +1182,48 @@ class TemplateRenderer {
     // Log do affiliate_link que será usado
     logger.info(`🔗 Preparando variáveis de template. affiliate_link: ${product.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
 
-    // Calcular preço final (com cupom se houver)
-    let finalPrice = product.current_price;
+    // IMPORTANTE: Definir preços corretamente
+    // current_price = preço atual do produto (SEM cupom)
+    // final_price = preço COM cupom aplicado (se houver)
+    // old_price = preço antigo (antes de qualquer desconto)
+
+    const productCurrentPrice = product.current_price || 0;
     let priceWithCoupon = null;
 
     if (product.coupon_id) {
       try {
         const coupon = await Coupon.findById(product.coupon_id);
         if (coupon && coupon.is_active) {
-          const currentPrice = product.current_price || 0;
-
           if (coupon.discount_type === 'percentage') {
             // Desconto percentual
-            priceWithCoupon = currentPrice - (currentPrice * (coupon.discount_value / 100));
+            priceWithCoupon = productCurrentPrice - (productCurrentPrice * (coupon.discount_value / 100));
           } else {
             // Desconto fixo
-            priceWithCoupon = Math.max(0, currentPrice - coupon.discount_value);
+            priceWithCoupon = Math.max(0, productCurrentPrice - coupon.discount_value);
           }
 
           // Aplicar limite máximo de desconto se existir
           if (coupon.max_discount_value && coupon.max_discount_value > 0) {
-            const discountAmount = currentPrice - priceWithCoupon;
+            const discountAmount = productCurrentPrice - priceWithCoupon;
             if (discountAmount > coupon.max_discount_value) {
-              priceWithCoupon = currentPrice - coupon.max_discount_value;
+              priceWithCoupon = productCurrentPrice - coupon.max_discount_value;
             }
           }
 
-          finalPrice = priceWithCoupon;
-          logger.debug(`💰 Preço final com cupom: R$ ${currentPrice} → R$ ${finalPrice.toFixed(2)}`);
+          logger.debug(`💰 Preço atual: R$ ${productCurrentPrice} → Preço com cupom: R$ ${priceWithCoupon.toFixed(2)}`);
         }
       } catch (error) {
         logger.warn(`Erro ao calcular preço com cupom: ${error.message}`);
       }
     }
 
-    // Usar preço final (com cupom) ou preço atual
-    const priceFormatted = new Intl.NumberFormat('pt-BR', {
+    // Formatar preço atual (SEM cupom)
+    const currentPriceFormatted = new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    }).format(finalPrice);
+    }).format(productCurrentPrice);
 
+    // Formatar preço antigo (old_price) - preço ANTES de qualquer desconto
     const oldPriceFormatted = product.old_price
       ? new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -1255,15 +1231,13 @@ class TemplateRenderer {
       }).format(product.old_price)
       : null;
 
-    // Preço original (antes do cupom) se houver cupom
-    // IMPORTANTE: original_price deve ser o preço ANTES do cupom (current_price)
-    // Se não houver cupom, usar current_price como original_price
-    const originalPriceFormatted = (product.coupon_id && priceWithCoupon)
+    // Formatar preço final (COM cupom, se houver)
+    const finalPriceFormatted = priceWithCoupon
       ? new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
-      }).format(product.current_price)
-      : priceFormatted; // Se não houver cupom, usar o preço formatado atual
+      }).format(priceWithCoupon)
+      : currentPriceFormatted;
 
     const platformName = product.platform === 'mercadolivre' ? 'Mercado Livre' :
       product.platform === 'shopee' ? 'Shopee' :
@@ -1302,13 +1276,13 @@ class TemplateRenderer {
           couponSection += `💰 **Desconto:** ${discountText} OFF\n`;
 
           // Mostrar preço final com cupom se calculado
-          if (priceWithCoupon && priceWithCoupon < product.current_price) {
-            const finalPriceFormatted = new Intl.NumberFormat('pt-BR', {
+          if (priceWithCoupon && priceWithCoupon < productCurrentPrice) {
+            const priceWithCouponFormatted = new Intl.NumberFormat('pt-BR', {
               style: 'currency',
               currency: 'BRL'
             }).format(priceWithCoupon);
-            couponSection += `\n🔥 **PREÇO FINAL COM CUPOM:** ${finalPriceFormatted}\n`;
-            couponSection += `💵 ~~${priceFormatted}~~ → ${finalPriceFormatted}\n`;
+            couponSection += `\n🔥 **PREÇO FINAL COM CUPOM:** ${priceWithCouponFormatted}\n`;
+            couponSection += `💵 ~~${currentPriceFormatted}~~ → ${priceWithCouponFormatted}\n`;
           }
 
           if (coupon.min_purchase > 0) {
@@ -1399,10 +1373,17 @@ class TemplateRenderer {
       }
     }
 
+    // Log das variáveis preparadas
+    logger.info(`📊 Variáveis de preço preparadas:`);
+    logger.info(`   current_price: ${currentPriceFormatted} (preço atual SEM cupom)`);
+    logger.info(`   final_price: ${finalPriceFormatted} (preço COM cupom)`);
+    logger.info(`   old_price: ${oldPriceFormatted || 'N/A'} (preço antigo)`);
+    logger.info(`   discount_percentage: ${product.discount_percentage || 0}%`);
+
     return {
       product_name: productName,
-      current_price: priceFormatted, // Preço final (com cupom se houver)
-      original_price: originalPriceFormatted, // Preço antes do cupom (ou preço atual se não houver cupom)
+      current_price: currentPriceFormatted, // Preço atual do produto (SEM cupom)
+      original_price: oldPriceFormatted || currentPriceFormatted, // Preço antigo (old_price) ou current_price se não houver
       old_price: oldPriceFormatted ? ` ~~${oldPriceFormatted}~~` : '',
       discount_percentage: product.discount_percentage || 0,
       platform_name: platformName,
@@ -1411,12 +1392,7 @@ class TemplateRenderer {
       coupon_section: couponSection,
       shopee_offer_info: shopeeOfferInfo,
       is_shopee_offer: product.platform === 'shopee' ? 'true' : 'false',
-      final_price: (product.coupon_id && priceWithCoupon)
-        ? new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: 'BRL'
-        }).format(priceWithCoupon)
-        : priceFormatted, // Preço final COM cupom aplicado (ou preço atual se não houver cupom)
+      final_price: finalPriceFormatted, // Preço final COM cupom aplicado
       price_with_coupon: priceWithCoupon ? new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
@@ -1579,7 +1555,9 @@ class TemplateRenderer {
         // Converter todas as ocorrências de **texto**
         while (message !== previousMessage && iterations < maxIterations) {
           previousMessage = message;
-          message = message.replace(/\*\*([^*]+?)\*\*/g, (match, content) => {
+          // Regex melhorado para bold: aceita qualquer caractere inclusive asteriscos isolados
+          // Padrão: ** seguido de qualquer coisa que não seja **, seguido de **
+          message = message.replace(/\*\*([\s\S]+?)\*\*/g, (match, content) => {
             // Escapar caracteres HTML especiais dentro do conteúdo
             const escaped = content
               .replace(/&/g, '&amp;')
@@ -2143,17 +2121,21 @@ class TemplateRenderer {
 
       case 'promotion_with_coupon':
         // Template padrão para promoção COM CUPOM
-        // IMPORTANTE: Usar coupon_section para seção completa do cupom
+        // IMPORTANTE: Usar os preços corretos:
+        // - original_price: preço antigo (antes de qualquer desconto)
+        // - current_price: preço atual do produto (SEM cupom)
+        // - final_price: preço COM cupom aplicado
         logger.info(`📋 [TEMPLATE PADRÃO] Gerando template para promotion_with_coupon`);
         logger.debug(`   Variables: ${JSON.stringify({
           product_name: variables.product_name?.substring(0, 50) || 'N/A',
+          original_price: variables.original_price || 'N/A',
           current_price: variables.current_price || 'N/A',
           final_price: variables.final_price || 'N/A',
           coupon_code: variables.coupon_code || 'N/A',
           has_coupon_section: !!variables.coupon_section
         })}`);
 
-        return `🔥 **PROMOÇÃO + CUPOM!**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **Preço:** ${variables.current_price || 'R$ 0,00'}\n🎟️ **Com Cupom:** ${variables.final_price || variables.price_with_coupon || variables.current_price || 'R$ 0,00'}${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n${variables.coupon_section || `🎟️ **CUPOM:** \`${variables.coupon_code || 'N/A'}\`\n💰 **Desconto:** ${variables.coupon_discount || 'N/A'}`}\n\n🛒 ${variables.platform_name || 'Plataforma'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Economia dupla! Corre que está acabando!`;
+        return `🔥 **PROMOÇÃO + CUPOM!**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **Preço:** ${variables.current_price || 'R$ 0,00'}${variables.old_price || ''}\n🎟️ **Com Cupom:** ${variables.final_price || variables.price_with_coupon || variables.current_price || 'R$ 0,00'}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n${variables.coupon_section || `🎟️ **CUPOM:** \`${variables.coupon_code || 'N/A'}\`\n💰 **Desconto:** ${variables.coupon_discount || 'N/A'}`}\n\n🛒 ${variables.platform_name || 'Plataforma'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Economia dupla! Corre que está acabando!`;
 
       case 'new_coupon':
         // Se não tem descrição nem data de validade, é cupom capturado do Telegram

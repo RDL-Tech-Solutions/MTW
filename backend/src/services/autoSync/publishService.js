@@ -437,7 +437,7 @@ class PublishService {
 
       // 1. Editar produto com IA (antes de publicar)
       try {
-        const productEditor = (await import('../ai/productEditor.js')).default;
+        const productEditor = (await import('../../ai/productEditor.js')).default;
         const Product = (await import('../../models/Product.js')).default; // Importar Model Product
 
         if (await productEditor.isEnabled()) {
@@ -515,7 +515,7 @@ class PublishService {
 
       // 2. Calcular score de qualidade
       try {
-        const qualityScorer = (await import('../services/qualityScorer.js')).default;
+        const qualityScorer = (await import('../qualityScorer.js')).default;
         const scoreData = await qualityScorer.calculateOfferScore(product);
         product.offer_score = scoreData.score;
 
@@ -532,7 +532,7 @@ class PublishService {
 
       // 3. Detectar duplicados (antes de publicar)
       try {
-        const duplicateDetector = (await import('../services/duplicateDetector.js')).default;
+        const duplicateDetector = (await import('../duplicateDetector.js')).default;
         const duplicate = await duplicateDetector.detectDuplicate(product);
 
         if (duplicate && duplicate.canonical_id) {

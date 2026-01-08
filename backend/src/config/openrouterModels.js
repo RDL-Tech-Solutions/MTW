@@ -11,21 +11,41 @@
 export const OPENROUTER_MODELS = [
   // ========== MODELOS GRATUITOS RECOMENDADOS ==========
   {
-    id: 'google/gemini-flash-1.5',
-    name: 'Gemini Flash 1.5 ⭐ RECOMENDADO (Gratuito)',
-    provider: 'Google',
+    id: 'mistralai/mixtral-8x7b-instruct',
+    name: 'Mixtral 8x7B Instruct ⭐ RECOMENDADO (Gratuito)',
+    provider: 'Mistral AI',
     type: 'free',
-    description: 'MELHOR OPÇÃO GRATUITA - Rápido, suporta JSON, ideal para todas as funções.',
+    description: 'MELHOR OPÇÃO GRATUITA - Rápido, suporta JSON, contexto grande (32K).',
     supportsJson: true,
-    maxTokens: 8192,
+    maxTokens: 32000,
     recommended: true
   },
   {
-    id: 'mistralai/mixtral-8x7b-instruct',
-    name: 'Mixtral 8x7B Instruct (Gratuito)',
-    provider: 'Mistral AI',
+    id: 'google/gemini-flash-1.5-8b',
+    name: 'Gemini Flash 1.5 8B (Gratuito)',
+    provider: 'Google',
     type: 'free',
-    description: 'Gratuito com suporte JSON. Contexto grande (32K).',
+    description: 'Gratuito, otimizado para velocidade. Suporta JSON.',
+    supportsJson: true,
+    maxTokens: 8192
+  },
+  {
+    id: 'google/gemini-2.0-flash-exp:free',
+    name: 'Gemini 2.0 Flash Experimental (Gratuito)',
+    provider: 'Google',
+    type: 'free',
+    description: 'Versão experimental gratuita do Gemini 2.0. Suporta JSON.',
+    supportsJson: true,
+    maxTokens: 8192
+  },
+
+  // ========== MODELOS PAGOS (MELHOR QUALIDADE) ==========
+  {
+    id: 'anthropic/claude-3-haiku',
+    name: 'Claude 3 Haiku (Pago - Econômico)',
+    provider: 'Anthropic',
+    type: 'paid',
+    description: 'Rápido e econômico. Ótimo custo-benefício para templates.',
     supportsJson: true,
     maxTokens: 200000,
     pricing: 'Custo baixo, boa qualidade'
@@ -51,16 +71,6 @@ export const OPENROUTER_MODELS = [
     supportsJson: true,
     maxTokens: 128000,
     pricing: 'Custo muito baixo, excelente qualidade'
-  },
-  {
-    id: 'anthropic/claude-3-haiku',
-    name: 'Claude 3 Haiku (Pago)',
-    provider: 'Anthropic',
-    type: 'paid',
-    description: 'Rápido e econômico. Boa alternativa ao GPT-4o Mini.',
-    supportsJson: true,
-    maxTokens: 200000,
-    pricing: 'Custo baixo, boa qualidade'
   },
 
   // ========== MODELOS PREMIUM (ALTA QUALIDADE) ==========

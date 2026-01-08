@@ -15,16 +15,17 @@ import telegramChannelRoutes from './telegramChannelRoutes.js';
 import telegramCollectorRoutes from './telegramCollectorRoutes.js';
 import appSettingsRoutes from './appSettingsRoutes.js';
 import cronRoutes from './cronRoutes.js';
+import aiRoutes from './aiRoutes.js';
 
 const router = express.Router();
 
 // Health check
 router.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'API PreçoCerto está funcionando',
-    timestamp: new Date().toISOString()
-  });
+    res.json({
+        success: true,
+        message: 'API PreçoCerto está funcionando',
+        timestamp: new Date().toISOString()
+    });
 });
 
 // Rotas
@@ -44,5 +45,6 @@ router.use('/telegram-channels', telegramChannelRoutes);
 router.use('/telegram-collector', telegramCollectorRoutes);
 router.use('/settings', appSettingsRoutes);
 router.use('/cron', cronRoutes); // Rotas para Vercel Cron
+router.use('/ai', aiRoutes);
 
 export default router;

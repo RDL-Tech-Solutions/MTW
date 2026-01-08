@@ -318,12 +318,9 @@ class AppSettings {
   static async getOpenRouterConfig() {
     const settings = await this.get();
     return {
-      apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY,
-      // IMPORTANTE: gemini-flash-1.5 é o modelo GRATUITO recomendado - suporta JSON
-      model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'google/gemini-flash-1.5',
-      enabled: settings.openrouter_enabled !== undefined
-        ? settings.openrouter_enabled
-        : (process.env.OPENROUTER_ENABLED === 'true' || false)
+      apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY || null,
+      model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mixtral-8x7b-instruct',
+      enabled: settings.openrouter_enabled !== undefined ? settings.openrouter_enabled : (process.env.OPENROUTER_ENABLED === 'true' || false)
     };
   }
 

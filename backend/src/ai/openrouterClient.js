@@ -19,8 +19,10 @@ class OpenRouterClient {
   async getConfig() {
     try {
       const settings = await AppSettings.get();
-      // IMPORTANTE: gemini-flash-1.5 é o modelo GRATUITO recomendado - suporta JSON
-      let model = settings.openrouter_model || process.env.OPENROUTER_MODEL || 'google/gemini-flash-1.5';
+      // Modelo padrão fallback (GRATUITO e confiável)
+      let model = settings.openrouter_model ||
+        process.env.OPENROUTER_MODEL ||
+        'mistralai/mixtral-8x7b-instruct';
 
       // Verificar se o modelo está na lista de modelos suportados
       // Se não estiver, avisar mas permitir usar (pode ser um modelo novo ou customizado)

@@ -1,6 +1,9 @@
 -- =====================================================
--- MTW Promo Database Schema V3 (Complete)
--- Data: 2025-12-29
+-- MTW Promo Database Schema V4 (Complete)
+-- Data: 2026-01-07
+-- Mudanças V4:
+-- - Modelo de IA padrão: google/gemini-flash-1.5 (gratuito)
+-- - Adicionada coluna no_coupons em bot_channels
 -- =====================================================
 
 -- Habilitar extensões necessárias
@@ -42,7 +45,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     
     -- OpenRouter / AI
     openrouter_api_key VARCHAR(255),
-    openrouter_model VARCHAR(100) DEFAULT 'openai/gpt-4o-mini',
+    openrouter_model VARCHAR(100) DEFAULT 'mistralai/mixtral-8x7b-instruct',
     openrouter_enabled BOOLEAN DEFAULT FALSE,
     
     -- AI Settings
@@ -199,6 +202,7 @@ CREATE TABLE IF NOT EXISTS bot_channels (
   name VARCHAR(255),
   is_active BOOLEAN DEFAULT TRUE,
   only_coupons BOOLEAN DEFAULT FALSE,
+  no_coupons BOOLEAN DEFAULT FALSE,
   
   -- Segmentação
   category_filter JSONB DEFAULT '[]'::jsonb,
@@ -219,6 +223,7 @@ CREATE TABLE IF NOT EXISTS bot_channels (
 );
 
 CREATE INDEX IF NOT EXISTS idx_bot_channels_only_coupons ON bot_channels(only_coupons) WHERE only_coupons = TRUE;
+CREATE INDEX IF NOT EXISTS idx_bot_channels_no_coupons ON bot_channels(no_coupons) WHERE no_coupons = TRUE;
 
 CREATE TABLE IF NOT EXISTS bot_message_templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

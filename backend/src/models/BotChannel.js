@@ -3,21 +3,23 @@ import supabase from '../config/database.js';
 class BotChannel {
   // Criar novo canal de bot
   static async create(channelData) {
-    const { 
-      platform, 
-      identifier, 
-      name, 
+    const {
+      platform,
+      identifier,
+      name,
       is_active = true,
       only_coupons = false,
+      no_coupons = false,
       category_filter = null
     } = channelData;
 
-    const insertData = { 
-      platform, 
-      identifier, 
-      name, 
+    const insertData = {
+      platform,
+      identifier,
+      name,
       is_active,
-      only_coupons: only_coupons || false
+      only_coupons: only_coupons || false,
+      no_coupons: no_coupons || false
     };
 
     // Adicionar category_filter apenas se fornecido

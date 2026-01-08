@@ -36,7 +36,7 @@ class BotController {
   // Criar novo canal de bot
   async createChannel(req, res) {
     try {
-      const { platform, identifier, name, is_active, only_coupons, category_filter } = req.body;
+      const { platform, identifier, name, is_active, only_coupons, no_coupons, category_filter } = req.body;
 
       // Validar dados
       if (!platform || !identifier) {
@@ -97,6 +97,7 @@ class BotController {
         name,
         is_active,
         only_coupons: only_coupons || false,
+        no_coupons: no_coupons || false,
         category_filter: category_filter || null
       });
 

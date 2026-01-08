@@ -153,6 +153,13 @@ class NotificationDispatcher {
         continue;
       }
 
+      // 0.2. Filtro de no_coupons (NOVO)
+      // se o canal não aceita cupons, não enviar cupons
+      if (channel.no_coupons === true && (eventType === 'coupon_new' || eventType === 'coupon_expired')) {
+        logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando cupom`);
+        continue;
+      }
+
       // 1. Filtro de categoria (produtos E cupons)
       // IMPORTANTE: Cupons também podem ter categoria!
       if (data.category_id) {
@@ -471,11 +478,11 @@ class NotificationDispatcher {
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
       // IMPORTANTE: Garantir que category_id está presente nos dados para filtro
       const channels = data
-        ? await this.filterChannelsBySegmentation(allChannels, eventType, { 
-            ...data, 
-            id: data.product_id || data.coupon_id || data.id,
-            category_id: data.category_id || null // Garantir que category_id está presente
-          })
+        ? await this.filterChannelsBySegmentation(allChannels, eventType, {
+          ...data,
+          id: data.product_id || data.coupon_id || data.id,
+          category_id: data.category_id || null // Garantir que category_id está presente
+        })
         : allChannels;
 
       if (channels.length === 0) {
@@ -611,11 +618,11 @@ class NotificationDispatcher {
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
       // IMPORTANTE: Garantir que category_id está presente nos dados para filtro
       const channels = data
-        ? await this.filterChannelsBySegmentation(allChannels, eventType, { 
-            ...data, 
-            id: data.product_id || data.coupon_id || data.id,
-            category_id: data.category_id || null // Garantir que category_id está presente
-          })
+        ? await this.filterChannelsBySegmentation(allChannels, eventType, {
+          ...data,
+          id: data.product_id || data.coupon_id || data.id,
+          category_id: data.category_id || null // Garantir que category_id está presente
+        })
         : allChannels;
 
       if (channels.length === 0) {
@@ -907,10 +914,10 @@ class NotificationDispatcher {
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
       const whatsappChannels = data && data.category_id
         ? await this.filterChannelsBySegmentation(allWhatsappChannels, eventType, {
-            ...data,
-            id: data.product_id || data.coupon_id || data.id,
-            category_id: data.category_id || null
-          })
+          ...data,
+          id: data.product_id || data.coupon_id || data.id,
+          category_id: data.category_id || null
+        })
         : allWhatsappChannels;
 
       if (whatsappChannels.length === 0) {

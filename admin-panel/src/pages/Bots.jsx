@@ -83,6 +83,7 @@ export default function Bots() {
     channel_name: '',
     is_active: true,
     only_coupons: false,
+    no_coupons: false,
     category_filter: []
   });
 
@@ -286,6 +287,7 @@ export default function Bots() {
         name: channelForm.channel_name,
         is_active: channelForm.is_active,
         only_coupons: channelForm.only_coupons || false,
+        no_coupons: channelForm.no_coupons || false,
         category_filter: channelForm.category_filter && channelForm.category_filter.length > 0
           ? channelForm.category_filter
           : null
@@ -301,7 +303,7 @@ export default function Bots() {
 
       setIsDialogOpen(false);
       setEditingChannel(null);
-      setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
+      setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, no_coupons: false, category_filter: [] });
       fetchChannels();
     } catch (error) {
       toast({
@@ -351,6 +353,7 @@ export default function Bots() {
       channel_name: channel.name || channel.channel_name,
       is_active: channel.is_active,
       only_coupons: channel.only_coupons || false,
+      no_coupons: channel.no_coupons || false,
       category_filter: categoryFilter
     });
     setIsDialogOpen(true);
@@ -922,7 +925,7 @@ export default function Bots() {
                           type="checkbox"
                           id="only_coupons"
                           checked={channelForm.only_coupons}
-                          onChange={(e) => setChannelForm({ ...channelForm, only_coupons: e.target.checked, category_filter: [] })}
+                          onChange={(e) => setChannelForm({ ...channelForm, only_coupons: e.target.checked, no_coupons: false, category_filter: [] })}
                           className="h-4 w-4 rounded"
                         />
                         <Label htmlFor="only_coupons" className="cursor-pointer">
@@ -931,6 +934,23 @@ export default function Bots() {
                       </div>
                       <p className="text-xs text-muted-foreground ml-6">
                         Se marcado, este canal só receberá notificações de cupons, nunca de produtos
+                      </p>
+
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="no_coupons"
+                          checked={channelForm.no_coupons}
+                          disabled={channelForm.only_coupons}
+                          onChange={(e) => setChannelForm({ ...channelForm, no_coupons: e.target.checked, only_coupons: false })}
+                          className="h-4 w-4 rounded disabled:opacity-50"
+                        />
+                        <Label htmlFor="no_coupons" className={`cursor-pointer ${channelForm.only_coupons ? 'opacity-50' : ''}`}>
+                          Não recebe cupons (apenas produtos)
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground ml-6">
+                        Se marcado, este canal só receberá notificações de produtos, nunca de cupons
                       </p>
 
                       {!channelForm.only_coupons && (
