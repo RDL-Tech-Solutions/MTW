@@ -1,140 +1,49 @@
 /**
- * Lista completa de modelos disponíveis no OpenRouter
- * Sincronizado com backend/src/config/openrouterModels.js
+ * Lista de modelos disponíveis no OpenRouter
+ * SINCRONIZADO com backend/src/config/openrouterModels.js
+ * 
+ * IMPORTANTE: Modelos com supportsJson: true são REQUERIDOS para análise de cupom
  */
 
 export const OPENROUTER_MODELS = [
-  // ========== MODELOS GRATUITOS ==========
+  // ========== MODELOS GRATUITOS RECOMENDADOS ==========
   {
-    id: 'mistralai/mistral-7b-instruct',
-    name: 'Mistral 7B Instruct',
-    provider: 'Mistral AI',
+    id: 'google/gemini-flash-1.5',
+    name: 'Gemini Flash 1.5 ⭐ RECOMENDADO (Gratuito)',
+    provider: 'Google',
     type: 'free',
-    description: 'Modelo leve e rápido, ideal para tarefas básicas',
-    supportsJson: false,
-    maxTokens: 8192
+    description: 'MELHOR OPÇÃO GRATUITA - Rápido, suporta JSON, ideal para todas as funções.',
+    supportsJson: true,
+    maxTokens: 8192,
+    recommended: true
   },
   {
     id: 'mistralai/mixtral-8x7b-instruct',
-    name: 'Mixtral 8x7B Instruct',
+    name: 'Mixtral 8x7B Instruct (Gratuito)',
     provider: 'Mistral AI',
     type: 'free',
-    description: 'Modelo inteligente e rápido, melhor qualidade que Mistral 7B',
+    description: 'Gratuito com suporte JSON. Contexto grande (32K).',
     supportsJson: true,
-    maxTokens: 32768
-  },
-  {
-    id: 'meta-llama/llama-3-8b-instruct',
-    name: 'Llama 3 8B Instruct',
-    provider: 'Meta',
-    type: 'free',
-    description: 'Modelo pequeno e poderoso da Meta',
-    supportsJson: false,
-    maxTokens: 8192
-  },
-  {
-    id: 'openchat/openchat-3.5-0106',
-    name: 'OpenChat 3.5',
-    provider: 'OpenChat',
-    type: 'free',
-    description: 'Modelo de chat otimizado, útil e rápido',
-    supportsJson: false,
-    maxTokens: 8192
-  },
-  {
-    id: 'nousresearch/nous-capybara-7b',
-    name: 'Nous Capybara 7B',
-    provider: 'Nous Research',
-    type: 'free',
-    description: 'Modelo conversacional com boa memória',
-    supportsJson: false,
-    maxTokens: 8192
-  },
-  {
-    id: 'gryphe/mythomax-l2-13b',
-    name: 'MythoMax L2 13B',
-    provider: 'Gryphe',
-    type: 'free',
-    description: 'Equilibrado entre criatividade e lógica',
-    supportsJson: false,
-    maxTokens: 8192
-  },
-  {
-    id: 'google/gemini-flash-1.5',
-    name: 'Gemini Flash 1.5',
-    provider: 'Google',
-    type: 'free',
-    description: 'Modelo rápido e eficiente do Google',
-    supportsJson: true,
-    maxTokens: 8192
-  },
-  {
-    id: 'qwen/qwen-2.5-7b-instruct',
-    name: 'Qwen 2.5 7B Instruct',
-    provider: 'Qwen',
-    type: 'free',
-    description: 'Modelo de instrução eficiente',
-    supportsJson: false,
     maxTokens: 32768
   },
 
-  // ========== MODELOS PAGOS (POPULARES) ==========
+  // ========== MODELOS PAGOS (MELHOR QUALIDADE) ==========
   {
-    id: 'openai/gpt-4o',
-    name: 'GPT-4o',
+    id: 'openai/gpt-4o-mini',
+    name: 'GPT-4o Mini (Pago)',
     provider: 'OpenAI',
     type: 'paid',
-    description: 'Modelo mais avançado da OpenAI, melhor precisão',
-    supportsJson: true,
-    maxTokens: 16384,
-    pricing: 'Alto custo, melhor qualidade'
-  },
-  {
-    id: 'openai/gpt-4-turbo',
-    name: 'GPT-4 Turbo',
-    provider: 'OpenAI',
-    type: 'paid',
-    description: 'Versão turbo do GPT-4, mais rápido',
+    description: 'Melhor custo-benefício pago. Rápido, inteligente, econômico.',
     supportsJson: true,
     maxTokens: 128000,
-    pricing: 'Alto custo, melhor qualidade'
-  },
-  {
-    id: 'openai/gpt-3.5-turbo',
-    name: 'GPT-3.5 Turbo',
-    provider: 'OpenAI',
-    type: 'paid',
-    description: 'Modelo rápido e econômico da OpenAI',
-    supportsJson: true,
-    maxTokens: 16384,
-    pricing: 'Custo médio, boa qualidade'
-  },
-  {
-    id: 'anthropic/claude-3-opus',
-    name: 'Claude 3 Opus',
-    provider: 'Anthropic',
-    type: 'paid',
-    description: 'Contexto longo, raciocínio poderoso',
-    supportsJson: true,
-    maxTokens: 200000,
-    pricing: 'Alto custo, excelente qualidade'
-  },
-  {
-    id: 'anthropic/claude-3-sonnet',
-    name: 'Claude 3 Sonnet',
-    provider: 'Anthropic',
-    type: 'paid',
-    description: 'Versão balanceada do Claude 3',
-    supportsJson: true,
-    maxTokens: 200000,
-    pricing: 'Custo médio-alto, ótima qualidade'
+    pricing: 'Custo muito baixo, excelente qualidade'
   },
   {
     id: 'anthropic/claude-3-haiku',
-    name: 'Claude 3 Haiku',
+    name: 'Claude 3 Haiku (Pago)',
     provider: 'Anthropic',
     type: 'paid',
-    description: 'Versão rápida e econômica do Claude 3',
+    description: 'Rápido e econômico. Boa alternativa ao GPT-4o Mini.',
     supportsJson: true,
     maxTokens: 200000,
     pricing: 'Custo baixo, boa qualidade'
@@ -144,47 +53,61 @@ export const OPENROUTER_MODELS = [
     name: 'Claude 3.5 Sonnet',
     provider: 'Anthropic',
     type: 'paid',
-    description: 'Versão mais recente e melhorada do Claude',
+    description: 'Excelente para templates criativos e análise profunda.',
     supportsJson: true,
     maxTokens: 200000,
     pricing: 'Custo médio-alto, excelente qualidade'
   },
+
+  // ========== MODELOS PREMIUM (ALTA QUALIDADE) ==========
   {
-    id: 'google/gemini-pro',
-    name: 'Gemini Pro',
-    provider: 'Google',
+    id: 'openai/gpt-4o',
+    name: 'GPT-4o',
+    provider: 'OpenAI',
     type: 'paid',
-    description: 'Desempenho razoável do Google',
+    description: 'Modelo mais avançado da OpenAI. Melhor precisão.',
     supportsJson: true,
-    maxTokens: 32768,
-    pricing: 'Custo médio'
+    maxTokens: 16384,
+    pricing: 'Alto custo, melhor qualidade'
   },
   {
-    id: 'google/gemini-pro-1.5',
-    name: 'Gemini Pro 1.5',
-    provider: 'Google',
+    id: 'openai/gpt-4-turbo',
+    name: 'GPT-4 Turbo',
+    provider: 'OpenAI',
     type: 'paid',
-    description: 'Versão melhorada do Gemini Pro',
-    supportsJson: true,
-    maxTokens: 1000000,
-    pricing: 'Custo médio'
-  },
-  {
-    id: 'cohere/command-r+',
-    name: 'Command R+',
-    provider: 'Cohere',
-    type: 'paid',
-    description: 'Ideal para embedding e aplicações RAG',
+    description: 'Contexto grande (128K), versão turbo do GPT-4.',
     supportsJson: true,
     maxTokens: 128000,
-    pricing: 'Custo médio'
+    pricing: 'Alto custo, melhor qualidade'
+  },
+  {
+    id: 'anthropic/claude-3-opus',
+    name: 'Claude 3 Opus',
+    provider: 'Anthropic',
+    type: 'paid',
+    description: 'Máximo poder de raciocínio. Contexto longo.',
+    supportsJson: true,
+    maxTokens: 200000,
+    pricing: 'Alto custo, excelente qualidade'
+  },
+
+  // ========== MODELOS ECONÔMICOS ==========
+  {
+    id: 'openai/gpt-3.5-turbo',
+    name: 'GPT-3.5 Turbo',
+    provider: 'OpenAI',
+    type: 'paid',
+    description: 'Modelo rápido e econômico. Bom para tarefas simples.',
+    supportsJson: true,
+    maxTokens: 16384,
+    pricing: 'Custo médio, boa qualidade'
   },
   {
     id: 'mistralai/mistral-large',
     name: 'Mistral Large',
     provider: 'Mistral AI',
     type: 'paid',
-    description: 'Modelo premium da Mistral AI',
+    description: 'Modelo premium da Mistral. Bom custo-benefício.',
     supportsJson: true,
     maxTokens: 32000,
     pricing: 'Custo médio-alto'
@@ -194,9 +117,21 @@ export const OPENROUTER_MODELS = [
     name: 'Llama 3 70B Instruct',
     provider: 'Meta',
     type: 'paid',
-    description: 'Modelo grande e poderoso da Meta',
+    description: 'Modelo grande e poderoso da Meta. Open source.',
     supportsJson: true,
     maxTokens: 8192,
+    pricing: 'Custo médio'
+  },
+
+  // ========== MODELOS GOOGLE ==========
+  {
+    id: 'google/gemini-pro-1.5',
+    name: 'Gemini Pro 1.5',
+    provider: 'Google',
+    type: 'paid',
+    description: 'Contexto muito grande (1M tokens). Bom para análises longas.',
+    supportsJson: true,
+    maxTokens: 1000000,
     pricing: 'Custo médio'
   }
 ];
@@ -216,12 +151,31 @@ export function getModelById(id) {
 }
 
 /**
- * Obter modelos que suportam JSON
+ * Obter modelos que suportam JSON (REQUERIDO para análise de cupom)
  */
 export function getModelsWithJsonSupport() {
   return OPENROUTER_MODELS.filter(model => model.supportsJson === true);
 }
 
+/**
+ * Obter modelos recomendados para MTW Promo
+ */
+export function getRecommendedModels() {
+  return OPENROUTER_MODELS.filter(model =>
+    model.supportsJson === true && (
+      model.recommended === true ||
+      model.id.includes('gpt-4o') ||
+      model.id.includes('claude') ||
+      model.id.includes('gemini')
+    )
+  );
+}
 
-
-
+/**
+ * Obter modelo padrão recomendado (GRATUITO)
+ */
+export function getDefaultModel() {
+  return OPENROUTER_MODELS.find(model => model.recommended === true) ||
+    OPENROUTER_MODELS.find(model => model.id === 'google/gemini-flash-1.5') ||
+    OPENROUTER_MODELS[0];
+}

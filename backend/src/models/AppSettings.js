@@ -319,7 +319,8 @@ class AppSettings {
     const settings = await this.get();
     return {
       apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY,
-      model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct',
+      // IMPORTANTE: gemini-flash-1.5 é o modelo GRATUITO recomendado - suporta JSON
+      model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'google/gemini-flash-1.5',
       enabled: settings.openrouter_enabled !== undefined
         ? settings.openrouter_enabled
         : (process.env.OPENROUTER_ENABLED === 'true' || false)

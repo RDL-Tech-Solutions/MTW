@@ -2,6 +2,40 @@ import supabase from '../config/database.js';
 import { isCouponValid } from '../utils/helpers.js';
 
 class Coupon {
+  // Plataformas válidas no banco de dados
+  static VALID_PLATFORMS = ['shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'];
+
+  // Normalizar plataforma para valor válido
+  static normalizePlatform(platform) {
+    if (!platform) return 'general';
+    const normalized = platform.toLowerCase().trim();
+
+    // Mapeamento de plataformas conhecidas para valores válidos
+    const platformMap = {
+      'shopee': 'shopee',
+      'mercadolivre': 'mercadolivre',
+      'mercado livre': 'mercadolivre',
+      'meli': 'mercadolivre',
+      'amazon': 'amazon',
+      'aliexpress': 'aliexpress',
+      'ali express': 'aliexpress',
+      'general': 'general'
+    };
+
+    // Verificar mapeamento direto
+    if (platformMap[normalized]) {
+      return platformMap[normalized];
+    }
+
+    // Verificar se está na lista de válidas
+    if (Coupon.VALID_PLATFORMS.includes(normalized)) {
+      return normalized;
+    }
+
+    // Se não for válida, usar 'general'
+    return 'general';
+  }
+
   // Criar novo cupom
   static async create(couponData) {
     const {
@@ -35,10 +69,13 @@ class Coupon {
       ai_edit_history = null
     } = couponData;
 
+    // Normalizar plataforma para valor válido
+    const normalizedPlatform = Coupon.normalizePlatform(platform);
+
     // Preparar dados para inserção
     const insertData = {
       code,
-      platform,
+      platform: normalizedPlatform,
       discount_type,
       discount_value,
       min_purchase: min_purchase || 0,
@@ -106,26 +143,26 @@ class Coupon {
   // Buscar todos os cupons com o mesmo código (para verificar duplicatas em múltiplos canais)
   static async findAllByCode(code, options = {}) {
     const { excludeId = null, onlyPending = false, onlyFromTelegram = false } = options;
-    
+
     let query = supabase
       .from('coupons')
       .select('*')
       .eq('code', code.toUpperCase());
-    
+
     if (excludeId) {
       query = query.neq('id', excludeId);
     }
-    
+
     if (onlyPending) {
       query = query.eq('is_pending_approval', true);
     }
-    
+
     if (onlyFromTelegram) {
       query = query.eq('capture_source', 'telegram');
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) throw error;
     return data || [];
   }
@@ -222,7 +259,7 @@ class Coupon {
     let query = supabase
       .from('coupons')
       .select('*', { count: 'exact' });
-    
+
     // Se excludePending for true, excluir cupons pendentes automaticamente
     // Isso garante que na aba "Todos os Cupons" só apareçam cupons aprovados
     if (excludePending && (is_pending_approval === undefined || is_pending_approval === null || is_pending_approval === '')) {
@@ -242,7 +279,7 @@ class Coupon {
     };
 
     if (platform && platform !== '') query = query.eq('platform', platform);
-    
+
     // Aplicar filtro de is_active
     // Se excludePending for true e is_active não for fornecido, aplicar is_active: true por padrão
     if (excludePending && is_active === undefined) {
@@ -251,15 +288,15 @@ class Coupon {
       const normalizedIsActive = normalizeBoolean(is_active);
       if (normalizedIsActive !== undefined) query = query.eq('is_active', normalizedIsActive);
     }
-    
+
     const normalizedIsVip = normalizeBoolean(is_vip);
     if (normalizedIsVip !== undefined) query = query.eq('is_vip', normalizedIsVip);
-    
+
     const normalizedAutoCaptured = normalizeBoolean(auto_captured);
     if (normalizedAutoCaptured !== undefined) query = query.eq('auto_captured', normalizedAutoCaptured);
-    
+
     if (verification_status && verification_status !== '') query = query.eq('verification_status', verification_status);
-    
+
     // Sempre aplicar filtro de is_pending_approval se fornecido
     // Se excludePending for true, não aplicar este filtro (já foi aplicado acima como false)
     // Se for true (boolean), aplicar diretamente
@@ -270,9 +307,9 @@ class Coupon {
         query = query.eq('is_pending_approval', normalizedIsPendingApproval);
       }
     }
-    
+
     if (discount_type && discount_type !== '') query = query.eq('discount_type', discount_type);
-    
+
     const normalizedIsGeneral = normalizeBoolean(is_general);
     if (normalizedIsGeneral !== undefined) query = query.eq('is_general', normalizedIsGeneral);
     if (origem) query = query.eq('origem', origem);

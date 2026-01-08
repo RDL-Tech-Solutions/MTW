@@ -33,10 +33,10 @@ class CouponExtractor {
 
     // Regex para OFF (melhorado)
     this.OFF_PATTERN = /(\d+)\s*(?:%|por\s*cento)?\s*(?:OFF|off|de\s*desconto)/i;
-    
+
     // Regex para limite de desconto (máx R$200, limite R$200 OFF)
     this.MAX_DISCOUNT_PATTERN = /(?:máx|max|limite|lim)\s*(?:de\s*)?R\$\s*(\d+(?:[.,]\d{2})?)|(?:máx|max|limite|lim)\s*R\$\s*(\d+)\s*OFF/i;
-    
+
     // Regex para compra mínima (melhorado)
     this.MIN_PURCHASE_PATTERN = /(?:em|acima\s*de|acima|a\s*partir\s*de|mínimo|min|compra\s*mínima|valor\s*mínimo)\s*R\$\s*(\d+(?:[.,]\d{2})?)|R\$\s*(\d+(?:[.,]\d{2})?)\s*(?:em|acima|mínimo)/i;
   }
@@ -62,13 +62,13 @@ class CouponExtractor {
 
     // Filtrar códigos muito comuns que não são cupons
     const invalidCodes = new Set([
-      'HTTP', 'HTTPS', 'WWW', 'COM', 'BR', 'ORG', 'NET', 'HTML', 'JPEG', 'PNG', 
+      'HTTP', 'HTTPS', 'WWW', 'COM', 'BR', 'ORG', 'NET', 'HTML', 'JPEG', 'PNG',
       'AMZN', 'AMAZON', 'SHOPEE', 'MELI', 'MERCADO', 'LIVRE', 'ALIEXPRESS',
       'MAGAZINE', 'LUIZA', 'AMERICANAS', 'SUBMARINO', 'CASAS', 'BAHIA',
       'FACEBOOK', 'INSTAGRAM', 'TWITTER', 'YOUTUBE', 'TIKTOK', 'WHATSAPP',
       'TELEGRAM', 'DISCORD', 'SLACK', 'GMAIL', 'OUTLOOK', 'YAHOO'
     ]);
-    
+
     // MÉTODO 1 (PRIORIDADE MÁXIMA): Código dentro de backticks `codigo`
     const backtickMatches = [...text.matchAll(this.COUPON_CODE_IN_BACKTICKS)];
     for (const match of backtickMatches) {
@@ -78,7 +78,7 @@ class CouponExtractor {
         return code;
       }
     }
-    
+
     // MÉTODO 2: Código após ":" ou "Código:" (formato comum: "🎟 18% OFF: MELICUPOM" ou "Código: MELICUPOM")
     const colonPatterns = [
       /[:：]\s*([A-Z0-9]{4,15})\b/g,
@@ -86,7 +86,7 @@ class CouponExtractor {
       /code[:\s]+([A-Z0-9]{4,15})\b/gi,
       /cupom[:\s]+([A-Z0-9]{4,15})\b/gi
     ];
-    
+
     for (const pattern of colonPatterns) {
       const colonMatches = [...text.matchAll(pattern)];
       for (const match of colonMatches) {
@@ -97,7 +97,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     // MÉTODO 3: Código após emoji 🎟 (melhorado)
     const emojiPatterns = [
       /🎟[️]?\s*([A-Z0-9]{4,15})\b/g,
@@ -105,7 +105,7 @@ class CouponExtractor {
       /💰[️]?\s*([A-Z0-9]{4,15})\b/g,
       /💳[️]?\s*([A-Z0-9]{4,15})\b/g
     ];
-    
+
     for (const pattern of emojiPatterns) {
       const emojiMatches = [...text.matchAll(pattern)];
       for (const match of emojiMatches) {
@@ -116,7 +116,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     // MÉTODO 4: Código próximo a palavras-chave de cupom (método original melhorado)
     const matches = [...text.matchAll(this.COUPON_CODE_PATTERN)];
     for (const match of matches) {
@@ -125,19 +125,19 @@ class CouponExtractor {
         const textLower = text.toLowerCase();
         const codeLower = code.toLowerCase();
         const matchIndex = textLower.indexOf(codeLower);
-        
+
         if (matchIndex !== -1) {
           // Verificar contexto ao redor (200 caracteres antes e depois)
           const start = Math.max(0, matchIndex - 200);
           const end = Math.min(text.length, matchIndex + code.length + 200);
           const context = textLower.substring(start, end);
-          
+
           // Se há palavras-chave próximas, é provavelmente um cupom
           if (this.COUPON_KEYWORDS.some(keyword => context.includes(keyword))) {
             logger.debug(`   ✅ Código encontrado próximo a palavra-chave: ${code}`);
             return code;
           }
-          
+
           // Se há padrões de desconto próximos (OFF, %, R$)
           if (context.includes('off') || context.includes('%') || context.includes('r$') || context.includes('desconto')) {
             logger.debug(`   ✅ Código encontrado próximo a padrão de desconto: ${code}`);
@@ -146,7 +146,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     // MÉTODO 5: Se o texto tem palavras-chave, tentar qualquer código alfanumérico maior que 5 caracteres
     if (this.hasCouponKeywords(text)) {
       for (const match of matches) {
@@ -157,7 +157,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     logger.debug(`   ⚠️ Nenhum código válido encontrado na mensagem`);
     return null;
   }
@@ -222,7 +222,7 @@ class CouponExtractor {
         // Continuar
       }
     }
-    
+
     // Padrão adicional: "180 OFF" (sem R$)
     const simpleOffMatch = text.match(/(\d+)\s*OFF/i);
     if (simpleOffMatch && !result.value) {
@@ -334,15 +334,18 @@ class CouponExtractor {
 
   /**
    * Tenta identificar a plataforma do cupom (melhorado com detecção de links)
+   * IMPORTANTE: Retorna apenas plataformas válidas no banco de dados:
+   * 'shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'
    */
   extractPlatform(text) {
     if (!text) return null;
 
     const textLower = text.toLowerCase();
 
-    const platforms = {
+    // Plataformas suportadas no banco de dados
+    const validPlatforms = {
       'mercadolivre': [
-        'mercado livre', 'meli', 'mercadolivre', 'mercadolivre.com', 
+        'mercado livre', 'meli', 'mercadolivre', 'mercadolivre.com',
         'mercadolivre.com.br', 'mercadolivre.com/sec'
       ],
       'shopee': [
@@ -353,7 +356,11 @@ class CouponExtractor {
       ],
       'aliexpress': [
         'aliexpress', 'ali express', 'aliexpress.com'
-      ],
+      ]
+    };
+
+    // Plataformas não suportadas que serão mapeadas para 'general'
+    const unsupportedPlatforms = {
       'magazine luiza': [
         'magazine', 'magalu', 'magazine luiza', 'magazineluiza.com.br'
       ],
@@ -365,33 +372,52 @@ class CouponExtractor {
       ],
       'casas bahia': [
         'casas bahia', 'casasbahia', 'casasbahia.com.br'
-      ],
+      ]
     };
 
-    // Verificar por palavras-chave
-    for (const [platform, keywords] of Object.entries(platforms)) {
+    // Verificar por palavras-chave de plataformas válidas
+    for (const [platform, keywords] of Object.entries(validPlatforms)) {
       if (keywords.some(keyword => textLower.includes(keyword))) {
         logger.debug(`   Plataforma identificada por palavra-chave: ${platform}`);
         return platform;
       }
     }
 
-    // Verificar por URLs/links
+    // Verificar por URLs/links de plataformas válidas
     const urlPatterns = {
       'mercadolivre': /mercadolivre\.com/i,
       'shopee': /shopee\.com/i,
       'amazon': /(amzn\.to|amzlink\.to|amazon\.com)/i,
-      'aliexpress': /aliexpress\.com/i,
-      'magazine luiza': /magazineluiza\.com/i,
-      'americanas': /americanas\.com/i,
-      'submarino': /submarino\.com/i,
-      'casas bahia': /casasbahia\.com/i,
+      'aliexpress': /aliexpress\.com/i
     };
 
     for (const [platform, pattern] of Object.entries(urlPatterns)) {
       if (pattern.test(text)) {
         logger.debug(`   Plataforma identificada por URL: ${platform}`);
         return platform;
+      }
+    }
+
+    // Verificar plataformas não suportadas e retornar 'general'
+    for (const [platform, keywords] of Object.entries(unsupportedPlatforms)) {
+      if (keywords.some(keyword => textLower.includes(keyword))) {
+        logger.debug(`   Plataforma ${platform} detectada, mas não é suportada. Usando 'general'.`);
+        return 'general';
+      }
+    }
+
+    // Verificar URLs de plataformas não suportadas
+    const unsupportedUrlPatterns = {
+      'magazine luiza': /magazineluiza\.com/i,
+      'americanas': /americanas\.com/i,
+      'submarino': /submarino\.com/i,
+      'casas bahia': /casasbahia\.com/i
+    };
+
+    for (const [platform, pattern] of Object.entries(unsupportedUrlPatterns)) {
+      if (pattern.test(text)) {
+        logger.debug(`   Plataforma ${platform} detectada por URL, mas não é suportada. Usando 'general'.`);
+        return 'general';
       }
     }
 
@@ -405,7 +431,7 @@ class CouponExtractor {
     if (!text) return null;
 
     const textLower = text.toLowerCase();
-    
+
     // Padrões para datas de validade
     const patterns = [
       // "válido até 31/12/2024"
@@ -431,7 +457,7 @@ class CouponExtractor {
             expiryDate.setDate(expiryDate.getDate() + days);
             return expiryDate.toISOString();
           }
-          
+
           // Se encontrou data completa
           if (match.length >= 4) {
             const day = parseInt(match[1]);
@@ -472,20 +498,20 @@ class CouponExtractor {
     }
 
     const coupons = [];
-    
+
     // Primeiro, buscar todos os códigos possíveis da mensagem
     const allCodes = this.extractAllCouponCodes(text);
-    
+
     if (allCodes.length === 0) {
       logger.debug(`   ⚠️ Nenhum código encontrado na mensagem`);
       return [];
     }
-    
+
     logger.debug(`   📋 Encontrados ${allCodes.length} código(s) possível(is): ${allCodes.join(', ')}`);
-    
+
     // Dividir mensagem por linhas ou padrões de separação
     const lines = text.split(/\n+/).filter(line => line.trim().length > 0);
-    
+
     // Tentar extrair cupom de cada linha que contenha código
     for (const line of lines) {
       // Verificar se a linha contém algum dos códigos encontrados
@@ -493,7 +519,7 @@ class CouponExtractor {
         // Verificar se o código está na linha (pode estar em backticks ou não)
         return line.includes(`\`${code}\``) || line.includes(code);
       });
-      
+
       if (hasCodeInLine) {
         const coupon = this.extractCouponInfo(line, messageId, channelUsername);
         if (coupon) {
@@ -506,7 +532,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     // Se não encontrou em linhas separadas, tentar extrair da mensagem completa
     if (coupons.length === 0) {
       const coupon = this.extractCouponInfo(text, messageId, channelUsername);
@@ -515,34 +541,34 @@ class CouponExtractor {
         logger.debug(`   ✅ Cupom extraído da mensagem completa: ${coupon.code}`);
       }
     }
-    
+
     // Se ainda não encontrou ou encontrou menos cupons que códigos, tentar extrair múltiplos códigos da mesma mensagem
     // IMPORTANTE: Se há múltiplos códigos, garantir que todos sejam extraídos
     if (allCodes.length > coupons.length) {
       logger.debug(`   🔍 Encontrados ${allCodes.length} código(s) mas apenas ${coupons.length} cupom(ns) extraído(s). Tentando extrair os restantes...`);
-      
+
       for (const code of allCodes) {
         // Verificar se já extraímos este código
         const alreadyExtracted = coupons.some(c => c.code === code);
         if (alreadyExtracted) {
           continue; // Pular se já foi extraído
         }
-        
+
         // Criar contexto ao redor do código
         const codePattern = new RegExp(`\`${code}\``);
         let codeMatch = text.match(codePattern);
-        
+
         // Se não encontrou em backticks, procurar sem backticks
         if (!codeMatch) {
           codeMatch = text.match(new RegExp(`\\b${code}\\b`));
         }
-        
+
         if (codeMatch && codeMatch.index !== undefined) {
           // Aumentar contexto para capturar mais informações (300 caracteres antes e depois)
           const start = Math.max(0, codeMatch.index - 300);
           const end = Math.min(text.length, codeMatch.index + codeMatch[0].length + 300);
           const context = text.substring(start, end);
-          
+
           // Tentar extrair cupom do contexto
           const coupon = this.extractCouponInfo(context, messageId, channelUsername);
           if (coupon && coupon.code === code) {
@@ -583,14 +609,14 @@ class CouponExtractor {
                 capture_source: 'telegram',
                 auto_captured: true
               };
-              
+
               // Aplicar desconto se encontrado
               const discount = this.extractDiscount(text);
               if (discount && discount.value) {
                 minCoupon.discount_type = discount.type;
                 minCoupon.discount_value = discount.value;
               }
-              
+
               const isDuplicate = coupons.some(c => c.code === minCoupon.code);
               if (!isDuplicate) {
                 coupons.push(minCoupon);
@@ -601,7 +627,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     logger.info(`   📊 Total de ${coupons.length} cupom(ns) extraído(s) da mensagem`);
     return coupons;
   }
@@ -612,14 +638,14 @@ class CouponExtractor {
    */
   extractAllCouponCodes(text) {
     if (!text) return [];
-    
+
     const codes = new Set();
     const invalidCodes = new Set([
-      'HTTP', 'HTTPS', 'WWW', 'COM', 'BR', 'ORG', 'NET', 'HTML', 'JPEG', 'PNG', 
+      'HTTP', 'HTTPS', 'WWW', 'COM', 'BR', 'ORG', 'NET', 'HTML', 'JPEG', 'PNG',
       'AMZN', 'AMAZON', 'SHOPEE', 'MELI', 'MERCADO', 'LIVRE', 'ALIEXPRESS',
       'MAGAZINE', 'LUIZA', 'AMERICANAS', 'SUBMARINO', 'CASAS', 'BAHIA'
     ]);
-    
+
     // PRIORIDADE 1: Buscar códigos dentro de backticks `codigo`
     const backtickMatches = [...text.matchAll(this.COUPON_CODE_IN_BACKTICKS)];
     for (const match of backtickMatches) {
@@ -628,12 +654,12 @@ class CouponExtractor {
         codes.add(code);
       }
     }
-    
+
     // Se encontrou códigos em backticks, retornar apenas esses (mais confiáveis)
     if (codes.size > 0) {
       return Array.from(codes);
     }
-    
+
     // PRIORIDADE 2: Buscar códigos após ":" ou palavras-chave
     const colonPatterns = [
       /[:：]\s*([A-Z0-9]{4,15})\b/g,
@@ -641,7 +667,7 @@ class CouponExtractor {
       /code[:\s]+([A-Z0-9]{4,15})\b/gi,
       /cupom[:\s]+([A-Z0-9]{4,15})\b/gi
     ];
-    
+
     for (const pattern of colonPatterns) {
       const matches = [...text.matchAll(pattern)];
       for (const match of matches) {
@@ -651,7 +677,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     // PRIORIDADE 3: Buscar códigos após emoji
     const emojiPatterns = [
       /🎟[️]?\s*([A-Z0-9]{4,15})\b/g,
@@ -659,7 +685,7 @@ class CouponExtractor {
       /💰[️]?\s*([A-Z0-9]{4,15})\b/g,
       /💳[️]?\s*([A-Z0-9]{4,15})\b/g
     ];
-    
+
     for (const pattern of emojiPatterns) {
       const matches = [...text.matchAll(pattern)];
       for (const match of matches) {
@@ -669,7 +695,7 @@ class CouponExtractor {
         }
       }
     }
-    
+
     return Array.from(codes);
   }
 

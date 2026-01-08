@@ -1,79 +1,79 @@
 /**
  * Analisador de Produtos com IA
- * Analisa qualidade, relevância, categorização e sugere melhorias
+ * OTIMIZADO para compatibilidade com modelos gratuitos e pagos
+ * 
+ * Modelos testados:
+ * - google/gemini-flash-1.5 (FREE) ⭐
+ * - mistralai/mixtral-8x7b-instruct (FREE)
+ * - openai/gpt-4o-mini (PAID)
  */
 import logger from '../config/logger.js';
 import openrouterClient from './openrouterClient.js';
 
 class ProductAnalyzer {
   /**
-   * Gerar prompt para análise de produto
-   * @param {Object} product - Dados do produto
-   * @returns {string} - Prompt formatado
+   * Gerar prompt OTIMIZADO para análise de produto
+   * Formato simplificado para melhor compatibilidade
    */
   generateAnalysisPrompt(product) {
-    return `Você é um especialista em análise de produtos para e-commerce.
+    // Limitar tamanho dos campos
+    const name = (product.name || 'N/A').substring(0, 200);
+    const description = (product.description || '').substring(0, 300);
+    const discount = product.discount_percentage || 0;
+    const price = product.current_price || 0;
 
-Analise o produto abaixo e retorne APENAS um JSON válido com a análise.
+    return `Analise este produto e retorne APENAS JSON.
 
-Dados do Produto:
-- Nome: ${product.name || 'N/A'}
-- Preço: ${product.current_price || 'N/A'}
-- Preço Original: ${product.original_price || 'N/A'}
-- Desconto: ${product.discount_percentage || 0}%
+PRODUTO:
+- Nome: ${name}
+- Preço: R$ ${price}
+- Desconto: ${discount}%
 - Plataforma: ${product.platform || 'N/A'}
-- Descrição: ${product.description || 'N/A'}
-- Categoria: ${product.category || 'N/A'}
+${description ? `- Descrição: ${description}` : ''}
 
-Formato obrigatório do JSON:
+RETORNE APENAS ESTE JSON:
 {
   "quality_score": 0.0-1.0,
   "relevance_score": 0.0-1.0,
   "price_score": 0.0-1.0,
-  "is_relevant": true | false,
-  "should_publish": true | false,
-  "suggested_category": "string | null",
-  "suggested_keywords": ["string"],
-  "issues": ["string"],
-  "strengths": ["string"],
+  "is_relevant": true ou false,
+  "should_publish": true ou false,
+  "suggested_category": "categoria" ou null,
+  "issues": ["problema1"],
+  "strengths": ["ponto forte1"],
   "confidence": 0.0-1.0
 }
 
-Regras:
-- quality_score: Avalie qualidade geral (0.0 = ruim, 1.0 = excelente)
-- relevance_score: Avalie relevância para o público (0.0 = irrelevante, 1.0 = muito relevante)
-- price_score: Avalie se o preço é competitivo (0.0 = caro, 1.0 = excelente preço)
-- is_relevant: Se o produto é relevante para o catálogo
-- should_publish: Se deve ser publicado (considera qualidade, preço, relevância)
-- suggested_category: Categoria sugerida se a atual estiver incorreta
-- suggested_keywords: Array de keywords sugeridas para melhorar busca
-- issues: Array de problemas encontrados (ex: ["preço alto", "descrição vazia"])
-- strengths: Array de pontos fortes (ex: ["desconto alto", "produto popular"])
-- confidence: Confiança na análise (0.0-1.0)
+CRITÉRIOS:
+- quality_score: 0.8+ se nome claro e preço bom
+- price_score: 0.8+ se desconto >= 20%
+- should_publish: true se quality >= 0.6 E price >= 0.5
+- is_relevant: true se produto faz sentido
 
-Retorne SOMENTE o JSON, sem explicações ou markdown.`;
+EXEMPLO:
+{"quality_score":0.8,"relevance_score":0.7,"price_score":0.9,"is_relevant":true,"should_publish":true,"suggested_category":"Eletrônicos","issues":[],"strengths":["Bom desconto"],"confidence":0.85}
+
+Retorne APENAS o JSON:`;
   }
 
   /**
    * Analisar produto usando IA
-   * @param {Object} product - Dados do produto
-   * @returns {Promise<Object>} - Análise do produto
    */
   async analyzeProduct(product) {
     try {
-      logger.info(`🤖 Analisando produto via IA: ${product.name?.substring(0, 50)}...`);
+      logger.info(`🤖 Analisando produto: ${product.name?.substring(0, 50)}...`);
 
       // Verificar se IA está habilitada
       const aiConfig = await openrouterClient.getConfig();
       if (!aiConfig.enabled || !aiConfig.apiKey) {
-        logger.warn('⚠️ IA não está habilitada. Retornando análise padrão.');
+        logger.warn('⚠️ IA não habilitada. Usando análise padrão.');
         return this.getDefaultAnalysis(product);
       }
 
       // Gerar prompt
       const prompt = this.generateAnalysisPrompt(product);
 
-      // Fazer requisição para OpenRouter
+      // Fazer requisição
       const response = await openrouterClient.makeRequest(prompt);
 
       // Validar resposta
@@ -82,27 +82,14 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
       }
 
       // Normalizar resposta
-      const analysis = {
-        quality_score: this.normalizeScore(response.quality_score),
-        relevance_score: this.normalizeScore(response.relevance_score),
-        price_score: this.normalizeScore(response.price_score),
-        is_relevant: response.is_relevant === true || response.is_relevant === 'true',
-        should_publish: response.should_publish === true || response.should_publish === 'true',
-        suggested_category: response.suggested_category || null,
-        suggested_keywords: Array.isArray(response.suggested_keywords)
-          ? response.suggested_keywords
-          : [],
-        issues: Array.isArray(response.issues) ? response.issues : [],
-        strengths: Array.isArray(response.strengths) ? response.strengths : [],
-        confidence: this.normalizeScore(response.confidence || 0.5)
-      };
+      const analysis = this.normalizeAnalysis(response, product);
 
-      logger.info(`✅ Análise concluída: should_publish=${analysis.should_publish}, confidence=${analysis.confidence.toFixed(2)}`);
+      logger.info(`✅ Análise: should_publish=${analysis.should_publish}, confidence=${analysis.confidence.toFixed(2)}`);
 
       return analysis;
 
     } catch (error) {
-      // Re-throw critical errors that should stop processing
+      // Erros críticos que devem parar o processamento
       const criticalErrors = [
         'OpenRouter API Key inválida',
         'Rate limit',
@@ -110,20 +97,37 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
         'OpenRouter está desabilitado'
       ];
 
-      if (criticalErrors.some(msg => error.message && error.message.includes(msg))) {
+      if (criticalErrors.some(msg => error.message?.includes(msg))) {
         throw error;
       }
 
-      logger.error(`❌ Erro ao analisar produto: ${error.message}`);
-      // Retornar análise padrão em caso de erro não crítico
+      logger.error(`❌ Erro na análise: ${error.message}`);
       return this.getDefaultAnalysis(product);
     }
   }
 
   /**
-   * Normalizar score para garantir que está entre 0 e 1
-   * @param {any} score - Score a normalizar
-   * @returns {number} - Score normalizado (0-1)
+   * Normalizar resposta da IA
+   */
+  normalizeAnalysis(response, product) {
+    return {
+      quality_score: this.normalizeScore(response.quality_score),
+      relevance_score: this.normalizeScore(response.relevance_score),
+      price_score: this.normalizeScore(response.price_score),
+      is_relevant: this.normalizeBoolean(response.is_relevant),
+      should_publish: this.normalizeBoolean(response.should_publish),
+      suggested_category: response.suggested_category || null,
+      suggested_keywords: Array.isArray(response.suggested_keywords)
+        ? response.suggested_keywords
+        : [],
+      issues: Array.isArray(response.issues) ? response.issues : [],
+      strengths: Array.isArray(response.strengths) ? response.strengths : [],
+      confidence: this.normalizeScore(response.confidence || 0.5)
+    };
+  }
+
+  /**
+   * Normalizar score para 0-1
    */
   normalizeScore(score) {
     if (typeof score === 'number') {
@@ -135,13 +139,21 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
         return Math.max(0, Math.min(1, parsed));
       }
     }
-    return 0.5; // Default
+    return 0.5;
+  }
+
+  /**
+   * Normalizar boolean
+   */
+  normalizeBoolean(value) {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === 1) return true;
+    if (value === 'false' || value === 0) return false;
+    return false;
   }
 
   /**
    * Análise padrão quando IA não está disponível
-   * @param {Object} product - Dados do produto
-   * @returns {Object} - Análise padrão
    */
   getDefaultAnalysis(product) {
     const discount = product.discount_percentage || 0;
@@ -149,27 +161,63 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
     const hasName = product.name && product.name.trim().length > 0;
     const hasPrice = product.current_price && parseFloat(product.current_price) > 0;
 
+    const qualityScore = hasName && hasPrice ? 0.7 : 0.3;
+    const priceScore = hasGoodDiscount ? 0.8 : 0.5;
+    const shouldPublish = hasName && hasPrice && hasGoodDiscount;
+
     return {
-      quality_score: hasName && hasPrice ? 0.7 : 0.3,
+      quality_score: qualityScore,
       relevance_score: 0.5,
-      price_score: hasGoodDiscount ? 0.8 : 0.5,
+      price_score: priceScore,
       is_relevant: hasName && hasPrice,
-      should_publish: hasName && hasPrice && hasGoodDiscount,
+      should_publish: shouldPublish,
       suggested_category: null,
       suggested_keywords: [],
-      issues: !hasName ? ['Nome do produto ausente'] : !hasPrice ? ['Preço ausente'] : [],
-      strengths: hasGoodDiscount ? ['Desconto atrativo'] : [],
+      issues: this.detectIssues(product),
+      strengths: this.detectStrengths(product),
       confidence: 0.5
     };
   }
 
   /**
+   * Detectar problemas básicos
+   */
+  detectIssues(product) {
+    const issues = [];
+    if (!product.name || product.name.trim().length === 0) {
+      issues.push('Nome ausente');
+    }
+    if (!product.current_price || parseFloat(product.current_price) <= 0) {
+      issues.push('Preço inválido');
+    }
+    if (!product.image_url) {
+      issues.push('Sem imagem');
+    }
+    return issues;
+  }
+
+  /**
+   * Detectar pontos fortes básicos
+   */
+  detectStrengths(product) {
+    const strengths = [];
+    const discount = product.discount_percentage || 0;
+    if (discount >= 30) {
+      strengths.push('Desconto excelente');
+    } else if (discount >= 20) {
+      strengths.push('Bom desconto');
+    } else if (discount >= 10) {
+      strengths.push('Desconto atrativo');
+    }
+    return strengths;
+  }
+
+  /**
    * Analisar múltiplos produtos em lote
-   * @param {Array} products - Array de produtos
-   * @returns {Promise<Array>} - Array de análises
    */
   async analyzeBatch(products) {
     const analyses = [];
+
     for (const product of products) {
       try {
         const analysis = await this.analyzeProduct(product);
@@ -178,10 +226,12 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
           product_name: product.name,
           analysis
         });
-        // Pequeno delay para evitar rate limit
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Delay para evitar rate limit (1 segundo entre requisições)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
       } catch (error) {
-        logger.error(`Erro ao analisar produto ${product.id}: ${error.message}`);
+        logger.error(`Erro no produto ${product.id}: ${error.message}`);
         analyses.push({
           product_id: product.id,
           product_name: product.name,
@@ -190,16 +240,9 @@ Retorne SOMENTE o JSON, sem explicações ou markdown.`;
         });
       }
     }
+
     return analyses;
   }
 }
 
 export default new ProductAnalyzer();
-
-
-
-
-
-
-
-

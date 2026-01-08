@@ -1,6 +1,7 @@
 import AppSettings from '../models/AppSettings.js';
 import logger from '../config/logger.js';
 import axios from 'axios';
+import { OPENROUTER_MODELS, getModelsByType, getModelsWithJsonSupport } from '../config/openrouterModels.js';
 
 class AppSettingsController {
   /**
@@ -12,7 +13,7 @@ class AppSettingsController {
     try {
       const settings = await AppSettings.get();
       const revealFields = req.query.reveal ? req.query.reveal.split(',') : [];
-      
+
       // Lista de campos sensíveis que podem ser revelados
       const sensitiveFields = [
         'meli_client_secret',
@@ -70,16 +71,16 @@ class AppSettingsController {
 
       // Validar campos obrigatórios apenas se estiverem sendo atualizados
       // (não validar se o campo não foi enviado na requisição)
-      if (updates.shopee_partner_id !== undefined && updates.shopee_partner_id && 
-          updates.shopee_partner_key !== undefined && !updates.shopee_partner_key) {
+      if (updates.shopee_partner_id !== undefined && updates.shopee_partner_id &&
+        updates.shopee_partner_key !== undefined && !updates.shopee_partner_key) {
         return res.status(400).json({
           success: false,
           message: 'Shopee Partner Key é obrigatório quando Partner ID é fornecido'
         });
       }
 
-      if (updates.amazon_access_key !== undefined && updates.amazon_access_key && 
-          updates.amazon_secret_key !== undefined && !updates.amazon_secret_key) {
+      if (updates.amazon_access_key !== undefined && updates.amazon_access_key &&
+        updates.amazon_secret_key !== undefined && !updates.amazon_secret_key) {
         return res.status(400).json({
           success: false,
           message: 'Amazon Secret Key é obrigatório quando Access Key é fornecido'
@@ -88,8 +89,8 @@ class AppSettingsController {
 
       // Validar apenas se ambos client_id e client_secret estão sendo atualizados
       // Se apenas client_id está sendo atualizado, não exigir client_secret
-      if (updates.meli_client_id !== undefined && updates.meli_client_id && 
-          updates.meli_client_secret !== undefined && !updates.meli_client_secret) {
+      if (updates.meli_client_id !== undefined && updates.meli_client_id &&
+        updates.meli_client_secret !== undefined && !updates.meli_client_secret) {
         return res.status(400).json({
           success: false,
           message: 'Mercado Livre Client Secret é obrigatório quando Client ID é fornecido'
@@ -107,7 +108,7 @@ class AppSettingsController {
       if (logUpdates.expo_access_token) logUpdates.expo_access_token = '***';
       if (logUpdates.backend_api_key) logUpdates.backend_api_key = '***';
       if (logUpdates.openrouter_api_key) logUpdates.openrouter_api_key = '***';
-      
+
       logger.info('✅ Atualizando configurações:', JSON.stringify(logUpdates));
 
       const settings = await AppSettings.update(updates);
@@ -217,7 +218,7 @@ class AppSettingsController {
       // Gerar ID seguro para state (recomendação de segurança)
       const crypto = await import('crypto');
       const state = crypto.default.randomBytes(32).toString('hex');
-      
+
       // Gerar URL de autorização do Mercado Livre
       // IMPORTANTE: Adicionar parâmetro state para segurança conforme documentação
       const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}&state=${state}`;
@@ -303,7 +304,7 @@ class AppSettingsController {
       });
     } catch (error) {
       logger.error(`Erro ao trocar código por tokens: ${error.message}`);
-      
+
       const errorMessage = error.response?.data?.message || error.message;
       const errorDetails = error.response?.data || {};
 
@@ -411,7 +412,7 @@ class AppSettingsController {
       const errorMessage = errorData.message || errorData.error || error.message;
 
       logger.error(`❌ Erro ao renovar token (${status}): ${errorMessage}`);
-      
+
       // Log detalhado para debug
       if (error.response) {
         logger.error('📋 Detalhes do erro:', JSON.stringify(errorData, null, 2));
@@ -422,8 +423,8 @@ class AppSettingsController {
       let suggestions = [];
 
       if (status === 400) {
-        if (errorMessage?.includes('invalid_grant') || errorMessage?.includes('invalid_token') || 
-            errorMessage?.includes('expired') || errorMessage?.includes('already used')) {
+        if (errorMessage?.includes('invalid_grant') || errorMessage?.includes('invalid_token') ||
+          errorMessage?.includes('expired') || errorMessage?.includes('already used')) {
           userMessage = 'Refresh token inválido, expirado ou já utilizado';
           suggestions.push('⚠️ O refresh token do Mercado Livre expira após 6 meses de inatividade');
           suggestions.push('⚠️ Cada refresh token só pode ser usado UMA vez - após uso, um novo é gerado');
@@ -474,7 +475,7 @@ class AppSettingsController {
       }
 
       const settings = await AppSettings.get();
-      
+
       // Lista de campos sensíveis permitidos
       const allowedSensitiveFields = [
         'meli_client_secret',
@@ -529,12 +530,12 @@ class AppSettingsController {
   async getOpenRouterModels(req, res) {
     try {
       const type = req.query.type; // 'free', 'paid', ou undefined para todos
-      
+
       let models = OPENROUTER_MODELS;
       if (type === 'free' || type === 'paid') {
         models = getModelsByType(type);
       }
-      
+
       res.json({
         success: true,
         data: {

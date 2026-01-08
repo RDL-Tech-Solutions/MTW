@@ -3,6 +3,57 @@ import { calculateDiscountPercentage } from '../utils/helpers.js';
 import logger from '../config/logger.js';
 
 class Product {
+  // Plataformas válidas no banco de dados
+  static VALID_PLATFORMS = ['shopee', 'mercadolivre', 'amazon', 'aliexpress', 'unknown'];
+
+  // Status válidos no banco de dados
+  static VALID_STATUS = ['pending', 'approved', 'published', 'rejected'];
+
+  // Normalizar plataforma para valor válido
+  static normalizePlatform(platform) {
+    if (!platform) return 'unknown';
+    const normalized = platform.toLowerCase().trim();
+
+    // Mapeamento de plataformas conhecidas para valores válidos
+    const platformMap = {
+      'shopee': 'shopee',
+      'mercadolivre': 'mercadolivre',
+      'mercado livre': 'mercadolivre',
+      'meli': 'mercadolivre',
+      'amazon': 'amazon',
+      'aliexpress': 'aliexpress',
+      'ali express': 'aliexpress',
+      'unknown': 'unknown'
+    };
+
+    // Verificar mapeamento direto
+    if (platformMap[normalized]) {
+      return platformMap[normalized];
+    }
+
+    // Verificar se está na lista de válidas
+    if (Product.VALID_PLATFORMS.includes(normalized)) {
+      return normalized;
+    }
+
+    // Se não for válida, usar 'unknown'
+    return 'unknown';
+  }
+
+  // Normalizar status para valor válido
+  static normalizeStatus(status) {
+    if (!status) return 'pending';
+    const normalized = status.toLowerCase().trim();
+
+    // Verificar se está na lista de válidos
+    if (Product.VALID_STATUS.includes(normalized)) {
+      return normalized;
+    }
+
+    // Se não for válido, usar 'pending'
+    return 'pending';
+  }
+
   // Criar novo produto
   static async create(productData) {
     const {
@@ -20,6 +71,10 @@ class Product {
       original_link
     } = productData;
 
+    // Normalizar plataforma e status para valores válidos
+    const normalizedPlatform = Product.normalizePlatform(platform);
+    const normalizedStatus = Product.normalizeStatus(status);
+
     const discount_percentage = old_price
       ? calculateDiscountPercentage(old_price, current_price)
       : 0;
@@ -32,7 +87,7 @@ class Product {
       .insert([{
         name,
         image_url,
-        platform,
+        platform: normalizedPlatform,
         current_price,
         old_price,
         discount_percentage,
@@ -41,7 +96,7 @@ class Product {
         affiliate_link,
         external_id,
         stock_available,
-        status,
+        status: normalizedStatus,
         original_link: finalOriginalLink
       }])
       .select()
@@ -60,7 +115,7 @@ class Product {
       .single();
 
     if (error) throw error;
-    
+
     // Calcular preço final com cupom se houver
     if (data && data.coupon_id && data.coupon_discount_type && data.coupon_discount_value) {
       try {
@@ -96,7 +151,7 @@ class Product {
         logger.warn(`Erro ao calcular preço final para produto ${id}: ${e.message}`);
       }
     }
-    
+
     return data;
   }
 
@@ -143,7 +198,7 @@ class Product {
     if (max_price) query = query.lte('current_price', max_price);
     if (min_discount) query = query.gte('discount_percentage', min_discount);
     if (search) query = query.ilike('name', `%${search}%`);
-    
+
     // Filtro por status (se a coluna existir)
     if (status) {
       try {
@@ -452,13 +507,13 @@ class Product {
         .from('products')
         .select('status')
         .limit(1);
-      
+
       const { error: testError } = await testQuery;
-      
+
       // Se a coluna status não existir, retornar array vazio
       if (testError && (
         (testError.message && (
-          testError.message.includes('column') && 
+          testError.message.includes('column') &&
           (testError.message.includes('status') || testError.message.toLowerCase().includes('does not exist'))
         )) ||
         (testError.code && (
@@ -476,7 +531,7 @@ class Product {
           totalPages: 0
         };
       }
-      
+
       // Se a coluna existe, fazer a query completa com filtro de status
       let query = supabase
         .from('products')
@@ -505,17 +560,17 @@ class Product {
       // Buscar produtos pendentes
       logger.debug(`🔍 Buscando produtos pendentes (findPending)...`);
       const { data: allData, error, count: allCount } = await query;
-      
+
       if (error) {
         logger.error(`❌ Erro na query inicial: ${error.message}`);
         logger.error(`   Código: ${error.code}`);
         logger.error(`   Detalhes: ${JSON.stringify(error, null, 2)}`);
-        
+
         // Se o erro for sobre a coluna status não existir, retornar array vazio
         // Isso permite que a migração seja executada depois sem quebrar a aplicação
-        const isStatusColumnError = 
+        const isStatusColumnError =
           (error.message && (
-            error.message.includes('column') && 
+            error.message.includes('column') &&
             (error.message.includes('status') || error.message.toLowerCase().includes('does not exist'))
           )) ||
           (error.code && (
@@ -525,7 +580,7 @@ class Product {
             String(error.code).includes('42703') || // Pode vir como string
             String(error.code).includes('PGRST')
           ));
-        
+
         if (isStatusColumnError) {
           logger.warn('⚠️ Coluna status não encontrada. Execute o SQL: SIMPLE_FIX_STATUS.sql');
           return {
@@ -536,14 +591,14 @@ class Product {
             totalPages: 0
           };
         }
-        
+
         // Se for outro tipo de erro, lançar para ser tratado pelo error handler
         throw error;
       }
-      
+
       logger.debug(`   Produtos pendentes encontrados: ${allData?.length || 0}`);
       logger.debug(`   Count total: ${allCount || 0}`);
-      
+
       // Usar os dados retornados diretamente (já filtrados e paginados)
       const paginatedProducts = allData || [];
       const totalPending = allCount || 0;
@@ -602,7 +657,7 @@ class Product {
           enriched.coupon_discount_value = coupon.discount_value;
           enriched.coupon_valid_until = coupon.valid_until;
           enriched.coupon_is_vip = coupon.is_vip;
-          
+
           // Calcular preço final com cupom
           try {
             let finalPrice = product.current_price;
@@ -647,11 +702,11 @@ class Product {
       logger.error('   Mensagem:', error.message);
       logger.error('   Stack:', error.stack);
       logger.error('   Detalhes:', JSON.stringify(error, null, 2));
-      
+
       // Se o erro for sobre a coluna status não existir, retornar array vazio
-      const isStatusColumnError = 
+      const isStatusColumnError =
         (error.message && (
-          error.message.includes('column') && 
+          error.message.includes('column') &&
           (error.message.includes('status') || error.message.toLowerCase().includes('does not exist'))
         )) ||
         (error.code && (
@@ -661,7 +716,7 @@ class Product {
           String(error.code).includes('42703') || // Pode vir como string
           String(error.code).includes('PGRST')
         ));
-      
+
       if (isStatusColumnError) {
         logger.warn('⚠️ Coluna status não encontrada (catch). Execute o SQL: SIMPLE_FIX_STATUS.sql');
         return {
@@ -672,7 +727,7 @@ class Product {
           totalPages: 0
         };
       }
-      
+
       throw error;
     }
   }

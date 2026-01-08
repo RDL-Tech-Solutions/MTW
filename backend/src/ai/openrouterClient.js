@@ -19,27 +19,28 @@ class OpenRouterClient {
   async getConfig() {
     try {
       const settings = await AppSettings.get();
-      let model = settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct';
-      
+      // IMPORTANTE: gemini-flash-1.5 é o modelo GRATUITO recomendado - suporta JSON
+      let model = settings.openrouter_model || process.env.OPENROUTER_MODEL || 'google/gemini-flash-1.5';
+
       // Verificar se o modelo está na lista de modelos suportados
       // Se não estiver, avisar mas permitir usar (pode ser um modelo novo ou customizado)
       const { getModelById } = await import('../config/openrouterModels.js');
       const modelInfo = getModelById(model);
-      
+
       if (!modelInfo) {
         logger.warn(`⚠️ Modelo "${model}" não está na lista de modelos suportados.`);
-        logger.warn(`   Usando modelo padrão válido: mistralai/mistral-7b-instruct`);
-        // Forçar modelo padrão se não estiver na lista
-        model = 'mistralai/mistral-7b-instruct';
+        logger.warn(`   Permitindo uso do modelo customizado, mas verifique se o ID está correto.`);
+        // Forçar modelo padrão se não estiver na lista - DESATIVADO para permitir novos modelos
+        // model = 'mistralai/mistral-7b-instruct';
       } else {
         logger.debug(`✅ Modelo "${model}" encontrado na lista de modelos suportados (${modelInfo.name}).`);
       }
-      
+
       return {
         apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY,
         model: model,
-        enabled: settings.openrouter_enabled !== undefined 
-          ? settings.openrouter_enabled 
+        enabled: settings.openrouter_enabled !== undefined
+          ? settings.openrouter_enabled
           : (process.env.OPENROUTER_ENABLED === 'true' || false)
       };
     } catch (error) {
@@ -127,36 +128,36 @@ class OpenRouterClient {
       if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         throw new Error('Prompt vazio ou inválido');
       }
-      
+
       // Log do tamanho do prompt para debug
       logger.debug(`🤖 Enviando requisição para OpenRouter (modelo: ${config.model})...`);
       logger.debug(`   Tamanho do prompt: ${prompt.length} caracteres`);
-      
+
       // Se o prompt for muito longo, avisar (mas não bloquear)
       if (prompt.length > 10000) {
         logger.warn(`⚠️ Prompt muito longo (${prompt.length} caracteres). Pode causar problemas.`);
       }
 
       // Preparar payload da requisição
-      // Usar system message para reforçar instruções de JSON (se não estiver em modo texto)
+      // Usar system message SIMPLIFICADA para melhor compatibilidade
       const messages = [];
       if (!options.forceTextMode) {
-        // Adicionar system message para reforçar que deve retornar apenas JSON
+        // System message curta e direta
         messages.push({
           role: 'system',
-          content: 'Você é um sistema automatizado que retorna APENAS objetos JSON válidos. NUNCA responda com texto livre. NUNCA explique. NUNCA adicione comentários. Retorne SOMENTE o JSON solicitado.'
+          content: 'Responda APENAS com JSON válido. Sem explicações, sem markdown, sem comentários.'
         });
       }
       messages.push({
         role: 'user',
         content: prompt
       });
-      
+
       const requestPayload = {
         model: config.model,
         messages: messages,
-        temperature: 0.3, // Baixa temperatura para respostas mais determinísticas
-        max_tokens: options.forceTextMode ? 2000 : 1500 // Aumentado para evitar truncamento (2000 para textos longos, 1500 para JSON)
+        temperature: 0.2, // Temperatura baixa para respostas mais consistentes
+        max_tokens: options.forceTextMode ? 1500 : 1000 // Reduzido para evitar timeout em modelos gratuitos
       };
 
       // Adicionar response_format apenas se o modelo suportar e não estiver em modo texto
@@ -199,12 +200,12 @@ class OpenRouterClient {
       const choice = response.data.choices[0];
       const content = choice.message?.content;
       const finishReason = choice.finish_reason;
-      
+
       // Verificar se a resposta foi truncada
       if (finishReason === 'length') {
         logger.warn(`⚠️ Resposta da IA foi truncada (finish_reason: length). Aumente max_tokens se necessário.`);
       }
-      
+
       // Verificar se o conteúdo está vazio
       if (!content || typeof content !== 'string' || content.trim().length === 0) {
         logger.error(`❌ Resposta da IA está vazia`);
@@ -212,7 +213,7 @@ class OpenRouterClient {
         logger.error(`   Choice completo: ${JSON.stringify(choice)}`);
         throw new Error('Resposta da IA está vazia ou inválida');
       }
-      
+
       logger.debug(`✅ Resposta recebida da OpenRouter (${content.length} caracteres, finish_reason: ${finishReason})`);
 
       // Se está em modo texto, retornar string diretamente
@@ -225,7 +226,7 @@ class OpenRouterClient {
           .replace(/```[\w]*\n?/g, '')
           .replace(/```/g, '')
           .trim();
-        
+
         return cleanedContent;
       }
 
@@ -242,7 +243,7 @@ class OpenRouterClient {
             .replace(/^\[OUT\]\s*/g, '')
             .replace(/<\|.*?\|>/g, '')
             .trim();
-          
+
           if (!cleanedForCheck.startsWith('{') && !cleanedForCheck.startsWith('[')) {
             logger.error(`❌ Resposta da IA não é JSON - parece ser texto livre`);
             logger.error(`   Conteúdo: ${cleanedForCheck.substring(0, 200)}`);
@@ -251,11 +252,11 @@ class OpenRouterClient {
             throw new Error(`Resposta da IA não é JSON válido. O modelo retornou texto livre ao invés de JSON. Conteúdo: ${cleanedForCheck.substring(0, 100)}...`);
           }
         }
-        
+
         // Primeiro, tentar extrair JSON diretamente (mais robusto)
         // IMPORTANTE: Muitos modelos retornam JSON dentro de blocos markdown (```json ... ```)
         // Precisamos remover o markdown ANTES de extrair o JSON
-        
+
         // Passo 1: Remover markdown code blocks primeiro
         let contentWithoutMarkdown = content
           .replace(/```json\s*\n?/gi, '')  // ```json com ou sem quebra de linha
@@ -265,7 +266,7 @@ class OpenRouterClient {
           .replace(/^```/gm, '')  // ``` no início de linha
           .replace(/```$/gm, '')  // ``` no final de linha
           .trim();
-        
+
         // Passo 2: Procurar por padrão { ... } no conteúdo limpo
         const jsonMatch = contentWithoutMarkdown.match(/\{[\s\S]*\}/);
         let cleanedContent = jsonMatch ? jsonMatch[0] : contentWithoutMarkdown;
@@ -285,12 +286,12 @@ class OpenRouterClient {
         logger.error(`   Conteúdo recebido (primeiros 500 chars): ${content.substring(0, 500)}`);
         logger.error(`   Conteúdo recebido (últimos 200 chars): ${content.substring(Math.max(0, content.length - 200))}`);
         logger.error(`   Tamanho total: ${content.length} caracteres`);
-        
+
         // Verificar se o conteúdo está muito curto (possível truncamento)
         if (content.length < 50) {
           logger.error(`   ⚠️ Conteúdo muito curto, possível truncamento ou resposta incompleta`);
         }
-        
+
         // Tentar uma última vez com uma limpeza mais agressiva
         try {
           // Passo 1: Remover markdown primeiro
@@ -302,26 +303,26 @@ class OpenRouterClient {
             .replace(/^```/gm, '')
             .replace(/```$/gm, '')
             .trim();
-          
+
           // Passo 2: Remover tudo antes do primeiro { e depois do último }
           const firstBrace = contentForExtraction.indexOf('{');
           const lastBrace = contentForExtraction.lastIndexOf('}');
-          
+
           if (firstBrace === -1) {
             logger.error(`   ❌ Nenhum caractere '{' encontrado no conteúdo`);
-            
+
             // Limpar tokens especiais para verificar melhor
             const contentTrimmed = contentForExtraction
               .replace(/^<s>\s*/g, '')
               .replace(/^\[OUT\]\s*/g, '')
               .replace(/<\|.*?\|>/g, '')
               .trim();
-            
+
             // Se o conteúdo é apenas markdown vazio, é um erro de truncamento
             if (contentTrimmed === '```' || (contentTrimmed.startsWith('```') && contentTrimmed.length < 20)) {
               throw new Error(`Resposta da IA está incompleta (apenas início de markdown). A resposta foi truncada antes de completar. Tente aumentar max_tokens ou usar um modelo diferente.`);
             }
-            
+
             // Se não começa com { ou [, é texto livre (modelo não seguiu instruções)
             if (!contentTrimmed.startsWith('{') && !contentTrimmed.startsWith('[')) {
               logger.error(`   ⚠️ Resposta parece ser texto livre ao invés de JSON`);
@@ -329,24 +330,24 @@ class OpenRouterClient {
               logger.error(`   💡 Tente usar um modelo diferente ou verificar as configurações do prompt.`);
               throw new Error(`Resposta da IA não é JSON válido. O modelo retornou texto livre ao invés de JSON. Conteúdo: ${contentTrimmed.substring(0, 100)}...`);
             }
-            
+
             throw new Error(`Resposta da IA não contém JSON válido. Conteúdo: ${contentForExtraction.substring(0, 100)}...`);
           }
-          
+
           if (lastBrace === -1 || lastBrace <= firstBrace) {
             logger.error(`   ❌ JSON incompleto ou malformado (firstBrace: ${firstBrace}, lastBrace: ${lastBrace})`);
-            
+
             // Se encontrou { mas não }, a resposta foi truncada
             if (finishReason === 'length') {
               throw new Error(`Resposta da IA foi truncada (finish_reason: length). JSON incompleto. Aumente max_tokens na configuração.`);
             }
-            
+
             throw new Error(`Resposta da IA contém JSON incompleto ou malformado. Possível truncamento.`);
           }
-          
+
           const extractedJson = contentForExtraction.substring(firstBrace, lastBrace + 1);
           logger.debug(`   🔍 Tentando extrair JSON: ${extractedJson.substring(0, 200)}...`);
-          
+
           // Limpar markdown do JSON extraído antes de parsear (limpeza final)
           const finalJson = extractedJson
             .replace(/```json\s*\n?/gi, '')
@@ -356,26 +357,26 @@ class OpenRouterClient {
             .replace(/^```/gm, '')
             .replace(/```$/gm, '')
             .trim();
-          
+
           parsedResponse = JSON.parse(finalJson);
           logger.debug(`✅ JSON extraído com sucesso após limpeza agressiva`);
         } catch (secondParseError) {
           logger.error(`❌ Falha na segunda tentativa de parsing: ${secondParseError.message}`);
           logger.error(`   Conteúdo completo (para debug): ${content}`);
           logger.error(`   Finish reason: ${finishReason}`);
-          
+
           // Se o conteúdo está vazio ou muito curto, pode ser que a resposta foi truncada
           // ou o modelo não retornou nada útil
           if (content.length < 10) {
             logger.error(`   ⚠️ Conteúdo extremamente curto (${content.length} chars). Possível erro na API ou modelo.`);
             logger.error(`   💡 Dica: Verifique se o modelo está funcionando corretamente ou se há problemas de conectividade.`);
           }
-          
+
           // Se finish_reason é 'length', a resposta foi truncada
           if (finishReason === 'length') {
             throw new Error(`Resposta da IA foi truncada (finish_reason: length). Aumente max_tokens na configuração do OpenRouter. Conteúdo recebido: ${content.substring(0, 200)}...`);
           }
-          
+
           throw new Error(`Resposta da IA não é um JSON válido: ${parseError.message}. Conteúdo recebido: ${content.substring(0, 200)}...`);
         }
       }
@@ -397,7 +398,7 @@ class OpenRouterClient {
         // Se não conseguir obter config, usar valores padrão
         configForError = { model: 'modelo desconhecido' };
       }
-      
+
       if (error.response) {
         // Erro da API
         const status = error.response.status;
@@ -415,7 +416,7 @@ class OpenRouterClient {
           const modelName = configForError?.model || 'modelo desconhecido';
           logger.error(`❌ Modelo não encontrado: ${modelName}`);
           logger.error(`   Erro: ${errorMsg}`);
-          
+
           // Sugerir modelos alternativos (gratuitos)
           const { getModelsByType } = await import('../config/openrouterModels.js');
           const freeModels = getModelsByType('free');
