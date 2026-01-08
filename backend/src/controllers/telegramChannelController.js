@@ -12,7 +12,7 @@ class TelegramChannelController {
   async list(req, res) {
     try {
       const { is_active, search } = req.query;
-      
+
       const channels = await TelegramChannel.findAll({
         is_active: is_active !== undefined ? is_active === 'true' : undefined,
         search
@@ -64,8 +64,24 @@ class TelegramChannelController {
               }
             }
 
+            // Garantir que example_messages seja sempre um array
+            let exampleMessages = [];
+            if (channel.example_messages) {
+              if (Array.isArray(channel.example_messages)) {
+                exampleMessages = channel.example_messages;
+              } else if (typeof channel.example_messages === 'string') {
+                try {
+                  exampleMessages = JSON.parse(channel.example_messages);
+                } catch (e) {
+                  logger.warn(`Erro ao parsear example_messages do canal ${channel.id}`);
+                  exampleMessages = [];
+                }
+              }
+            }
+
             return {
               ...channel,
+              example_messages: exampleMessages,
               coupons_captured: couponsCount,
               last_message_at: lastMessageAt || channel.last_message_at
             };
@@ -74,6 +90,7 @@ class TelegramChannelController {
             // Retornar canal com valores do banco se houver erro
             return {
               ...channel,
+              example_messages: Array.isArray(channel.example_messages) ? channel.example_messages : [],
               coupons_captured: channel.coupons_captured || 0,
               last_message_at: channel.last_message_at || null
             };
@@ -83,7 +100,7 @@ class TelegramChannelController {
 
       // Adicionar informações sobre IA
       const aiEnabled = await couponAnalyzer.isEnabled();
-      
+
       // Contar cupons extraídos via IA
       let aiCouponsCount = 0;
       try {
@@ -152,9 +169,26 @@ class TelegramChannelController {
         });
       }
 
+      // Garantir que example_messages seja sempre um array
+      let exampleMessages = [];
+      if (channel.example_messages) {
+        if (Array.isArray(channel.example_messages)) {
+          exampleMessages = channel.example_messages;
+        } else if (typeof channel.example_messages === 'string') {
+          try {
+            exampleMessages = JSON.parse(channel.example_messages);
+          } catch (e) {
+            logger.warn(`Erro ao parsear example_messages do canal ${channel.id}`);
+          }
+        }
+      }
+
       res.json({
         success: true,
-        data: channel
+        data: {
+          ...channel,
+          example_messages: exampleMessages
+        }
       });
     } catch (error) {
       logger.error(`Erro ao buscar canal: ${error.message}`);
@@ -399,8 +433,8 @@ class TelegramChannelController {
         ...couponData,
         origem: 'telegram',
         auto_captured: true,
-        is_pending_approval: couponData.is_pending_approval !== undefined 
-          ? couponData.is_pending_approval 
+        is_pending_approval: couponData.is_pending_approval !== undefined
+          ? couponData.is_pending_approval
           : true
       });
 
@@ -457,7 +491,7 @@ class TelegramChannelController {
   async listCoupons(req, res) {
     try {
       const { page = 1, limit = 20, channel_origin } = req.query;
-      
+
       const filters = {
         origem: 'telegram',
         page: parseInt(page),
@@ -491,7 +525,7 @@ class TelegramChannelController {
   async getAiStatus(req, res) {
     try {
       const aiEnabled = await couponAnalyzer.isEnabled();
-      
+
       // Estatísticas de cupons extraídos via IA
       let stats = {
         total_ai_coupons: 0,

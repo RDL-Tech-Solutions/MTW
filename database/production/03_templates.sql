@@ -89,28 +89,25 @@ ON CONFLICT DO NOTHING;
 -- MODELOS PARA: PROMOÇÃO + CUPOM (promotion_with_coupon)
 -- =====================================================
 
--- Modelo 1: Simples e Direto (ATIVO)
+-- Modelo 1: Simples e Direto (ATIVO) - Atualizado 2026-01-08
 INSERT INTO bot_message_templates (template_type, platform, template, description, is_active, available_variables) VALUES
 ('promotion_with_coupon', 'all', 
-'🔥 **PROMOÇÃO + CUPOM!**
+'📦 {product_name}
 
-📦 {product_name}
+💰 Preço: {original_price}
+🎟️ Com Cupom: {final_price}
+🏷️ {discount_percentage}% OFF
 
-💰 **Preço Original:** {current_price}
-🎟️ **Com Cupom:** {price_with_coupon}
-{old_price}
-🏷️ **{discount_percentage}% OFF**
+🎟️ CUPOM: `{coupon_code}`
 
-{coupon_section}
-
-🛒 {platform_name}
+🛒 Plataforma: {platform_name}
 
 🔗 {affiliate_link}
 
-⚡ Economia dupla! Corre que está acabando!',
-'Modelo Padrão 1: Promoção com Cupom - Simples e Direto',
+⚡ Economia dupla! Aproveite agora!',
+'Modelo Padrão 1: Promoção com Cupom - Simples e Direto (Atualizado)',
 true,
-'["product_name", "current_price", "original_price", "final_price", "price_with_coupon", "old_price", "discount_percentage", "platform_name", "coupon_section", "coupon_code", "coupon_discount", "affiliate_link"]'::jsonb)
+'["product_name", "original_price", "final_price", "discount_percentage", "coupon_code", "platform_name", "affiliate_link"]'::jsonb)
 ON CONFLICT DO NOTHING;
 
 -- Modelo 2: Detalhado e Informativo  

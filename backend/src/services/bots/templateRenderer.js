@@ -1267,63 +1267,10 @@ class TemplateRenderer {
     // Nome do produto será escapado depois baseado na plataforma
     const productName = product.name || 'Produto sem nome';
 
-    // Preparar seção de cupom se houver
-    let couponSection = '';
-    if (product.coupon_id) {
-      try {
-        const coupon = await Coupon.findById(product.coupon_id);
-        if (coupon && coupon.is_active) {
-          const discountText = coupon.discount_type === 'percentage'
-            ? `${coupon.discount_value}%`
-            : `R$ ${coupon.discount_value.toFixed(2)}`;
-
-          couponSection = `\n🎟️ **CUPOM DISPONÍVEL**\n\n`;
-          couponSection += `💬 **Código:** \`${coupon.code}\`\n`;
-          couponSection += `💰 **Desconto:** ${discountText} OFF\n`;
-
-          // Mostrar preço final com cupom se calculado
-          if (priceWithCoupon && priceWithCoupon < productCurrentPrice) {
-            const priceWithCouponFormatted = new Intl.NumberFormat('pt-BR', {
-              style: 'currency',
-              currency: 'BRL'
-            }).format(priceWithCoupon);
-            couponSection += `\n🔥 **PREÇO FINAL COM CUPOM:** ${priceWithCouponFormatted}\n`;
-            couponSection += `💵 ~~${currentPriceFormatted}~~ → ${priceWithCouponFormatted}\n`;
-          }
-
-          if (coupon.min_purchase > 0) {
-            // Para cupons de produtos, manter formato completo
-            couponSection += `💳 **Compra mínima:** R$ ${coupon.min_purchase.toFixed(2)}\n`;
-          }
-
-          // Limite máximo de desconto
-          if (coupon.max_discount_value > 0) {
-            couponSection += `💰 **Limite de desconto:** R$ ${coupon.max_discount_value.toFixed(2)}\n`;
-          }
-
-          // Limite de usos
-          if (coupon.max_uses) {
-            couponSection += `📊 **Limite de usos:** ${coupon.current_uses || 0} / ${coupon.max_uses}\n`;
-          }
-
-          // Aplicabilidade
-          if (coupon.is_general === true) {
-            couponSection += `✅ **Válido para todos os produtos**\n`;
-          } else if (coupon.is_general === false) {
-            const productCount = coupon.applicable_products?.length || 0;
-            if (productCount > 0) {
-              couponSection += `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})\n`;
-            } else {
-              couponSection += `📦 **Em produtos selecionados**\n`;
-            }
-          }
-
-          couponSection += `📅 **Válido até:** ${this.formatDate(coupon.valid_until)}\n`;
-        }
-      } catch (error) {
-        logger.warn(`Erro ao buscar cupom ${product.coupon_id}: ${error.message}`);
-      }
-    }
+    // IMPORTANTE: Não gerar coupon_section para templates novos de "Promoção + Cupom"
+    // O novo template usa variáveis individuais: {coupon_code}, {final_price}, etc
+    // Manter coupon_section vazio para compatibilidade com templates antigos
+    const couponSection = '';
 
     // Informações específicas para Shopee (ofertas/coleções)
     let shopeeOfferInfo = '';
@@ -1382,15 +1329,18 @@ class TemplateRenderer {
     // Log das variáveis preparadas
     logger.info(`📊 Variáveis de preço preparadas:`);
     logger.info(`   current_price: ${currentPriceFormatted} (preço atual SEM cupom)`);
-    logger.info(`   final_price: ${finalPriceFormatted} (preço COM cupom)`);
-    logger.info(`   old_price: ${oldPriceFormatted || 'N/A'} (preço antigo)`);
+    logger.info(`   original_price: ${currentPriceFormatted} (preço SEM cupom - novo template)`);
+    logger.info(`   final_price: ${finalPriceFormatted} (preço COM cupom - novo template)`);
+    logger.info(`   old_price: ${oldPriceFormatted || 'N/A'} (preço antigo riscado)`);
     logger.info(`   discount_percentage: ${product.discount_percentage || 0}%`);
+    logger.info(`   coupon_code: ${couponCode || 'N/A'}`);
 
     return {
       product_name: productName,
       current_price: currentPriceFormatted, // Preço atual do produto (SEM cupom)
-      original_price: oldPriceFormatted || currentPriceFormatted, // Preço antigo (old_price) ou current_price se não houver
-      old_price: oldPriceFormatted ? ` ~~${oldPriceFormatted}~~` : '',
+      original_price: currentPriceFormatted, // NOVO: Preço SEM cupom (para template Promoção + Cupom)
+      final_price: finalPriceFormatted, // NOVO: Preço COM cupom aplicado (para template Promoção + Cupom)
+      old_price: oldPriceFormatted ? ` ~~${oldPriceFormatted}~~` : '', // Preço antigo riscado (opcional)
       discount_percentage: product.discount_percentage || 0,
       platform_name: platformName,
       category_name: categoryName,
@@ -1398,12 +1348,11 @@ class TemplateRenderer {
       coupon_section: couponSection,
       shopee_offer_info: shopeeOfferInfo,
       is_shopee_offer: product.platform === 'shopee' ? 'true' : 'false',
-      final_price: finalPriceFormatted, // Preço final COM cupom aplicado
       price_with_coupon: priceWithCoupon ? new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
       }).format(priceWithCoupon) : null,
-      coupon_code: couponCode,
+      coupon_code: couponCode, // Código do cupom (se houver)
       coupon_discount: couponDiscount
     };
   }
