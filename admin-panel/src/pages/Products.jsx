@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap, Loader2, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -36,7 +36,8 @@ export default function Products() {
     deleting: new Set(),
     submitting: false,
     analyzing: false,
-    batchDeleting: false
+    batchDeleting: false,
+    scheduling: false
   });
 
   const [formData, setFormData] = useState({
@@ -408,6 +409,7 @@ export default function Products() {
       });
     } finally {
       setAnalyzingLink(false);
+      setProcessingActions(prev => ({ ...prev, analyzing: false }));
     }
   };
 
@@ -778,11 +780,62 @@ export default function Products() {
                   </div>
                 )}
 
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting}>Cancelar</Button>
+                <DialogFooter className="flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting || processingActions.scheduling}>Cancelar</Button>
+                  {!editingProduct && (
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="bg-purple-600 hover:bg-purple-700"
+                      disabled={processingActions.submitting || processingActions.scheduling || !formData.name || !formData.price}
+                      onClick={async () => {
+                        setProcessingActions(prev => ({ ...prev, scheduling: true }));
+                        try {
+                          const parsePrice = (priceStr) => {
+                            if (!priceStr && priceStr !== 0) return null;
+                            if (typeof priceStr === 'number') return priceStr;
+                            const normalized = String(priceStr).replace(',', '.');
+                            const cleaned = normalized.replace(/[^\d.]/g, '');
+                            return parseFloat(cleaned) || null;
+                          };
+                          const productData = {
+                            name: formData.name,
+                            image_url: formData.image_url,
+                            platform: formData.platform,
+                            current_price: parsePrice(formData.discount_price) || parsePrice(formData.price),
+                            old_price: formData.discount_price ? parsePrice(formData.price) : null,
+                            category_id: formData.category_id?.trim() || null,
+                            coupon_id: formData.coupon_id?.trim() || null,
+                            affiliate_link: formData.affiliate_url,
+                            stock_available: true,
+                            external_id: `${formData.platform}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                            schedule_mode: true // Ativa modo agendamento com IA
+                          };
+                          const response = await api.post('/products', productData);
+                          await fetchProducts(1);
+                          toast({
+                            title: "Produto Agendado! 📅",
+                            description: response.data?.message || "A IA definiu o melhor horário. Verifique em Agendamentos.",
+                          });
+                          setIsDialogOpen(false);
+                          setFormData({ name: '', description: '', price: '', discount_price: '', affiliate_url: '', image_url: '', category_id: '', coupon_id: '', platform: 'shopee' });
+                        } catch (error) {
+                          toast({ title: "Erro!", description: "Erro ao agendar produto.", variant: "destructive" });
+                        } finally {
+                          setProcessingActions(prev => ({ ...prev, scheduling: false }));
+                        }
+                      }}
+                    >
+                      {processingActions.scheduling ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Agendando...</>
+                      ) : (
+                        <><Calendar className="mr-2 h-4 w-4" />Criar + IA Agendar</>
+                      )}
+                    </Button>
+                  )}
                   <Button
                     type="submit"
-                    disabled={processingActions.submitting}
+                    disabled={processingActions.submitting || processingActions.scheduling}
                     className="disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {processingActions.submitting ? (
@@ -791,7 +844,7 @@ export default function Products() {
                         {editingProduct ? 'Salvando...' : 'Criando...'}
                       </>
                     ) : (
-                      editingProduct ? 'Salvar' : 'Criar'
+                      editingProduct ? 'Salvar' : 'Criar e Publicar'
                     )}
                   </Button>
                 </DialogFooter>

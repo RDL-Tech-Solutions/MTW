@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -26,6 +26,7 @@ export default function PendingProducts() {
   const [finalPrice, setFinalPrice] = useState(null);
   const [approving, setApproving] = useState(false);
   const [shortening, setShortening] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -439,6 +440,59 @@ export default function PendingProducts() {
     } finally {
       setApproving(false);
       setShortening(false);
+    }
+  };
+
+  // Aprovar e agendar com IA - a IA define o melhor horário para publicar
+  const handleApproveAndSchedule = async () => {
+    if (!affiliateLink || !affiliateLink.trim()) {
+      toast({
+        title: "Erro",
+        description: "Link de afiliado é obrigatório",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      const payload = {
+        affiliate_link: affiliateLink.trim(),
+        shorten_link: false
+      };
+
+      if (selectedCouponId) {
+        payload.coupon_id = selectedCouponId;
+      }
+
+      if (selectedCategoryId) {
+        payload.category_id = selectedCategoryId;
+      }
+
+      toast({
+        title: "Agendando com IA...",
+        description: "A IA está analisando o melhor horário para publicar este produto.",
+      });
+
+      const response = await api.post(`/products/pending/${selectedProduct.id}/approve-schedule`, payload);
+
+      toast({
+        title: "Produto Agendado! 📅",
+        description: response.data?.data?.message || "A IA definiu o melhor horário. Verifique em Agendamentos IA.",
+      });
+
+      // Recarregar lista
+      fetchPendingProducts(pagination.page);
+      handleCloseApprovalDialog();
+    } catch (error) {
+      console.error('❌ Erro ao agendar produto:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Falha ao agendar produto com IA",
+        variant: "destructive"
+      });
+    } finally {
+      setScheduling(false);
     }
   };
 
@@ -1011,18 +1065,18 @@ export default function PendingProducts() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
             <Button
               variant="outline"
               onClick={handleCloseApprovalDialog}
-              disabled={approving || shortening}
+              disabled={approving || shortening || scheduling}
             >
               Cancelar
             </Button>
             <Button
               variant="outline"
               onClick={() => handleApprove(true)}
-              disabled={approving || shortening || !affiliateLink.trim()}
+              disabled={approving || shortening || scheduling || !affiliateLink.trim()}
             >
               {shortening ? (
                 <>
@@ -1032,13 +1086,13 @@ export default function PendingProducts() {
               ) : (
                 <>
                   <Link2 className="h-4 w-4 mr-2" />
-                  Encurtar Link e Publicar
+                  Encurtar + Publicar
                 </>
               )}
             </Button>
             <Button
               onClick={() => handleApprove(false)}
-              disabled={approving || shortening || !affiliateLink.trim()}
+              disabled={approving || shortening || scheduling || !affiliateLink.trim()}
             >
               {approving ? (
                 <>
@@ -1047,6 +1101,24 @@ export default function PendingProducts() {
                 </>
               ) : (
                 'Aprovar e Publicar'
+              )}
+            </Button>
+            <Button
+              variant="default"
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={handleApproveAndSchedule}
+              disabled={approving || shortening || scheduling || !affiliateLink.trim()}
+            >
+              {scheduling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Agendando...
+                </>
+              ) : (
+                <>
+                  <Calendar className="h-4 w-4 mr-2" />
+                  IA Agendar
+                </>
               )}
             </Button>
           </DialogFooter>

@@ -41,31 +41,49 @@ class ProductController {
   // Criar produto (admin)
   static async create(req, res, next) {
     try {
+      const { schedule_mode } = req.body;
+
       // Criar produto (status padrão é 'pending' no modelo)
       const product = await Product.create(req.body);
 
       logger.info(`Produto criado: ${product.id}`);
 
-      // Buscar dados completos do produto para publicação
+      // Buscar dados completos do produto para publicação/agendamento
       const fullProduct = await Product.findById(product.id);
 
-      // Publicar e notificar automaticamente (como era antes)
-      const publishResult = await publishService.publishAll(fullProduct);
+      if (schedule_mode) {
+        // MODO AGENDAMENTO: Usar IA para definir melhor horário
+        logger.info(`📅 Modo agendamento ativado para: ${product.name}`);
 
-      // Atualizar status para 'published' após publicação bem-sucedida
-      if (publishResult.success) {
-        await Product.update(product.id, { status: 'published' });
-        logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
-      } else {
-        // Se a publicação falhou, manter como 'approved' (aprovado mas não publicado)
+        const schedulerService = (await import('../services/autoSync/schedulerService.js')).default;
+        await schedulerService.scheduleProduct(fullProduct);
+
+        // Atualizar status para 'approved' (aguardando publicação agendada)
         await Product.update(product.id, { status: 'approved' });
-        logger.warn(`⚠️ Produto aprovado mas publicação falhou: ${product.name}`);
+
+        logger.info(`✅ Produto agendado com IA: ${product.name}`);
+
+        const updatedProduct = await Product.findById(product.id);
+        res.status(201).json(successResponse(updatedProduct, 'Produto criado e agendado com IA! Verifique em Agendamentos.'));
+      } else {
+        // MODO NORMAL: Publicar imediatamente
+        const publishResult = await publishService.publishAll(fullProduct);
+
+        // Atualizar status para 'published' após publicação bem-sucedida
+        if (publishResult.success) {
+          await Product.update(product.id, { status: 'published' });
+          logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
+        } else {
+          // Se a publicação falhou, manter como 'approved' (aprovado mas não publicado)
+          await Product.update(product.id, { status: 'approved' });
+          logger.warn(`⚠️ Produto aprovado mas publicação falhou: ${product.name}`);
+        }
+
+        // Buscar produto atualizado para retornar
+        const updatedProduct = await Product.findById(product.id);
+
+        res.status(201).json(successResponse(updatedProduct, 'Produto criado e publicado com sucesso'));
       }
-
-      // Buscar produto atualizado para retornar
-      const updatedProduct = await Product.findById(product.id);
-
-      res.status(201).json(successResponse(updatedProduct, 'Produto criado e publicado com sucesso'));
     } catch (error) {
       next(error);
     }
@@ -437,7 +455,129 @@ class ProductController {
     }
   }
 
-  // Rejeitar produto pendente (admin)
+  // Aprovar e AGENDAR produto com IA (admin)
+  // Diferente do approve normal, este não publica imediatamente - a IA decide o melhor horário
+  static async approveAndSchedule(req, res, next) {
+    try {
+      logger.info(`📅 ========== APROVAR E AGENDAR COM IA ==========`);
+
+      const { id } = req.params;
+      const { affiliate_link, coupon_id, category_id, shorten_link } = req.body;
+
+      if (!affiliate_link || !affiliate_link.trim()) {
+        return res.status(400).json(
+          errorResponse('Link de afiliado é obrigatório', 'MISSING_AFFILIATE_LINK')
+        );
+      }
+
+      // Encurtar link se solicitado
+      let finalAffiliateLink = affiliate_link.trim();
+      const shouldShorten = shorten_link === true || shorten_link === 'true' || shorten_link === 1 || shorten_link === '1';
+
+      if (shouldShorten) {
+        try {
+          const urlShortener = (await import('../services/urlShortener.js')).default;
+          const shortenedUrl = await urlShortener.shorten(affiliate_link.trim());
+          if (shortenedUrl && shortenedUrl !== affiliate_link.trim()) {
+            new URL(shortenedUrl); // Validar
+            finalAffiliateLink = shortenedUrl;
+            logger.info(`✅ Link encurtado: ${finalAffiliateLink}`);
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao encurtar link, usando original: ${error.message}`);
+        }
+      }
+
+      // Buscar produto
+      const product = await Product.findById(id);
+      if (!product) {
+        return res.status(404).json(
+          errorResponse(ERROR_MESSAGES.NOT_FOUND, ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      if (product.status !== 'pending') {
+        return res.status(400).json(
+          errorResponse('Produto já foi processado', 'PRODUCT_ALREADY_PROCESSED')
+        );
+      }
+
+      // Preparar dados de atualização
+      let updateData = {
+        affiliate_link: finalAffiliateLink,
+        status: 'approved'
+      };
+
+      if (category_id) {
+        updateData.category_id = category_id;
+      }
+
+      // Processar cupom se fornecido
+      let finalPrice = product.current_price;
+      if (coupon_id) {
+        const Coupon = (await import('../models/Coupon.js')).default;
+        const coupon = await Coupon.findById(coupon_id);
+
+        if (coupon && coupon.is_active) {
+          const now = new Date();
+          const validFrom = new Date(coupon.valid_from);
+          const validUntil = new Date(coupon.valid_until);
+
+          if (now >= validFrom && now <= validUntil) {
+            const currentPrice = product.current_price || 0;
+
+            if (coupon.discount_type === 'percentage') {
+              finalPrice = currentPrice - (currentPrice * (coupon.discount_value / 100));
+            } else {
+              finalPrice = Math.max(0, currentPrice - coupon.discount_value);
+            }
+
+            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+              const discountAmount = currentPrice - finalPrice;
+              if (discountAmount > coupon.max_discount_value) {
+                finalPrice = currentPrice - coupon.max_discount_value;
+              }
+            }
+
+            updateData.coupon_id = coupon_id;
+            logger.info(`💰 Preço com cupom: R$ ${finalPrice.toFixed(2)}`);
+          }
+        }
+      }
+
+      // Aprovar produto
+      const approvedProduct = await Product.approve(id, finalAffiliateLink, updateData);
+      logger.info(`✅ Produto aprovado: ${approvedProduct.name}`);
+
+      // Buscar produto completo para agendamento
+      const fullProduct = await Product.findById(id);
+      fullProduct.affiliate_link = finalAffiliateLink;
+      if (category_id) fullProduct.category_id = category_id;
+      if (coupon_id) {
+        fullProduct.coupon_id = coupon_id;
+        fullProduct.final_price = finalPrice;
+        fullProduct.price_with_coupon = finalPrice;
+      }
+
+      // AGENDAR COM IA (não publicar imediatamente)
+      const schedulerService = (await import('../services/autoSync/schedulerService.js')).default;
+      await schedulerService.scheduleProduct(fullProduct);
+
+      logger.info(`📅 ✅ Produto agendado com IA: ${fullProduct.name}`);
+      logger.info(`   Verifique em /scheduled-posts para ver o horário definido pela IA`);
+
+      res.json(successResponse({
+        product: approvedProduct,
+        scheduled: true,
+        final_price: coupon_id ? finalPrice : null,
+        message: 'Produto aprovado e agendado! A IA definiu o melhor horário para publicação.'
+      }, 'Produto aprovado e agendado com IA'));
+    } catch (error) {
+      logger.error(`❌ Erro ao aprovar e agendar produto: ${error.message}`);
+      next(error);
+    }
+  }
+
   static async reject(req, res, next) {
     try {
       const { id } = req.params;

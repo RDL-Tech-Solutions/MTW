@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Trash2, Play, Search, Calendar, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Trash2, Play, Search, Calendar, Clock, AlertCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -114,6 +114,29 @@ export default function ScheduledPosts() {
         });
     };
 
+    const formatPrice = (price) => {
+        if (!price) return '-';
+        return `R$ ${parseFloat(price).toFixed(2)}`;
+    };
+
+    const getTimeRemaining = (scheduledAt) => {
+        if (!scheduledAt) return null;
+        const now = new Date();
+        const scheduled = new Date(scheduledAt);
+        const diff = scheduled - now;
+
+        if (diff <= 0) return { text: 'Aguardando processamento', color: 'text-orange-500', urgent: true };
+
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) return { text: `em ${days}d ${hours % 24}h`, color: 'text-muted-foreground', urgent: false };
+        if (hours > 0) return { text: `em ${hours}h ${minutes % 60}min`, color: 'text-blue-500', urgent: false };
+        if (minutes > 5) return { text: `em ${minutes} min`, color: 'text-yellow-500', urgent: false };
+        return { text: `em ${minutes} min`, color: 'text-red-500', urgent: true };
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -123,6 +146,15 @@ export default function ScheduledPosts() {
                         Fila de publicações inteligentes ({pagination.total})
                     </p>
                 </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchPosts(pagination.page)}
+                    disabled={loading}
+                >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Atualizar
+                </Button>
             </div>
 
             <div className="flex gap-2 bg-muted/50 p-1 rounded-lg w-fit">
@@ -131,8 +163,8 @@ export default function ScheduledPosts() {
                         key={status}
                         onClick={() => setStatusFilter(status)}
                         className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${statusFilter === status
-                                ? 'bg-background shadow text-foreground'
-                                : 'text-muted-foreground hover:text-foreground'
+                            ? 'bg-background shadow text-foreground'
+                            : 'text-muted-foreground hover:text-foreground'
                             }`}
                     >
                         {status === 'all' ? 'Todos' :
@@ -149,6 +181,7 @@ export default function ScheduledPosts() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Produto</TableHead>
+                                <TableHead>Preço</TableHead>
                                 <TableHead>Plataforma</TableHead>
                                 <TableHead>Agendado Para</TableHead>
                                 <TableHead>Status</TableHead>
@@ -189,6 +222,16 @@ export default function ScheduledPosts() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
+                                            <div className="font-medium text-green-600">
+                                                {formatPrice(post.products?.current_price)}
+                                            </div>
+                                            {post.products?.old_price && post.products.old_price > post.products.current_price && (
+                                                <div className="text-xs text-muted-foreground line-through">
+                                                    {formatPrice(post.products.old_price)}
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
                                             <Badge variant="outline" className="capitalize">
                                                 {post.platform}
                                             </Badge>
@@ -199,7 +242,15 @@ export default function ScheduledPosts() {
                                                     <Calendar className="w-3 h-3" />
                                                     {formatDate(post.scheduled_at)}
                                                 </div>
-                                                {/* Como não temos motivo salvo no banco ainda, omitimos ou mostramos só data */}
+                                                {post.status === 'pending' && (() => {
+                                                    const timeInfo = getTimeRemaining(post.scheduled_at);
+                                                    return timeInfo && (
+                                                        <span className={`text-xs ${timeInfo.color} flex items-center gap-1`}>
+                                                            <Clock className="w-3 h-3" />
+                                                            {timeInfo.text}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                         </TableCell>
                                         <TableCell>

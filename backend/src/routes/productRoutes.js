@@ -9,6 +9,7 @@ const router = express.Router();
 // Rotas para produtos pendentes (devem vir antes de /:id para evitar conflito)
 router.get('/pending', authenticateToken, requireAdmin, ProductController.listPending);
 router.post('/pending/:id/approve', authenticateToken, requireAdmin, ProductController.approve);
+router.post('/pending/:id/approve-schedule', authenticateToken, requireAdmin, ProductController.approveAndSchedule);
 router.post('/pending/:id/reject', authenticateToken, requireAdmin, ProductController.reject);
 
 // Estatísticas de produtos

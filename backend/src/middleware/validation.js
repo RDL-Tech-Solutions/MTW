@@ -5,13 +5,13 @@ import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
 export const validate = (schema) => {
   return (req, res, next) => {
     const { error } = schema.validate(req.body, { abortEarly: false });
-    
+
     if (error) {
       const errors = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message
       }));
-      
+
       return res.status(400).json({
         success: false,
         error: ERROR_MESSAGES.VALIDATION_ERROR,
@@ -19,7 +19,7 @@ export const validate = (schema) => {
         details: errors
       });
     }
-    
+
     next();
   };
 };
@@ -42,7 +42,7 @@ export const loginSchema = Joi.object({
 export const createProductSchema = Joi.object({
   name: Joi.string().min(3).max(500).required(),
   image_url: Joi.string().uri().required(),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon').required(),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general').required(),
   current_price: Joi.number().positive().required(),
   old_price: Joi.number().positive().allow(null),
   discount_percentage: Joi.number().min(0).max(100).allow(null),
@@ -50,13 +50,14 @@ export const createProductSchema = Joi.object({
   coupon_id: Joi.string().uuid().allow('', null).optional(),
   affiliate_link: Joi.string().uri().required(),
   external_id: Joi.string().allow('', null).optional(),
-  stock_available: Joi.boolean().default(true)
+  stock_available: Joi.boolean().default(true),
+  schedule_mode: Joi.boolean().default(false)
 });
 
 export const updateProductSchema = Joi.object({
   name: Joi.string().min(3).max(500),
   image_url: Joi.string().uri(),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon'),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'),
   current_price: Joi.number().positive(),
   old_price: Joi.number().positive().allow(null),
   discount_percentage: Joi.number().min(0).max(100).allow(null),
