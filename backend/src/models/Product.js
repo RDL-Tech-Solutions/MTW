@@ -845,46 +845,87 @@ class Product {
 
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const BATCH_SIZE = 500; // Supabase limita .in() a ~1000 IDs
 
-      // 1. Excluir pendentes com mais de 24h
-      const { data: deletedPending, count: pendingCount, error: pendingError } = await supabase
+      // Função auxiliar para deletar em lotes
+      const deleteInBatches = async (ids, table = 'products') => {
+        let deleted = 0;
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const batch = ids.slice(i, i + BATCH_SIZE);
+
+          // Deletar agendamentos vinculados primeiro
+          try {
+            await supabase
+              .from('scheduled_posts')
+              .delete()
+              .in('product_id', batch);
+          } catch (e) {
+            // Ignorar erro se não houver agendamentos
+          }
+
+          // Deletar produtos
+          const { count, error } = await supabase
+            .from(table)
+            .delete({ count: 'exact' })
+            .in('id', batch);
+
+          if (error) throw error;
+          deleted += count || 0;
+
+          logger.debug(`   Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${count} deletados`);
+        }
+        return deleted;
+      };
+
+      // 1. Buscar IDs dos produtos pendentes com mais de 24h
+      const { data: pendingProducts, error: pendingFetchError } = await supabase
         .from('products')
-        .delete({ count: 'exact' })
+        .select('id, name')
         .eq('status', 'pending')
-        .lt('created_at', twentyFourHoursAgo)
-        .select('id, name, created_at');
+        .lt('created_at', twentyFourHoursAgo);
 
-      if (pendingError) throw pendingError;
+      if (pendingFetchError) throw pendingFetchError;
 
-      if (pendingCount > 0) {
-        const names = deletedPending.map(p => p.name).slice(0, 5).join(', ');
+      let pendingCount = 0;
+      if (pendingProducts && pendingProducts.length > 0) {
+        const pendingIds = pendingProducts.map(p => p.id);
+        logger.info(`   📋 ${pendingIds.length} produtos pendentes antigos encontrados`);
+
+        pendingCount = await deleteInBatches(pendingIds);
+
+        const names = pendingProducts.map(p => p.name).slice(0, 5).join(', ').substring(0, 100);
         const more = pendingCount > 5 ? ` e mais ${pendingCount - 5}` : '';
         logger.info(`✅ Removidos ${pendingCount} produtos pendentes antigos (>24h): ${names}${more}`);
       } else {
         logger.debug('ℹ️ Nenhum produto pendente antigo para remover');
       }
 
-      // 2. Excluir processados (approved/published/rejected) com mais de 7 dias
-      const { data: deletedProcessed, count: processedCount, error: processedError } = await supabase
+      // 2. Buscar IDs dos produtos processados com mais de 7 dias
+      const { data: processedProducts, error: processedFetchError } = await supabase
         .from('products')
-        .delete({ count: 'exact' })
+        .select('id, name')
         .in('status', ['approved', 'published', 'rejected'])
-        .lt('updated_at', sevenDaysAgo)
-        .select('id, name, status, updated_at');
+        .lt('updated_at', sevenDaysAgo);
 
-      if (processedError) throw processedError;
+      if (processedFetchError) throw processedFetchError;
 
-      if (processedCount > 0) {
-        const names = deletedProcessed.map(p => p.name).slice(0, 5).join(', ');
+      let processedCount = 0;
+      if (processedProducts && processedProducts.length > 0) {
+        const processedIds = processedProducts.map(p => p.id);
+        logger.info(`   📋 ${processedIds.length} produtos processados antigos encontrados`);
+
+        processedCount = await deleteInBatches(processedIds);
+
+        const names = processedProducts.map(p => p.name).slice(0, 5).join(', ').substring(0, 100);
         const more = processedCount > 5 ? ` e mais ${processedCount - 5}` : '';
         logger.info(`✅ Removidos ${processedCount} produtos antigos (>7 dias): ${names}${more}`);
       } else {
         logger.debug('ℹ️ Nenhum produto processado antigo para remover');
       }
 
-      logger.info(`📊 Total de produtos removidos: ${(pendingCount || 0) + (processedCount || 0)}`);
+      logger.info(`📊 Total de produtos removidos: ${pendingCount + processedCount}`);
 
-      return { pendingCount: pendingCount || 0, processedCount: processedCount || 0 };
+      return { pendingCount, processedCount };
     } catch (error) {
       logger.error(`❌ Erro na limpeza automática de produtos: ${error.message}`);
       throw error;

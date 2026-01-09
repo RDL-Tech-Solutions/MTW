@@ -1,10 +1,14 @@
 
+
 import { supabase } from '../../config/database.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
 import templateRenderer from '../bots/templateRenderer.js';
 import telegramService from '../bots/telegramService.js';
 import whatsappService from '../bots/whatsappService.js';
 import schedulerService from './schedulerService.js';
+import logger from '../../config/logger.js';
+import Product from '../../models/Product.js';
+
 
 class PublishService {
   /**

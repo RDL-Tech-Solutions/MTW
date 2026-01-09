@@ -89,7 +89,7 @@ class ScheduledPost {
 
             let dbQuery = supabase
                 .from('scheduled_posts')
-                .select('*, products(*)', { count: 'exact' })
+                .select('*, products(*, category:categories!category_id(id, name, icon))', { count: 'exact' })
                 .order('scheduled_at', { ascending: true })
                 .range(from, to);
 
