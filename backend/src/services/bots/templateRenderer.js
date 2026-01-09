@@ -1010,10 +1010,8 @@ class TemplateRenderer {
           return null;
         }
 
-        // Verificar se a linha tem apenas label e dois pontos, sem valor real
-        if (trimmed.match(/^[\s\p{Emoji}<>\/]*<[^>]+>[^<]*<\/[^>]+>[\s:]*$/u)) {
-          return null;
-        }
+        // NÃO remover linhas que contêm labels ou valores (mesmo que sozinhos na linha)
+        // O filtro anterior estava removendo <b>CÓDIGO:</b> e <code>ABC</code> por engano
 
         // Preservar a linha original (com espaços se necessário)
         return line;
@@ -1416,15 +1414,14 @@ class TemplateRenderer {
     if (coupon.is_general === true) {
       // Cupom válido para todos os produtos
       applicability = '✅ **Válido para todos os produtos**';
-    } else if (coupon.is_general === false) {
+    } else if (coupon.is_general === false && coupon.applicable_products?.length > 0) {
       // Cupom para produtos selecionados
-      const productCount = coupon.applicable_products?.length || 0;
-      if (productCount > 0) {
-        applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
-      }
-      // Se productCount === 0 e não é geral, não incluir (deixar vazio)
+      const productCount = coupon.applicable_products.length;
+      applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
+    } else {
+      // is_general é null ou false sem produtos - não mencionar nada
+      applicability = '';
     }
-    // Se is_general for null, applicability permanece vazio e a linha será removida do template
 
     // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
     // Sempre retornar vazio, independente de ter ou não data de expiração
@@ -2090,81 +2087,111 @@ class TemplateRenderer {
 
   /**
    * Template padrão caso não encontre template customizado
+   * IMPORTANTE: Estes templates devem ser IDÊNTICOS aos templates do banco de dados (03_templates.sql)
+   * Isso garante consistência entre modo 'default' e fallback da IA
    * @param {string} templateType - Tipo do template
    * @param {Object} variables - Variáveis
    * @returns {string}
    */
   getDefaultTemplate(templateType, variables, platform = 'telegram') {
-    // Usar ** para negrito (será convertido automaticamente para WhatsApp)
+    // NOTA: Templates sincronizados com 03_templates.sql (Modelo Padrão 1: Simples e Direto)
+    // Usar ** para negrito (será convertido para HTML/Markdown conforme plataforma)
     switch (templateType) {
       case 'new_promotion':
-        // Template padrão para todas as plataformas (SEM CUPOM)
-        // Incluir informações extras da Shopee se houver
-        const extraInfo = variables.shopee_offer_info ? `\n${variables.shopee_offer_info}` : '';
-        return `🔥 **NOVA PROMOÇÃO AUTOMÁTICA**\n\n📦 ${variables.product_name || 'Produto'}${extraInfo}\n\n💰 **${variables.current_price || 'R$ 0,00'}**${variables.old_price || ''}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n🛒 Plataforma: ${variables.platform_name || 'N/A'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Aproveite antes que acabe!`;
+        // Template padrão do banco: "Modelo Padrão 1: Simples e Direto" (ATIVO)
+        // Variáveis: product_name, current_price, old_price, discount_percentage, platform_name, coupon_section, affiliate_link
+        return `🔥 **PROMOÇÃO IMPERDÍVEL!**
+
+📦 ${variables.product_name || '{product_name}'}
+
+💰 **${variables.current_price || '{current_price}'}**${variables.old_price || ''}
+🏷️ **${variables.discount_percentage || 0}% OFF**
+
+🛒 ${variables.platform_name || '{platform_name}'}
+
+${variables.coupon_section || ''}
+
+🔗 ${variables.affiliate_link || '{affiliate_link}'}
+
+⚡ Corre que está acabando!`;
 
       case 'promotion_with_coupon':
-        // Template padrão para promoção COM CUPOM
-        // IMPORTANTE: Usar os preços corretos:
-        // - original_price: preço antigo (antes de qualquer desconto)
-        // - current_price: preço atual do produto (SEM cupom)
-        // - final_price: preço COM cupom aplicado
+        // Template padrão do banco: "Modelo Padrão 1: Promoção com Cupom - Simples e Direto (Atualizado)"
+        // Variáveis: product_name, original_price, final_price, discount_percentage, coupon_code, platform_name, affiliate_link
         logger.info(`📋 [TEMPLATE PADRÃO] Gerando template para promotion_with_coupon`);
         logger.debug(`   Variables: ${JSON.stringify({
           product_name: variables.product_name?.substring(0, 50) || 'N/A',
           original_price: variables.original_price || 'N/A',
           current_price: variables.current_price || 'N/A',
           final_price: variables.final_price || 'N/A',
-          coupon_code: variables.coupon_code || 'N/A',
-          has_coupon_section: !!variables.coupon_section
+          coupon_code: variables.coupon_code || 'N/A'
         })}`);
 
-        return `🔥 **PROMOÇÃO + CUPOM!**\n\n📦 ${variables.product_name || 'Produto'}\n\n💰 **Preço:** ${variables.current_price || 'R$ 0,00'}${variables.old_price || ''}\n🎟️ **Com Cupom:** ${variables.final_price || variables.price_with_coupon || variables.current_price || 'R$ 0,00'}\n🏷️ **${variables.discount_percentage || 0}% OFF**\n\n${variables.coupon_section || `🎟️ **CUPOM:** \`${variables.coupon_code || 'N/A'}\`\n💰 **Desconto:** ${variables.coupon_discount || 'N/A'}`}\n\n🛒 ${variables.platform_name || 'Plataforma'}\n\n🔗 ${variables.affiliate_link || 'Link não disponível'}\n\n⚡ Economia dupla! Corre que está acabando!`;
+        return `📦 ${variables.product_name || '{product_name}'}
+
+💰 Preço: ${variables.original_price || variables.current_price || '{original_price}'}
+🎟️ Com Cupom: ${variables.final_price || variables.price_with_coupon || '{final_price}'}
+🏷️ ${variables.discount_percentage || 0}% OFF
+
+🎟️ CUPOM: \`${variables.coupon_code || '{coupon_code}'}\`
+
+🛒 Plataforma: ${variables.platform_name || '{platform_name}'}
+
+🔗 ${variables.affiliate_link || '{affiliate_link}'}
+
+⚡ Economia dupla! Aproveite agora!`;
 
       case 'new_coupon':
-        // Se não tem descrição nem data de validade, é cupom capturado do Telegram
-        // Usar template simplificado apenas com: plataforma, código, compra mínima, limite desconto
-        // SEM link de afiliado
-        if (!variables.coupon_description && !variables.valid_until) {
-          // Template simplificado e limpo para cupons do Telegram (formato padronizado)
-          // Seguindo o formato especificado: 🎟️ CUPOM DISPONÍVEL
-          let message = `🎟️ **CUPOM DISPONÍVEL**\n\n`;
-          message += `**Código:** ${variables.coupon_code || 'N/A'}\n`;
-          message += `**Plataforma:** ${variables.platform_name || 'N/A'}\n`;
-          message += `**Desconto:** ${variables.discount_value || 'N/A'}\n`;
-          if (variables.min_purchase) {
-            // min_purchase agora contém apenas o valor (R$ X.XX), adicionar emoji e texto
-            message += `💳 **Compra mínima:** ${variables.min_purchase}\n`;
-          }
-          // Incluir aplicabilidade se disponível
-          if (variables.applicability) {
-            message += `${variables.applicability}\n`;
-          }
-          // IMPORTANTE: NÃO incluir aviso de expiração ou data de validade na mensagem do bot
-          // message += `\n⚠️ **Sujeito à expiração**\n`;
-          return message;
+        // Template padrão do banco: "Modelo Padrão 1: Simples e Direto" (ATIVO)
+        // Variáveis: platform_name, coupon_code, discount_value, min_purchase, applicability, coupon_title, coupon_description, affiliate_link
+
+        // Construir mensagem linha por linha para evitar linhas vazias desnecessárias
+        let couponMsg = `🎟️ **NOVO CUPOM DISPONÍVEL!**
+
+🏪 ${variables.platform_name || '{platform_name}'}
+
+💬 **CÓDIGO:** \`${variables.coupon_code || '{coupon_code}'}\`
+
+💰 **DESCONTO:** ${variables.discount_value || '{discount_value}'} OFF`;
+
+        // Adicionar compra mínima apenas se existir
+        if (variables.min_purchase && variables.min_purchase.trim()) {
+          couponMsg += `\n💳 **Compra mínima:** ${variables.min_purchase}`;
         }
-        // Template completo para cupons normais
-        let fullMessage = `🎟️ **NOVO CUPOM DISPONÍVEL!**\n\n`;
-        fullMessage += `🏪 **Plataforma:** ${variables.platform_name || 'N/A'}\n`;
-        fullMessage += `💬 **Código:** \`${variables.coupon_code || 'N/A'}\`\n`;
-        fullMessage += `💰 **Desconto:** ${variables.discount_value || 'N/A'} OFF\n`;
-        if (variables.min_purchase) {
-          // min_purchase agora contém apenas o valor (R$ X.XX), adicionar emoji e texto
-          fullMessage += `💳 **Compra mínima:** ${variables.min_purchase}\n`;
+
+        // Adicionar aplicabilidade apenas se existir
+        if (variables.applicability && variables.applicability.trim()) {
+          couponMsg += `\n${variables.applicability}`;
         }
-        if (variables.max_discount) fullMessage += `${variables.max_discount}`;
-        if (variables.applicability) fullMessage += `\n${variables.applicability}\n`;
-        if (variables.coupon_title) fullMessage += `\n📝 **${variables.coupon_title}**\n`;
-        if (variables.coupon_description) fullMessage += `${variables.coupon_description}\n`;
-        // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
-        // if (variables.valid_until) fullMessage += `\n📅 **Válido até:** ${variables.valid_until}\n`;
-        if (variables.affiliate_link) fullMessage += `\n🔗 ${variables.affiliate_link}\n`;
-        fullMessage += `\n⚡ Use agora e economize!`;
-        return fullMessage;
+
+        // Adicionar título e descrição se existirem
+        if (variables.coupon_title && variables.coupon_title.trim()) {
+          couponMsg += `\n\n📝 ${variables.coupon_title}`;
+        }
+        if (variables.coupon_description && variables.coupon_description.trim()) {
+          couponMsg += `\n${variables.coupon_description}`;
+        }
+
+        // Adicionar link se existir
+        if (variables.affiliate_link && variables.affiliate_link !== 'Link não disponível' && variables.affiliate_link.trim()) {
+          couponMsg += `\n\n🔗 ${variables.affiliate_link}`;
+        }
+
+        couponMsg += `\n\n⚡ Use agora e economize!`;
+
+        return couponMsg;
 
       case 'expired_coupon':
-        return `⚠️ **CUPOM EXPIROU**\n\n🏪 Plataforma: ${variables.platform_name || 'N/A'}\n💬 Código: \`${variables.coupon_code || 'N/A'}\`\n📅 Expirado em: ${variables.expired_date || 'N/A'}\n\n😔 Infelizmente este cupom não está mais disponível.\n🔔 Fique atento às próximas promoções!`;
+        // Template padrão do banco: "Modelo Padrão 1: Simples e Direto" (ATIVO)
+        // Variáveis: platform_name, coupon_code, expired_date
+        return `⚠️ **CUPOM EXPIROU**
+
+🏪 ${variables.platform_name || '{platform_name}'}
+💬 Código: \`${variables.coupon_code || '{coupon_code}'}\`
+📅 Expirado em: ${variables.expired_date || '{expired_date}'}
+
+😔 Este cupom não está mais disponível.
+🔔 Fique atento às próximas promoções!`;
 
       default:
         return 'Mensagem não configurada';

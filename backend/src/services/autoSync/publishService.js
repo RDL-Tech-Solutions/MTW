@@ -121,7 +121,7 @@ class PublishService {
   /**
    * Enviar para Telegram Bot (com imagem se disponível)
    */
-  async notifyTelegramBot(product) {
+  async notifyTelegramBot(product, options = {}) {
     try {
       const message = await this.formatBotMessage(product, 'telegram');
 
@@ -156,7 +156,8 @@ class PublishService {
             message,
             product.image_url,
             'promotion_new',
-            product // Passar dados do produto para segmentação
+            product, // Passar dados do produto para segmentação
+            { bypassDuplicates: !!options.manual }
           );
 
           logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
@@ -193,7 +194,7 @@ class PublishService {
   /**
    * Enviar para WhatsApp Bot (com imagem se disponível)
    */
-  async notifyWhatsAppBot(product) {
+  async notifyWhatsAppBot(product, options = {}) {
     try {
       const message = await this.formatBotMessage(product, 'whatsapp');
 
@@ -215,7 +216,8 @@ class PublishService {
             message,
             product.image_url,
             'promotion_new',
-            product // Passar dados do produto para segmentação
+            product, // Passar dados do produto para segmentação
+            { bypassDuplicates: !!options.manual }
           );
 
           logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
@@ -240,7 +242,7 @@ class PublishService {
       const result = await notificationDispatcher.sendToWhatsApp(message, {
         eventType: 'promotion_new',
         ...product // Passar dados do produto para segmentação
-      });
+      }, { bypassDuplicates: !!options.manual });
 
       if (result && result.success && result.sent > 0) {
         logger.info(`✅ Notificação WhatsApp enviada para produto: ${product.name} (${result.sent} canal(is))`);
@@ -618,14 +620,14 @@ class PublishService {
       if (options.manual) {
         // Telegram (apenas se should_send_to_bots = true)
         if (product.should_send_to_bots !== false) {
-          results.telegram = await this.notifyTelegramBot(product);
+          results.telegram = await this.notifyTelegramBot(product, options);
         } else {
           logger.info(`⏸️ Telegram desabilitado pela IA para este produto`);
         }
 
         // WhatsApp (apenas se should_send_to_bots = true)
         if (product.should_send_to_bots !== false) {
-          results.whatsapp = await this.notifyWhatsAppBot(product);
+          results.whatsapp = await this.notifyWhatsAppBot(product, options);
         } else {
           logger.info(`⏸️ WhatsApp desabilitado pela IA para este produto`);
         }

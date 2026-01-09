@@ -67,7 +67,8 @@ class ProductController {
         res.status(201).json(successResponse(updatedProduct, 'Produto criado e agendado com IA! Verifique em Agendamentos.'));
       } else {
         // MODO NORMAL: Publicar imediatamente
-        const publishResult = await publishService.publishAll(fullProduct);
+        // IMPORTANTE: Passar manual: true para ignorar o agendador
+        const publishResult = await publishService.publishAll(fullProduct, { manual: true });
 
         // Atualizar status para 'published' após publicação bem-sucedida
         if (publishResult.success) {
@@ -82,7 +83,7 @@ class ProductController {
         // Buscar produto atualizado para retornar
         const updatedProduct = await Product.findById(product.id);
 
-        res.status(201).json(successResponse(updatedProduct, 'Produto criado e publicado com sucesso'));
+        res.status(201).json(successResponse(updatedProduct, publishResult.success ? 'Produto criado e publicado com sucesso' : 'Produto criado, mas falha na publicação imediata.'));
       }
     } catch (error) {
       next(error);
@@ -434,21 +435,27 @@ class ProductController {
       // Publicar e notificar (agora com edição de IA, score e detecção de duplicados)
       // Passar skipAiCategory: true se a categoria foi definida manualmente
       // Passar manualCategoryId explicitamente para garantir
+      // IMPORTANTE: manual: true garante publicação imediata sem passar pelo agendador
       const publishResult = await publishService.publishAll(fullProduct, {
         skipAiCategory: !!category_id,
-        manualCategoryId: category_id
+        manualCategoryId: category_id,
+        manual: true
       });
 
-      // Atualizar status para 'published'
-      await Product.update(id, { status: 'published' });
-
-      logger.info(`✅ Produto aprovado e publicado: ${fullProduct.name}${coupon_id ? ` com cupom (preço final: R$ ${finalPrice.toFixed(2)})` : ''}`);
+      // Atualizar status para 'published' apenas se a publicação foi bem-sucedida ou agendada
+      if (publishResult.success) {
+        await Product.update(id, { status: 'published' });
+        logger.info(`✅ Produto aprovado e publicado: ${fullProduct.name}${coupon_id ? ` com cupom (preço final: R$ ${finalPrice.toFixed(2)})` : ''}`);
+      } else {
+        // Se falhou por algum motivo (ex: duplicado), o status ficará como approved mas não published
+        logger.warn(`⚠️ Produto aprovado mas NÃO publicado: ${fullProduct.name}. Motivo: ${publishResult.reason || 'Erro desconhecido'}`);
+      }
 
       res.json(successResponse({
         product: approvedProduct,
         publishResult,
         final_price: coupon_id ? finalPrice : null
-      }, 'Produto aprovado e publicado com sucesso'));
+      }, publishResult.success ? 'Produto aprovado e publicado com sucesso' : 'Produto aprovado, mas não publicado (verifique logs)'));
     } catch (error) {
       logger.error(`❌ Erro ao aprovar produto: ${error.message}`);
       next(error);

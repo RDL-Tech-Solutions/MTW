@@ -226,7 +226,8 @@ class NotificationDispatcher {
   /**
    * Verificar se já foi enviado recentemente (evitar duplicação)
    */
-  async checkDuplicateSend(channelId, eventType, data) {
+  async checkDuplicateSend(channelId, eventType, data, bypassDuplicates = false) {
+    if (bypassDuplicates) return false;
     try {
       const entityId = data.id || data.product_id || data.coupon_id;
       if (!entityId) return false;
@@ -461,7 +462,7 @@ class NotificationDispatcher {
   /**
    * Enviar mensagem com imagem para Telegram
    */
-  async sendToTelegramWithImage(message, imagePath, eventType = 'general', data = null) {
+  async sendToTelegramWithImage(message, imagePath, eventType = 'general', data = null, options = {}) {
     try {
       logger.info(`📤 [NotificationDispatcher] Enviando imagem para Telegram`);
       logger.info(`   imagePath: ${imagePath}`);
@@ -497,7 +498,7 @@ class NotificationDispatcher {
 
       for (const channel of channels) {
         // Verificar duplicação antes de enviar
-        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id });
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
         if (isDuplicate) {
           logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
           results.push({
@@ -601,7 +602,7 @@ class NotificationDispatcher {
   /**
    * Enviar mensagem com imagem para WhatsApp
    */
-  async sendToWhatsAppWithImage(message, imagePath, eventType = 'general', data = null) {
+  async sendToWhatsAppWithImage(message, imagePath, eventType = 'general', data = null, options = {}) {
     try {
       logger.info(`📤 [NotificationDispatcher] Enviando imagem para WhatsApp`);
       logger.info(`   imagePath: ${imagePath}`);
@@ -637,7 +638,7 @@ class NotificationDispatcher {
 
       for (const channel of channels) {
         // Verificar duplicação antes de enviar
-        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id });
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id }, options.bypassDuplicates);
         if (isDuplicate) {
           logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
           results.push({
@@ -765,7 +766,7 @@ class NotificationDispatcher {
    * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento
    * @returns {Promise<Object>}
    */
-  async sendToTelegram(message, eventTypeOrData) {
+  async sendToTelegram(message, eventTypeOrData, options = {}) {
     try {
       logger.info('📤 Enviando mensagem para canais Telegram');
 
@@ -891,7 +892,7 @@ class NotificationDispatcher {
    * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento
    * @returns {Promise<Object>}
    */
-  async sendToWhatsApp(message, eventTypeOrData) {
+  async sendToWhatsApp(message, eventTypeOrData, options = {}) {
     try {
       logger.info('📤 Enviando mensagem para canais WhatsApp');
 

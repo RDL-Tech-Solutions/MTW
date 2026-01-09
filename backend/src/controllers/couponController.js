@@ -262,7 +262,7 @@ class CouponController {
 
       // Notificar bots e app (sempre notificar quando forçar publicação manual)
       try {
-        await couponNotificationService.notifyNewCoupon(approvedCoupon);
+        await couponNotificationService.notifyNewCoupon(approvedCoupon, { manual: true });
         logger.info(`✅ Cupom ${approvedCoupon.code} publicado e notificado com sucesso`);
       } catch (notifyError) {
         logger.warn(`⚠️ Erro ao notificar cupom: ${notifyError.message}`);
@@ -355,7 +355,7 @@ class CouponController {
 
       // Notificar sobre novo cupom aprovado
       try {
-        await couponNotificationService.notifyNewCoupon(coupon);
+        await couponNotificationService.notifyNewCoupon(coupon, { manual: true });
         logger.info(`✅ Cupom ${coupon.code} aprovado e notificado com sucesso`);
       } catch (notifError) {
         logger.warn(`⚠️ Erro ao notificar cupom aprovado: ${notifError.message}`);
@@ -406,7 +406,7 @@ class CouponController {
 
           // Notificar sobre novo cupom aprovado
           try {
-            await couponNotificationService.notifyNewCoupon(coupon);
+            await couponNotificationService.notifyNewCoupon(coupon, { manual: true });
           } catch (notifError) {
             logger.warn(`⚠️ Erro ao notificar cupom aprovado: ${notifError.message}`);
           }

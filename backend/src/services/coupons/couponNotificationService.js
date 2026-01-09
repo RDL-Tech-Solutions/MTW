@@ -18,7 +18,7 @@ class CouponNotificationService {
    */
   formatNewCouponMessage(coupon) {
     const emoji = this.getPlatformEmoji(coupon.platform);
-    const discount = coupon.discount_type === 'percentage' 
+    const discount = coupon.discount_type === 'percentage'
       ? `${coupon.discount_value}%`
       : `R$ ${coupon.discount_value.toFixed(2)}`;
 
@@ -64,7 +64,7 @@ Fique de olho para novos cupons!
    */
   formatExpiringCouponMessage(coupon, daysLeft) {
     const emoji = this.getPlatformEmoji(coupon.platform);
-    const discount = coupon.discount_type === 'percentage' 
+    const discount = coupon.discount_type === 'percentage'
       ? `${coupon.discount_value}%`
       : `R$ ${coupon.discount_value.toFixed(2)}`;
 
@@ -86,7 +86,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
   /**
    * Notificar novo cupom (com imagem)
    */
-  async notifyNewCoupon(coupon) {
+  async notifyNewCoupon(coupon, options = {}) {
     try {
       logger.info(`📢 ========== NOTIFICAÇÃO DE NOVO CUPOM ==========`);
       logger.info(`   Cupom: ${coupon.code}`);
@@ -101,22 +101,22 @@ ${coupon.affiliate_link || 'Link não disponível'}
 
       // Preparar contextData para IA ADVANCED
       const contextData = { coupon };
-      
+
       // Renderizar templates para cada plataforma
       logger.debug(`   Renderizando templates...`);
       let whatsappMessage = await templateRenderer.render('new_coupon', 'whatsapp', variables, contextData);
       let telegramMessage = await templateRenderer.render('new_coupon', 'telegram', variables, contextData);
       logger.info(`   Templates renderizados (WhatsApp: ${whatsappMessage.length} chars, Telegram: ${telegramMessage.length} chars)`);
-      
+
       // IMPORTANTE: Garantir que o código do cupom esteja formatado para cópia fácil no Telegram
       // Se não estiver formatado com backticks ou <code>, formatar agora
       const couponCode = variables.coupon_code || coupon.code || '';
       if (couponCode && couponCode !== 'N/A') {
         // Verificar se já está formatado
-        const hasCodeFormat = telegramMessage.includes(`\`${couponCode}\``) || 
-                             telegramMessage.includes(`<code>${couponCode}</code>`) ||
-                             telegramMessage.match(new RegExp(`[<\\\`]${couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[>\\\`]`));
-        
+        const hasCodeFormat = telegramMessage.includes(`\`${couponCode}\``) ||
+          telegramMessage.includes(`<code>${couponCode}</code>`) ||
+          telegramMessage.match(new RegExp(`[<\\\`]${couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[>\\\`]`));
+
         if (!hasCodeFormat) {
           logger.info(`📝 Formatando código do cupom para facilitar cópia no Telegram`);
           // Substituir código sem formatação por código formatado
@@ -134,7 +134,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
       let imageToSend = null;
       let imageUrlForWhatsApp = null;
       let usePlatformLogo = false;
-      
+
       // Verificar se a plataforma tem logo padrão
       const platformLogos = {
         mercadolivre: 'mercadolivre-logo.png',
@@ -142,9 +142,9 @@ ${coupon.affiliate_link || 'Link não disponível'}
         aliexpress: 'aliexpress-logo.png',
         amazon: 'amazon-logo.png'
       };
-      
+
       const logoFileName = platformLogos[coupon.platform];
-      
+
       if (logoFileName) {
         // SEMPRE tentar usar logo da plataforma primeiro (similar ao produto)
         // Caminho correto: __dirname = backend/src/services/coupons
@@ -154,44 +154,44 @@ ${coupon.affiliate_link || 'Link não disponível'}
         const logoPath = path.join(__dirname, '../../../assets/logos', logoFileName);
         // Resolver para caminho absoluto (resolve .. corretamente)
         const absoluteLogoPath = path.resolve(logoPath);
-        
+
         logger.info(`🔍 ========== BUSCANDO LOGO DA PLATAFORMA ==========`);
         logger.info(`   Plataforma: ${coupon.platform}`);
         logger.info(`   Logo filename: ${logoFileName}`);
         logger.info(`   __dirname: ${__dirname}`);
         logger.info(`   Caminho relativo: ${logoPath}`);
         logger.info(`   Caminho absoluto: ${absoluteLogoPath}`);
-        
+
         try {
           // Verificar se o arquivo existe usando caminho absoluto
           logger.info(`   Verificando existência do arquivo...`);
           await fs.access(absoluteLogoPath);
           logger.info(`   ✅ Arquivo existe e está acessível`);
-          
+
           // Verificar se é realmente um arquivo
           const stats = await fs.stat(absoluteLogoPath);
           if (!stats.isFile()) {
             throw new Error(`Caminho não é um arquivo: ${absoluteLogoPath}`);
           }
-          
+
           if (stats.size === 0) {
             throw new Error(`Arquivo está vazio: ${absoluteLogoPath}`);
           }
-          
+
           logger.info(`   ✅ Arquivo válido encontrado: ${stats.size} bytes`);
           logger.info(`   ✅ Logo da plataforma será enviado com a mensagem`);
           logger.info(`   ✅ Caminho final que será usado: ${absoluteLogoPath}`);
-          
+
           // IMPORTANTE: Usar caminho absoluto para garantir que funcione
           imageToSend = absoluteLogoPath;
           usePlatformLogo = true;
-          
+
           // Para WhatsApp, precisamos de uma URL HTTP
           // Obter backend_url das configurações
           try {
             const settings = await AppSettings.get();
             logger.debug(`   Configurações carregadas: backend_url = ${settings.backend_url || 'NÃO DEFINIDO'}`);
-            
+
             // Tentar múltiplas fontes para backend_url
             let backendUrl = settings.backend_url;
             if (!backendUrl) {
@@ -205,13 +205,13 @@ ${coupon.affiliate_link || 'Link não disponível'}
               backendUrl = 'http://localhost:3000';
               logger.warn(`⚠️ backend_url não configurado, usando padrão: ${backendUrl}`);
             }
-            
+
             // Remover barra final se houver
             const cleanBackendUrl = backendUrl.replace(/\/$/, '');
             imageUrlForWhatsApp = `${cleanBackendUrl}/assets/logos/${logoFileName}`;
-            
+
             logger.info(`✅ URL HTTP gerada para WhatsApp: ${imageUrlForWhatsApp}`);
-            
+
             // Validar URL
             try {
               const urlObj = new URL(imageUrlForWhatsApp);
@@ -227,11 +227,11 @@ ${coupon.affiliate_link || 'Link não disponível'}
             // Continuar com caminho local - Telegram pode usar, WhatsApp vai tentar
             imageUrlForWhatsApp = null;
           }
-          
-            const platformName = coupon.platform === 'mercadolivre' ? 'Mercado Livre' : 
-                                coupon.platform === 'shopee' ? 'Shopee' : 
-                                coupon.platform === 'aliexpress' ? 'AliExpress' : 
-                                coupon.platform === 'amazon' ? 'Amazon' : coupon.platform;
+
+          const platformName = coupon.platform === 'mercadolivre' ? 'Mercado Livre' :
+            coupon.platform === 'shopee' ? 'Shopee' :
+              coupon.platform === 'aliexpress' ? 'AliExpress' :
+                coupon.platform === 'amazon' ? 'Amazon' : coupon.platform;
           logger.info(`✅ ========== LOGO ENCONTRADO E CONFIGURADO ==========`);
           logger.info(`   Plataforma: ${platformName}`);
           logger.info(`   Caminho absoluto (Telegram): ${absoluteLogoPath}`);
@@ -246,7 +246,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
           logger.error(`   Caminho absoluto tentado: ${absoluteLogoPath}`);
           logger.error(`   Erro: ${logoError.message}`);
           logger.error(`   Stack: ${logoError.stack}`);
-          
+
           // Tentar caminho alternativo: verificar se existe em diferentes locais
           const alternativePaths = [
             path.resolve(process.cwd(), 'assets/logos', logoFileName),
@@ -254,7 +254,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
             path.resolve(__dirname, '../../../assets/logos', logoFileName),
             path.resolve(__dirname, '../../../../assets/logos', logoFileName)
           ];
-          
+
           logger.info(`   Tentando caminhos alternativos...`);
           for (const altPath of alternativePaths) {
             const resolvedAltPath = path.resolve(altPath);
@@ -272,12 +272,12 @@ ${coupon.affiliate_link || 'Link não disponível'}
               logger.debug(`   Caminho alternativo não encontrado: ${resolvedAltPath}`);
             }
           }
-          
+
           if (!imageToSend) {
             logger.error(`   ❌ Logo não encontrado em nenhum caminho tentado`);
             logger.error(`   Erro: ${logoError.message}`);
             logger.warn(`   ⚠️ Geração de imagem do cupom DESABILITADA - enviando apenas mensagem sem imagem`);
-            
+
             // DESABILITADO: Não gerar imagem do cupom como fallback
             // Usar apenas logo da plataforma de backend/assets
             imageToSend = null;
@@ -298,7 +298,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
         logger.info(`   imageToSend: ${imageToSend || 'NÃO DEFINIDA'}`);
         logger.info(`   usePlatformLogo: ${usePlatformLogo}`);
         logger.info(`   imageUrlForWhatsApp: ${imageUrlForWhatsApp || 'NÃO DEFINIDA'}`);
-        
+
         if (imageToSend) {
           // IMPORTANTE: Sempre enviar imagem COM mensagem como caption (similar ao produto)
           if (usePlatformLogo) {
@@ -308,21 +308,23 @@ ${coupon.affiliate_link || 'Link não disponível'}
               logger.info(`📸 Enviando logo da plataforma COM mensagem como caption para WhatsApp (URL HTTP)`);
               logger.info(`   URL da imagem: ${imageUrlForWhatsApp}`);
               logger.info(`   Mensagem length: ${whatsappMessage.length} caracteres`);
-              
+
               whatsappResult = await notificationDispatcher.sendToWhatsAppWithImage(
                 whatsappMessage,
                 imageUrlForWhatsApp,
-                'coupon_new'
+                'coupon_new',
+                null,
+                { bypassDuplicates: !!options.manual }
               );
-              
+
               logger.info(`✅ Resultado WhatsApp: ${JSON.stringify(whatsappResult)}`);
-              
+
               if (!whatsappResult || !whatsappResult.success) {
                 logger.error(`❌ Falha ao enviar imagem para WhatsApp. Resultado: ${JSON.stringify(whatsappResult)}`);
                 logger.warn(`⚠️ Tentando enviar apenas mensagem como fallback...`);
                 // Fallback: enviar apenas mensagem
                 try {
-                  whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_new');
+                  whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_new', { bypassDuplicates: !!options.manual });
                   logger.info(`✅ Mensagem WhatsApp enviada (sem imagem): ${JSON.stringify(whatsappResult)}`);
                 } catch (fallbackError) {
                   logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
@@ -332,13 +334,15 @@ ${coupon.affiliate_link || 'Link não disponível'}
               // URL não gerada - tentar usar caminho local (pode não funcionar no WhatsApp)
               logger.warn(`⚠️ URL HTTP não disponível, tentando usar caminho local para WhatsApp`);
               logger.info(`   Caminho local: ${imageToSend}`);
-              
+
               whatsappResult = await notificationDispatcher.sendToWhatsAppWithImage(
                 whatsappMessage,
                 imageToSend,
-                'coupon_new'
+                'coupon_new',
+                null,
+                { bypassDuplicates: !!options.manual }
               );
-              
+
               logger.info(`✅ Resultado WhatsApp: ${JSON.stringify(whatsappResult)}`);
             }
           } else {
@@ -346,15 +350,17 @@ ${coupon.affiliate_link || 'Link não disponível'}
             logger.info(`📸 Enviando imagem do cupom COM mensagem como caption para WhatsApp`);
             logger.info(`   Caminho da imagem: ${imageToSend}`);
             logger.info(`   Mensagem length: ${whatsappMessage.length} caracteres`);
-            
+
             whatsappResult = await notificationDispatcher.sendToWhatsAppWithImage(
               whatsappMessage,
               imageToSend,
-              'coupon_new'
+              'coupon_new',
+              null,
+              { bypassDuplicates: !!options.manual }
             );
-            
+
             logger.info(`✅ Resultado WhatsApp: ${JSON.stringify(whatsappResult)}`);
-            
+
             if (!whatsappResult || !whatsappResult.success) {
               logger.error(`❌ Falha ao enviar imagem para WhatsApp. Resultado: ${JSON.stringify(whatsappResult)}`);
             }
@@ -362,7 +368,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
         } else {
           // Sem imagem - enviar apenas mensagem
           logger.warn(`⚠️ Sem imagem disponível, enviando apenas mensagem para WhatsApp`);
-          whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_new');
+          whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_new', { bypassDuplicates: !!options.manual });
           logger.info(`✅ Mensagem WhatsApp enviada: ${JSON.stringify(whatsappResult)}`);
         }
       } catch (error) {
@@ -378,7 +384,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
         logger.info(`📤 Enviando para Telegram...`);
         logger.info(`   imageToSend: ${imageToSend || 'NÃO DEFINIDA'}`);
         logger.info(`   usePlatformLogo: ${usePlatformLogo}`);
-        
+
         if (imageToSend) {
           // IMPORTANTE: Sempre enviar imagem COM mensagem como caption (similar ao produto)
           logger.info(`📸 ========== ENVIANDO IMAGEM PARA TELEGRAM ==========`);
@@ -386,7 +392,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
           logger.info(`   Caminho absoluto: ${path.resolve(imageToSend)}`);
           logger.info(`   É logo da plataforma: ${usePlatformLogo}`);
           logger.info(`   Mensagem length: ${telegramMessage.length} caracteres`);
-          
+
           // Verificar se arquivo existe antes de enviar (usar caminho absoluto)
           const absoluteImagePath = path.isAbsolute(imageToSend) ? imageToSend : path.resolve(imageToSend);
           try {
@@ -396,16 +402,17 @@ ${coupon.affiliate_link || 'Link não disponível'}
             logger.info(`   ✅ Arquivo existe e está acessível`);
             logger.info(`   ✅ Tamanho: ${fileStats.size} bytes`);
             logger.info(`   ✅ É arquivo: ${fileStats.isFile()}`);
-            
+
             // Usar caminho absoluto para envio
             const finalImagePath = absoluteImagePath;
             logger.info(`   ✅ Usando caminho final: ${finalImagePath}`);
-            
+
             telegramResult = await notificationDispatcher.sendToTelegramWithImage(
               telegramMessage,
               finalImagePath,
               'coupon_new',
-              coupon // Passar dados do cupom para segmentação
+              coupon, // Passar dados do cupom para segmentação
+              { bypassDuplicates: !!options.manual }
             );
           } catch (accessError) {
             logger.error(`   ❌ Arquivo não acessível: ${accessError.message}`);
@@ -413,15 +420,15 @@ ${coupon.affiliate_link || 'Link não disponível'}
             logger.error(`   ❌ Stack: ${accessError.stack}`);
             throw new Error(`Arquivo de imagem não acessível: ${absoluteImagePath}`);
           }
-          
+
           logger.info(`✅ Resultado Telegram: ${JSON.stringify(telegramResult)}`);
-          
+
           if (!telegramResult || !telegramResult.success) {
             logger.error(`❌ Falha ao enviar imagem para Telegram. Resultado: ${JSON.stringify(telegramResult)}`);
             logger.warn(`⚠️ Tentando enviar apenas mensagem como fallback...`);
             // Fallback: enviar apenas mensagem
             try {
-              telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_new');
+              telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_new', { bypassDuplicates: !!options.manual });
               logger.info(`✅ Mensagem Telegram enviada (sem imagem): ${JSON.stringify(telegramResult)}`);
             } catch (fallbackError) {
               logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
@@ -430,7 +437,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
         } else {
           // Sem imagem - enviar apenas mensagem
           logger.warn(`⚠️ Sem imagem disponível, enviando apenas mensagem para Telegram`);
-          telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_new');
+          telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_new', { bypassDuplicates: !!options.manual });
           logger.info(`✅ Mensagem Telegram enviada: ${JSON.stringify(telegramResult)}`);
         }
       } catch (error) {
@@ -462,10 +469,10 @@ ${coupon.affiliate_link || 'Link não disponível'}
         whatsapp: whatsappResult,
         telegram: telegramResult
       };
-      
+
       logger.info(`✅ ========== NOTIFICAÇÃO CONCLUÍDA ==========`);
       logger.info(`   Resultado: ${JSON.stringify(result)}`);
-      
+
       return result;
 
     } catch (error) {
