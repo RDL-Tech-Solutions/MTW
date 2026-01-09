@@ -43,8 +43,42 @@ class AdvancedTemplateGenerator {
         urgencyLevel
       });
 
-      // Gerar template via IA
-      const template = await this.callAI(prompt);
+      // Gerar template via IA (texto puro)
+      let template = await this.callAI(prompt);
+
+      // PÓS-PROCESSAMENTO: Aplicar formatação Markdown aos placeholders
+      template = template
+        // Remover NBSP e chars invisíveis primeiro
+        .replace(/\u00A0/g, ' ')
+
+        .replace(/PRODUTO_NOME/gi, '**{product_name}**')
+        .replace(/PRECO_ATUAL/gi, '**{current_price}**')
+
+        // SUBSTITUIÇÃO "HOOVER" (Aspirador) DE PRECO_ANTIGO
+        // A variável {old_price} JÁ VEM COM TILDES do sistema padrão (~~R$ XX~~)
+        // Portanto, substituímos APENAS pela variável, removendo qualquer decoração extra da IA
+        .replace(/(?:[~R$\-\s])*(?:PRE[cCçÇ][oO0][_\-\s]*ANTIGO)(?:[~R$\-\s])*/gi, '{old_price}')
+
+        .replace(/DESCONTO_PERCENTUAL/gi, '**{discount_percentage}%**')
+        .replace(/CODIGO_CUPOM/gi, '`{coupon_code}`')
+        .replace(/PRECO_FINAL/gi, '**{final_price}**')
+        .replace(/DESCONTO_CUPOM/gi, '**{coupon_discount}**')
+        .replace(/LINK_PRODUTO/gi, '👉 {affiliate_link}')
+        // LIMPEZA FINAL DE SEGURANÇA
+        .replace(/~~\s*~~/g, '~~') // Remove ~~ ~~ duplicado
+        .replace(/~{3,}/g, '~~')   // Remove ~~~ ou ~~~~
+        .replace(/R\$\s*~~/gi, '~~') // Remove R$ ~~ ficando apenas ~~R$ (do valor)
+        // Garantir que não fique ~~R$ ~~R$ 
+        .replace(/~~R\$\s*~~R\$/gi, '~~R$')
+        // Remover tags HTML
+        .replace(/<[^>]+>/g, '')
+        // Remover entidades HTML
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        // Limpar linhas vazias excessivas
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 
       logger.info(`✅ [IA ADVANCED] Template de promoção gerado (${template.length} chars)`);
       return template;
@@ -138,7 +172,16 @@ class AdvancedTemplateGenerator {
       logger.info(`🤖 [IA ADVANCED] Gerando template de cupom expirado: ${coupon.code}`);
 
       const prompt = this.buildExpiredCouponPrompt(coupon, platform);
-      const template = await this.callAI(prompt);
+
+      // Gerar via IA (texto puro)
+      let template = await this.callAI(prompt);
+
+      // PÓS-PROCESSAMENTO
+      template = template
+        .replace(/CODIGO_CUPOM/gi, '`{coupon_code}`')
+        // Remover tags HTML remanescentes
+        .replace(/<[^>]+>/g, '')
+        .trim();
 
       logger.info(`✅ [IA ADVANCED] Template de cupom expirado gerado`);
       return template;
@@ -150,67 +193,59 @@ class AdvancedTemplateGenerator {
   }
 
   /**
-   * Construir prompt OTIMIZADO para promoção
-   * Formato simplificado para melhor compatibilidade com modelos gratuitos
+   * Construir prompt CRIATIVO para promoção
+   * Texto puro com placeholders - formatação aplicada depois
    */
   buildPromotionPrompt(product, platform, context) {
-    // Template base que a IA vai preencher
-    // Para produtos COM CUPOM: current_price = preço atual, final_price = preço com cupom
-    // Para produtos SEM CUPOM: current_price = preço atual
-    const templateBase = context.hasCoupon ? `
-🔥 **OFERTA ESPECIAL + CUPOM!** 🔥
+    const hasDiscount = context.discount && context.discount > 0;
+    const hasCoupon = context.hasCoupon;
 
-📦 **{product_name}**
+    // Personas de vendas variadas
+    const personas = [
+      'um especialista em achados e promoções bombásticas',
+      'um entusiasta de tecnologia que adora compartilhar boas oportunidades',
+      'um consultor de compras inteligentes focado em economia real',
+      'um amigo que acabou de ver um preço inacreditável e precisa avisar a galera',
+      'um influenciador de nicho focado em custo-benefício'
+    ];
+    const randomPersona = personas[Math.floor(Math.random() * personas.length)];
 
-[DESCRIÇÃO CRIATIVA AQUI - 2-3 linhas sobre o produto]
+    return `Você é ${randomPersona}. Crie uma mensagem IRRESISTÍVEL de produto em promoção!
 
-💰 **Preço:** {current_price} ~~{old_price}~~
-🎟️ **Com Cupom:** {final_price}
-🏷️ **{discount_percentage}% OFF!**
+📋 DADOS DO PRODUTO:
+Nome: ${product.name || 'Produto'}
+Preço atual: R$ ${product.current_price}
+${context.hasOldPrice ? `Preço original: R$ ${product.old_price}` : ''}
+${hasDiscount ? `Desconto: ${context.discount}%` : ''}
+${hasCoupon ? `TEM CUPOM EXTRA! Preço final: R$ ${context.finalPrice}` : ''}
 
-🎟️ **CUPOM:** \`{coupon_code}\`
-💵 **Desconto extra:** {coupon_discount}
+🎯 SUA MISSÃO:
+Crie uma mensagem que faça o leitor QUERER comprar AGORA!
+Use gatilhos de urgência, exclusividade e benefícios.
 
-👉 {affiliate_link}
+✍️ REGRAS OBRIGATÓRIAS:
+1. NÃO use HTML ou Markdown (escreva APENAS texto puro)
+2. Use APENAS texto simples + 4-7 emojis
+3. 7-10 linhas com boa respiração (use quebras de linha)
+4. Use PRODUTO_NOME para o nome do produto
+5. Use PRECO_ATUAL para o preço (NÃO escreva "R$" antes)
+6. Use PRECO_ANTIGO para o preço original (NÃO escreva "R$" ou "~~" antes)
+7. Use DESCONTO_PERCENTUAL para o desconto
+${hasCoupon ? '8. Use CODIGO_CUPOM para o cupom extra\n9. Use PRECO_FINAL para preço com cupom\n10. Use DESCONTO_CUPOM para valor do cupom' : ''}
+${hasDiscount ? '11. DESTAQUE a economia!' : ''}
+12. Termine OBRIGATORIAMENTE a mensagem com a palavra LINK_PRODUTO
+13. NUNCA mencione datas ou prazos
 
-⚡ **Economia dupla! Corra!**
-` : `
-🔥 **OFERTA IMPERDÍVEL!** 🔥
+💡 EXEMPLOS DE ABERTURA VENDEDORA (inspire-se):
 
-📦 **{product_name}**
+"🔥 OFERTA IMPERDÍVEL! Olha só esse preço!"
+"💥 PROMOÇÃO ARRASADORA! Você precisa ver isso!"
+"⚡ ATENÇÃO! Produto TOP com desconto ABSURDO!"
+"🎯 OPORTUNIDADE ÚNICA! Não vai ter igual!"
+"🚀 CORRE! Essa oferta é MUITO BOA!"
+"✨ MARAVILHOSO! Olha o que eu trouxe pra vocês!"
 
-[DESCRIÇÃO CRIATIVA AQUI - 2-3 linhas sobre o produto]
-
-💰 **Preço:** {current_price} ~~{old_price}~~
-🏷️ **{discount_percentage}% OFF!**
-
-👉 {affiliate_link}
-
-⚡ **Aproveite antes que acabe!**
-`;
-
-    return `Crie uma mensagem promocional para o Telegram.
-
-PRODUTO:
-- Nome: ${product.name || 'Produto'}
-- Preço atual: R$ ${product.current_price}
-${context.hasOldPrice ? `- Preço antigo: R$ ${product.old_price}` : ''}
-${context.hasCoupon && context.finalPrice ? `- Preço com cupom: R$ ${context.finalPrice}` : ''}
-- Desconto: ${context.discount}%
-${context.hasCoupon ? '- TEM CUPOM DE DESCONTO EXTRA!' : ''}
-
-INSTRUÇÕES SIMPLES:
-1. Use este formato EXATO como base:
-${templateBase}
-
-2. Substitua [DESCRIÇÃO CRIATIVA AQUI...] por 2-3 linhas vendedoras sobre o produto
-3. MANTENHA todas as variáveis entre chaves: {product_name}, {current_price}, {old_price}, {discount_percentage}, {affiliate_link}${context.hasCoupon ? ', {final_price}, {coupon_code}, {coupon_discount}' : ''}
-4. Use ** para negrito, \` para código e ~~ para riscar (strikethrough) o preço antigo
-5. MANTENHA o riscado (~~) ao redor do preço antigo se ele existir
-6. Use emojis estratégicos (4-6 no total)
-7. NÃO adicione explicações, apenas retorne a mensagem
-
-Retorne APENAS a mensagem promocional:`;
+Agora crie SUA mensagem de venda única (texto puro com quebras de linha):`;
   }
 
   /**
@@ -219,14 +254,14 @@ Retorne APENAS a mensagem promocional:`;
    */
   buildCouponPrompt(coupon, platform, context) {
     const discountText = context.discountType === 'percentage'
-      ? `${context.discountValue}%`
-      : `R$ ${context.discountValue}`;
+      ? `${context.discountValue}% `
+      : `R$ ${context.discountValue} `;
 
-    return `Você é um especialista em marketing viral. Crie uma mensagem EXCITING e ENVOLVENTE.
+    return `Você é um especialista em marketing viral.Crie uma mensagem EXCITING e ENVOLVENTE.
 
 📋 DADOS:
-Código: ${coupon.code}
-Desconto: ${discountText}
+    Código: ${coupon.code}
+    Desconto: ${discountText}
 ${context.hasMinPurchase ? `Mínimo: R$ ${coupon.min_purchase}` : 'Sem mínimo!'}
 ${context.isGeneral === true ? 'TODOS OS PRODUTOS (destaque isso!)' : ''}
 ${context.isGeneral === false ? 'Produtos selecionados (mencione!)' : ''}
@@ -236,51 +271,51 @@ Escreva uma mensagem que faça as pessoas PARAREM e prestarem atenção!
 Use linguagem persuasiva, emoção e urgência.
 
 ✍️ REGRAS OBRIGATÓRIAS:
-1. NÃO use <b>, </b>, <code> ou qualquer HTML/markdown
-2. Use APENAS texto simples + 4-6 emojis
-3. 6-8 linhas CURTAS com espaçamento
-4. Use CODIGO_CUPOM para o código
-5. Use VALOR_DESCONTO para o desconto
-6. Use VALOR_MINIMO se tiver mínimo
-7. Use APLICABILIDADE se tiver is_general definido
-8. NUNCA mencione datas ou links
+    1. NÃO use < b >, </b >, <code> ou qualquer HTML/markdown
+      2. Use APENAS texto simples + 4-6 emojis
+      3. 6-8 linhas CURTAS com espaçamento
+      4. Use CODIGO_CUPOM para o código
+      5. Use VALOR_DESCONTO para o desconto
+      6. Use VALOR_MINIMO se tiver mínimo
+      7. Use APLICABILIDADE se tiver is_general definido
+      8. NUNCA mencione datas ou links
 
-💡 EXEMPLOS DE ABERTURA ENVOLVENTE (não copie, inspire-se):
+      💡 EXEMPLOS DE ABERTURA ENVOLVENTE (não copie, inspire-se):
 
-"🎉 Vocês NÃO vão acreditar no que encontrei!"
-"💰 ALERTA DE ECONOMIA! Segura essa!"
-"🚨 PARA TUDO! Descobri um cupom ABSURDO!"
-"✨ Quem aqui quer ECONOMIZAR dinheiro DE VERDADE?"
-"🔥 Fala galera! Olha só essa BOMBA!"
-"🎁 Presente para vocês: um cupom MUITO BOM!"
+      "🎉 Vocês NÃO vão acreditar no que encontrei!"
+      "💰 ALERTA DE ECONOMIA! Segura essa!"
+      "🚨 PARA TUDO! Descobri um cupom ABSURDO!"
+      "✨ Quem aqui quer ECONOMIZAR dinheiro DE VERDADE?"
+      "🔥 Fala galera! Olha só essa BOMBA!"
+      "🎁 Presente para vocês: um cupom MUITO BOM!"
 
-Agora escreva SUA mensagem única (texto puro com quebras de linha):`;
+      Agora escreva SUA mensagem única (texto puro com quebras de linha):`;
   }
 
   /**
    * Construir prompt para cupom expirado
    */
   buildExpiredCouponPrompt(coupon, platform) {
-    return `Crie uma mensagem curta informando que um cupom expirou.
+    return `Você é um porta-voz de uma comunidade de ofertas. Informe que um cupom infelizmente expirou.
 
-INFORMAÇÕES:
-- Código expirado: ${coupon.code}
-- Data: ${this.formatDate(coupon.valid_until)}
+      INFORMAÇÕES:
+      - Código que expirou: ${coupon.code}
 
-FORMATO:
-⚠️ **Cupom Expirado** ⚠️
+      🎯 SUA MISSÃO:
+      Seja amigável, mas deixe claro que a oportunidade passou. Incentive os usuários a ficarem atentos para não perderem as próximas!
 
-O cupom \`{coupon_code}\` não está mais válido.
+      ✍️ REGRAS:
+      1. NÃO use <b>, </b>, <code> ou Markdown
+        2. Use APENAS texto simples + 2-3 emojis
+        3. Use CODIGO_CUPOM para o código do cupom
+        4. NUNCA mencione datas específicas
+        5. Máximo 4 linhas curtas
 
-🔔 Fique atento às próximas ofertas!
+        💡 EXEMPLOS (inspire-se):
+        "😔 Poxa, esse cupom CODIGO_CUPOM acabou de expirar!"
+        "⏰ O tempo voou e o cupom CODIGO_CUPOM não está mais ativo."
 
-REGRAS:
-1. Seja breve e educado
-2. Use a variável {coupon_code}
-3. Motive a ficar atento
-4. NÃO adicione explicações
-
-Retorne APENAS a mensagem:`;
+        Agora escreva sua mensagem curta (apenas texto puro):`;
   }
 
   /**

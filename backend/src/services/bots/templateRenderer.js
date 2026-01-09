@@ -167,8 +167,14 @@ class TemplateRenderer {
             // Corrigir tildes múltiplos incorretos (~~~~ → ~~)
             .replace(/~{3,}/g, '~~')
             // Corrigir padrões mal formatados como "(de ~~ R$ 44,88)" - remover "(de" e manter apenas o preço formatado
+            // Corrigir padrões mal formatados como "(de ~~ R$ 44,88)" - remover "(de" e manter apenas o preço formatado
             .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
             .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+            // Limpeza AGRESSIVA FINAL de tildes duplicados ou mal formados
+            .replace(/(~~\s*)+~~/g, '~~')
+            .replace(/~{3,}/g, '~~')
+            .replace(/R\$\s*~~\s*~*R\$/gi, '~~R$') // R$ ~~ ~~R$ -> ~~R$
+            .replace(/~~.*?~~\s*R\$/gi, '~~R$')  // ~~ ~~ R$ -> ~~R$
             // Remover texto "mensagem truncada" que a IA pode adicionar
             .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
             .replace(/\s*\(mensagem\s+truncada\)/gi, '')
