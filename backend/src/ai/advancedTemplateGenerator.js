@@ -131,6 +131,9 @@ class AdvancedTemplateGenerator {
       // A IA retorna texto puro com CODIGO_CUPOM, VALOR_DESCONTO, etc.
       // Nós aplicamos a formatação aqui para garantir consistência
       template = template
+        // Remover NBSP e chars invisíveis primeiro (CRÍTICO para evitar texto aglutinado)
+        .replace(/\u00A0/g, ' ')
+
         // Substituir placeholders por variáveis formatadas em Markdown
         .replace(/CODIGO_CUPOM/gi, '`{coupon_code}`')
         .replace(/VALOR_DESCONTO/gi, '**{discount_value}**')
@@ -145,13 +148,16 @@ class AdvancedTemplateGenerator {
 
       // Limpeza final
       template = template
-        // Remover qualquer tag HTML que a IA possa ter adicionado mesmo assim
+        // Remover qualquer tag HTML que a IA possa ter adicionado
         .replace(/<[^>]+>/g, '')
         // Remover entidades HTML
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&amp;/g, '&')
-        // Limpar linhas vazias excessivas
+        // Garantir quebras de linha DUPLAS para visualização correta no Telegram
+        // Se houver apenas uma quebra de linha entre caracteres não vazio, transforma em duas
+        .replace(/([^\n])\n([^\n])/g, '$1\n\n$2')
+        // Limpar excessos (3 ou mais viram 2)
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
@@ -200,17 +206,74 @@ class AdvancedTemplateGenerator {
     const hasDiscount = context.discount && context.discount > 0;
     const hasCoupon = context.hasCoupon;
 
-    // Personas de vendas variadas
+    // Personas de vendas variadas (15 variações)
     const personas = [
-      'um especialista em achados e promoções bombásticas',
-      'um entusiasta de tecnologia que adora compartilhar boas oportunidades',
-      'um consultor de compras inteligentes focado em economia real',
-      'um amigo que acabou de ver um preço inacreditável e precisa avisar a galera',
-      'um influenciador de nicho focado em custo-benefício'
+      {
+        role: "O Caçador de Bug",
+        instruction: "Aja como se fosse um erro de preço. 'Gente, corre que o estagiário errou!', 'Preço bugado!'. Use emojis de 🐛 e 🚨."
+      },
+      {
+        role: "O Analista de Custo-Benefício",
+        instruction: "Foque na lógica matemática. 'Fiz as contas e esse é o menor preço histórico'. Use emojis de 📉 e 🧮."
+      },
+      {
+        role: "O Influencer Hype",
+        instruction: "Fale como se fosse o produto do momento. 'Todo mundo tá querendo...', 'O queridinho da internet'. Use emojis de ✨ e trends."
+      },
+      {
+        role: "O Alerta Vermelho",
+        instruction: "Urgência máxima. 'ÚLTIMAS UNIDADES', 'Vai acabar em minutos'. Use emojis de 🔴 e ⏰."
+      },
+      {
+        role: "O Comparador Sincero",
+        instruction: "Compare com o preço normal. 'Geralmente custa X, mas hoje tá Y'. Mostre a vantagem clara."
+      },
+      {
+        role: "O Amigo Íntimo",
+        instruction: "Tom de conversa privada. 'Só tô mandando pra você que é VIP...', 'Não espalha muito'. Use emojis de 🤫."
+      },
+      {
+        role: "O Minimalista Premium",
+        instruction: "Poucas palavras, foco na elegância e qualidade. 'Simplesmente o melhor.', 'Qualidade indiscutível.'. Estilo clean."
+      },
+      {
+        role: "O Detetive de Preços",
+        instruction: "Diga que estava monitorando. 'Tava de olho nesse preço há meses e finalmente caiu!'. Use emojis de 🕵️‍♂️."
+      },
+      {
+        role: "O Resolve-Problemas",
+        instruction: "Foque na dor que o produto resolve. 'Cansado de X? A solução tá aqui.'. Seja prático."
+      },
+      {
+        role: "O Humorista",
+        instruction: "Faça uma piada leve sobre precisar do produto. 'Pra você parar de passar vergonha...', 'Chega de improviso'. 😂"
+      },
+      {
+        role: "O Futurista/Tech",
+        instruction: "Foque na inovação e specs. 'Tecnologia de ponta', 'O futuro chegou'. Use emojis de 🚀 e 🤖."
+      },
+      {
+        role: "O Crítico Gastronômico/Experiente",
+        instruction: "Fale como quem testou e aprovou. 'Qualidade testada', 'Selo de aprovação'. (Adapte se não for comida)."
+      },
+      {
+        role: "O Desconfiado Convertido",
+        instruction: "Diga que duvidava mas se surpreendeu. 'Eu não acreditava que era tão bom...', 'Me surpreendeu'."
+      },
+      {
+        role: "O VIP 'Backstage'",
+        instruction: "Fale como se tivesse acesso privilegiado. 'Consegui esse lote exclusivo', 'Direto da fábrica pra vocês'."
+      },
+      {
+        role: "O Presenteador",
+        instruction: "Sugira como presente. 'Já pensou no presente de...?'. 'Aquele mimo que você merece'. 🎁"
+      }
     ];
+
     const randomPersona = personas[Math.floor(Math.random() * personas.length)];
 
-    return `Você é ${randomPersona}. Crie uma mensagem IRRESISTÍVEL de produto em promoção!
+    return `Você vai assumir a seguinte persona: ${randomPersona.role}.
+${randomPersona.instruction}
 
 📋 DADOS DO PRODUTO:
 Nome: ${product.name || 'Produto'}
@@ -220,13 +283,13 @@ ${hasDiscount ? `Desconto: ${context.discount}%` : ''}
 ${hasCoupon ? `TEM CUPOM EXTRA! Preço final: R$ ${context.finalPrice}` : ''}
 
 🎯 SUA MISSÃO:
-Crie uma mensagem que faça o leitor QUERER comprar AGORA!
+Crie uma mensagem que faça o leitor QUERER comprar AGORA seguindo o estilo da sua persona (${randomPersona.role})!
 Use gatilhos de urgência, exclusividade e benefícios.
 
 ✍️ REGRAS OBRIGATÓRIAS:
 1. NÃO use HTML ou Markdown (escreva APENAS texto puro)
-2. Use APENAS texto simples + 4-7 emojis
-3. 7-10 linhas com boa respiração (use quebras de linha)
+2. Use APENAS texto simples + 4-7 emojis condizentes com a persona
+3. 7-10 linhas com boa respiração (use quebras de linha DUPLAS)
 4. Use PRODUTO_NOME para o nome do produto
 5. Use PRECO_ATUAL para o preço (NÃO escreva "R$" antes)
 6. Use PRECO_ANTIGO para o preço original (NÃO escreva "R$" ou "~~" antes)
@@ -257,9 +320,56 @@ Agora crie SUA mensagem de venda única (texto puro com quebras de linha):`;
       ? `${context.discountValue}% `
       : `R$ ${context.discountValue} `;
 
-    return `Você é um especialista em marketing viral.Crie uma mensagem EXCITING e ENVOLVENTE.
+    // 10 Personas Criativas Variadas
+    const personas = [
+      {
+        role: "O Entusiasta Exagerado",
+        instruction: "Use exclamações, emojis de fogo e demonstre choque com o preço baixo. Comece com algo como 'Gente do céu!' ou 'Inacreditável!'."
+      },
+      {
+        role: "O Especialista Analítico",
+        instruction: "Seja direto e foque no valor matemático da economia. Use emojis de gráfico e dinheiro. Comece com 'Analisando as ofertas de hoje...' ou 'Oportunidade calculada:'."
+      },
+      {
+        role: "O Amigo Confidencial",
+        instruction: "Fale como se estivesse contando um segredo para um amigo próximo. Use 'psiu', 'olha isso aqui' e emojis de segredo. Tom de cumplicidade."
+      },
+      {
+        role: "O Alertador de Urgência",
+        instruction: "Foque na escassez e rapidez. Use emojis de sirene e relógio. Frases curtas e de impacto tipo 'CORRE!', 'VAI ACABAR!'."
+      },
+      {
+        role: "O Caçador de Tesouros",
+        instruction: "Aja como quem encontrou uma joia rara. Use emojis de diamante e estrela. 'Olha o que eu garimpei...', 'Achado do dia!'."
+      },
+      {
+        role: "O Minimalista Impactante",
+        instruction: "Seja extremamente breve. Poucas palavras, muito impacto. Foco total nos números e no código. Estilo 'Curto e grosso'."
+      },
+      {
+        role: "O Questionador",
+        instruction: "Comece com uma pergunta que engaje. 'Quem aí quer economizar?', 'Cansado de pagar caro?'. Faça o leitor responder mentalmente sim."
+      },
+      {
+        role: "O VIP Exclusivo",
+        instruction: "Faça o leitor se sentir especial. 'Só para quem está no grupo...', 'Oferta vip liberada...'. Use emojis de troféu ou medalha."
+      },
+      {
+        role: "O Irônico Divertido",
+        instruction: "Use um humor leve sobre gastar dinheiro vs economizar. 'O estagiário ficou maluco', 'Patrão liberou o desconto'."
+      },
+      {
+        role: "O Tecnológico/Gamer",
+        instruction: "Use termos como 'Desbloqueado', 'Level Up', 'Cheat Code'. Emojis de controle de game, robô ou raio."
+      }
+    ];
 
-📋 DADOS:
+    const randomPersona = personas[Math.floor(Math.random() * personas.length)];
+
+    return `Você vai assumir a seguinte persona: ${randomPersona.role}.
+${randomPersona.instruction}
+
+📋 DADOS DO CUPOM:
     Código: ${coupon.code}
     Desconto: ${discountText}
 ${context.hasMinPurchase ? `Mínimo: R$ ${coupon.min_purchase}` : 'Sem mínimo!'}
@@ -267,29 +377,20 @@ ${context.isGeneral === true ? 'TODOS OS PRODUTOS (destaque isso!)' : ''}
 ${context.isGeneral === false ? 'Produtos selecionados (mencione!)' : ''}
 
 🎯 SUA MISSÃO:
-Escreva uma mensagem que faça as pessoas PARAREM e prestarem atenção!
-Use linguagem persuasiva, emoção e urgência.
+Crie uma mensagem curta e PERFEITA para vender este cupom no Telegram/WhatsApp seguindo exatamente o estilo da sua persona (${randomPersona.role}).
 
 ✍️ REGRAS OBRIGATÓRIAS:
-    1. NÃO use < b >, </b >, <code> ou qualquer HTML/markdown
-      2. Use APENAS texto simples + 4-6 emojis
-      3. 6-8 linhas CURTAS com espaçamento
-      4. Use CODIGO_CUPOM para o código
-      5. Use VALOR_DESCONTO para o desconto
-      6. Use VALOR_MINIMO se tiver mínimo
-      7. Use APLICABILIDADE se tiver is_general definido
-      8. NUNCA mencione datas ou links
+    1. NÃO use HTML ou Markdown (escreva APENAS texto puro)
+    2. Use APENAS texto simples + 4-6 emojis condizentes com a persona
+    3. 5-7 linhas no máximo
+    4. Use CODIGO_CUPOM para o código
+    5. Use VALOR_DESCONTO para o desconto
+    6. Use VALOR_MINIMO se tiver mínimo
+    7. Use APLICABILIDADE se tiver is_general definido
+    8. NUNCA mencione datas, validades ou links
+    9. Use QUEBRA DE LINHA DUPLA entre frases/parágrafos para não ficar tudo junto
 
-      💡 EXEMPLOS DE ABERTURA ENVOLVENTE (não copie, inspire-se):
-
-      "🎉 Vocês NÃO vão acreditar no que encontrei!"
-      "💰 ALERTA DE ECONOMIA! Segura essa!"
-      "🚨 PARA TUDO! Descobri um cupom ABSURDO!"
-      "✨ Quem aqui quer ECONOMIZAR dinheiro DE VERDADE?"
-      "🔥 Fala galera! Olha só essa BOMBA!"
-      "🎁 Presente para vocês: um cupom MUITO BOM!"
-
-      Agora escreva SUA mensagem única (texto puro com quebras de linha):`;
+    Agora escreva SUA mensagem única (texto puro com quebras de linha DUPLAS):`;
   }
 
   /**
