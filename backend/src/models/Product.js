@@ -846,24 +846,72 @@ class Product {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const BATCH_SIZE = 500; // Supabase limita .in() a ~1000 IDs
+      const QUERY_LIMIT = 1000; // Limite de busca por query
 
-      // Função auxiliar para deletar em lotes
+      // Contadores totais
+      let totalPendingCount = 0;
+      let totalProcessedCount = 0;
+      let totalRelated = {
+        scheduled_posts: 0,
+        sync_logs: 0,
+        price_history: 0,
+        click_tracking: 0,
+        notifications: 0
+      };
+
+      // Função auxiliar para deletar em lotes com limpeza COMPLETA de registros relacionados
       const deleteInBatches = async (ids, table = 'products') => {
         let deleted = 0;
+
         for (let i = 0; i < ids.length; i += BATCH_SIZE) {
           const batch = ids.slice(i, i + BATCH_SIZE);
 
-          // Deletar agendamentos vinculados primeiro
+          // 1. Deletar agendamentos vinculados
           try {
-            await supabase
+            const { count } = await supabase
               .from('scheduled_posts')
-              .delete()
+              .delete({ count: 'exact' })
               .in('product_id', batch);
-          } catch (e) {
-            // Ignorar erro se não houver agendamentos
-          }
+            totalRelated.scheduled_posts += count || 0;
+          } catch (e) { /* Ignorar */ }
 
-          // Deletar produtos
+          // 2. Deletar logs de sincronização vinculados
+          try {
+            const { count } = await supabase
+              .from('sync_logs')
+              .delete({ count: 'exact' })
+              .in('product_id', batch);
+            totalRelated.sync_logs += count || 0;
+          } catch (e) { /* Ignorar */ }
+
+          // 3. Deletar histórico de preços
+          try {
+            const { count } = await supabase
+              .from('price_history')
+              .delete({ count: 'exact' })
+              .in('product_id', batch);
+            totalRelated.price_history += count || 0;
+          } catch (e) { /* Ignorar */ }
+
+          // 4. Deletar rastreamento de cliques
+          try {
+            const { count } = await supabase
+              .from('click_tracking')
+              .delete({ count: 'exact' })
+              .in('product_id', batch);
+            totalRelated.click_tracking += count || 0;
+          } catch (e) { /* Ignorar */ }
+
+          // 5. Deletar notificações relacionadas
+          try {
+            const { count } = await supabase
+              .from('notifications')
+              .delete({ count: 'exact' })
+              .in('product_id', batch);
+            totalRelated.notifications += count || 0;
+          } catch (e) { /* Ignorar */ }
+
+          // 6. Finalmente, deletar os produtos
           const { count, error } = await supabase
             .from(table)
             .delete({ count: 'exact' })
@@ -871,61 +919,99 @@ class Product {
 
           if (error) throw error;
           deleted += count || 0;
-
-          logger.debug(`   Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${count} deletados`);
         }
+
         return deleted;
       };
 
-      // 1. Buscar IDs dos produtos pendentes com mais de 24h
-      const { data: pendingProducts, error: pendingFetchError } = await supabase
-        .from('products')
-        .select('id, name')
-        .eq('status', 'pending')
-        .lt('created_at', twentyFourHoursAgo);
+      // ===== LOOP 1: Limpar TODOS os produtos pendentes > 24h =====
+      let pendingRound = 0;
+      while (true) {
+        pendingRound++;
 
-      if (pendingFetchError) throw pendingFetchError;
+        const { data: pendingProducts, error: pendingFetchError } = await supabase
+          .from('products')
+          .select('id, name')
+          .eq('status', 'pending')
+          .lt('created_at', twentyFourHoursAgo)
+          .limit(QUERY_LIMIT);
 
-      let pendingCount = 0;
-      if (pendingProducts && pendingProducts.length > 0) {
-        const pendingIds = pendingProducts.map(p => p.id);
-        logger.info(`   📋 ${pendingIds.length} produtos pendentes antigos encontrados`);
+        if (pendingFetchError) throw pendingFetchError;
 
-        pendingCount = await deleteInBatches(pendingIds);
+        if (!pendingProducts || pendingProducts.length === 0) {
+          if (pendingRound === 1) {
+            logger.info('ℹ️ Nenhum produto pendente antigo para remover');
+          }
+          break; // Saiu do loop - não há mais produtos
+        }
 
-        const names = pendingProducts.map(p => p.name).slice(0, 5).join(', ').substring(0, 100);
-        const more = pendingCount > 5 ? ` e mais ${pendingCount - 5}` : '';
-        logger.info(`✅ Removidos ${pendingCount} produtos pendentes antigos (>24h): ${names}${more}`);
-      } else {
-        logger.debug('ℹ️ Nenhum produto pendente antigo para remover');
+        logger.info(`   📋 Rodada ${pendingRound}: ${pendingProducts.length} produtos pendentes encontrados`);
+
+        const deletedCount = await deleteInBatches(pendingProducts.map(p => p.id));
+        totalPendingCount += deletedCount;
+
+        logger.info(`   ✅ Rodada ${pendingRound}: ${deletedCount} produtos deletados (Total: ${totalPendingCount})`);
+
+        // Se retornou menos que o limite, não há mais produtos
+        if (pendingProducts.length < QUERY_LIMIT) break;
       }
 
-      // 2. Buscar IDs dos produtos processados com mais de 7 dias
-      const { data: processedProducts, error: processedFetchError } = await supabase
-        .from('products')
-        .select('id, name')
-        .in('status', ['approved', 'published', 'rejected'])
-        .lt('updated_at', sevenDaysAgo);
+      // ===== LOOP 2: Limpar TODOS os produtos processados > 7 dias =====
+      let processedRound = 0;
+      while (true) {
+        processedRound++;
 
-      if (processedFetchError) throw processedFetchError;
+        const { data: processedProducts, error: processedFetchError } = await supabase
+          .from('products')
+          .select('id, name')
+          .in('status', ['approved', 'published', 'rejected'])
+          .lt('updated_at', sevenDaysAgo)
+          .limit(QUERY_LIMIT);
 
-      let processedCount = 0;
-      if (processedProducts && processedProducts.length > 0) {
-        const processedIds = processedProducts.map(p => p.id);
-        logger.info(`   📋 ${processedIds.length} produtos processados antigos encontrados`);
+        if (processedFetchError) throw processedFetchError;
 
-        processedCount = await deleteInBatches(processedIds);
+        if (!processedProducts || processedProducts.length === 0) {
+          if (processedRound === 1) {
+            logger.info('ℹ️ Nenhum produto processado antigo para remover');
+          }
+          break; // Saiu do loop - não há mais produtos
+        }
 
-        const names = processedProducts.map(p => p.name).slice(0, 5).join(', ').substring(0, 100);
-        const more = processedCount > 5 ? ` e mais ${processedCount - 5}` : '';
-        logger.info(`✅ Removidos ${processedCount} produtos antigos (>7 dias): ${names}${more}`);
-      } else {
-        logger.debug('ℹ️ Nenhum produto processado antigo para remover');
+        logger.info(`   📋 Rodada ${processedRound}: ${processedProducts.length} produtos processados encontrados`);
+
+        const deletedCount = await deleteInBatches(processedProducts.map(p => p.id));
+        totalProcessedCount += deletedCount;
+
+        logger.info(`   ✅ Rodada ${processedRound}: ${deletedCount} produtos deletados (Total: ${totalProcessedCount})`);
+
+        // Se retornou menos que o limite, não há mais produtos
+        if (processedProducts.length < QUERY_LIMIT) break;
       }
 
-      logger.info(`📊 Total de produtos removidos: ${pendingCount + processedCount}`);
+      // ===== RESUMO FINAL =====
+      logger.info('');
+      logger.info('📊 ===== RESUMO DA LIMPEZA =====');
+      logger.info(`   🗑️ Produtos pendentes (>24h): ${totalPendingCount}`);
+      logger.info(`   🗑️ Produtos processados (>7 dias): ${totalProcessedCount}`);
+      logger.info(`   📦 TOTAL DE PRODUTOS REMOVIDOS: ${totalPendingCount + totalProcessedCount}`);
 
-      return { pendingCount, processedCount };
+      if (Object.values(totalRelated).some(v => v > 0)) {
+        logger.info('');
+        logger.info('   📋 Registros relacionados removidos:');
+        if (totalRelated.scheduled_posts > 0) logger.info(`      - Agendamentos: ${totalRelated.scheduled_posts}`);
+        if (totalRelated.sync_logs > 0) logger.info(`      - Logs de sync: ${totalRelated.sync_logs}`);
+        if (totalRelated.price_history > 0) logger.info(`      - Histórico de preços: ${totalRelated.price_history}`);
+        if (totalRelated.click_tracking > 0) logger.info(`      - Rastreamento de cliques: ${totalRelated.click_tracking}`);
+        if (totalRelated.notifications > 0) logger.info(`      - Notificações: ${totalRelated.notifications}`);
+      }
+
+      logger.info('================================');
+
+      return {
+        pendingCount: totalPendingCount,
+        processedCount: totalProcessedCount,
+        relatedDeleted: totalRelated
+      };
     } catch (error) {
       logger.error(`❌ Erro na limpeza automática de produtos: ${error.message}`);
       throw error;
