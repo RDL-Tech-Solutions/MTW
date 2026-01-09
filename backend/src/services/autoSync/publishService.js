@@ -1,8 +1,10 @@
-import logger from '../../config/logger.js';
+
+import { supabase } from '../../config/database.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
 import templateRenderer from '../bots/templateRenderer.js';
 import telegramService from '../bots/telegramService.js';
 import whatsappService from '../bots/whatsappService.js';
+import schedulerService from './schedulerService.js';
 
 class PublishService {
   /**
@@ -11,10 +13,10 @@ class PublishService {
    */
   async publishToApp(product) {
     try {
-      logger.info(`📱 Produto ${product.id} já disponível no app via API /products`);
+      logger.info(`📱 Produto ${product.id} já disponível no app via API / products`);
       return true;
     } catch (error) {
-      logger.error(`❌ Erro ao publicar no app: ${error.message}`);
+      logger.error(`❌ Erro ao publicar no app: ${error.message} `);
       return false;
     }
   }
@@ -56,7 +58,7 @@ class PublishService {
       const uniqueUserIds = [...new Set(usersToNotify)];
 
       if (uniqueUserIds.length === 0) {
-        logger.info(`🔔 Nenhum usuário para notificar sobre: ${product.name}`);
+        logger.info(`🔔 Nenhum usuário para notificar sobre: ${product.name} `);
         return true;
       }
 
@@ -75,12 +77,12 @@ class PublishService {
             });
           }
         } catch (error) {
-          logger.error(`Erro ao processar usuário ${userId}: ${error.message}`);
+          logger.error(`Erro ao processar usuário ${userId}: ${error.message} `);
         }
       }
 
       if (notifications.length === 0) {
-        logger.info(`🔔 Nenhuma notificação criada para: ${product.name}`);
+        logger.info(`🔔 Nenhuma notificação criada para: ${product.name} `);
         return true;
       }
 
@@ -100,7 +102,7 @@ class PublishService {
             }
           }
         } catch (error) {
-          logger.error(`Erro ao enviar push para usuário ${createdNotification.user_id}: ${error.message}`);
+          logger.error(`Erro ao enviar push para usuário ${createdNotification.user_id}: ${error.message} `);
         }
       }
 
@@ -427,90 +429,89 @@ class PublishService {
       app: false,
       push: false,
       telegram: false,
-      whatsapp: false
+      whatsapp: false,
+      success: false
     };
 
     try {
-      logger.info(`🔄 Iniciando publishAll para produto ${product.id}`);
+      logger.info(`📢 Iniciando publicação multicanal para: ${product.name}`);
       logger.info(`   Options: ${JSON.stringify(options)}`);
-      logger.info(`   Category ID inicial: ${product.category_id}`);
+
+      // Variável para armazenar dados editados
+      let editedProduct = {};
 
       // 1. Editar produto com IA (antes de publicar)
       try {
         const productEditor = (await import('../../ai/productEditor.js')).default;
-        const Product = (await import('../../models/Product.js')).default; // Importar Model Product
 
         if (await productEditor.isEnabled()) {
           logger.info(`🤖 Editando produto com IA antes da publicação...`);
-          const editedProduct = await productEditor.editProduct(product);
+          editedProduct = await productEditor.editProduct(product);
 
           // Log do resultado da IA
           logger.info(`🤖 IA sugeriu categoria: ${editedProduct.ai_detected_category_id || 'Nenhuma'}`);
-          logger.info(`   Categoria atual (manual): ${product.category_id}`);
-          logger.info(`   Skip AI: ${options.skipAiCategory}, Manual ID Option: ${options.manualCategoryId}`);
-
-          // Aplicar edições ao produto
-          if (editedProduct.ai_optimized_title) {
-            product.ai_optimized_title = editedProduct.ai_optimized_title;
-          }
-          if (editedProduct.ai_generated_description) {
-            product.ai_generated_description = editedProduct.ai_generated_description;
-          }
-          if (editedProduct.ai_detected_category_id) {
-            product.ai_detected_category_id = editedProduct.ai_detected_category_id;
-
-            // Só atualizar a categoria principal se NÃO foi solicitado pular (ex: alteração manual)
-            // E se não houver uma categoria manual explícita nas opções
-            if (!options.skipAiCategory && !options.manualCategoryId) {
-              product.category_id = editedProduct.ai_detected_category_id; // Usar categoria detectada
-            } else {
-              logger.info(`🛡️ Mantendo categoria manual: ${options.manualCategoryId || product.category_id} (ignorando sugestão IA: ${editedProduct.ai_detected_category_id})`);
-
-              // Se tiver manualCategoryId explícito, garantir que está aplicado
-              if (options.manualCategoryId) {
-                product.category_id = options.manualCategoryId;
-              }
-            }
-          }
-          if (editedProduct.offer_priority) {
-            product.offer_priority = editedProduct.offer_priority;
-          }
-          if (editedProduct.should_send_push !== undefined) {
-            product.should_send_push = editedProduct.should_send_push;
-          }
-          if (editedProduct.should_send_to_bots !== undefined) {
-            product.should_send_to_bots = editedProduct.should_send_to_bots;
-          }
-          if (editedProduct.is_featured_offer !== undefined) {
-            product.is_featured_offer = editedProduct.is_featured_offer;
-          }
-          if (editedProduct.ai_decision_reason) {
-            product.ai_decision_reason = editedProduct.ai_decision_reason;
-          }
-          if (editedProduct.ai_edit_history) {
-            product.ai_edit_history = editedProduct.ai_edit_history;
-          }
-
-          // Atualizar no banco
-          if (product.id) {
-            logger.info(`💾 Salvando atualizações de IA no banco. Categoria final: ${product.category_id}`);
-            await Product.update(product.id, {
-              ai_optimized_title: product.ai_optimized_title,
-              ai_generated_description: product.ai_generated_description,
-              ai_detected_category_id: product.ai_detected_category_id,
-              offer_priority: product.offer_priority,
-              should_send_push: product.should_send_push,
-              should_send_to_bots: product.should_send_to_bots,
-              is_featured_offer: product.is_featured_offer,
-              ai_decision_reason: product.ai_decision_reason,
-              ai_edit_history: product.ai_edit_history,
-              category_id: product.category_id // Usar a categoria final decidida (pode ser manual ou IA)
-            });
-          }
         }
       } catch (editError) {
-        logger.warn(`⚠️ Erro ao editar produto com IA: ${editError.message}`);
-        // Continuar publicação mesmo se edição falhar
+        logger.warn(`⚠️ Erro ao inicializar/executar editor IA: ${editError.message}`);
+      }
+
+      // Aplicar edições ao produto
+      if (editedProduct.ai_optimized_title) {
+        product.ai_optimized_title = editedProduct.ai_optimized_title;
+      }
+      if (editedProduct.ai_generated_description) {
+        product.ai_generated_description = editedProduct.ai_generated_description;
+      }
+      if (editedProduct.ai_detected_category_id) {
+        product.ai_detected_category_id = editedProduct.ai_detected_category_id;
+
+        // Só atualizar a categoria principal se NÃO foi solicitado pular (ex: alteração manual)
+        // E se não houver uma categoria manual explícita nas opções
+        if (!options.skipAiCategory && !options.manualCategoryId) {
+          product.category_id = editedProduct.ai_detected_category_id; // Usar categoria detectada
+        } else {
+          logger.info(`🛡️ Mantendo categoria manual: ${options.manualCategoryId || product.category_id} (ignorando sugestão IA: ${editedProduct.ai_detected_category_id})`);
+
+          // Se tiver manualCategoryId explícito, garantir que está aplicado
+          if (options.manualCategoryId) {
+            product.category_id = options.manualCategoryId;
+          }
+        }
+      }
+      if (editedProduct.offer_priority) {
+        product.offer_priority = editedProduct.offer_priority;
+      }
+      if (editedProduct.should_send_push !== undefined) {
+        product.should_send_push = editedProduct.should_send_push;
+      }
+      if (editedProduct.should_send_to_bots !== undefined) {
+        product.should_send_to_bots = editedProduct.should_send_to_bots;
+      }
+      if (editedProduct.is_featured_offer !== undefined) {
+        product.is_featured_offer = editedProduct.is_featured_offer;
+      }
+      if (editedProduct.ai_decision_reason) {
+        product.ai_decision_reason = editedProduct.ai_decision_reason;
+      }
+      if (editedProduct.ai_edit_history) {
+        product.ai_edit_history = editedProduct.ai_edit_history;
+      }
+
+      // Atualizar no banco
+      if (product.id) {
+        logger.info(`💾 Salvando atualizações de IA no banco. Categoria final: ${product.category_id}`);
+        await Product.update(product.id, {
+          ai_optimized_title: product.ai_optimized_title,
+          ai_generated_description: product.ai_generated_description,
+          ai_detected_category_id: product.ai_detected_category_id,
+          offer_priority: product.offer_priority,
+          should_send_push: product.should_send_push,
+          should_send_to_bots: product.should_send_to_bots,
+          is_featured_offer: product.is_featured_offer,
+          ai_decision_reason: product.ai_decision_reason,
+          ai_edit_history: product.ai_edit_history,
+          category_id: product.category_id // Usar a categoria final decidida (pode ser manual ou IA)
+        });
       }
 
       // 2. Calcular score de qualidade
@@ -607,18 +608,33 @@ class PublishService {
         logger.info(`⏸️ Push notification desabilitado pela IA para este produto`);
       }
 
-      // Telegram (apenas se should_send_to_bots = true)
-      if (product.should_send_to_bots !== false) {
-        results.telegram = await this.notifyTelegramBot(product);
-      } else {
-        logger.info(`⏸️ Telegram desabilitado pela IA para este produto`);
-      }
+      // 3. Bots (Telegram & WhatsApp)
+      // Se for publicação manual (options.manual = true), envia imediato.
+      // Se for auto-sync (padrão), usa o agendamento inteligente.
+      if (options.manual) {
+        // Telegram (apenas se should_send_to_bots = true)
+        if (product.should_send_to_bots !== false) {
+          results.telegram = await this.notifyTelegramBot(product);
+        } else {
+          logger.info(`⏸️ Telegram desabilitado pela IA para este produto`);
+        }
 
-      // WhatsApp (apenas se should_send_to_bots = true)
-      if (product.should_send_to_bots !== false) {
-        results.whatsapp = await this.notifyWhatsAppBot(product);
+        // WhatsApp (apenas se should_send_to_bots = true)
+        if (product.should_send_to_bots !== false) {
+          results.whatsapp = await this.notifyWhatsAppBot(product);
+        } else {
+          logger.info(`⏸️ WhatsApp desabilitado pela IA para este produto`);
+        }
       } else {
-        logger.info(`⏸️ WhatsApp desabilitado pela IA para este produto`);
+        // Agendamento Inteligente (apenas se bots não foram explicitamente desabilitados)
+        if (product.should_send_to_bots !== false) {
+          await schedulerService.scheduleProduct(product);
+          results.telegram = 'scheduled';
+          results.whatsapp = 'scheduled';
+          logger.info('🕒 Posts de Telegram e WhatsApp agendados inteligentemente.');
+        } else {
+          logger.info(`⏸️ Agendamento de bots desabilitado pela IA para este produto`);
+        }
       }
 
       const success = results.telegram || results.whatsapp;

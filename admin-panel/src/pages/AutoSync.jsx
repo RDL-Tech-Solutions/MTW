@@ -24,6 +24,10 @@ export default function AutoSync() {
     mercadolivre_auto_publish: false,
     amazon_auto_publish: false,
     aliexpress_auto_publish: false,
+    shopee_shorten_link: false,
+    mercadolivre_shorten_link: false,
+    amazon_shorten_link: false,
+    aliexpress_shorten_link: false,
     keywords: '',
     min_discount_percentage: 10,
     categories: [],
@@ -64,6 +68,10 @@ export default function AutoSync() {
         mercadolivre_auto_publish: data.mercadolivre_auto_publish || false,
         amazon_auto_publish: data.amazon_auto_publish || false,
         aliexpress_auto_publish: data.aliexpress_auto_publish || false,
+        shopee_shorten_link: data.shopee_shorten_link || false,
+        mercadolivre_shorten_link: data.mercadolivre_shorten_link || false,
+        amazon_shorten_link: data.amazon_shorten_link || false,
+        aliexpress_shorten_link: data.aliexpress_shorten_link || false,
         keywords: data.keywords || '',
         min_discount_percentage: data.min_discount_percentage || 10,
         categories: data.categories || [],
@@ -166,7 +174,7 @@ export default function AutoSync() {
 
       // Aguardar um pouco antes de atualizar para garantir que os dados foram salvos
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Atualizar dados
       await Promise.all([
         fetchHistory(),
@@ -230,7 +238,7 @@ export default function AutoSync() {
 
       // Aguardar um pouco antes de atualizar para garantir que os dados foram salvos
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Atualizar dados
       await Promise.all([
         fetchHistory(),
@@ -398,9 +406,9 @@ export default function AutoSync() {
             Capture automaticamente promoções de múltiplas plataformas (Mercado Livre, Shopee, Amazon, AliExpress)
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={async () => {
             await Promise.all([fetchConfig(), fetchHistory(), fetchStats()]);
             toast({
@@ -765,12 +773,23 @@ export default function AutoSync() {
                     Publicar automaticamente após análise estratégica da IA
                   </p>
                 </div>
-                <Switch
-                  checked={config.mercadolivre_auto_publish || false}
-                  onCheckedChange={(checked) => setConfig({ ...config, mercadolivre_auto_publish: checked })}
-                  id="mercadolivre_auto_publish"
-                  disabled={!config.mercadolivre_enabled}
-                />
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="mercadolivre_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.mercadolivre_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, mercadolivre_shorten_link: checked })}
+                      id="mercadolivre_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.mercadolivre_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, mercadolivre_auto_publish: checked })}
+                    id="mercadolivre_auto_publish"
+                    disabled={!config.mercadolivre_enabled}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-3 border rounded-lg">
@@ -780,12 +799,23 @@ export default function AutoSync() {
                     Publicar automaticamente após análise estratégica da IA
                   </p>
                 </div>
-                <Switch
-                  checked={config.shopee_auto_publish || false}
-                  onCheckedChange={(checked) => setConfig({ ...config, shopee_auto_publish: checked })}
-                  id="shopee_auto_publish"
-                  disabled={!config.shopee_enabled}
-                />
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="shopee_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.shopee_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, shopee_shorten_link: checked })}
+                      id="shopee_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.shopee_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, shopee_auto_publish: checked })}
+                    id="shopee_auto_publish"
+                    disabled={!config.shopee_enabled}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-3 border rounded-lg">
@@ -795,12 +825,23 @@ export default function AutoSync() {
                     Publicar automaticamente após análise estratégica da IA
                   </p>
                 </div>
-                <Switch
-                  checked={config.amazon_auto_publish || false}
-                  onCheckedChange={(checked) => setConfig({ ...config, amazon_auto_publish: checked })}
-                  id="amazon_auto_publish"
-                  disabled={!config.amazon_enabled}
-                />
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="amazon_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.amazon_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, amazon_shorten_link: checked })}
+                      id="amazon_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.amazon_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, amazon_auto_publish: checked })}
+                    id="amazon_auto_publish"
+                    disabled={!config.amazon_enabled}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-3 border rounded-lg">
@@ -810,19 +851,30 @@ export default function AutoSync() {
                     Publicar automaticamente após análise estratégica da IA
                   </p>
                 </div>
-                <Switch
-                  checked={config.aliexpress_auto_publish || false}
-                  onCheckedChange={(checked) => setConfig({ ...config, aliexpress_auto_publish: checked })}
-                  id="aliexpress_auto_publish"
-                  disabled={!config.aliexpress_enabled}
-                />
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="aliexpress_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.aliexpress_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, aliexpress_shorten_link: checked })}
+                      id="aliexpress_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.aliexpress_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, aliexpress_auto_publish: checked })}
+                    id="aliexpress_auto_publish"
+                    disabled={!config.aliexpress_enabled}
+                  />
+                </div>
               </div>
             </div>
 
             <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
               <p className="text-sm text-blue-800 dark:text-blue-200">
                 <Brain className="inline mr-2 h-4 w-4" />
-                <strong>Como funciona:</strong> A IA analisa qualidade, relevância, preço e competitividade. 
+                <strong>Como funciona:</strong> A IA analisa qualidade, relevância, preço e competitividade.
                 Produtos aprovados são publicados automaticamente. Produtos rejeitados ficam em /pending-products para revisão manual.
               </p>
             </div>

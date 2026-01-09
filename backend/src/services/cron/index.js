@@ -7,6 +7,7 @@ import { cleanupOldData } from './cleanupOldData.js';
 import { monitorExpiredCoupons } from './monitorExpiredCoupons.js';
 import autoSyncCron from '../../cron/autoSyncCron.js';
 import couponCaptureCron from '../../cron/couponCaptureCron.js';
+import schedulerCron from '../../cron/schedulerCron.js';
 
 export const startCronJobs = () => {
   logger.info('🕐 Iniciando cron jobs...');
@@ -72,6 +73,9 @@ export const startCronJobs = () => {
   couponCaptureCron.startAll().catch(error => {
     logger.error(`Erro ao iniciar coupon capture cron: ${error.message}`);
   });
+
+  // Iniciar Cron de Agendamento Inteligente de Posts
+  schedulerCron.start();
 
   logger.info('✅ Cron jobs iniciados com sucesso');
 };

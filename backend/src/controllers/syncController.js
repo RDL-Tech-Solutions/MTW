@@ -6,6 +6,7 @@ import shopeeSync from '../services/autoSync/shopeeSync.js';
 import amazonSync from '../services/autoSync/amazonSync.js';
 import aliExpressSync from '../services/autoSync/aliExpressSync.js';
 import publishService from '../services/autoSync/publishService.js';
+import urlShortener from '../services/urlShortener.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
 // Módulos de IA
@@ -231,17 +232,17 @@ class SyncController {
 
     try {
       logger.info(`🤖 Analisando produto estrategicamente: ${product.name?.substring(0, 50)}...`);
-      
+
       // Fazer análise estratégica com IA
       const analysis = await productAnalyzer.analyzeProduct(product);
-      
+
       logger.info(`📊 Análise estratégica concluída:`);
       logger.info(`   Quality Score: ${(analysis.quality_score * 100).toFixed(1)}%`);
       logger.info(`   Relevance Score: ${(analysis.relevance_score * 100).toFixed(1)}%`);
       logger.info(`   Price Score: ${(analysis.price_score * 100).toFixed(1)}%`);
       logger.info(`   Should Publish: ${analysis.should_publish ? 'SIM ✅' : 'NÃO ⏸️'}`);
       logger.info(`   Confidence: ${(analysis.confidence * 100).toFixed(1)}%`);
-      
+
       if (analysis.issues && analysis.issues.length > 0) {
         logger.info(`   Issues: ${analysis.issues.join(', ')}`);
       }
@@ -251,7 +252,7 @@ class SyncController {
 
       // Decisão baseada na análise da IA
       const shouldPublish = analysis.should_publish === true && analysis.confidence >= 0.7;
-      
+
       if (shouldPublish) {
         logger.info(`✅ Produto aprovado pela IA para publicação automática`);
       } else {
@@ -300,18 +301,35 @@ class SyncController {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.mercadolivre_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               // Fazer análise estratégica com IA
               const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
+                // VERIFICAÇÃO DE ENCURTAMENTO DE LINK
+                if (config.mercadolivre_shorten_link) {
+                  try {
+                    logger.info(`🔗 Encurtando link para Mercado Livre: ${product.affiliate_link}`);
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink && shortLink !== product.affiliate_link) {
+                      product.affiliate_link = shortLink;
+                      // Atualizar link encurtado no banco
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                      logger.info(`   Link encurtado salvo: ${shortLink}`);
+                    }
+                  } catch (shortError) {
+                    logger.error(`❌ Erro ao encurtar link ML: ${shortError.message}`);
+                    // Continua com link original se falhar
+                  }
+                }
+
                 // Publicar automaticamente no app e enviar para bots
                 const publishResult = await publishService.publishAll(product);
-                
+
                 // Atualizar produto para status 'active' após publicação
                 await Product.update(product.id, { status: 'active' });
-                
+
                 // Registrar log
                 await SyncLog.create({
                   platform: 'mercadolivre',
@@ -321,7 +339,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 // Produto rejeitado pela IA - fica pendente
@@ -333,7 +351,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -346,7 +364,7 @@ class SyncController {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           } else {
@@ -416,18 +434,35 @@ class SyncController {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.amazon_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               // Fazer análise estratégica com IA
               const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
+                // VERIFICAÇÃO DE ENCURTAMENTO DE LINK
+                if (config.amazon_shorten_link) {
+                  try {
+                    logger.info(`🔗 Encurtando link para Amazon: ${product.affiliate_link}`);
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink && shortLink !== product.affiliate_link) {
+                      product.affiliate_link = shortLink;
+                      // Atualizar link encurtado no banco
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                      logger.info(`   Link encurtado salvo: ${shortLink}`);
+                    }
+                  } catch (shortError) {
+                    logger.error(`❌ Erro ao encurtar link Amazon: ${shortError.message}`);
+                    // Continua com link original se falhar
+                  }
+                }
+
                 // Publicar automaticamente no app e enviar para bots
                 const publishResult = await publishService.publishAll(product);
-                
+
                 // Atualizar produto para status 'active' após publicação
                 await Product.update(product.id, { status: 'active' });
-                
+
                 // Registrar log
                 await SyncLog.create({
                   platform: 'amazon',
@@ -437,7 +472,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 // Produto rejeitado pela IA - fica pendente
@@ -449,7 +484,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -462,7 +497,7 @@ class SyncController {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           } else {
@@ -500,9 +535,9 @@ class SyncController {
       const AppSettings = (await import('../models/AppSettings.js')).default;
       const aliExpressConfig = await AppSettings.getAliExpressConfig();
       const productOrigin = aliExpressConfig.productOrigin || 'both';
-      
+
       logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
-      
+
       // 1. Buscar produtos com origem especificada
       const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50, productOrigin);
 
@@ -525,18 +560,35 @@ class SyncController {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.aliexpress_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               // Fazer análise estratégica com IA
               const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
+                // VERIFICAÇÃO DE ENCURTAMENTO DE LINK
+                if (config.aliexpress_shorten_link) {
+                  try {
+                    logger.info(`🔗 Encurtando link para AliExpress: ${product.affiliate_link}`);
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink && shortLink !== product.affiliate_link) {
+                      product.affiliate_link = shortLink;
+                      // Atualizar link encurtado no banco
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                      logger.info(`   Link encurtado salvo: ${shortLink}`);
+                    }
+                  } catch (shortError) {
+                    logger.error(`❌ Erro ao encurtar link AliExpress: ${shortError.message}`);
+                    // Continua com link original se falhar
+                  }
+                }
+
                 // Publicar automaticamente no app e enviar para bots
                 const publishResult = await publishService.publishAll(product);
-                
+
                 // Atualizar produto para status 'active' após publicação
                 await Product.update(product.id, { status: 'active' });
-                
+
                 // Registrar log
                 await SyncLog.create({
                   platform: 'aliexpress',
@@ -546,7 +598,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 // Produto rejeitado pela IA - fica pendente
@@ -558,7 +610,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -571,7 +623,7 @@ class SyncController {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           } else {
@@ -624,18 +676,35 @@ class SyncController {
 
             // Verificar se auto-publicação está habilitada para esta plataforma
             const autoPublishEnabled = config.shopee_auto_publish === true;
-            
+
             if (autoPublishEnabled) {
               // Fazer análise estratégica com IA
               const { shouldPublish, analysis } = await SyncController.analyzeAndDecidePublish(product, true);
-              
+
               if (shouldPublish) {
+                // VERIFICAÇÃO DE ENCURTAMENTO DE LINK
+                if (config.shopee_shorten_link) {
+                  try {
+                    logger.info(`🔗 Encurtando link para Shopee: ${product.affiliate_link}`);
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink && shortLink !== product.affiliate_link) {
+                      product.affiliate_link = shortLink;
+                      // Atualizar link encurtado no banco
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                      logger.info(`   Link encurtado salvo: ${shortLink}`);
+                    }
+                  } catch (shortError) {
+                    logger.error(`❌ Erro ao encurtar link Shopee: ${shortError.message}`);
+                    // Continua com link original se falhar
+                  }
+                }
+
                 // Publicar automaticamente no app e enviar para bots
                 const publishResult = await publishService.publishAll(product);
-                
+
                 // Atualizar produto para status 'active' após publicação
                 await Product.update(product.id, { status: 'active' });
-                
+
                 // Registrar log
                 await SyncLog.create({
                   platform: 'shopee',
@@ -645,7 +714,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: publishResult.success
                 });
-                
+
                 logger.info(`✅ Produto publicado automaticamente: ${product.name}`);
               } else {
                 // Produto rejeitado pela IA - fica pendente
@@ -657,7 +726,7 @@ class SyncController {
                   is_new_product: true,
                   sent_to_bots: false
                 });
-                
+
                 logger.info(`⏸️ Produto ficará em /pending-products: ${product.name}`);
               }
             } else {
@@ -670,7 +739,7 @@ class SyncController {
                 is_new_product: true,
                 sent_to_bots: false
               });
-              
+
               logger.info(`⏸️ Auto-publicação desabilitada - produto ficará em /pending-products: ${product.name}`);
             }
           } else {

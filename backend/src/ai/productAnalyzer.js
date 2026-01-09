@@ -22,7 +22,7 @@ class ProductAnalyzer {
     const discount = product.discount_percentage || 0;
     const price = product.current_price || 0;
 
-    return `Analise este produto e retorne APENAS JSON.
+    return `Analise este produto para e-commerce no Brasil e retorne APENAS JSON.
 
 PRODUTO:
 - Nome: ${name}
@@ -31,27 +31,31 @@ PRODUTO:
 - Plataforma: ${product.platform || 'N/A'}
 ${description ? `- Descrição: ${description}` : ''}
 
+CONTEXTO:
+O objetivo é identificar produtos com alto potencial de engajamento para grupos de ofertas no Telegram e WhatsApp.
+
 RETORNE APENAS ESTE JSON:
 {
   "quality_score": 0.0-1.0,
   "relevance_score": 0.0-1.0,
   "price_score": 0.0-1.0,
+  "viral_potential": 0.0-1.0,
+  "trend_alignment": "Alta" | "Média" | "Baixa",
   "is_relevant": true ou false,
   "should_publish": true ou false,
-  "suggested_category": "categoria" ou null,
+  "suggested_category": "categoria",
   "issues": ["problema1"],
   "strengths": ["ponto forte1"],
   "confidence": 0.0-1.0
 }
 
 CRITÉRIOS:
-- quality_score: 0.8+ se nome claro e preço bom
-- price_score: 0.8+ se desconto >= 20%
-- should_publish: true se quality >= 0.6 E price >= 0.5
-- is_relevant: true se produto faz sentido
+- viral_potential: Alto se for produto curioso, inovador, preço bug (erro) ou desejo de consumo imediato.
+- should_publish: true se quality >= 0.7 E (price_score >= 0.6 OU viral_potential >= 0.7).
+- trend_alignment: Avalie se o produto conecta com tendências atuais ou sazonais.
 
 EXEMPLO:
-{"quality_score":0.8,"relevance_score":0.7,"price_score":0.9,"is_relevant":true,"should_publish":true,"suggested_category":"Eletrônicos","issues":[],"strengths":["Bom desconto"],"confidence":0.85}
+{"quality_score":0.8, "relevance_score":0.9, "price_score":0.9, "viral_potential":0.85, "trend_alignment":"Alta", "is_relevant":true, "should_publish":true, "suggested_category":"Eletrônicos", "issues":[], "strengths":["Preço histórico", "Produto tendência"], "confidence":0.9}
 
 Retorne APENAS o JSON:`;
   }
@@ -114,6 +118,8 @@ Retorne APENAS o JSON:`;
       quality_score: this.normalizeScore(response.quality_score),
       relevance_score: this.normalizeScore(response.relevance_score),
       price_score: this.normalizeScore(response.price_score),
+      viral_potential: this.normalizeScore(response.viral_potential),
+      trend_alignment: response.trend_alignment || 'Baixa',
       is_relevant: this.normalizeBoolean(response.is_relevant),
       should_publish: this.normalizeBoolean(response.should_publish),
       suggested_category: response.suggested_category || null,
@@ -169,6 +175,8 @@ Retorne APENAS o JSON:`;
       quality_score: qualityScore,
       relevance_score: 0.5,
       price_score: priceScore,
+      viral_potential: hasGoodDiscount ? 0.6 : 0.3,
+      trend_alignment: 'Baixa',
       is_relevant: hasName && hasPrice,
       should_publish: shouldPublish,
       suggested_category: null,
