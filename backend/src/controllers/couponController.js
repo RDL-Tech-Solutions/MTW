@@ -221,12 +221,37 @@ class CouponController {
   static async forcePublish(req, res, next) {
     try {
       const { id } = req.params;
+      const updateData = req.body; // Dados atualizados do frontend
+
       const coupon = await Coupon.findById(id);
 
       if (!coupon) {
         return res.status(404).json(
           errorResponse('Cupom não encontrado', ERROR_CODES.NOT_FOUND)
         );
+      }
+
+      // IMPORTANTE: Atualizar dados do cupom antes de aprovar
+      // Campos que podem ser atualizados pelo admin ao revisar
+      const fieldsToUpdate = {};
+
+      if (updateData.code !== undefined) fieldsToUpdate.code = updateData.code;
+      if (updateData.platform !== undefined) fieldsToUpdate.platform = updateData.platform;
+      if (updateData.description !== undefined) fieldsToUpdate.description = updateData.description;
+      if (updateData.discount_type !== undefined) fieldsToUpdate.discount_type = updateData.discount_type;
+      if (updateData.discount_value !== undefined) fieldsToUpdate.discount_value = updateData.discount_value;
+      if (updateData.min_purchase !== undefined) fieldsToUpdate.min_purchase = updateData.min_purchase;
+      if (updateData.max_discount_value !== undefined) fieldsToUpdate.max_discount_value = updateData.max_discount_value;
+      if (updateData.is_general !== undefined && updateData.is_general !== null) fieldsToUpdate.is_general = updateData.is_general;
+      if (updateData.max_uses !== undefined) fieldsToUpdate.max_uses = updateData.max_uses;
+      if (updateData.valid_from !== undefined) fieldsToUpdate.valid_from = updateData.valid_from;
+      if (updateData.valid_until !== undefined) fieldsToUpdate.valid_until = updateData.valid_until;
+      if (updateData.is_exclusive !== undefined) fieldsToUpdate.is_exclusive = updateData.is_exclusive;
+
+      // Aplicar atualizações se houver
+      if (Object.keys(fieldsToUpdate).length > 0) {
+        logger.info(`📝 Atualizando cupom ${id} com dados do admin:`, fieldsToUpdate);
+        await Coupon.update(id, fieldsToUpdate);
       }
 
       // Aprovar cupom

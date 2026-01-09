@@ -90,8 +90,36 @@ class AdvancedTemplateGenerator {
         urgencyLevel
       });
 
-      // Gerar template via IA
-      const template = await this.callAI(prompt);
+      // Gerar template via IA (texto puro)
+      let template = await this.callAI(prompt);
+
+      // PÓS-PROCESSAMENTO: Aplicar formatação Markdown aos placeholders
+      // A IA retorna texto puro com CODIGO_CUPOM, VALOR_DESCONTO, etc.
+      // Nós aplicamos a formatação aqui para garantir consistência
+      template = template
+        // Substituir placeholders por variáveis formatadas em Markdown
+        .replace(/CODIGO_CUPOM/gi, '`{coupon_code}`')
+        .replace(/VALOR_DESCONTO/gi, '**{discount_value}**')
+        .replace(/VALOR_MINIMO/gi, '**{min_purchase}**');
+
+      // Substituir APLICABILIDADE conforme configuração
+      if (isGeneral === true) {
+        template = template.replace(/APLICABILIDADE/gi, '✅ Válido para **todos os produtos**!');
+      } else if (isGeneral === false) {
+        template = template.replace(/APLICABILIDADE/gi, '🎯 Válido apenas para **produtos selecionados**');
+      }
+
+      // Limpeza final
+      template = template
+        // Remover qualquer tag HTML que a IA possa ter adicionado mesmo assim
+        .replace(/<[^>]+>/g, '')
+        // Remover entidades HTML
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        // Limpar linhas vazias excessivas
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 
       logger.info(`✅ [IA ADVANCED] Template de cupom gerado (${template.length} chars)`);
       return template;
@@ -186,44 +214,47 @@ Retorne APENAS a mensagem promocional:`;
   }
 
   /**
-   * Construir prompt OTIMIZADO para cupom
+   * Construir prompt CRIATIVO para cupom
+   * A IA gera APENAS o texto criativo - formatação é aplicada pelo código
    */
   buildCouponPrompt(coupon, platform, context) {
     const discountText = context.discountType === 'percentage'
       ? `${context.discountValue}%`
       : `R$ ${context.discountValue}`;
 
-    return `Crie uma mensagem curta sobre um cupom de desconto para o Telegram.
+    return `Você é um especialista em marketing viral. Crie uma mensagem EXCITING e ENVOLVENTE.
 
-CUPOM:
-- Código: ${coupon.code}
-- Desconto: ${discountText} OFF
-${context.hasMinPurchase ? `- Compra mínima: R$ ${coupon.min_purchase}` : '- Sem compra mínima'}
-${context.hasMaxDiscount ? `- Limite: R$ ${coupon.max_discount_value}` : ''}
-${context.isGeneral ? '- Válido para TODOS os produtos' : ''}
+📋 DADOS:
+Código: ${coupon.code}
+Desconto: ${discountText}
+${context.hasMinPurchase ? `Mínimo: R$ ${coupon.min_purchase}` : 'Sem mínimo!'}
+${context.isGeneral === true ? 'TODOS OS PRODUTOS (destaque isso!)' : ''}
+${context.isGeneral === false ? 'Produtos selecionados (mencione!)' : ''}
 
-FORMATO OBRIGATÓRIO:
-🎟️ **NOVO CUPOM!**
+🎯 SUA MISSÃO:
+Escreva uma mensagem que faça as pessoas PARAREM e prestarem atenção!
+Use linguagem persuasiva, emoção e urgência.
 
-💰 **{discount_value} OFF**
+✍️ REGRAS OBRIGATÓRIAS:
+1. NÃO use <b>, </b>, <code> ou qualquer HTML/markdown
+2. Use APENAS texto simples + 4-6 emojis
+3. 6-8 linhas CURTAS com espaçamento
+4. Use CODIGO_CUPOM para o código
+5. Use VALOR_DESCONTO para o desconto
+6. Use VALOR_MINIMO se tiver mínimo
+7. Use APLICABILIDADE se tiver is_general definido
+8. NUNCA mencione datas ou links
 
-🔑 **Código:** \`{coupon_code}\`
-${context.hasMinPurchase ? '💳 **Mínimo:** {min_purchase}' : ''}
-${context.isGeneral ? '✅ Válido para todos produtos!' : ''}
+💡 EXEMPLOS DE ABERTURA ENVOLVENTE (não copie, inspire-se):
 
-👉 {affiliate_link}
+"🎉 Vocês NÃO vão acreditar no que encontrei!"
+"💰 ALERTA DE ECONOMIA! Segura essa!"
+"🚨 PARA TUDO! Descobri um cupom ABSURDO!"
+"✨ Quem aqui quer ECONOMIZAR dinheiro DE VERDADE?"
+"🔥 Fala galera! Olha só essa BOMBA!"
+"🎁 Presente para vocês: um cupom MUITO BOM!"
 
-⚡ Use agora e economize!
-
-REGRAS:
-1. Siga o formato acima EXATAMENTE
-2. Mantenha as variáveis: {discount_value}, {coupon_code}, {min_purchase}, {affiliate_link}
-3. Use ** para negrito e \` para código do cupom
-4. NUNCA pule a linha de desconto (💰 **{discount_value} OFF**)
-5. NÃO mencione data de validade
-6. NÃO adicione explicações
-
-Retorne APENAS a mensagem:`;
+Agora escreva SUA mensagem única (texto puro com quebras de linha):`;
   }
 
   /**
@@ -302,27 +333,46 @@ Retorne APENAS a mensagem:`;
       .replace(/^\[OUT\]\s*/g, '')
       .trim();
 
-    // 2. Converter HTML para Markdown
+    // 2. Desescapar entidades HTML PRIMEIRO (antes de converter tags)
+    template = template
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+
+    // 3. Converter HTML para Markdown
     template = template
       .replace(/<b>(.*?)<\/b>/gi, '**$1**')
       .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
       .replace(/<i>(.*?)<\/i>/gi, '_$1_')
       .replace(/<em>(.*?)<\/em>/gi, '_$1_')
       .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
+      .replace(/<del>(.*?)<\/del>/gi, '~~$1~~')
+      .replace(/<strike>(.*?)<\/strike>/gi, '~~$1~~')
       .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
+      .replace(/<br\s*\/?>/gi, '\n');
 
-    // 3. Remover tags HTML restantes
+    // 3.1 Limpeza adicional: remover tags literais que não foram convertidas
+    // Isso captura casos onde as tags aparecem quebradas ou mal formatadas
+    template = template
+      .replace(/<\/?code>/gi, '')
+      .replace(/<\/?b>/gi, '')
+      .replace(/<\/?strong>/gi, '')
+      .replace(/<\/?i>/gi, '')
+      .replace(/<\/?em>/gi, '')
+      .replace(/<\/?s>/gi, '')
+      .replace(/<\/?del>/gi, '')
+      .replace(/<\/?strike>/gi, '');
+
+    // 4. Remover tags HTML restantes
     template = template.replace(/<[^>]+>/g, '');
 
-    // 4. Corrigir tildes múltiplos
+    // 5. Corrigir tildes múltiplos
     template = template.replace(/~{3,}/g, '~~');
 
-    // 5. Corrigir padrões de preço antigo mal formatados
+    // 6. Corrigir padrões de preço antigo mal formatados
     template = template
       .replace(/\(de\s+~~([^~]+)~~\)/gi, ' ~~$1~~')
       .replace(/\bde\s+~~([^~]+)~~/gi, ' ~~$1~~')

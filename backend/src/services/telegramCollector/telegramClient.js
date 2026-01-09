@@ -206,6 +206,7 @@ class TelegramClientService {
     return this.client;
   }
 
+
   /**
    * Conectar e autenticar
    */

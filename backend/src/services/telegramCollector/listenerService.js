@@ -517,6 +517,12 @@ class TelegramListenerService {
   isMessageWithinTimeRange(message, channel) {
     const captureMode = channel.capture_mode || 'new_only';
 
+    // Modo REALTIME: aceita todas as mensagens novas, sem restrições de tempo
+    if (captureMode === 'realtime') {
+      logger.debug(`   ⚡ Modo REALTIME: aceitando mensagem sem restrições de tempo`);
+      return true;
+    }
+
     if (captureMode === 'new_only') {
       // 3. Se a mensagem foi enviada após o início do listener (se disponível)
 
@@ -812,6 +818,14 @@ class TelegramListenerService {
       if (!this.isMessageWithinTimeRange(message, channel)) {
         logger.debug(`   ⏰ Mensagem fora do período permitido (modo: ${channel.capture_mode || 'new_only'})`);
         return;
+      }
+
+      // Detectar modo Tempo Real para processamento prioritário
+      const isRealtime = channel.capture_mode === 'realtime';
+      const processingStartTime = Date.now();
+
+      if (isRealtime) {
+        logger.info(`   ⚡ MODO TEMPO REAL ativado - Processamento prioritário iniciado`);
       }
 
       // Obter texto da mensagem de várias formas (métodos melhorados)
@@ -1224,6 +1238,12 @@ class TelegramListenerService {
 
       // Salvar cupom
       await this.saveCoupon(couponData, messageHash);
+
+      // Log de tempo total para modo Tempo Real
+      if (isRealtime) {
+        const processingTime = Date.now() - processingStartTime;
+        logger.info(`   ⚡ TEMPO REAL: Mensagem processada em ${processingTime}ms`);
+      }
 
       // Atualizar última mensagem processada
       await TelegramChannel.update(channel.id, {

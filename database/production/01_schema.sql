@@ -284,6 +284,10 @@ CREATE TABLE IF NOT EXISTS telegram_collector_config (
     listener_status VARCHAR(20) DEFAULT 'stopped' CHECK (listener_status IN ('running', 'stopped', 'error')),
     listener_pid INTEGER,
     last_error TEXT,
+    -- Forçar Data Center específico
+    forced_dc_id INTEGER,
+    forced_dc_ip VARCHAR(50),
+    forced_dc_port INTEGER DEFAULT 443,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT single_collector_config CHECK (id = '00000000-0000-0000-0000-000000000001')

@@ -148,6 +148,22 @@ class TemplateRenderer {
             .replace(/<em>(.*?)<\/em>/gi, '_$1_')
             .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')  // Strikethrough
             .replace(/<br\s*\/?>/gi, '\n')
+            // Desescapar entidades HTML que a IA pode ter gerado
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&quot;/g, '"')
+            // Converter tags HTML remanescentes para Markdown
+            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+            // Remover tags HTML quebradas ou literais
+            .replace(/<\/?code>/gi, '')
+            .replace(/<\/?b>/gi, '')
+            .replace(/<\/?strong>/gi, '')
+            .replace(/<\/?i>/gi, '')
+            .replace(/<\/?em>/gi, '')
             // Corrigir tildes múltiplos incorretos (~~~~ → ~~)
             .replace(/~{3,}/g, '~~')
             // Corrigir padrões mal formatados como "(de ~~ R$ 44,88)" - remover "(de" e manter apenas o preço formatado

@@ -53,6 +53,16 @@ export default function TelegramChannels() {
   });
   const [templateMode, setTemplateMode] = useState('custom');
 
+  // Data Centers do Telegram disponíveis
+  const DC_OPTIONS = [
+    { id: '', label: 'Automático (Padrão)', ip: '', port: 443 },
+    { id: '1', label: 'DC1 - Europa (149.154.175.50)', ip: '149.154.175.50', port: 443 },
+    { id: '2', label: 'DC2 - Américas (149.154.167.51)', ip: '149.154.167.51', port: 443 },
+    { id: '3', label: 'DC3 - Miami/Américas (149.154.175.100) ⭐ Recomendado', ip: '149.154.175.100', port: 443 },
+    { id: '4', label: 'DC4 - Américas (149.154.167.91)', ip: '149.154.167.91', port: 443 },
+    { id: '5', label: 'DC5 - Singapura (91.108.56.130)', ip: '91.108.56.130', port: 443 },
+  ];
+
   // Configuração
   const [config, setConfig] = useState({
     api_id: '',
@@ -62,7 +72,10 @@ export default function TelegramChannels() {
     schedule_start: '08:00',
     schedule_end: '22:00',
     work_duration: 5,
-    pause_duration: 5
+    pause_duration: 5,
+    forced_dc_id: '',
+    forced_dc_ip: '',
+    forced_dc_port: 443
   });
   const [configLoading, setConfigLoading] = useState(false);
 
@@ -162,7 +175,10 @@ export default function TelegramChannels() {
           schedule_start: data.schedule_start || '08:00',
           schedule_end: data.schedule_end || '22:00',
           work_duration: data.work_duration || 5,
-          pause_duration: data.pause_duration || 5
+          pause_duration: data.pause_duration || 5,
+          forced_dc_id: data.forced_dc_id ? String(data.forced_dc_id) : '',
+          forced_dc_ip: data.forced_dc_ip || '',
+          forced_dc_port: data.forced_dc_port || 443
         });
       }
     } catch (error) {
@@ -763,12 +779,13 @@ export default function TelegramChannels() {
                       className="w-full px-3 py-2 border rounded-md bg-background"
                       required
                     >
+                      <option value="realtime">⚡ Tempo Real (processamento imediato)</option>
                       <option value="new_only">Apenas novas mensagens</option>
                       <option value="1_day">Mensagens antigas (máx 1 dia)</option>
                       <option value="2_days">Mensagens antigas (máx 2 dias)</option>
                     </select>
                     <p className="text-xs text-muted-foreground">
-                      Define quantas mensagens antigas serão capturadas
+                      Tempo Real: processa e analisa cupons instantaneamente com IA
                     </p>
                   </div>
 

@@ -558,40 +558,56 @@ class Coupon {
   /**
    * Limpeza automática de cupons antigos
    * - Pendentes > 24h
-   * - Aprovados/Ativos > 7 dias
+   * - Aprovados/Ativos > 7 dias (SOMENTE se expirados ou sem validade)
    */
   static async cleanupOldItems() {
     try {
       logger.info('🔄 Iniciando limpeza automática de cupons...');
 
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       // 1. Excluir pendentes com mais de 24h
-      const { count: pendingCount, error: pendingError } = await supabase
+      const { data: deletedPending, count: pendingCount, error: pendingError } = await supabase
         .from('coupons')
         .delete({ count: 'exact' })
         .eq('is_pending_approval', true)
-        .lt('created_at', twentyFourHoursAgo);
+        .lt('created_at', twentyFourHoursAgo)
+        .select('id, code, created_at');
 
       if (pendingError) throw pendingError;
+
       if (pendingCount > 0) {
-        logger.info(`✅ Removidos ${pendingCount} cupons pendentes antigos (>24h)`);
+        const codes = deletedPending.map(c => c.code).join(', ');
+        logger.info(`✅ Removidos ${pendingCount} cupons pendentes antigos (>24h): ${codes}`);
+      } else {
+        logger.debug('ℹ️ Nenhum cupom pendente antigo para remover');
       }
 
       // 2. Excluir processados (não pendentes) com mais de 7 dias
-      const { count: processedCount, error: processedError } = await supabase
+      // IMPORTANTE: Respeitar valid_until - só deletar se expirado E antigo
+      // Deletar SE: (1) Cupom antigo (>7 dias) E (2) (Sem validade OU já expirou)
+      const { data: deletedProcessed, count: processedCount, error: processedError } = await supabase
         .from('coupons')
         .delete({ count: 'exact' })
         .eq('is_pending_approval', false)
-        .lt('updated_at', sevenDaysAgo);
+        .lt('updated_at', sevenDaysAgo)
+        .or(`valid_until.is.null,valid_until.lt.${now.toISOString()}`)
+        .select('id, code, valid_until, updated_at');
 
       if (processedError) throw processedError;
+
       if (processedCount > 0) {
-        logger.info(`✅ Removidos ${processedCount} cupons antigos (>7 dias)`);
+        const codes = deletedProcessed.map(c => c.code).join(', ');
+        logger.info(`✅ Removidos ${processedCount} cupons antigos (>7 dias e expirados): ${codes}`);
+      } else {
+        logger.debug('ℹ️ Nenhum cupom processado antigo para remover');
       }
 
-      return { pendingCount, processedCount };
+      logger.info(`📊 Total de cupons removidos: ${(pendingCount || 0) + (processedCount || 0)}`);
+
+      return { pendingCount: pendingCount || 0, processedCount: processedCount || 0 };
     } catch (error) {
       logger.error(`❌ Erro na limpeza automática de cupons: ${error.message}`);
       throw error;

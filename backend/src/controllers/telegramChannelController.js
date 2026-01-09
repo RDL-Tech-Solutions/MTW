@@ -18,85 +18,74 @@ class TelegramChannelController {
         search
       });
 
-      // Calcular estatísticas reais para cada canal usando queries otimizadas
-      const channelsWithStats = await Promise.all(
-        channels.map(async (channel) => {
-          try {
-            // Construir possíveis valores de channel_origin para buscar
-            const possibleOrigins = [];
-            if (channel.username) {
-              possibleOrigins.push(channel.username);
-              possibleOrigins.push(`@${channel.username}`);
-            }
-            if (channel.channel_id) {
-              possibleOrigins.push(channel.channel_id);
-            }
-            possibleOrigins.push(channel.name);
+      // Buscar estatísticas agregadas de todos os canais de uma vez (RPC otimizada)
+      logger.debug(`📊 Buscando estatísticas agregadas para ${channels.length} canais...`);
+      const { data: stats, error: statsError } = await supabase.rpc('get_telegram_channels_stats');
 
-            // Contar cupons usando query otimizada
-            let couponsCount = 0;
-            let lastMessageAt = null;
+      if (statsError) {
+        logger.error(`❌ Erro ao buscar estatísticas agregadas: ${statsError.message}`);
+      }
 
-            if (possibleOrigins.length > 0) {
-              // Contar cupons deste canal usando Supabase
-              const { count, error: countError } = await supabase
-                .from('coupons')
-                .select('*', { count: 'exact', head: true })
-                .eq('origem', 'telegram')
-                .in('channel_origin', possibleOrigins);
+      // Criar mapa de estatísticas para acesso rápido O(1)
+      const statsMap = new Map();
+      if (stats && Array.isArray(stats)) {
+        stats.forEach(stat => {
+          statsMap.set(stat.channel_origin, {
+            coupons_captured: Number(stat.coupons_count) || 0,
+            last_message_at: stat.last_message_at
+          });
+        });
+        logger.debug(`✅ Carregadas estatísticas de ${stats.length} canais`);
+      }
 
-              if (!countError) {
-                couponsCount = count || 0;
-              }
+      // Aplicar estatísticas aos canais (processamento em memória, sem queries adicionais)
+      const channelsWithStats = channels.map(channel => {
+        // Construir possíveis valores de channel_origin para buscar
+        const possibleOrigins = [];
+        if (channel.username) {
+          possibleOrigins.push(channel.username);
+          possibleOrigins.push(`@${channel.username}`);
+        }
+        if (channel.channel_id) {
+          possibleOrigins.push(channel.channel_id);
+        }
+        possibleOrigins.push(channel.name);
 
-              // Buscar última mensagem (último cupom capturado)
-              const { data: lastCoupon, error: lastError } = await supabase
-                .from('coupons')
-                .select('created_at')
-                .eq('origem', 'telegram')
-                .in('channel_origin', possibleOrigins)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
+        // Buscar estatísticas no mapa (primeira correspondência vence)
+        let channelStats = {
+          coupons_captured: channel.coupons_captured || 0,
+          last_message_at: channel.last_message_at || null
+        };
 
-              if (!lastError && lastCoupon) {
-                lastMessageAt = lastCoupon.created_at;
-              }
-            }
-
-            // Garantir que example_messages seja sempre um array
-            let exampleMessages = [];
-            if (channel.example_messages) {
-              if (Array.isArray(channel.example_messages)) {
-                exampleMessages = channel.example_messages;
-              } else if (typeof channel.example_messages === 'string') {
-                try {
-                  exampleMessages = JSON.parse(channel.example_messages);
-                } catch (e) {
-                  logger.warn(`Erro ao parsear example_messages do canal ${channel.id}`);
-                  exampleMessages = [];
-                }
-              }
-            }
-
-            return {
-              ...channel,
-              example_messages: exampleMessages,
-              coupons_captured: couponsCount,
-              last_message_at: lastMessageAt || channel.last_message_at
-            };
-          } catch (error) {
-            logger.warn(`Erro ao calcular stats do canal ${channel.id}: ${error.message}`);
-            // Retornar canal com valores do banco se houver erro
-            return {
-              ...channel,
-              example_messages: Array.isArray(channel.example_messages) ? channel.example_messages : [],
-              coupons_captured: channel.coupons_captured || 0,
-              last_message_at: channel.last_message_at || null
-            };
+        for (const origin of possibleOrigins) {
+          if (statsMap.has(origin)) {
+            channelStats = statsMap.get(origin);
+            break;
           }
-        })
-      );
+        }
+
+        // Garantir que example_messages seja sempre um array
+        let exampleMessages = [];
+        if (channel.example_messages) {
+          if (Array.isArray(channel.example_messages)) {
+            exampleMessages = channel.example_messages;
+          } else if (typeof channel.example_messages === 'string') {
+            try {
+              exampleMessages = JSON.parse(channel.example_messages);
+            } catch (e) {
+              logger.warn(`Erro ao parsear example_messages do canal ${channel.id}`);
+              exampleMessages = [];
+            }
+          }
+        }
+
+        return {
+          ...channel,
+          example_messages: exampleMessages,
+          coupons_captured: channelStats.coupons_captured,
+          last_message_at: channelStats.last_message_at
+        };
+      });
 
       // Adicionar informações sobre IA
       const aiEnabled = await couponAnalyzer.isEnabled();

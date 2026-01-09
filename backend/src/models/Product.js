@@ -847,30 +847,44 @@ class Product {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       // 1. Excluir pendentes com mais de 24h
-      const { count: pendingCount, error: pendingError } = await supabase
+      const { data: deletedPending, count: pendingCount, error: pendingError } = await supabase
         .from('products')
         .delete({ count: 'exact' })
         .eq('status', 'pending')
-        .lt('created_at', twentyFourHoursAgo);
+        .lt('created_at', twentyFourHoursAgo)
+        .select('id, name, created_at');
 
       if (pendingError) throw pendingError;
+
       if (pendingCount > 0) {
-        logger.info(`✅ Removidos ${pendingCount} produtos pendentes antigos (>24h)`);
+        const names = deletedPending.map(p => p.name).slice(0, 5).join(', ');
+        const more = pendingCount > 5 ? ` e mais ${pendingCount - 5}` : '';
+        logger.info(`✅ Removidos ${pendingCount} produtos pendentes antigos (>24h): ${names}${more}`);
+      } else {
+        logger.debug('ℹ️ Nenhum produto pendente antigo para remover');
       }
 
       // 2. Excluir processados (approved/published/rejected) com mais de 7 dias
-      const { count: processedCount, error: processedError } = await supabase
+      const { data: deletedProcessed, count: processedCount, error: processedError } = await supabase
         .from('products')
         .delete({ count: 'exact' })
         .in('status', ['approved', 'published', 'rejected'])
-        .lt('updated_at', sevenDaysAgo);
+        .lt('updated_at', sevenDaysAgo)
+        .select('id, name, status, updated_at');
 
       if (processedError) throw processedError;
+
       if (processedCount > 0) {
-        logger.info(`✅ Removidos ${processedCount} produtos antigos (>7 dias)`);
+        const names = deletedProcessed.map(p => p.name).slice(0, 5).join(', ');
+        const more = processedCount > 5 ? ` e mais ${processedCount - 5}` : '';
+        logger.info(`✅ Removidos ${processedCount} produtos antigos (>7 dias): ${names}${more}`);
+      } else {
+        logger.debug('ℹ️ Nenhum produto processado antigo para remover');
       }
 
-      return { pendingCount, processedCount };
+      logger.info(`📊 Total de produtos removidos: ${(pendingCount || 0) + (processedCount || 0)}`);
+
+      return { pendingCount: pendingCount || 0, processedCount: processedCount || 0 };
     } catch (error) {
       logger.error(`❌ Erro na limpeza automática de produtos: ${error.message}`);
       throw error;

@@ -19,6 +19,8 @@ export default function Coupons() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
+  const [approvalCoupon, setApprovalCoupon] = useState(null); // Cupom para modal de aprovação
+  const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -342,7 +344,24 @@ export default function Coupons() {
     }));
 
     try {
-      await api.post(`/coupons/${coupon.id}/force-publish`);
+      // IMPORTANTE: Enviar dados atualizados do cupom no body
+      // Extrair apenas os campos relevantes para atualização
+      const updateData = {
+        code: coupon.code,
+        platform: coupon.platform,
+        description: coupon.description,
+        discount_type: coupon.discount_type,
+        discount_value: coupon.discount_value,
+        min_purchase: coupon.min_purchase,
+        max_discount_value: coupon.max_discount_value,
+        is_general: coupon.is_general,
+        max_uses: coupon.max_uses,
+        valid_from: coupon.valid_from,
+        valid_until: coupon.valid_until,
+        is_exclusive: coupon.is_exclusive
+      };
+
+      await api.post(`/coupons/${coupon.id}/force-publish`, updateData);
       if (activeTab === 'all') {
         fetchCoupons(pagination.page);
       } else {
@@ -1083,8 +1102,8 @@ export default function Coupons() {
             <button
               onClick={() => setActiveTab('all')}
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${activeTab === 'all'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
             >
               Todos os Cupons
@@ -1092,8 +1111,8 @@ export default function Coupons() {
             <button
               onClick={() => setActiveTab('pending')}
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${activeTab === 'pending'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
             >
               Pendentes de Aprovação
@@ -1286,10 +1305,10 @@ export default function Coupons() {
                                   <div className="w-full bg-gray-200 rounded-full h-2">
                                     <div
                                       className={`h-2 rounded-full ${coupon.confidence_score >= 0.90
-                                          ? 'bg-green-500'
-                                          : coupon.confidence_score >= 0.75
-                                            ? 'bg-yellow-500'
-                                            : 'bg-red-500'
+                                        ? 'bg-green-500'
+                                        : coupon.confidence_score >= 0.75
+                                          ? 'bg-yellow-500'
+                                          : 'bg-red-500'
                                         }`}
                                       style={{ width: `${coupon.confidence_score * 100}%` }}
                                     />
@@ -1386,30 +1405,29 @@ export default function Coupons() {
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  onClick={() => handleApproveCoupon(coupon.id)}
+                                  onClick={() => {
+                                    setApprovalCoupon(coupon);
+                                    setFormData({
+                                      code: coupon.code || '',
+                                      platform: coupon.platform || 'general',
+                                      description: coupon.description || '',
+                                      discount_type: coupon.discount_type || 'percentage',
+                                      discount_value: coupon.discount_value || '',
+                                      min_purchase: coupon.min_purchase || '',
+                                      max_discount_value: coupon.max_discount_value || '',
+                                      is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
+                                      applicable_products: coupon.applicable_products || [],
+                                      max_uses: coupon.max_uses || '',
+                                      current_uses: coupon.current_uses || 0,
+                                      valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
+                                      valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
+                                      is_exclusive: coupon.is_exclusive || false
+                                    });
+                                    setIsApprovalDialogOpen(true);
+                                  }}
                                   disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
                                   className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Aprovar cupom"
-                                >
-                                  {processingCoupons.approving.has(coupon.id) ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Aprovando...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                      Aprovar
-                                    </>
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => handleForcePublish(coupon)}
-                                  disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Aprovar e publicar imediatamente"
+                                  title="Revisar e publicar cupom"
                                 >
                                   {processingCoupons.publishing.has(coupon.id) ? (
                                     <>
@@ -1418,8 +1436,8 @@ export default function Coupons() {
                                     </>
                                   ) : (
                                     <>
-                                      <Send className="h-3 w-3 mr-1" />
-                                      Publicar
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Revisar e Publicar
                                     </>
                                   )}
                                 </Button>
@@ -1522,6 +1540,286 @@ export default function Coupons() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Aprovação com Edição */}
+      <Dialog open={isApprovalDialogOpen} onOpenChange={setIsApprovalDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Revisar e Publicar Cupom
+            </DialogTitle>
+            <DialogDescription>
+              Revise e edite os dados do cupom antes de publicar
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Informações de origem */}
+          {approvalCoupon && (
+            <div className="p-3 bg-muted rounded-lg border text-sm">
+              <div className="flex flex-wrap gap-3">
+                {approvalCoupon.channel_origin && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Canal:</span>
+                    <Badge variant="outline">{approvalCoupon.channel_origin}</Badge>
+                  </div>
+                )}
+                {approvalCoupon.capture_source && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Fonte:</span>
+                    <Badge variant="outline" className="capitalize">{approvalCoupon.capture_source}</Badge>
+                  </div>
+                )}
+                {approvalCoupon.confidence_score !== null && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Confiança:</span>
+                    <Badge variant={approvalCoupon.confidence_score >= 0.9 ? 'default' : approvalCoupon.confidence_score >= 0.75 ? 'secondary' : 'destructive'}>
+                      {(approvalCoupon.confidence_score * 100).toFixed(0)}%
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!approvalCoupon) return;
+
+            try {
+              // Preparar dados atualizados
+              const updateData = {
+                code: formData.code?.trim()?.toUpperCase() || approvalCoupon.code,
+                platform: formData.platform,
+                description: formData.description?.trim() || null,
+                discount_type: formData.discount_type,
+                discount_value: parseFloat(formData.discount_value) || approvalCoupon.discount_value,
+                min_purchase: formData.min_purchase ? parseFloat(formData.min_purchase) : 0,
+                max_discount_value: formData.max_discount_value ? parseFloat(formData.max_discount_value) : null,
+                is_general: formData.is_general,
+                max_uses: formData.max_uses ? parseInt(formData.max_uses) : null,
+                valid_from: formData.valid_from ? new Date(formData.valid_from + 'T00:00:00').toISOString() : null,
+                valid_until: formData.valid_until ? new Date(formData.valid_until + 'T23:59:59').toISOString() : null,
+                is_exclusive: formData.is_exclusive || false
+              };
+
+              // Publicar cupom com dados atualizados
+              await handleForcePublish({ ...approvalCoupon, ...updateData });
+              setIsApprovalDialogOpen(false);
+              setApprovalCoupon(null);
+            } catch (error) {
+              console.error('Erro ao publicar cupom:', error);
+            }
+          }} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="approval-platform">Plataforma *</Label>
+                <select
+                  id="approval-platform"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.platform}
+                  onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
+                  required
+                >
+                  <option value="general">Geral</option>
+                  <option value="mercadolivre">Mercado Livre</option>
+                  <option value="shopee">Shopee</option>
+                  <option value="amazon">Amazon</option>
+                  <option value="aliexpress">AliExpress</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="approval-code">Código *</Label>
+                <Input
+                  id="approval-code"
+                  value={formData.code || ''}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                  placeholder="Ex: PROMO10"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="approval-description">Título/Descrição</Label>
+              <textarea
+                id="approval-description"
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Descrição do cupom"
+                rows={4}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y min-h-[100px]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="approval-discount_type">Tipo de Desconto *</Label>
+                <select
+                  id="approval-discount_type"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.discount_type}
+                  onChange={(e) => setFormData({ ...formData, discount_type: e.target.value })}
+                >
+                  <option value="percentage">Porcentagem (%)</option>
+                  <option value="fixed">Valor Fixo (R$)</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="approval-discount_value">
+                  Valor do Desconto * {formData.discount_type === 'percentage' ? '(%)' : '(R$)'}
+                </Label>
+                <Input
+                  id="approval-discount_value"
+                  type="number"
+                  step="0.01"
+                  value={formData.discount_value || ''}
+                  onChange={(e) => setFormData({ ...formData, discount_value: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            {(formData.platform === 'mercadolivre' || formData.platform === 'shopee') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="approval-min_purchase">Compra Mínima (R$)</Label>
+                  <Input
+                    id="approval-min_purchase"
+                    type="number"
+                    step="0.01"
+                    value={formData.min_purchase || ''}
+                    onChange={(e) => setFormData({ ...formData, min_purchase: e.target.value })}
+                    placeholder="Ex: 259.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="approval-max_discount_value">Limite Máximo de Desconto (R$)</Label>
+                  <Input
+                    id="approval-max_discount_value"
+                    type="number"
+                    step="0.01"
+                    value={formData.max_discount_value || ''}
+                    onChange={(e) => setFormData({ ...formData, max_discount_value: e.target.value })}
+                    placeholder="Ex: 60.00"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="approval-is_general">Aplicabilidade</Label>
+              <select
+                id="approval-is_general"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.is_general === null ? 'null' : formData.is_general ? 'true' : 'false'}
+                onChange={(e) => {
+                  const value = e.target.value === 'null' ? null : e.target.value === 'true';
+                  setFormData({
+                    ...formData,
+                    is_general: value,
+                    applicable_products: value === false ? formData.applicable_products : []
+                  });
+                }}
+              >
+                <option value="null">Não especificado</option>
+                <option value="true">Todos os Produtos</option>
+                <option value="false">Produtos Selecionados</option>
+              </select>
+              {formData.is_general === false && (
+                <p className="text-sm text-muted-foreground">
+                  ⚠️ Para produtos selecionados, você precisará associar os produtos após publicar.
+                </p>
+              )}
+              {formData.is_general === null && (
+                <p className="text-sm text-muted-foreground">
+                  ℹ️ Quando não especificado, a aplicabilidade não aparecerá no template.
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="approval-valid_from">Data de Início</Label>
+                <Input
+                  id="approval-valid_from"
+                  type="date"
+                  value={formData.valid_from || ''}
+                  onChange={(e) => setFormData({ ...formData, valid_from: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="approval-valid_until">Data de Expiração</Label>
+                <Input
+                  id="approval-valid_until"
+                  type="date"
+                  value={formData.valid_until || ''}
+                  onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="approval-is_exclusive"
+                  checked={formData.is_exclusive || false}
+                  onChange={(e) => setFormData({ ...formData, is_exclusive: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <Label htmlFor="approval-is_exclusive" className="text-sm font-medium">
+                  ⭐ Cupom Exclusivo
+                </Label>
+              </div>
+            </div>
+
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  if (approvalCoupon) {
+                    const reason = prompt('Motivo da rejeição (opcional):');
+                    if (reason !== null) {
+                      handleRejectCoupon(approvalCoupon.id, reason);
+                      setIsApprovalDialogOpen(false);
+                      setApprovalCoupon(null);
+                    }
+                  }
+                }}
+                className="w-full sm:w-auto"
+              >
+                <XCircle className="h-4 w-4 mr-1" />
+                Rejeitar
+              </Button>
+              <Button type="button" variant="outline" onClick={() => {
+                setIsApprovalDialogOpen(false);
+                setApprovalCoupon(null);
+              }} className="w-full sm:w-auto">
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+                disabled={processingCoupons.publishing.has(approvalCoupon?.id)}
+              >
+                {processingCoupons.publishing.has(approvalCoupon?.id) ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Publicando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-1" />
+                    Publicar Cupom
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

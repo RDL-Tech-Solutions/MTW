@@ -49,7 +49,10 @@ class TelegramCollectorController {
         schedule_start,
         schedule_end,
         work_duration,
-        pause_duration
+        pause_duration,
+        forced_dc_id,
+        forced_dc_ip,
+        forced_dc_port
       } = req.body;
 
       const updateData = {};
@@ -91,6 +94,17 @@ class TelegramCollectorController {
       if (schedule_end !== undefined) updateData.schedule_end = schedule_end;
       if (work_duration !== undefined) updateData.work_duration = parseInt(work_duration);
       if (pause_duration !== undefined) updateData.pause_duration = parseInt(pause_duration);
+
+      // Campos de Data Center forçado
+      if (forced_dc_id !== undefined) {
+        updateData.forced_dc_id = forced_dc_id ? parseInt(forced_dc_id) : null;
+      }
+      if (forced_dc_ip !== undefined) {
+        updateData.forced_dc_ip = forced_dc_ip || null;
+      }
+      if (forced_dc_port !== undefined) {
+        updateData.forced_dc_port = forced_dc_port ? parseInt(forced_dc_port) : 443;
+      }
 
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({
