@@ -26,6 +26,7 @@ const navigation = [
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Notificações', href: '/notifications', icon: Bell },
   { name: 'Automação', href: '/auto-sync', icon: RefreshCw },
+  { name: 'Agendamentos IA', href: '/scheduled-posts', icon: Clock },
   { name: 'Bots', href: '/bots', icon: Bot },
   { name: 'Canais Telegram', href: '/telegram-channels', icon: MessageSquare },
   { name: 'Configurações', href: '/settings', icon: Settings },

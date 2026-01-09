@@ -16,6 +16,7 @@ import telegramCollectorRoutes from './telegramCollectorRoutes.js';
 import appSettingsRoutes from './appSettingsRoutes.js';
 import cronRoutes from './cronRoutes.js';
 import aiRoutes from './aiRoutes.js';
+import scheduledPostRoutes from './scheduledPostRoutes.js';
 
 const router = express.Router();
 
@@ -46,5 +47,6 @@ router.use('/telegram-collector', telegramCollectorRoutes);
 router.use('/settings', appSettingsRoutes);
 router.use('/cron', cronRoutes); // Rotas para Vercel Cron
 router.use('/ai', aiRoutes);
+router.use('/scheduled-posts', scheduledPostRoutes);
 
 export default router;

@@ -118,44 +118,55 @@ class SchedulerService {
             logger.info(`⏰ Processando ${posts.length} posts agendados...`);
 
             for (const post of posts) {
-                try {
-                    if (!post.products) {
-                        logger.warn(`⚠️ Produto não encontrado para agendamento ${post.id}. Marcando como falha.`);
-                        await ScheduledPost.update(post.id, { status: 'failed', error_message: 'Product not found' });
-                        continue;
-                    }
-
-                    // Executar publicação
-                    let result = false;
-                    if (post.platform === 'telegram') {
-                        result = await publishService.notifyTelegramBot(post.products);
-                    } else if (post.platform === 'whatsapp') {
-                        result = await publishService.notifyWhatsAppBot(post.products);
-                    }
-
-                    // Atualizar status
-                    if (result) {
-                        await ScheduledPost.update(post.id, { status: 'published' });
-                        logger.info(`✅ Post agendado executado: ${post.platform} - ${post.products.name}`);
-                    } else {
-                        await ScheduledPost.update(post.id, {
-                            status: 'failed',
-                            error_message: 'Falha no envio do bot',
-                            attempts: post.attempts + 1
-                        });
-                    }
-
-                } catch (postError) {
-                    logger.error(`❌ Erro ao processar agendamento ${post.id}: ${postError.message}`);
-                    await ScheduledPost.update(post.id, {
-                        status: 'failed',
-                        error_message: postError.message,
-                        attempts: post.attempts + 1
-                    });
-                }
+                await this.processSinglePost(post);
             }
         } catch (error) {
             logger.error(`❌ Erro no processamento da fila de agendamento: ${error.message}`);
+        }
+    }
+
+    /**
+     * Processar um único post agendado (Publicar)
+     * @param {Object} post - Objeto do post agendado
+     */
+    async processSinglePost(post) {
+        try {
+            if (!post.products) {
+                logger.warn(`⚠️ Produto não encontrado para agendamento ${post.id}. Marcando como falha.`);
+                await ScheduledPost.update(post.id, { status: 'failed', error_message: 'Product not found' });
+                return false;
+            }
+
+            // Executar publicação
+            let result = false;
+            if (post.platform === 'telegram') {
+                result = await publishService.notifyTelegramBot(post.products);
+            } else if (post.platform === 'whatsapp') {
+                result = await publishService.notifyWhatsAppBot(post.products);
+            }
+
+            // Atualizar status
+            if (result) {
+                await ScheduledPost.update(post.id, { status: 'published' });
+                logger.info(`✅ Post agendado executado: ${post.platform} - ${post.products.name}`);
+                return true;
+            } else {
+                await ScheduledPost.update(post.id, {
+                    status: 'failed',
+                    error_message: 'Falha no envio do bot',
+                    attempts: (post.attempts || 0) + 1
+                });
+                return false;
+            }
+
+        } catch (postError) {
+            logger.error(`❌ Erro ao processar agendamento ${post.id}: ${postError.message}`);
+            await ScheduledPost.update(post.id, {
+                status: 'failed',
+                error_message: postError.message,
+                attempts: (post.attempts || 0) + 1
+            });
+            return false;
         }
     }
 }

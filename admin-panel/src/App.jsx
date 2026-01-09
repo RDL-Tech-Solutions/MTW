@@ -15,6 +15,7 @@ import Notifications from './pages/Notifications';
 import TelegramChannels from './pages/TelegramChannels';
 import Settings from './pages/Settings';
 import PendingProducts from './pages/PendingProducts';
+import ScheduledPosts from './pages/ScheduledPosts';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -44,6 +45,7 @@ function App() {
           <Route path="auto-sync" element={<AutoSync />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="pending-products" element={<PendingProducts />} />
+          <Route path="scheduled-posts" element={<ScheduledPosts />} />
         </Route>
       </Routes>
       <Toaster />
