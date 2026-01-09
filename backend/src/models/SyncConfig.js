@@ -30,7 +30,8 @@ class SyncConfig {
         categories: [],
         cron_interval_minutes: 60,
         auto_publish: false,
-        is_active: false
+        is_active: false,
+        use_ai_keywords: false
       };
     }
 
@@ -59,6 +60,7 @@ class SyncConfig {
       categories: Array.isArray(configData.categories) ? configData.categories : [],
       cron_interval_minutes: Number(configData.cron_interval_minutes || 60),
       is_active: Boolean(configData.is_active),
+      use_ai_keywords: Boolean(configData.use_ai_keywords),
       updated_at: new Date().toISOString()
     };
 

@@ -8,6 +8,7 @@ import amazonSync from '../services/autoSync/amazonSync.js';
 import aliExpressSync from '../services/autoSync/aliExpressSync.js';
 import publishService from '../services/autoSync/publishService.js';
 import productAnalyzer from '../ai/productAnalyzer.js';
+import trendHunter from '../ai/trendHunter.js';
 import logger from '../config/logger.js';
 
 class AutoSyncCron {
@@ -210,8 +211,19 @@ class AutoSyncCron {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
-      const products = await meliSync.fetchMeliProducts(config.keywords, 50);
+      // 1. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('mercadolivre');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 2. Buscar produtos
+      const products = await meliSync.fetchMeliProducts(searchKeywords, 50);
 
       // 2. Filtrar promoções
       const promotions = await meliSync.filterMeliPromotions(
@@ -310,8 +322,19 @@ class AutoSyncCron {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
-      const products = await shopeeSync.fetchShopeeProducts(config.keywords, 50);
+      // 1. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('shopee');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 2. Buscar produtos
+      const products = await shopeeSync.fetchShopeeProducts(searchKeywords, 50);
 
       // 2. Filtrar promoções
       const promotions = shopeeSync.filterShopeePromotions(
@@ -407,8 +430,19 @@ class AutoSyncCron {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
-      const products = await amazonSync.fetchAmazonProducts(config.keywords, 50);
+      // 1. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('amazon');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 2. Buscar produtos
+      const products = await amazonSync.fetchAmazonProducts(searchKeywords, 50);
 
       // 2. Filtrar promoções
       const promotions = amazonSync.filterAmazonPromotions(
@@ -512,8 +546,19 @@ class AutoSyncCron {
 
       logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
 
+      // 0. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('aliexpress');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
       // 1. Buscar produtos com origem especificada
-      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50, productOrigin);
+      const products = await aliExpressSync.fetchAliExpressProducts(searchKeywords, 50, productOrigin);
 
       // 2. Filtrar promoções
       const promotions = aliExpressSync.filterAliExpressPromotions(

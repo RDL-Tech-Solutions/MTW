@@ -15,6 +15,14 @@ import descriptionOptimizer from '../ai/descriptionOptimizer.js';
 import priceAnalyzer from '../ai/priceAnalyzer.js';
 import keywordOptimizer from '../ai/keywordOptimizer.js';
 import intelligentFilter from '../ai/intelligentFilter.js';
+import trendHunter from '../ai/trendHunter.js';
+
+// Debug Logger Import
+if (typeof logger === 'undefined') {
+  console.warn('⚠️ Logger importado mas undefined no escopo do módulo SyncController');
+} else {
+  console.log('✅ Logger importado com sucesso em SyncController');
+}
 
 class SyncController {
   /**
@@ -280,7 +288,19 @@ class SyncController {
 
     try {
       // 1. Buscar produtos
-      const products = await meliSync.fetchMeliProducts(config.keywords, 50);
+      // 1. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('mercadolivre');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 2. Buscar produtos
+      const products = await meliSync.fetchMeliProducts(searchKeywords, 50);
 
       // 2. Filtrar promoções
       const promotions = await meliSync.filterMeliPromotions(
@@ -379,7 +399,11 @@ class SyncController {
             });
           }
         } catch (error) {
-          logger.error(`❌ Erro ao processar produto: ${error.message}`);
+          if (typeof logger !== 'undefined') {
+            logger.error(`❌ Erro ao processar produto: ${error.message}`);
+          } else {
+            console.error(`❌ Erro ao processar produto (Logger indisponível): ${error.message}`);
+          }
           results.errors++;
 
           await SyncLog.create({
@@ -394,7 +418,11 @@ class SyncController {
         }
       }
     } catch (error) {
-      logger.error(`❌ Erro geral na sincronização ML: ${error.message}`);
+      if (typeof logger !== 'undefined') {
+        logger.error(`❌ Erro geral na sincronização ML: ${error.message}`);
+      } else {
+        console.error(`❌ Erro geral na sincronização ML (Logger indisponível): ${error.message}`);
+      }
       results.errors++;
       throw error;
     }
@@ -413,7 +441,19 @@ class SyncController {
 
     try {
       // 1. Buscar produtos
-      const products = await amazonSync.fetchAmazonProducts(config.keywords, 50);
+      // 1. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('amazon');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 2. Buscar produtos
+      const products = await amazonSync.fetchAmazonProducts(searchKeywords, 50);
 
       // 2. Filtrar promoções
       const promotions = amazonSync.filterAmazonPromotions(
@@ -539,7 +579,19 @@ class SyncController {
       logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
 
       // 1. Buscar produtos com origem especificada
-      const products = await aliExpressSync.fetchAliExpressProducts(config.keywords, 50, productOrigin);
+      // 0. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('aliexpress');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 1. Buscar produtos com origem especificada
+      const products = await aliExpressSync.fetchAliExpressProducts(searchKeywords, 50, productOrigin);
 
       // 2. Filtrar promoções
       const promotions = aliExpressSync.filterAliExpressPromotions(
@@ -655,7 +707,19 @@ class SyncController {
 
     try {
       // 1. Buscar produtos
-      const products = await shopeeSync.fetchShopeeProducts(config.keywords, 50);
+      // 1. Determinar keywords (Manual vs AI)
+      let searchKeywords = config.keywords;
+      if (config.use_ai_keywords) {
+        const aiKeywords = await trendHunter.generateTrendingKeywords('shopee');
+        if (aiKeywords) {
+          searchKeywords = aiKeywords;
+        } else {
+          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+        }
+      }
+
+      // 2. Buscar produtos
+      const products = await shopeeSync.fetchShopeeProducts(searchKeywords, 50);
 
       // 2. Filtrar promoções
       const promotions = shopeeSync.filterShopeePromotions(
@@ -754,7 +818,11 @@ class SyncController {
             });
           }
         } catch (error) {
-          logger.error(`❌ Erro ao processar produto: ${error.message}`);
+          if (typeof logger !== 'undefined') {
+            logger.error(`❌ Erro ao processar produto: ${error.message}`);
+          } else {
+            console.error(`❌ Erro ao processar produto (Shopee) (Logger indisponível): ${error.message}`);
+          }
           results.errors++;
 
           await SyncLog.create({

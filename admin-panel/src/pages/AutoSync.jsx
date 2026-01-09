@@ -32,7 +32,8 @@ export default function AutoSync() {
     min_discount_percentage: 10,
     categories: [],
     cron_interval_minutes: 60,
-    is_active: false
+    is_active: false,
+    use_ai_keywords: false
   });
   const [history, setHistory] = useState([]);
   const [stats, setStats] = useState(null);
@@ -76,7 +77,8 @@ export default function AutoSync() {
         min_discount_percentage: data.min_discount_percentage || 10,
         categories: data.categories || [],
         cron_interval_minutes: data.cron_interval_minutes || 60,
-        is_active: data.is_active || false
+        is_active: data.is_active || false,
+        use_ai_keywords: data.use_ai_keywords || false
       });
     } catch (error) {
       console.error('Erro ao carregar configuração:', error);
@@ -969,18 +971,41 @@ export default function AutoSync() {
             </div>
           </div>
 
-          {/* Palavras-chave */}
-          <div className="space-y-2">
-            <Label htmlFor="keywords">Palavras-chave (separadas por vírgula)</Label>
-            <Input
-              id="keywords"
-              placeholder="Ex: fones bluetooth, smartwatch, notebook gamer"
-              value={config.keywords}
-              onChange={(e) => setConfig({ ...config, keywords: e.target.value })}
-            />
-            <p className="text-sm text-muted-foreground">
-              Os produtos serão buscados com base nessas palavras-chave
-            </p>
+          {/* Palavras-chave & AI Advanced */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  <Label htmlFor="use_ai_keywords" className="font-semibold text-base">Palavras-Chave IA Advanced (TrendHunter)</Label>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 pr-4">
+                  A IA busca automaticamente os produtos "quentes", promoções e termos virais do momento em cada plataforma.
+                  <span className="font-bold text-purple-600 dark:text-purple-400"> (Recomendado)</span>
+                </p>
+              </div>
+              <Switch
+                checked={config.use_ai_keywords || false}
+                onCheckedChange={(checked) => setConfig({ ...config, use_ai_keywords: checked })}
+                id="use_ai_keywords"
+              />
+            </div>
+
+            <div className={`space-y-2 transition-opacity ${config.use_ai_keywords ? 'opacity-50 pointer-events-none' : ''}`}>
+              <Label htmlFor="keywords">Palavras-chave Manuais (separadas por vírgula)</Label>
+              <Input
+                id="keywords"
+                placeholder="Ex: fones bluetooth, smartwatch, notebook gamer"
+                value={config.keywords}
+                onChange={(e) => setConfig({ ...config, keywords: e.target.value })}
+                disabled={config.use_ai_keywords}
+              />
+              <p className="text-sm text-muted-foreground">
+                {config.use_ai_keywords
+                  ? "Desabilitado: A IA está controlando as buscas automaticamente."
+                  : "Os produtos serão buscados especificamente com base nessas palavras-chave."}
+              </p>
+            </div>
           </div>
 
           {/* Desconto Mínimo */}
