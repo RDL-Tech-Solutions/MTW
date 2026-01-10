@@ -554,6 +554,130 @@ class AppSettingsController {
       });
     }
   }
+
+  /**
+   * Obter status da limpeza automática
+   * GET /api/settings/cleanup/status
+   */
+  async getCleanupStatus(req, res) {
+    try {
+      const schedule = await AppSettings.getCleanupSchedule();
+
+      res.json({
+        success: true,
+        data: {
+          hour: schedule.hour,
+          lastRun: schedule.lastRun,
+          nextRun: this.calculateNextRun(schedule.hour)
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao obter status de limpeza: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao obter status de limpeza',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Atualizar horário de limpeza automática
+   * PUT /api/settings/cleanup/schedule
+   */
+  async updateCleanupSchedule(req, res) {
+    try {
+      const { hour } = req.body;
+
+      if (hour === undefined || hour === null) {
+        return res.status(400).json({
+          success: false,
+          message: 'Campo "hour" é obrigatório'
+        });
+      }
+
+      const hourNum = parseInt(hour);
+      if (isNaN(hourNum) || hourNum < 0 || hourNum > 23) {
+        return res.status(400).json({
+          success: false,
+          message: 'Horário deve ser entre 0 e 23'
+        });
+      }
+
+      await AppSettings.updateCleanupSchedule(hourNum);
+
+      // Reiniciar cron job com novo horário
+      const { restartCleanupCron } = await import('../services/cron/index.js');
+      await restartCleanupCron();
+
+      logger.info(`✅ Horário de limpeza atualizado para ${hourNum}:00`);
+
+      res.json({
+        success: true,
+        message: `Horário de limpeza atualizado para ${hourNum}:00`,
+        data: {
+          hour: hourNum,
+          nextRun: this.calculateNextRun(hourNum)
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao atualizar horário de limpeza: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao atualizar horário de limpeza',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Executar limpeza manualmente
+   * POST /api/settings/cleanup/run
+   */
+  async runCleanupNow(req, res) {
+    try {
+      logger.info('🚀 Executando limpeza manual...');
+
+      const { cleanupOldData } = await import('../services/cron/cleanupOldData.js');
+      await cleanupOldData();
+
+      // Registrar última execução
+      await AppSettings.recordCleanupRun();
+
+      logger.info('✅ Limpeza manual concluída');
+
+      res.json({
+        success: true,
+        message: 'Limpeza executada com sucesso',
+        data: {
+          executedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro ao executar limpeza manual: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao executar limpeza',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Calcular próxima execução baseada no horário configurado
+   */
+  calculateNextRun(hour) {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(hour, 0, 0, 0);
+
+    // Se o horário já passou hoje, agendar para amanhã
+    if (next <= now) {
+      next.setDate(next.getDate() + 1);
+    }
+
+    return next.toISOString();
+  }
 }
 
 export default new AppSettingsController();

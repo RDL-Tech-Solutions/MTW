@@ -8,8 +8,12 @@ import { monitorExpiredCoupons } from './monitorExpiredCoupons.js';
 import autoSyncCron from '../../cron/autoSyncCron.js';
 import couponCaptureCron from '../../cron/couponCaptureCron.js';
 import schedulerCron from '../../cron/schedulerCron.js';
+import AppSettings from '../../models/AppSettings.js';
 
-export const startCronJobs = () => {
+// Armazenar referência da tarefa de limpeza para poder reiniciá-la
+let cleanupTask = null;
+
+export const startCronJobs = async () => {
   logger.info('🕐 Iniciando cron jobs...');
 
   // Atualizar preços - a cada 15 minutos
@@ -42,15 +46,8 @@ export const startCronJobs = () => {
     }
   });
 
-  // Limpeza de dados antigos - diariamente às 3h
-  cron.schedule('0 3 * * *', async () => {
-    logger.info('⏰ Executando: Limpeza de dados antigos');
-    try {
-      await cleanupOldData();
-    } catch (error) {
-      logger.error(`Erro no cron de limpeza: ${error.message}`);
-    }
-  });
+  // Limpeza de dados antigos - horário configurável
+  await startCleanupCron();
 
   // Monitorar cupons expirados e enviar notificações via bots - a cada 1 minuto
   cron.schedule('* * * * *', async () => {
@@ -78,4 +75,43 @@ export const startCronJobs = () => {
   schedulerCron.start();
 
   logger.info('✅ Cron jobs iniciados com sucesso');
+};
+
+/**
+ * Iniciar/Reiniciar cron de limpeza com horário configurável
+ */
+export const startCleanupCron = async () => {
+  try {
+    // Obter horário configurado
+    const { hour } = await AppSettings.getCleanupSchedule();
+    const cronExpression = `0 ${hour} * * *`;
+
+    // Parar tarefa anterior se existir
+    if (cleanupTask) {
+      cleanupTask.stop();
+      logger.info('🛑 Cron de limpeza anterior parado');
+    }
+
+    // Criar nova tarefa
+    cleanupTask = cron.schedule(cronExpression, async () => {
+      logger.info('⏰ Executando: Limpeza de dados antigos');
+      try {
+        await cleanupOldData();
+      } catch (error) {
+        logger.error(`Erro no cron de limpeza: ${error.message}`);
+      }
+    });
+
+    logger.info(`✅ Cron de limpeza agendado para ${hour}:00 (${cronExpression})`);
+  } catch (error) {
+    logger.error(`❌ Erro ao iniciar cron de limpeza: ${error.message}`);
+  }
+};
+
+/**
+ * Reiniciar cron de limpeza (chamado após mudança de configuração)
+ */
+export const restartCleanupCron = async () => {
+  logger.info('🔄 Reiniciando cron de limpeza...');
+  await startCleanupCron();
 };

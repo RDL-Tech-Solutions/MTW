@@ -22,6 +22,11 @@ router.post('/meli/refresh-token', appSettingsController.refreshMeliToken);
 // Rota para obter modelos OpenRouter disponíveis
 router.get('/openrouter-models', appSettingsController.getOpenRouterModels);
 
+// Rotas de limpeza automática
+router.get('/cleanup/status', appSettingsController.getCleanupStatus);
+router.put('/cleanup/schedule', appSettingsController.updateCleanupSchedule);
+router.post('/cleanup/run', appSettingsController.runCleanupNow);
+
 export default router;
 
 

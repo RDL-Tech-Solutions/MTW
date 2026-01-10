@@ -46,15 +46,6 @@ export default function Settings() {
     // Expo
     expo_access_token: '',
 
-    // Telegram Collector
-    telegram_collector_rate_limit_delay: 1.0,
-    telegram_collector_max_retries: 3,
-    telegram_collector_reconnect_delay: 30,
-
-    // Backend
-    backend_url: 'http://localhost:3000',
-    backend_api_key: '',
-
     // OpenRouter / IA
     openrouter_api_key: '',
     openrouter_model: 'mistralai/mistral-7b-instruct',
@@ -83,7 +74,6 @@ export default function Settings() {
     amazon_secret_key: false,
     aliexpress_app_secret: false,
     expo_access_token: false,
-    backend_api_key: false,
     openrouter_api_key: false
   });
 
@@ -96,9 +86,16 @@ export default function Settings() {
     amazon_secret_key: false,
     aliexpress_app_secret: false,
     expo_access_token: false,
-    backend_api_key: false,
     openrouter_api_key: false
   });
+
+  // Estados para auto-exclusão
+  const [cleanupSchedule, setCleanupSchedule] = useState({
+    hour: 3,
+    lastRun: null,
+    nextRun: null
+  });
+  const [loadingCleanup, setLoadingCleanup] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -1374,12 +1371,12 @@ export default function Settings() {
                             )}
                             <div className="flex items-center gap-1.5 min-w-[80px] justify-end">
                               <div className={`h-2 w-2 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
-                                  (isOffline || isError) ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
-                                    'bg-gray-300'
+                                (isOffline || isError) ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
+                                  'bg-gray-300'
                                 }`} />
                               <span className={`text-xs font-semibold ${isOnline ? 'text-green-600' :
-                                  (isOffline || isError) ? 'text-red-600' :
-                                    'text-gray-400'
+                                (isOffline || isError) ? 'text-red-600' :
+                                  'text-gray-400'
                                 }`}>
                                 {isOnline ? 'Online' : (isOffline || isError) ? 'Offline' : 'Não testado'}
                               </span>

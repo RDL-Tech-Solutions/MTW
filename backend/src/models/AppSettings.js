@@ -44,15 +44,11 @@ class AppSettings {
               .select(`
                 id,
                 amazon_marketplace,
-                backend_url,
                 aliexpress_api_url,
                 aliexpress_app_key,
                 aliexpress_app_secret,
                 aliexpress_tracking_id,
                 aliexpress_product_origin,
-                telegram_collector_rate_limit_delay,
-                telegram_collector_max_retries,
-                telegram_collector_reconnect_delay,
                 meli_client_id,
                 meli_client_secret,
                 meli_access_token,
@@ -66,10 +62,11 @@ class AppSettings {
                 amazon_secret_key,
                 amazon_partner_tag,
                 expo_access_token,
-                backend_api_key,
                 openrouter_api_key,
                 openrouter_model,
                 openrouter_enabled,
+                cleanup_schedule_hour,
+                cleanup_last_run,
                 created_at,
                 updated_at
               `)
@@ -140,11 +137,8 @@ class AppSettings {
       const insertData = {
         id: '00000000-0000-0000-0000-000000000001',
         amazon_marketplace: 'www.amazon.com.br',
-        backend_url: 'http://localhost:3000',
         aliexpress_api_url: 'https://api-sg.aliexpress.com/rest',
-        telegram_collector_rate_limit_delay: 1.0,
-        telegram_collector_max_retries: 3,
-        telegram_collector_reconnect_delay: 30
+        cleanup_schedule_hour: parseInt(process.env.CLEANUP_SCHEDULE_HOUR) || 3
       };
 
       // Tentar adicionar template_mode se as colunas existirem (não vai dar erro se não existirem)
@@ -349,6 +343,55 @@ class AppSettings {
       appSecret: settings.aliexpress_app_secret || process.env.ALIEXPRESS_APP_SECRET,
       trackingId: settings.aliexpress_tracking_id || process.env.ALIEXPRESS_TRACKING_ID,
       productOrigin: settings.aliexpress_product_origin || 'both' // brazil, international, both
+    };
+  }
+
+  /**
+   * Obter configurações de limpeza automática
+   */
+  static async getCleanupSchedule() {
+    const settings = await this.get();
+    return {
+      hour: settings.cleanup_schedule_hour ?? parseInt(process.env.CLEANUP_SCHEDULE_HOUR) ?? 3,
+      lastRun: settings.cleanup_last_run
+    };
+  }
+
+  /**
+   * Atualizar horário de limpeza e reiniciar cron
+   */
+  static async updateCleanupSchedule(hour) {
+    if (hour < 0 || hour > 23) {
+      throw new Error('Cleanup hour must be between 0 and 23');
+    }
+    return await this.update({ cleanup_schedule_hour: hour });
+  }
+
+  /**
+   * Registrar última execução de limpeza
+   */
+  static async recordCleanupRun() {
+    return await this.update({ cleanup_last_run: new Date().toISOString() });
+  }
+
+  /**
+   * Obter configurações de backend (de variáveis de ambiente)
+   */
+  static getBackendConfig() {
+    return {
+      url: process.env.BACKEND_URL || 'http://localhost:3000',
+      apiKey: process.env.BACKEND_API_KEY || null
+    };
+  }
+
+  /**
+   * Obter configurações do Telegram Collector (de variáveis de ambiente)
+   */
+  static getTelegramCollectorConfig() {
+    return {
+      rateLimitDelay: parseFloat(process.env.TELEGRAM_COLLECTOR_RATE_LIMIT_DELAY) || 1.0,
+      maxRetries: parseInt(process.env.TELEGRAM_COLLECTOR_MAX_RETRIES) || 3,
+      reconnectDelay: parseInt(process.env.TELEGRAM_COLLECTOR_RECONNECT_DELAY) || 30
     };
   }
 }
