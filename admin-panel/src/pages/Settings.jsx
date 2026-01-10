@@ -100,6 +100,7 @@ export default function Settings() {
   useEffect(() => {
     loadSettings();
     loadModelStatus();
+    loadCleanupSchedule();
   }, []);
 
   const loadModelStatus = async () => {
@@ -246,6 +247,58 @@ export default function Settings() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCleanupSchedule = async () => {
+    try {
+      const response = await api.get('/settings/cleanup/status');
+      if (response.data.success) {
+        setCleanupSchedule(response.data.data);
+      }
+    } catch (error) {
+      console.warn('Erro ao carregar agendamento de limpeza:', error);
+    }
+  };
+
+  const handleUpdateCleanupSchedule = async (newHour) => {
+    try {
+      const response = await api.put('/settings/cleanup/schedule', { hour: newHour });
+      if (response.data.success) {
+        toast({
+          title: "Sucesso",
+          description: `Horário de limpeza atualizado para ${newHour}:00`,
+        });
+        loadCleanupSchedule();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao atualizar horário",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRunCleanupNow = async () => {
+    setLoadingCleanup(true);
+    try {
+      const response = await api.post('/settings/cleanup/run');
+      if (response.data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Limpeza executada com sucesso!",
+        });
+        loadCleanupSchedule();
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Falha ao executar limpeza",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingCleanup(false);
     }
   };
 
@@ -1401,89 +1454,83 @@ export default function Settings() {
 
         {/* Outros */}
         <TabsContent value="other">
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Telegram Collector</CardTitle>
-                <CardDescription>
-                  Configurações do coletor de cupons do Telegram
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="telegram_collector_rate_limit_delay">Rate Limit Delay (s)</Label>
-                    <Input
-                      id="telegram_collector_rate_limit_delay"
-                      type="number"
-                      step="0.1"
-                      value={settings.telegram_collector_rate_limit_delay ?? 1.0}
-                      onChange={(e) => setSettings({ ...settings, telegram_collector_rate_limit_delay: parseFloat(e.target.value) || 1.0 })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="telegram_collector_max_retries">Max Retries</Label>
-                    <Input
-                      id="telegram_collector_max_retries"
-                      type="number"
-                      value={settings.telegram_collector_max_retries ?? 3}
-                      onChange={(e) => setSettings({ ...settings, telegram_collector_max_retries: parseInt(e.target.value) || 3 })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="telegram_collector_reconnect_delay">Reconnect Delay (s)</Label>
-                    <Input
-                      id="telegram_collector_reconnect_delay"
-                      type="number"
-                      value={settings.telegram_collector_reconnect_delay ?? 30}
-                      onChange={(e) => setSettings({ ...settings, telegram_collector_reconnect_delay: parseInt(e.target.value) || 30 })}
-                    />
-                  </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Auto-Exclusão de Dados</CardTitle>
+              <CardDescription>
+                Configure o horário para limpeza automática de dados antigos
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cleanup_hour">Horário de Execução</Label>
+                  <select
+                    id="cleanup_hour"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={cleanupSchedule.hour}
+                    onChange={(e) => handleUpdateCleanupSchedule(parseInt(e.target.value))}
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {i.toString().padStart(2, '0')}:00
+                        {i === 0 && ' (Meia-noite)'}
+                        {i === 3 && ' (Madrugada)'}
+                        {i === 12 && ' (Meio-dia)'}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Limpeza executada diariamente no horário selecionado
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+                <div>
+                  <Label>Última Execução</Label>
+                  <div className="flex h-10 items-center px-3 py-2 text-sm text-gray-700 bg-gray-50 rounded-md border border-gray-200">
+                    {cleanupSchedule.lastRun
+                      ? new Date(cleanupSchedule.lastRun).toLocaleString('pt-BR')
+                      : 'Nunca executado'}
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Próxima execução: {cleanupSchedule.nextRun
+                      ? new Date(cleanupSchedule.nextRun).toLocaleString('pt-BR')
+                      : 'Calculando...'}
+                  </p>
+                </div>
+              </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Backend</CardTitle>
-                <CardDescription>
-                  Configurações gerais do backend
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="backend_url">Backend URL</Label>
-                    <Input
-                      id="backend_url"
-                      value={settings.backend_url || 'http://localhost:3000'}
-                      onChange={(e) => setSettings({ ...settings, backend_url: e.target.value })}
-                      placeholder="http://localhost:3000"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="backend_api_key">Backend API Key</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="backend_api_key"
-                        type={showSecrets.backend_api_key ? 'text' : 'password'}
-                        value={settings.backend_api_key || ''}
-                        onChange={(e) => setSettings({ ...settings, backend_api_key: e.target.value })}
-                        placeholder={hasSavedValue.backend_api_key ? "Valor salvo no banco de dados" : "API Key (opcional)"}
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => toggleSecret('backend_api_key')}
-                      >
-                        {showSecrets.backend_api_key ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              <div className="pt-4 border-t">
+                <p className="text-sm text-gray-600 mb-3">
+                  A limpeza automática remove:</p>
+                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1 mb-4">
+                  <li>Notificações lidas com mais de 30 dias</li>
+                  <li>Registros de cliques com mais de 90 dias</li>
+                  <li>Produtos pendentes há mais de 24 horas</li>
+                  <li>Produtos aprovados com mais de 7 dias</li>
+                  <li>Cupons pendentes há mais de 24 horas</li>
+                  <li>Cupons aprovados com mais de 7 dias</li>
+                </ul>
+                <Button
+                  onClick={handleRunCleanupNow}
+                  disabled={loadingCleanup}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {loadingCleanup ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Executando Limpeza...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Executar Limpeza Agora
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
