@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#DC2626"
@@ -14,8 +15,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.precocerto.app",
-      "newArchEnabled": false
+      "bundleIdentifier": "com.precocerto.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,8 +24,7 @@
       "package": "com.precocerto.app",
       "permissions": [
         "NOTIFICATIONS"
-      ],
-      "newArchEnabled": false
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -36,10 +35,11 @@
         {
           "color": "#DC2626"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
-      "apiUrl": "http://localhost:3000/api",
+      "apiUrl": "http://192.168.7.8:3000/api",
       "eas": {
         "projectId": "967ccc1a-3521-4c83-91a4-851bed949c45"
       }
