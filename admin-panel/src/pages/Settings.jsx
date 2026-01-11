@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
-import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles, Loader2, Activity } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, ShoppingCart, Store, Package, Bell, RefreshCw, Key, Brain, Globe, DollarSign, Sparkles, Loader2, Activity, Server, Cpu, Database, Clock } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -693,6 +693,10 @@ export default function Settings() {
             <TabsTrigger value="other" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm whitespace-nowrap">
               <SettingsIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Outros
+            </TabsTrigger>
+            <TabsTrigger value="servidor" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm whitespace-nowrap">
+              <Server className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Servidor
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1532,7 +1536,298 @@ export default function Settings() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Servidor */}
+        <TabsContent value="servidor">
+          <ServerMonitoring />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Componente ServerMonitoring
+function ServerMonitoring() {
+  const { toast } = useToast();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [restarting, setRestarting] = useState(false);
+
+  const fetchStats = async () => {
+    try {
+      const response = await api.get('/server/stats');
+      setStats(response.data.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Erro ao buscar stats:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar estatísticas do servidor",
+        variant: "destructive"
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 5000); // Refresh 5s
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRestart = async () => {
+    if (!confirm('⚠️ Tem certeza que deseja reiniciar o servidor?\n\nO servidor ficará offline por alguns segundos.')) return;
+
+    setRestarting(true);
+    try {
+      await api.post('/server/restart');
+      toast({
+        title: '🔄 Servidor reiniciando',
+        description: 'O servidor será reiniciado em 3 segundos',
+      });
+
+      // Após 10s, tentar reconectar
+      setTimeout(() => {
+        setRestarting(false);
+        fetchStats();
+      }, 10000);
+    } catch (error) {
+      setRestarting(false);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível reiniciar o servidor',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const getMemoryColor = (percent) => {
+    if (percent > 90) return 'text-red-600';
+    if (percent > 80) return 'text-yellow-600';
+    return 'text-green-600';
+  };
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      ok: 'bg-green-100 text-green-800',
+      warning: 'bg-yellow-100 text-yellow-800',
+      error: 'bg-red-100 text-red-800',
+      CLOSED: 'bg-green-100 text-green-800',
+      OPEN: 'bg-red-100 text-red-800',
+      HALF_OPEN: 'bg-yellow-100 text-yellow-800'
+    };
+    return badges[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Memory (Node.js Heap) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Database className="h-5 w-5" />
+              Memória (Heap)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-3xl font-bold ${getMemoryColor(stats.memory.heapUsedPercent)}`}>
+              {stats.memory.heapUsedPercent}%
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              {stats.memory.heapUsed}MB / {stats.memory.heapTotal}MB
+            </p>
+            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${stats.memory.heapUsedPercent > 90 ? 'bg-red-500' :
+                    stats.memory.heapUsedPercent > 80 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}
+                style={{ width: `${stats.memory.heapUsedPercent}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Node.js
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* System RAM */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Database className="h-5 w-5" />
+              RAM Sistema
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-3xl font-bold ${getMemoryColor(stats.systemRAM.usedPercent)}`}>
+              {stats.systemRAM.usedPercent}%
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              {stats.systemRAM.used}MB / {stats.systemRAM.total}MB
+            </p>
+            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${stats.systemRAM.usedPercent > 90 ? 'bg-red-500' :
+                    stats.systemRAM.usedPercent > 80 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}
+                style={{ width: `${stats.systemRAM.usedPercent}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Livre: {stats.systemRAM.free}MB
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* CPU */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Cpu className="h-5 w-5" />
+              CPU
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-600">
+              {stats.cpu.usage}%
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              {stats.cpu.cores} cores
+            </p>
+            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all"
+                style={{ width: `${Math.min(stats.cpu.usage, 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {stats.system.platform}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Uptime */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-5 w-5" />
+              Uptime
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-600">
+              {Math.floor(stats.uptime / 3600)}h
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              {Math.floor((stats.uptime % 3600) / 60)}m online
+            </p>
+            <p className="text-xs text-gray-500 mt-3">
+              PID: {stats.system.pid}
+            </p>
+            <p className="text-xs text-gray-500">
+              Node: {stats.system.nodeVersion}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Health Checks */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Status dos Serviços</CardTitle>
+          <CardDescription>Verificação de saúde dos componentes do sistema</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* Database */}
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Database className="h-5 w-5 text-gray-500" />
+                <div>
+                  <p className="font-medium">Database</p>
+                  <p className="text-sm text-gray-500">Conexão com Supabase</p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(stats.health.database)}`}>
+                {stats.health.database === 'ok' ? '✓ Online' : '✗ Offline'}
+              </span>
+            </div>
+
+            {/* AI Queue */}
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Brain className="h-5 w-5 text-gray-500" />
+                <div>
+                  <p className="font-medium">AI Queue</p>
+                  <p className="text-sm text-gray-500">
+                    {stats.health.ai_queue.size} / {stats.health.ai_queue.limit} requisições
+                  </p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(stats.health.ai_queue.size > 80 ? 'warning' : 'ok')
+                }`}>
+                {stats.health.ai_queue.size > 80 ? '⚠ Alto' : '✓ Normal'}
+              </span>
+            </div>
+
+            {/* Circuit Breaker */}
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Activity className="h-5 w-5 text-gray-500" />
+                <div>
+                  <p className="font-medium">Circuit Breaker</p>
+                  <p className="text-sm text-gray-500">Proteção de API externa</p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(stats.health.circuit_breaker)}`}>
+                {stats.health.circuit_breaker}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Ações do Servidor</CardTitle>
+          <CardDescription>Controle operacional do backend</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleRestart}
+            disabled={restarting}
+            variant="destructive"
+            className="w-full sm:w-auto"
+          >
+            {restarting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Reiniciando...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reiniciar Servidor
+              </>
+            )}
+          </Button>
+          <p className="text-sm text-gray-500 mt-3">
+            ⚠️ O servidor ficará offline por alguns segundos durante o reinício
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

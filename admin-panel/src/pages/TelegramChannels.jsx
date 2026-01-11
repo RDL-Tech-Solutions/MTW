@@ -953,12 +953,13 @@ export default function TelegramChannels() {
                     className="w-full px-3 py-2 border rounded-md bg-background"
                     required
                   >
+                    <option value="realtime">⚡ Tempo Real (processamento imediato)</option>
                     <option value="new_only">Apenas novas mensagens</option>
                     <option value="1_day">Mensagens antigas (máx 1 dia)</option>
                     <option value="2_days">Mensagens antigas (máx 2 dias)</option>
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    Define quantas mensagens antigas serão capturadas
+                    Tempo Real: processa e analisa cupons instantaneamente com IA
                   </p>
                 </div>
 
@@ -1687,9 +1688,10 @@ export default function TelegramChannels() {
                           <div className="flex flex-col gap-1 text-xs">
                             {channel.capture_mode && (
                               <Badge variant="outline" className="text-xs">
-                                {channel.capture_mode === 'new_only' ? 'Apenas novas' :
-                                  channel.capture_mode === '1_day' ? 'Até 1 dia' :
-                                    'Até 2 dias'}
+                                {channel.capture_mode === 'realtime' ? '⚡ Tempo Real' :
+                                  channel.capture_mode === 'new_only' ? 'Apenas novas' :
+                                    channel.capture_mode === '1_day' ? 'Até 1 dia' :
+                                      'Até 2 dias'}
                               </Badge>
                             )}
                             {channel.platform_filter && channel.platform_filter !== 'all' && (

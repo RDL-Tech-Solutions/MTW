@@ -14,7 +14,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.precocerto.app"
+      "bundleIdentifier": "com.precocerto.app",
+      "newArchEnabled": false
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +24,8 @@
       "package": "com.precocerto.app",
       "permissions": [
         "NOTIFICATIONS"
-      ]
+      ],
+      "newArchEnabled": false
     },
     "web": {
       "bundler": "metro"

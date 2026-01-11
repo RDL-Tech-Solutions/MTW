@@ -17,17 +17,14 @@ import appSettingsRoutes from './appSettingsRoutes.js';
 import cronRoutes from './cronRoutes.js';
 import aiRoutes from './aiRoutes.js';
 import scheduledPostRoutes from './scheduledPostRoutes.js';
+import healthRoutes from './healthRoutes.js';
+import serverRoutes from './serverRoutes.js';
 
 const router = express.Router();
 
-// Health check
-router.get('/health', (req, res) => {
-    res.json({
-        success: true,
-        message: 'API PreçoCerto está funcionando',
-        timestamp: new Date().toISOString()
-    });
-});
+// Health check routes (sem /api prefix)
+router.use('/', healthRoutes);
+
 
 // Rotas
 router.use('/auth', authRoutes);
@@ -45,6 +42,7 @@ router.use('/notification-preferences', notificationPreferenceRoutes);
 router.use('/telegram-channels', telegramChannelRoutes);
 router.use('/telegram-collector', telegramCollectorRoutes);
 router.use('/settings', appSettingsRoutes);
+router.use('/server', serverRoutes);
 router.use('/cron', cronRoutes); // Rotas para Vercel Cron
 router.use('/ai', aiRoutes);
 router.use('/scheduled-posts', scheduledPostRoutes);

@@ -79,12 +79,12 @@ Template:`;
 
       // Fazer requisição para OpenRouter
       // Usar modo texto (não JSON) para obter template como texto puro
-      const response = await openrouterClient.makeRequest(prompt, { forceTextMode: true });
+      const response = await openrouterClient.enqueueRequest(prompt, { forceTextMode: true });
 
       // A resposta deve ser o template diretamente como string
       // No modo texto, a resposta vem como string direta
       let template = '';
-      
+
       if (typeof response === 'string') {
         template = response.trim();
       } else {

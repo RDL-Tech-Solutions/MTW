@@ -563,12 +563,20 @@ class AppSettingsController {
     try {
       const schedule = await AppSettings.getCleanupSchedule();
 
+      // Calculate next run
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(schedule.hour, 0, 0, 0);
+      if (next <= now) {
+        next.setDate(next.getDate() + 1);
+      }
+
       res.json({
         success: true,
         data: {
           hour: schedule.hour,
           lastRun: schedule.lastRun,
-          nextRun: this.calculateNextRun(schedule.hour)
+          nextRun: next.toISOString()
         }
       });
     } catch (error) {
@@ -612,12 +620,20 @@ class AppSettingsController {
 
       logger.info(`✅ Horário de limpeza atualizado para ${hourNum}:00`);
 
+      // Calculate next run
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(hourNum, 0, 0, 0);
+      if (next <= now) {
+        next.setDate(next.getDate() + 1);
+      }
+
       res.json({
         success: true,
         message: `Horário de limpeza atualizado para ${hourNum}:00`,
         data: {
           hour: hourNum,
-          nextRun: this.calculateNextRun(hourNum)
+          nextRun: next.toISOString()
         }
       });
     } catch (error) {
@@ -661,22 +677,6 @@ class AppSettingsController {
         message: error.message
       });
     }
-  }
-
-  /**
-   * Calcular próxima execução baseada no horário configurado
-   */
-  calculateNextRun(hour) {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(hour, 0, 0, 0);
-
-    // Se o horário já passou hoje, agendar para amanhã
-    if (next <= now) {
-      next.setDate(next.getDate() + 1);
-    }
-
-    return next.toISOString();
   }
 }
 

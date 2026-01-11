@@ -42,7 +42,7 @@ class CouponAnalyzer {
       const prompt = couponPrompt.generatePrompt(message, exampleMessages);
 
       // Fazer requisição para OpenRouter
-      const rawExtraction = await openrouterClient.makeRequest(prompt);
+      const rawExtraction = await openrouterClient.enqueueRequest(prompt);
 
       logger.debug(`✅ Resposta recebida da IA`);
       logger.debug(`   Código: ${rawExtraction.coupon_code || 'N/A'}`);
@@ -77,13 +77,13 @@ class CouponAnalyzer {
     } catch (error) {
       logger.error(`❌ Erro ao analisar cupom: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
-      
+
       // Se o erro for relacionado a JSON inválido ou resposta vazia, logar mais detalhes
       if (error.message.includes('JSON') || error.message.includes('vazia') || error.message.includes('truncado')) {
         logger.error(`   ⚠️ Erro crítico na resposta da IA. Verifique se o modelo está funcionando corretamente.`);
         logger.error(`   💡 Dica: Tente aumentar max_tokens ou verificar se o modelo suporta JSON mode.`);
       }
-      
+
       // Não lançar erro - retornar null para que o sistema continue funcionando
       // mesmo se a IA falhar
       return null;

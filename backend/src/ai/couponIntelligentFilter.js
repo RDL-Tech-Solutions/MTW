@@ -156,7 +156,7 @@ Plataforma: ${coupon.platform || 'N/A'}
 
 Retorne SOMENTE o JSON.`;
 
-      const response = await openrouterClient.makeRequest(prompt);
+      const response = await openrouterClient.enqueueRequest(prompt);
 
       return {
         quality_score: this.normalizeScore(response.quality_score),

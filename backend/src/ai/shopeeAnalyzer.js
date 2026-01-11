@@ -63,7 +63,7 @@ Regras:
 
 Retorne SOMENTE o JSON, sem explicações ou markdown.`;
 
-      const response = await openrouterClient.makeRequest(prompt);
+      const response = await openrouterClient.enqueueRequest(prompt);
 
       if (!response || typeof response !== 'object') {
         throw new Error('Resposta da IA não é um objeto válido');
@@ -135,7 +135,7 @@ Formato obrigatório do JSON:
 
 Retorne SOMENTE o JSON, sem explicações ou markdown.`;
 
-      const response = await openrouterClient.makeRequest(prompt);
+      const response = await openrouterClient.enqueueRequest(prompt);
 
       if (!response || typeof response !== 'object') {
         throw new Error('Resposta da IA não é um objeto válido');

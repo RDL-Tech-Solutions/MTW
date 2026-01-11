@@ -13,6 +13,7 @@ import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import { startCronJobs } from './services/cron/index.js';
+import { startMemoryMonitoring, stopMemoryMonitoring } from './utils/memoryMonitor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +138,8 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Inicialização do servidor
+let server; // Salvar referência para graceful shutdown
+
 const startServer = async () => {
   try {
     // Testar conexão com banco de dados
@@ -146,20 +149,28 @@ const startServer = async () => {
       throw new Error('Falha ao conectar com Supabase');
     }
 
-
-
     // Iniciar cron jobs (apenas se não for Vercel, pois Vercel usa cron externo)
     if (process.env.ENABLE_CRON_JOBS === 'true' && !process.env.VERCEL) {
       logger.info('🔄 Iniciando cron jobs (Node-Cron)...');
       startCronJobs();
     }
 
-    // Iniciar servidor
-    app.listen(PORT, () => {
+    // Iniciar servidor e salvar referência
+    server = app.listen(PORT, () => {
       logger.info(`🚀 Servidor rodando na porta ${PORT}`);
       logger.info(`📝 Ambiente: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🌐 API disponível em: http://localhost:${PORT}/api`);
     });
+
+    // Configurar timeouts do servidor
+    server.keepAliveTimeout = 65000; // Nginx padrão é 60s
+    server.headersTimeout = 66000; // Ligeiramente maior que keepAlive
+
+    // Iniciar monitor de memória em produção
+    if (process.env.NODE_ENV === 'production') {
+      startMemoryMonitoring();
+    }
+
   } catch (error) {
     logger.error(`❌ Erro ao iniciar servidor: ${error.message}`);
     process.exit(1);
@@ -187,16 +198,51 @@ process.on('uncaughtException', (error) => {
   // Para outros erros, apenas logar e continuar
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM recebido. Encerrando servidor...');
-  process.exit(0);
-});
+// Graceful shutdown completo
+let isShuttingDown = false;
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT recebido. Encerrando servidor...');
-  process.exit(0);
-});
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.info(`${signal} recebido. Iniciando shutdown gracioso...`);
+
+  // 1. Parar de aceitar novas requisições
+  if (server) {
+    server.close(() => {
+      logger.info('✅ Servidor HTTP fechado');
+    });
+  }
+
+  // 2. Configurar timeout de shutdown
+  const shutdownTimeout = setTimeout(() => {
+    logger.error('⏱️ Timeout no shutdown. Forçando saída...');
+    process.exit(1);
+  }, parseInt(process.env.SHUTDOWN_TIMEOUT) || 30000); // 30s padrão
+
+  // 3. Limpar recursos
+  try {
+    // Parar monitor de memória
+    stopMemoryMonitoring();
+
+    // Limpar cache AI
+    const openrouterClient = (await import('./ai/openrouterClient.js')).default;
+    openrouterClient.clearCache();
+    logger.info('✅ Cache AI limpo');
+
+    // Mensagem final
+    clearTimeout(shutdownTimeout);
+    logger.info('✅ Shutdown completo. Até logo! 👋');
+    process.exit(0);
+  } catch (error) {
+    logger.error(`Erro no shutdown: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+// Graceful shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Iniciar
 // Iniciar

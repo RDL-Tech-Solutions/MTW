@@ -535,9 +535,10 @@ class Product {
       // Se a coluna existe, fazer a query completa com filtro de status
       let query = supabase
         .from('products')
-        .select('id, name, image_url, platform, current_price, old_price, discount_percentage, affiliate_link, original_link, external_id, is_active, stock_available, status, category_id, coupon_id, created_at, updated_at', { count: 'exact' })
+        .select('id, name, image_url, platform, current_price, old_price, discount_percentage, affiliate_link, original_link, external_id, is_active, stock_available, status, category_id, coupon_id, scheduled_post_id, created_at, updated_at', { count: 'exact' })
         .eq('is_active', true)
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .is('scheduled_post_id', null); // Excluir produtos agendados pela IA
 
       // Aplicar filtros básicos
       if (platform) query = query.eq('platform', platform);

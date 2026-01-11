@@ -78,7 +78,7 @@ Retorne APENAS o JSON:`;
       const prompt = this.generateAnalysisPrompt(product);
 
       // Fazer requisição
-      const response = await openrouterClient.makeRequest(prompt);
+      const response = await openrouterClient.enqueueRequest(prompt);
 
       // Validar resposta
       if (!response || typeof response !== 'object') {

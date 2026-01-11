@@ -39,7 +39,7 @@ class ScheduledPost {
             const now = new Date().toISOString();
             const { data: posts, error } = await supabase
                 .from('scheduled_posts')
-                .select('*, products(*)')
+                .select('*, products!product_id(*)')
                 .eq('status', 'pending')
                 .lte('scheduled_at', now)
                 .order('scheduled_at', { ascending: true })
@@ -89,7 +89,7 @@ class ScheduledPost {
 
             let dbQuery = supabase
                 .from('scheduled_posts')
-                .select('*, products(*, category:categories!category_id(id, name, icon))', { count: 'exact' })
+                .select('*, products!product_id(*, category:categories!category_id(id, name, icon))', { count: 'exact' })
                 .order('scheduled_at', { ascending: true })
                 .range(from, to);
 
@@ -114,7 +114,7 @@ class ScheduledPost {
         try {
             const { data, error } = await supabase
                 .from('scheduled_posts')
-                .select('*, products(*)')
+                .select('*, products!product_id(*)')
                 .eq('id', id)
                 .single();
 

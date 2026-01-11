@@ -482,6 +482,8 @@ export default function Products() {
         description: "Erro ao salvar produto.",
         variant: "destructive",
       });
+    } finally {
+      setProcessingActions(prev => ({ ...prev, submitting: false }));
     }
   };
 
