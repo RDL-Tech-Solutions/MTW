@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Trash2, Play, Search, Calendar, Clock, AlertCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { Trash2, Play, Search, Calendar, Clock, AlertCircle, CheckCircle2, Loader2, RefreshCw, Trash } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -25,6 +25,8 @@ export default function ScheduledPosts() {
         delete: null,
         publish: null
     });
+
+    const [bulkDeleting, setBulkDeleting] = useState(false);
 
     useEffect(() => {
         fetchPosts(1);
@@ -89,6 +91,46 @@ export default function ScheduledPosts() {
         }
     };
 
+    const handleBulkDeletePending = async () => {
+        const pendingCount = posts.filter(p => p.status === 'pending').length;
+
+        if (pendingCount === 0) {
+            toast({
+                title: "Aviso",
+                description: "Não há agendamentos pendentes para apagar.",
+                variant: "default"
+            });
+            return;
+        }
+
+        const confirmMessage = `Deseja realmente apagar TODOS os ${pendingCount} agendamento(s) pendente(s)? Esta ação não pode ser desfeita!`;
+        if (!confirm(confirmMessage)) return;
+
+        setBulkDeleting(true);
+        try {
+            const response = await api.delete('/scheduled-posts/bulk/pending');
+            const deletedCount = response.data.data.deletedCount;
+
+            toast({
+                title: "Sucesso!",
+                description: `${deletedCount} agendamento(s) pendente(s) cancelado(s) com sucesso.`,
+                variant: "success"
+            });
+
+            // Recarregar a lista
+            fetchPosts(1); // Volta para a primeira página
+        } catch (error) {
+            console.error('Erro ao apagar agendamentos em lote:', error);
+            toast({
+                title: "Erro!",
+                description: "Falha ao apagar agendamentos pendentes.",
+                variant: "destructive"
+            });
+        } finally {
+            setBulkDeleting(false);
+        }
+    };
+
     const getStatusBadge = (status) => {
         const styles = {
             pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
@@ -146,15 +188,32 @@ export default function ScheduledPosts() {
                         Fila de publicações inteligentes ({pagination.total})
                     </p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fetchPosts(pagination.page)}
-                    disabled={loading}
-                >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Atualizar
-                </Button>
+                <div className="flex gap-2">
+                    {statusFilter === 'pending' && posts.filter(p => p.status === 'pending').length > 0 && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleBulkDeletePending}
+                            disabled={bulkDeleting || loading}
+                        >
+                            {bulkDeleting ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                                <Trash className="h-4 w-4 mr-2" />
+                            )}
+                            Apagar Pendentes em Lote
+                        </Button>
+                    )}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchPosts(pagination.page)}
+                        disabled={loading}
+                    >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                        Atualizar
+                    </Button>
+                </div>
             </div>
 
             <div className="flex gap-2 bg-muted/50 p-1 rounded-lg w-fit">

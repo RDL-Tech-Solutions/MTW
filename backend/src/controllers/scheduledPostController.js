@@ -62,6 +62,24 @@ class ScheduledPostController {
             next(error);
         }
     }
+
+    /**
+     * DELETE /api/scheduled-posts/bulk/pending
+     * Deletar todos os agendamentos pendentes em lote
+     */
+    static async bulkDeletePending(req, res, next) {
+        try {
+            logger.info('🗑️ Iniciando exclusão em lote de agendamentos pendentes...');
+            const deletedCount = await ScheduledPost.deleteAllPending();
+
+            res.json(successResponse(
+                { deletedCount },
+                `${deletedCount} agendamento(s) pendente(s) cancelado(s) com sucesso`
+            ));
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export default ScheduledPostController;

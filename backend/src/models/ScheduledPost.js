@@ -143,6 +143,41 @@ class ScheduledPost {
             throw error;
         }
     }
+
+    /**
+     * Deletar todos os agendamentos pendentes (Exclusão em lote)
+     * @returns {Promise<number>} Número de registros deletados
+     */
+    static async deleteAllPending() {
+        try {
+            // Primeiro, contar quantos existem
+            const { count: totalCount, error: countError } = await supabase
+                .from('scheduled_posts')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pending');
+
+            if (countError) throw countError;
+
+            if (totalCount === 0) {
+                logger.info('Nenhum agendamento pendente para deletar');
+                return 0;
+            }
+
+            // Deletar todos os pendentes
+            const { error } = await supabase
+                .from('scheduled_posts')
+                .delete()
+                .eq('status', 'pending');
+
+            if (error) throw error;
+
+            logger.info(`🗑️ ${totalCount} agendamento(s) pendente(s) deletado(s) em lote`);
+            return totalCount;
+        } catch (error) {
+            logger.error(`Erro ao deletar agendamentos pendentes em lote: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 export default ScheduledPost;

@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 router.get('/', ScheduledPostController.index);
+router.delete('/bulk/pending', ScheduledPostController.bulkDeletePending); // Deve vir antes de /:id
 router.delete('/:id', ScheduledPostController.destroy);
 router.post('/:id/publish-now', ScheduledPostController.publishNow);
 
