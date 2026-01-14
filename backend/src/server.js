@@ -32,26 +32,30 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Configurar CORS
+// Configurar CORS - Prioriza .env, usa defaults apenas como fallback
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:19006',
   'http://localhost:8081', // Expo Web
-  'http://localhost:8081', // Expo Web
   'http://localhost:3000',
   'https://precocertooo.vercel.app', // Frontend Vercel
 ];
 
-// Se CORS_ORIGIN estiver definido, usar ele + adicionar localhost:8081 se não estiver presente
-let allowedOrigins = defaultOrigins;
+// Usar CORS_ORIGIN do .env se definido, senão usar defaults
+let allowedOrigins;
 if (process.env.CORS_ORIGIN) {
-  const envOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim()).filter(o => o);
-  allowedOrigins = [...new Set([...envOrigins, ...defaultOrigins])]; // Merge e remove duplicatas
+  // Usar APENAS as origens do .env (não mesclar com defaults)
+  allowedOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim()).filter(o => o);
+  logger.info(`🌐 CORS: Usando origens do .env (${allowedOrigins.length} configuradas)`);
+} else {
+  // Fallback para defaults se .env não estiver configurado
+  allowedOrigins = defaultOrigins;
+  logger.info(`🌐 CORS: Usando origens padrão (${allowedOrigins.length} configuradas)`);
 }
 
 // Log de origens permitidas no startup
-logger.info(`🌐 CORS: Origens permitidas: ${allowedOrigins.join(', ')}`);
+logger.info(`📋 CORS: Origens permitidas: ${allowedOrigins.join(', ')}`);
 
 const corsOptions = {
   origin: (origin, callback) => {
