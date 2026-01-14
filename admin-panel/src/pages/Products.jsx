@@ -630,7 +630,7 @@ export default function Products() {
                     <Input
                       id="affiliate_url"
                       type="url"
-                      placeholder="https://shopee.com.br/... ou https://mercadolivre.com.br/... ou https://aliexpress.com/..."
+                      placeholder="https://shopee.com.br/... ou https://mercadolivre.com.br/... ou https://kabum.com.br/... ou https://magazineluiza.com.br/..."
                       value={formData.affiliate_url}
                       onChange={(e) => setFormData({ ...formData, affiliate_url: e.target.value })}
                       className="flex-1"
@@ -669,6 +669,9 @@ export default function Products() {
                       <option value="mercadolivre">Mercado Livre</option>
                       <option value="amazon">Amazon</option>
                       <option value="aliexpress">AliExpress</option>
+                      <option value="kabum">Kabum</option>
+                      <option value="magazineluiza">Magazine Luiza</option>
+                      <option value="terabyteshop">Terabyteshop</option>
                       <option value="general">Geral</option>
                     </select>
                   </div>
@@ -892,6 +895,9 @@ export default function Products() {
                   <option value="shopee">Shopee</option>
                   <option value="amazon">Amazon</option>
                   <option value="aliexpress">Ali</option>
+                  <option value="kabum">Kabum</option>
+                  <option value="magazineluiza">Magalu</option>
+                  <option value="terabyteshop">Terabyte</option>
                   <option value="general">Geral</option>
                 </select>
                 <select
@@ -1019,14 +1025,20 @@ export default function Products() {
                                 product.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
                                   product.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
                                     product.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
-                                      'bg-gray-100 text-gray-800 border-gray-300'
+                                      product.platform === 'kabum' ? 'bg-orange-200 text-orange-900 border-orange-400' :
+                                        product.platform === 'magazineluiza' ? 'bg-blue-200 text-blue-900 border-blue-400' :
+                                          product.platform === 'terabyteshop' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                            'bg-gray-100 text-gray-800 border-gray-300'
                                 }`}
                             >
                               {product.platform === 'mercadolivre' ? 'Mercado Livre' :
                                 product.platform === 'shopee' ? 'Shopee' :
                                   product.platform === 'amazon' ? 'Amazon' :
                                     product.platform === 'aliexpress' ? 'AliExpress' :
-                                      product.platform}
+                                      product.platform === 'kabum' ? 'Kabum' :
+                                        product.platform === 'magazineluiza' ? 'Magazine Luiza' :
+                                          product.platform === 'terabyteshop' ? 'Terabyteshop' :
+                                            product.platform}
                             </Badge>
                           </TableCell>
                           <TableCell>

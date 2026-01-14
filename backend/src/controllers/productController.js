@@ -206,7 +206,7 @@ class ProductController {
       logger.info(`==========================================`);
 
       const { id } = req.params;
-      const { affiliate_link, coupon_id, category_id, shorten_link } = req.body;
+      const { affiliate_link, coupon_id, category_id, shorten_link, current_price, old_price } = req.body;
 
       logger.info(`📝 Parâmetros extraídos do body:`);
       logger.info(`   id: ${id}`);
@@ -328,6 +328,24 @@ class ProductController {
       if (category_id) {
         updateData.category_id = category_id;
         logger.info(`📂 Categoria atualizada: ${category_id}`);
+      }
+
+      // Atualizar preços se editados
+      if (current_price !== undefined && !isNaN(parseFloat(current_price))) {
+        updateData.current_price = parseFloat(current_price);
+        logger.info(`💰 Preço atual atualizado: R$ ${current_price}`);
+      }
+
+      if (old_price !== undefined && !isNaN(parseFloat(old_price))) {
+        updateData.old_price = parseFloat(old_price);
+        logger.info(`💰 Preço antigo atualizado: R$ ${old_price}`);
+
+        // Recalcular desconto se ambos os preços foram fornecidos
+        if (updateData.current_price && updateData.old_price > updateData.current_price) {
+          const discountPercent = Math.round(((updateData.old_price - updateData.current_price) / updateData.old_price) * 100);
+          updateData.discount_percentage = discountPercent;
+          logger.info(`📊 Desconto recalculado: ${discountPercent}%`);
+        }
       }
 
       logger.info(`📝 updateData.affiliate_link: ${updateData.affiliate_link.substring(0, 100)}...`);

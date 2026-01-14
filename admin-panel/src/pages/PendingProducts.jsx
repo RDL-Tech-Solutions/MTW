@@ -47,6 +47,8 @@ export default function PendingProducts() {
   const [minDiscountFilter, setMinDiscountFilter] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [batchProcessing, setBatchProcessing] = useState(false);
+  const [editableCurrentPrice, setEditableCurrentPrice] = useState('');
+  const [editableOldPrice, setEditableOldPrice] = useState('');
 
   useEffect(() => {
     fetchPendingProducts(1);
@@ -147,6 +149,8 @@ export default function PendingProducts() {
     setSelectedCouponId(product.coupon_id || '');
     setSelectedCategoryId(product.category_id || '');
     setFinalPrice(null);
+    setEditableCurrentPrice(product.current_price?.toString() || '');
+    setEditableOldPrice(product.old_price?.toString() || '');
     setIsApprovalDialogOpen(true);
 
     // Buscar cupons disponíveis para a plataforma do produto
@@ -391,6 +395,14 @@ export default function PendingProducts() {
         payload.category_id = selectedCategoryId;
       }
 
+      // Adicionar preços editados
+      if (editableCurrentPrice && !isNaN(parseFloat(editableCurrentPrice))) {
+        payload.current_price = parseFloat(editableCurrentPrice);
+      }
+      if (editableOldPrice && !isNaN(parseFloat(editableOldPrice))) {
+        payload.old_price = parseFloat(editableOldPrice);
+      }
+
       console.log('📤 ========== ENVIANDO PAYLOAD ==========');
       console.log('   Product ID:', selectedProduct?.id);
       console.log('   Affiliate Link:', affiliateLink.substring(0, 80) + '...');
@@ -549,7 +561,10 @@ export default function PendingProducts() {
       mercadolivre: 'bg-yellow-500',
       shopee: 'bg-orange-500',
       amazon: 'bg-blue-500',
-      aliexpress: 'bg-red-500'
+      aliexpress: 'bg-red-500',
+      kabum: 'bg-orange-600',
+      magazineluiza: 'bg-blue-700',
+      terabyteshop: 'bg-purple-600'
     };
     return colors[platform] || 'bg-gray-500';
   };
@@ -559,7 +574,10 @@ export default function PendingProducts() {
       mercadolivre: 'Mercado Livre',
       shopee: 'Shopee',
       amazon: 'Amazon',
-      aliexpress: 'AliExpress'
+      aliexpress: 'AliExpress',
+      kabum: 'Kabum',
+      magazineluiza: 'Magazine Luiza',
+      terabyteshop: 'Terabyteshop'
     };
     return names[platform] || platform;
   };
@@ -617,6 +635,9 @@ export default function PendingProducts() {
                 <option value="shopee">Shopee</option>
                 <option value="amazon">Amazon</option>
                 <option value="aliexpress">AliExpress</option>
+                <option value="kabum">Kabum</option>
+                <option value="magazineluiza">Magazine Luiza</option>
+                <option value="terabyteshop">Terabyteshop</option>
               </select>
             </div>
             {showAdvancedFilters && (
@@ -995,6 +1016,40 @@ export default function PendingProducts() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Editar Preços */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="current_price">Preço Atual (R$)</Label>
+                  <Input
+                    id="current_price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editableCurrentPrice}
+                    onChange={(e) => setEditableCurrentPrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Preço final do produto
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="old_price">Preço Anterior (R$)</Label>
+                  <Input
+                    id="old_price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editableOldPrice}
+                    onChange={(e) => setEditableOldPrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Preço antes do desconto
+                  </p>
+                </div>
               </div>
 
               {/* Link Original */}

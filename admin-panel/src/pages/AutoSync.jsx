@@ -20,14 +20,23 @@ export default function AutoSync() {
     mercadolivre_enabled: false,
     amazon_enabled: false,
     aliexpress_enabled: false,
+    kabum_enabled: false,
+    magazineluiza_enabled: false,
+    terabyteshop_enabled: false,
     shopee_auto_publish: false,
     mercadolivre_auto_publish: false,
     amazon_auto_publish: false,
     aliexpress_auto_publish: false,
+    kabum_auto_publish: false,
+    magazineluiza_auto_publish: false,
+    terabyteshop_auto_publish: false,
     shopee_shorten_link: false,
     mercadolivre_shorten_link: false,
     amazon_shorten_link: false,
     aliexpress_shorten_link: false,
+    kabum_shorten_link: false,
+    magazineluiza_shorten_link: false,
+    terabyteshop_shorten_link: false,
     keywords: '',
     min_discount_percentage: 10,
     categories: [],
@@ -65,14 +74,23 @@ export default function AutoSync() {
         mercadolivre_enabled: data.mercadolivre_enabled || false,
         amazon_enabled: data.amazon_enabled || false,
         aliexpress_enabled: data.aliexpress_enabled || false,
+        kabum_enabled: data.kabum_enabled || false,
+        magazineluiza_enabled: data.magazineluiza_enabled || false,
+        terabyteshop_enabled: data.terabyteshop_enabled || false,
         shopee_auto_publish: data.shopee_auto_publish || false,
         mercadolivre_auto_publish: data.mercadolivre_auto_publish || false,
         amazon_auto_publish: data.amazon_auto_publish || false,
         aliexpress_auto_publish: data.aliexpress_auto_publish || false,
+        kabum_auto_publish: data.kabum_auto_publish || false,
+        magazineluiza_auto_publish: data.magazineluiza_auto_publish || false,
+        terabyteshop_auto_publish: data.terabyteshop_auto_publish || false,
         shopee_shorten_link: data.shopee_shorten_link || false,
         mercadolivre_shorten_link: data.mercadolivre_shorten_link || false,
         amazon_shorten_link: data.amazon_shorten_link || false,
         aliexpress_shorten_link: data.aliexpress_shorten_link || false,
+        kabum_shorten_link: data.kabum_shorten_link || false,
+        magazineluiza_shorten_link: data.magazineluiza_shorten_link || false,
+        terabyteshop_shorten_link: data.terabyteshop_shorten_link || false,
         keywords: data.keywords || '',
         min_discount_percentage: data.min_discount_percentage || 10,
         categories: data.categories || [],
@@ -196,7 +214,7 @@ export default function AutoSync() {
 
   const handleRunNow = async () => {
     // Validação básica
-    if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled) {
+    if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled && !config.kabum_enabled && !config.magazineluiza_enabled && !config.terabyteshop_enabled) {
       toast({
         title: "Atenção",
         description: "Selecione pelo menos uma plataforma para sincronizar.",
@@ -229,8 +247,8 @@ export default function AutoSync() {
       const response = await api.post('/sync/run-now');
       const results = response.data.data;
 
-      const totalNew = (results.mercadolivre?.new || 0) + (results.shopee?.new || 0) + (results.amazon?.new || 0) + (results.aliexpress?.new || 0);
-      const totalFound = (results.mercadolivre?.total || 0) + (results.shopee?.total || 0) + (results.amazon?.total || 0) + (results.aliexpress?.total || 0);
+      const totalNew = (results.mercadolivre?.new || 0) + (results.shopee?.new || 0) + (results.amazon?.new || 0) + (results.aliexpress?.new || 0) + (results.kabum?.new || 0) + (results.magazineluiza?.new || 0) + (results.terabyteshop?.new || 0);
+      const totalFound = (results.mercadolivre?.total || 0) + (results.shopee?.total || 0) + (results.amazon?.total || 0) + (results.aliexpress?.total || 0) + (results.kabum?.total || 0) + (results.magazineluiza?.total || 0) + (results.terabyteshop?.total || 0);
 
       toast({
         title: "Sincronização concluída!",
@@ -405,7 +423,7 @@ export default function AutoSync() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Automação de Produtos</h1>
           <p className="text-muted-foreground mt-2">
-            Capture automaticamente promoções de múltiplas plataformas (Mercado Livre, Shopee, Amazon, AliExpress)
+            Capture automaticamente promoções de 7 plataformas: Mercado Livre, Shopee, Amazon, AliExpress, Kabum, Magazine Luiza e Terabyteshop
           </p>
         </div>
         <Button
@@ -497,6 +515,39 @@ export default function AutoSync() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Kabum</CardTitle>
+            <Package className="h-4 w-4 text-orange-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.kabum || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Magazine Luiza</CardTitle>
+            <Package className="h-4 w-4 text-blue-700" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.magazineluiza || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Terabyteshop</CardTitle>
+            <Package className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.terabyteshop || 0}</div>
+            <p className="text-xs text-muted-foreground">Produtos capturados</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Enviados aos Bots</CardTitle>
             <AlertCircle className="h-4 w-4 text-purple-600" />
           </CardHeader>
@@ -579,6 +630,33 @@ export default function AutoSync() {
                 id="aliexpress"
               />
               <Label htmlFor="aliexpress" className="font-normal">AliExpress</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={config.kabum_enabled}
+                onCheckedChange={(checked) => setConfig({ ...config, kabum_enabled: checked })}
+                id="kabum"
+              />
+              <Label htmlFor="kabum" className="font-normal">Kabum</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={config.magazineluiza_enabled}
+                onCheckedChange={(checked) => setConfig({ ...config, magazineluiza_enabled: checked })}
+                id="magazineluiza"
+              />
+              <Label htmlFor="magazineluiza" className="font-normal">Magazine Luiza</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={config.terabyteshop_enabled}
+                onCheckedChange={(checked) => setConfig({ ...config, terabyteshop_enabled: checked })}
+                id="terabyteshop"
+              />
+              <Label htmlFor="terabyteshop" className="font-normal">Terabyteshop</Label>
             </div>
           </div>
 
@@ -696,6 +774,84 @@ export default function AutoSync() {
                   />
                 </div>
               </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="kabum_auto_publish" className="font-medium">Kabum</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="kabum_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.kabum_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, kabum_shorten_link: checked })}
+                      id="kabum_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.kabum_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, kabum_auto_publish: checked })}
+                    id="kabum_auto_publish"
+                    disabled={!config.kabum_enabled}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="magazineluiza_auto_publish" className="font-medium">Magazine Luiza</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="magazineluiza_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.magazineluiza_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, magazineluiza_shorten_link: checked })}
+                      id="magazineluiza_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.magazineluiza_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, magazineluiza_auto_publish: checked })}
+                    id="magazineluiza_auto_publish"
+                    disabled={!config.magazineluiza_enabled}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex-1">
+                  <Label htmlFor="terabyteshop_auto_publish" className="font-medium">Terabyteshop</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Publicar automaticamente após análise estratégica da IA
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 border-r pr-4 mr-2">
+                    <Label htmlFor="terabyteshop_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Switch
+                      checked={config.terabyteshop_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, terabyteshop_shorten_link: checked })}
+                      id="terabyteshop_shorten_link"
+                      className="scale-75"
+                    />
+                  </div>
+                  <Switch
+                    checked={config.terabyteshop_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, terabyteshop_auto_publish: checked })}
+                    id="terabyteshop_auto_publish"
+                    disabled={!config.terabyteshop_enabled}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -713,7 +869,7 @@ export default function AutoSync() {
             <p className="text-sm text-muted-foreground">
               Sincronize uma plataforma específica sem executar todas
             </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               <Button
                 onClick={() => handleRunPlatform('mercadolivre')}
                 disabled={runningPlatform !== null || !config.mercadolivre_enabled}
@@ -790,6 +946,66 @@ export default function AutoSync() {
                   <>
                     <Play className="mr-2 h-4 w-4" />
                     AliExpress
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={() => handleRunPlatform('kabum')}
+                disabled={runningPlatform !== null || !config.kabum_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'kabum' ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Kabum
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={() => handleRunPlatform('magazineluiza')}
+                disabled={runningPlatform !== null || !config.magazineluiza_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'magazineluiza' ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Magazine Luiza
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={() => handleRunPlatform('terabyteshop')}
+                disabled={runningPlatform !== null || !config.terabyteshop_enabled}
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                {runningPlatform === 'terabyteshop' ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Terabyteshop
                   </>
                 )}
               </Button>

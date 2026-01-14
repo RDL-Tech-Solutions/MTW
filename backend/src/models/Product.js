@@ -4,7 +4,17 @@ import logger from '../config/logger.js';
 
 class Product {
   // Plataformas válidas no banco de dados
-  static VALID_PLATFORMS = ['shopee', 'mercadolivre', 'amazon', 'aliexpress', 'unknown'];
+  static VALID_PLATFORMS = [
+    'shopee',
+    'mercadolivre',
+    'amazon',
+    'aliexpress',
+    'kabum',
+    'magazineluiza',
+    'terabyteshop',
+    'general',
+    'unknown'
+  ];
 
   // Status válidos no banco de dados
   static VALID_STATUS = ['pending', 'approved', 'published', 'rejected'];
@@ -23,6 +33,13 @@ class Product {
       'amazon': 'amazon',
       'aliexpress': 'aliexpress',
       'ali express': 'aliexpress',
+      'kabum': 'kabum',
+      'magazineluiza': 'magazineluiza',
+      'magazine luiza': 'magazineluiza',
+      'magalu': 'magazineluiza',
+      'terabyteshop': 'terabyteshop',
+      'terabyte': 'terabyteshop',
+      'general': 'general',
       'unknown': 'unknown'
     };
 

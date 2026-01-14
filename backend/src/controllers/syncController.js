@@ -5,6 +5,9 @@ import meliSync from '../services/autoSync/meliSync.js';
 import shopeeSync from '../services/autoSync/shopeeSync.js';
 import amazonSync from '../services/autoSync/amazonSync.js';
 import aliExpressSync from '../services/autoSync/aliExpressSync.js';
+import kabumSync from '../services/autoSync/kabumSync.js';
+import magaluSync from '../services/autoSync/magaluSync.js';
+import terabyteSync from '../services/autoSync/terabyteSync.js';
 import publishService from '../services/autoSync/publishService.js';
 import urlShortener from '../services/urlShortener.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
@@ -64,7 +67,10 @@ class SyncController {
 
       const config = await SyncConfig.get();
 
-      if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled) {
+      // Verificar se pelo menos uma plataforma está habilitada
+      if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled &&
+        !config.aliexpress_enabled && !config.kabum_enabled && !config.magazineluiza_enabled &&
+        !config.terabyteshop_enabled) {
         return res.status(400).json(errorResponse(
           'Nenhuma plataforma habilitada para sincronização',
           'SYNC_DISABLED'
@@ -75,7 +81,10 @@ class SyncController {
         mercadolivre: { total: 0, new: 0, errors: 0 },
         shopee: { total: 0, new: 0, errors: 0 },
         amazon: { total: 0, new: 0, errors: 0 },
-        aliexpress: { total: 0, new: 0, errors: 0 }
+        aliexpress: { total: 0, new: 0, errors: 0 },
+        kabum: { total: 0, new: 0, errors: 0 },
+        magazineluiza: { total: 0, new: 0, errors: 0 },
+        terabyteshop: { total: 0, new: 0, errors: 0 }
       };
 
       // Sincronizar Mercado Livre
@@ -122,14 +131,36 @@ class SyncController {
         }
       }
 
-      // Sincronizar AliExpress
-      if (config.aliexpress_enabled) {
+      // Sincronizar Kabum
+      if (config.kabum_enabled) {
         try {
-          const aliExpressResults = await SyncController.syncAliExpress(config);
-          results.aliexpress = aliExpressResults;
+          const kabumResults = await SyncController.syncKabum(config);
+          results.kabum = kabumResults;
         } catch (error) {
-          logger.error(`❌ Erro na sincronização AliExpress: ${error.message}`);
-          results.aliexpress.errors++;
+          logger.error(`❌ Erro na sincronização Kabum: ${error.message}`);
+          results.kabum.errors++;
+        }
+      }
+
+      // Sincronizar Magazine Luiza
+      if (config.magazineluiza_enabled) {
+        try {
+          const magaluResults = await SyncController.syncMagalu(config);
+          results.magazineluiza = magaluResults;
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização Magazine Luiza: ${error.message}`);
+          results.magazineluiza.errors++;
+        }
+      }
+
+      // Sincronizar Terabyteshop
+      if (config.terabyteshop_enabled) {
+        try {
+          const terabyteResults = await SyncController.syncTerabyte(config);
+          results.terabyteshop = terabyteResults;
+        } catch (error) {
+          logger.error(`❌ Erro na sincronização Terabyteshop: ${error.message}`);
+          results.terabyteshop.errors++;
         }
       }
 
@@ -199,6 +230,29 @@ class SyncController {
             return res.status(400).json(errorResponse('AliExpress não está habilitado', 'PLATFORM_DISABLED'));
           }
           results = await SyncController.syncAliExpress(config);
+          break;
+
+        case 'kabum':
+          if (!config.kabum_enabled) {
+            return res.status(400).json(errorResponse('Kabum não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncKabum(config);
+          break;
+
+        case 'magazineluiza':
+        case 'magalu':
+          if (!config.magazineluiza_enabled) {
+            return res.status(400).json(errorResponse('Magazine Luiza não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncMagalu(config);
+          break;
+
+        case 'terabyteshop':
+        case 'terabyte':
+          if (!config.terabyteshop_enabled) {
+            return res.status(400).json(errorResponse('Terabyteshop não está habilitado', 'PLATFORM_DISABLED'));
+          }
+          results = await SyncController.syncTerabyte(config);
           break;
 
         default:
@@ -990,6 +1044,213 @@ class SyncController {
       res.json(successResponse(analyses, 'Análises concluídas'));
     } catch (error) {
       next(error);
+    }
+  }
+
+  /**
+   * Sincronizar Kabum
+   */
+  static async syncKabum(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // Buscar URLs de produtos
+      const productUrls = await kabumSync.fetchKabumProducts(null, config.max_products || 20);
+      results.total = productUrls.length;
+
+      logger.info(`📦 ${productUrls.length} produtos encontrados na Kabum`);
+
+      // Processar cada URL
+      for (const url of productUrls) {
+        try {
+          // Analisar produto individual
+          const productData = await kabumSync.analyzeKabumLink(url);
+
+          if (!productData) {
+            results.errors++;
+            continue;
+          }
+
+          // Salvar no banco
+          const { product, isNew } = await kabumSync.saveKabumToDatabase(productData, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Auto-publicar se habilitado
+            if (config.kabum_auto_publish === true) {
+              const { shouldPublish } = await SyncController.analyzeAndDecidePublish(product, true);
+
+              if (shouldPublish) {
+                // Encurtar link se configurado
+                if (config.kabum_shorten_link) {
+                  try {
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink) {
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                    }
+                  } catch (error) {
+                    logger.error(`Erro ao encurtar link: ${error.message}`);
+                  }
+                }
+
+                // Publicar
+                await publishService.publishAll(product);
+                await Product.update(product.id, { status: 'active' });
+
+                logger.info(`✅ Kabum - Produto publicado: ${product.name}`);
+              }
+            }
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar produto Kabum: ${error.message}`);
+          results.errors++;
+        }
+      }
+
+      logger.info(`✅ Kabum sync concluído: ${results.new} novos de ${results.total}`);
+      return results;
+    } catch (error) {
+      logger.error(`❌ Erro no sync Kabum: ${error.message}`);
+      return results;
+    }
+  }
+
+  /**
+   * Sincronizar Magazine Luiza
+   */
+  static async syncMagalu(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // Buscar URLs de produtos
+      const productUrls = await magaluSync.fetchMagaluProducts(null, config.max_products || 20);
+      results.total = productUrls.length;
+
+      logger.info(`📦 ${productUrls.length} produtos encontrados na Magazine Luiza`);
+
+      // Processar cada URL
+      for (const url of productUrls) {
+        try {
+          // Analisar produto individual
+          const productData = await magaluSync.analyzeMagaluLink(url);
+
+          if (!productData) {
+            results.errors++;
+            continue;
+          }
+
+          // Salvar no banco
+          const { product, isNew } = await magaluSync.saveMagaluToDatabase(productData, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Auto-publicar se habilitado
+            if (config.magazineluiza_auto_publish === true) {
+              const { shouldPublish } = await SyncController.analyzeAndDecidePublish(product, true);
+
+              if (shouldPublish) {
+                // Encurtar link se configurado
+                if (config.magazineluiza_shorten_link) {
+                  try {
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink) {
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                    }
+                  } catch (error) {
+                    logger.error(`Erro ao encurtar link: ${error.message}`);
+                  }
+                }
+
+                // Publicar
+                await publishService.publishAll(product);
+                await Product.update(product.id, { status: 'active' });
+
+                logger.info(`✅ Magazine Luiza - Produto publicado: ${product.name}`);
+              }
+            }
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar produto Magazine Luiza: ${error.message}`);
+          results.errors++;
+        }
+      }
+
+      logger.info(`✅ Magazine Luiza sync concluído: ${results.new} novos de ${results.total}`);
+      return results;
+    } catch (error) {
+      logger.error(`❌ Erro no sync Magazine Luiza: ${error.message}`);
+      return results;
+    }
+  }
+
+  /**
+   * Sincronizar Terabyteshop
+   */
+  static async syncTerabyte(config) {
+    const results = { total: 0, new: 0, errors: 0 };
+
+    try {
+      // Buscar URLs de produtos
+      const productUrls = await terabyteSync.fetchTerabyteProducts(null, config.max_products || 20);
+      results.total = productUrls.length;
+
+      logger.info(`📦 ${productUrls.length} produtos encontrados na Terabyteshop`);
+
+      // Processar cada URL
+      for (const url of productUrls) {
+        try {
+          // Analisar produto individual
+          const productData = await terabyteSync.analyzeTerabyteLink(url);
+
+          if (!productData) {
+            results.errors++;
+            continue;
+          }
+
+          // Salvar no banco
+          const { product, isNew } = await terabyteSync.saveTerabyteToDatabase(productData, Product);
+
+          if (isNew) {
+            results.new++;
+
+            // Auto-publicar se habilitado
+            if (config.terabyteshop_auto_publish === true) {
+              const { shouldPublish } = await SyncController.analyzeAndDecidePublish(product, true);
+
+              if (shouldPublish) {
+                // Encurtar link se configurado
+                if (config.terabyteshop_shorten_link) {
+                  try {
+                    const shortLink = await urlShortener.shorten(product.affiliate_link);
+                    if (shortLink) {
+                      await Product.update(product.id, { affiliate_link: shortLink });
+                    }
+                  } catch (error) {
+                    logger.error(`Erro ao encurtar link: ${error.message}`);
+                  }
+                }
+
+                // Publicar
+                await publishService.publishAll(product);
+                await Product.update(product.id, { status: 'active' });
+
+                logger.info(`✅ Terabyteshop - Produto publicado: ${product.name}`);
+              }
+            }
+          }
+        } catch (error) {
+          logger.error(`Erro ao processar produto Terabyteshop: ${error.message}`);
+          results.errors++;
+        }
+      }
+
+      logger.info(`✅ Terabyteshop sync concluído: ${results.new} novos de ${results.total}`);
+      return results;
+    } catch (error) {
+      logger.error(`❌ Erro no sync Terabyteshop: ${error.message}`);
+      return results;
     }
   }
 }

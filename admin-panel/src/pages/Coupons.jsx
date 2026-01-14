@@ -126,7 +126,7 @@ export default function Coupons() {
           // Primeiro tentar buscar via API da plataforma selecionada
           const platform = formData.platform;
 
-          if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress'].includes(platform)) {
+          if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'terabyteshop'].includes(platform)) {
             try {
               const apiResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}?platform=${platform}`, {
                 validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
@@ -825,6 +825,9 @@ export default function Coupons() {
                       <option value="shopee">Shopee</option>
                       <option value="amazon">Amazon</option>
                       <option value="aliexpress">AliExpress</option>
+                      <option value="kabum">Kabum</option>
+                      <option value="magazineluiza">Magazine Luiza</option>
+                      <option value="terabyteshop">Terabyteshop</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -1153,6 +1156,9 @@ export default function Coupons() {
                   <option value="shopee">Shopee</option>
                   <option value="amazon">Amazon</option>
                   <option value="aliexpress">AliExpress</option>
+                  <option value="kabum">Kabum</option>
+                  <option value="magazineluiza">Magazine Luiza</option>
+                  <option value="terabyteshop">Terabyteshop</option>
                   <option value="general">Geral</option>
                 </select>
               </div>
@@ -1279,14 +1285,20 @@ export default function Coupons() {
                                 coupon.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
                                   coupon.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
                                     coupon.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
-                                      'bg-gray-100 text-gray-800 border-gray-300'
+                                      coupon.platform === 'kabum' ? 'bg-orange-200 text-orange-900 border-orange-400' :
+                                        coupon.platform === 'magazineluiza' ? 'bg-blue-200 text-blue-900 border-blue-400' :
+                                          coupon.platform === 'terabyteshop' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                            'bg-gray-100 text-gray-800 border-gray-300'
                             }
                           >
                             {coupon.platform === 'mercadolivre' ? 'Mercado Livre' :
                               coupon.platform === 'shopee' ? 'Shopee' :
                                 coupon.platform === 'amazon' ? 'Amazon' :
                                   coupon.platform === 'aliexpress' ? 'AliExpress' :
-                                    'Geral'}
+                                    coupon.platform === 'kabum' ? 'Kabum' :
+                                      coupon.platform === 'magazineluiza' ? 'Magazine Luiza' :
+                                        coupon.platform === 'terabyteshop' ? 'Terabyteshop' :
+                                          'Geral'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -1626,6 +1638,9 @@ export default function Coupons() {
                   <option value="shopee">Shopee</option>
                   <option value="amazon">Amazon</option>
                   <option value="aliexpress">AliExpress</option>
+                  <option value="kabum">Kabum</option>
+                  <option value="magazineluiza">Magazine Luiza</option>
+                  <option value="terabyteshop">Terabyteshop</option>
                 </select>
               </div>
               <div className="space-y-2">

@@ -4,6 +4,9 @@ export const PLATFORMS = {
   MERCADOLIVRE: 'mercadolivre',
   AMAZON: 'amazon',
   ALIEXPRESS: 'aliexpress',
+  KABUM: 'kabum',
+  MAGAZINELUIZA: 'magazineluiza',
+  TERABYTESHOP: 'terabyteshop',
   GENERAL: 'general'
 };
 

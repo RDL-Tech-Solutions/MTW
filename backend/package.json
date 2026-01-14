@@ -59,6 +59,9 @@
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
     "open": "^11.0.0",
+    "puppeteer": "^24.35.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.33.5",
     "telegram": "^2.26.22",
     "winston": "^3.11.0"
