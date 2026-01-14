@@ -3,6 +3,9 @@ export const PLATFORMS = {
   MERCADOLIVRE: 'mercadolivre',
   AMAZON: 'amazon',
   ALIEXPRESS: 'aliexpress',
+  KABUM: 'kabum',
+  MAGAZINELUIZA: 'magazineluiza',
+  TERABYTESHOP: 'terabyteshop',
   GENERAL: 'general',
 };
 
@@ -11,6 +14,9 @@ export const PLATFORM_LABELS = {
   [PLATFORMS.MERCADOLIVRE]: 'Mercado Livre',
   [PLATFORMS.AMAZON]: 'Amazon',
   [PLATFORMS.ALIEXPRESS]: 'AliExpress',
+  [PLATFORMS.KABUM]: 'Kabum',
+  [PLATFORMS.MAGAZINELUIZA]: 'Magazine Luiza',
+  [PLATFORMS.TERABYTESHOP]: 'Terabyteshop',
   [PLATFORMS.GENERAL]: 'Geral',
 };
 
@@ -19,6 +25,9 @@ export const PLATFORM_COLORS = {
   [PLATFORMS.MERCADOLIVRE]: '#FFE600',
   [PLATFORMS.AMAZON]: '#FF9900',
   [PLATFORMS.ALIEXPRESS]: '#FF4747',
+  [PLATFORMS.KABUM]: '#FF6500',
+  [PLATFORMS.MAGAZINELUIZA]: '#0086FF',
+  [PLATFORMS.TERABYTESHOP]: '#00A8E1',
   [PLATFORMS.GENERAL]: '#6B7280',
 };
 
@@ -58,14 +67,14 @@ export const SCREEN_NAMES = {
   LOGIN: 'Login',
   REGISTER: 'Register',
   FORGOT_PASSWORD: 'ForgotPassword',
-  
+
   // Main Tabs
   HOME: 'Home',
   CATEGORIES: 'Categories',
   FAVORITES: 'Favorites',
   COUPONS: 'Coupons',
   PROFILE: 'Profile',
-  
+
   // Stack
   PRODUCT_DETAILS: 'ProductDetails',
   COUPON_DETAILS: 'CouponDetails',
@@ -84,18 +93,18 @@ export const API_ENDPOINTS = {
   LOGIN: '/auth/login',
   REGISTER: '/auth/register',
   REFRESH_TOKEN: '/auth/refresh',
-  
+
   // Products
   PRODUCTS: '/products',
   PRODUCT_BY_ID: (id) => `/products/${id}`,
   PRODUCT_CLICK: (id) => `/products/${id}/click`,
-  
+
   // Categories
   CATEGORIES: '/categories',
-  
+
   // Coupons
   COUPONS: '/coupons',
-  
+
   // User
   USER_ME: '/users/me',
   USER_FAVORITES: '/favorites',
