@@ -43,6 +43,9 @@ const defaultOrigins = [
   'https://precocertooo.vercel.app', // Frontend Vercel
 ];
 
+// Debug: Verificar se CORS_ORIGIN está no .env
+logger.info(`🔍 DEBUG: CORS_ORIGIN do .env = "${process.env.CORS_ORIGIN || 'NÃO DEFINIDO'}"`);
+
 // Usar CORS_ORIGIN do .env se definido, senão usar defaults
 let allowedOrigins;
 if (process.env.CORS_ORIGIN) {
