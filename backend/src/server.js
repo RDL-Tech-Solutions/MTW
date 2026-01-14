@@ -39,6 +39,7 @@ const defaultOrigins = [
   'http://localhost:19006',
   'http://localhost:8081', // Expo Web
   'http://localhost:3000',
+  'https://precocertoadmin.netlify.app',
   'https://precocertooo.vercel.app', // Frontend Vercel
 ];
 
