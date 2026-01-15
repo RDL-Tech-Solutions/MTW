@@ -127,6 +127,10 @@ class NotificationDispatcher {
     const currentMinute = now.getMinutes();
     const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
 
+    // Log resumo dos dados para filtro
+    logger.info(`🔍 Filtrando ${channels.length} canais para eventType: ${eventType}`);
+    logger.info(`   Dados do item: category_id=${data.category_id || 'NÃO DEFINIDO'}, coupon_id=${data.coupon_id || 'N/A'}, offer_score=${data.offer_score || 'N/A'}, platform=${data.platform || 'N/A'}`);
+
     for (const channel of channels) {
       // 0. Filtro de content_filter (NOVO - CRÍTICO!)
       // Se o canal tem content_filter configurado, verificar se aceita o tipo de conteúdo
@@ -154,10 +158,19 @@ class NotificationDispatcher {
       }
 
       // 0.2. Filtro de no_coupons (NOVO)
-      // se o canal não aceita cupons, não enviar cupons
-      if (channel.no_coupons === true && (eventType === 'coupon_new' || eventType === 'coupon_expired')) {
-        logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando cupom`);
-        continue;
+      // se o canal não aceita cupons, não enviar cupons NEM produtos com cupons vinculados
+      if (channel.no_coupons === true) {
+        // Bloquear cupons standalone
+        if (eventType === 'coupon_new' || eventType === 'coupon_expired') {
+          logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando cupom`);
+          continue;
+        }
+
+        // NOVO: Bloquear produtos que têm cupom vinculado
+        if (eventType === 'promotion_new' && data.coupon_id) {
+          logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando produto com cupom vinculado (coupon_id: ${data.coupon_id})`);
+          continue;
+        }
       }
 
       // 1. Filtro de categoria (produtos E cupons)
@@ -176,6 +189,20 @@ class NotificationDispatcher {
             const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
             logger.debug(`   ✅ Canal ${channel.id} aceita categoria ${data.category_id} para ${itemType}`);
           }
+        } else {
+          // Canal não tem filtro de categoria, aceita todas
+          logger.debug(`   ℹ️ Canal ${channel.id} não tem filtro de categoria, aceitando item com categoria ${data.category_id}`);
+        }
+      } else {
+        // Item não tem categoria definida
+        if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
+          // Canal tem filtro de categoria, mas item não tem categoria - BLOQUEAR
+          const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
+          logger.debug(`   🚫 Canal ${channel.id} tem filtro de categoria (${channel.category_filter.join(', ')}), mas ${itemType} não tem categoria definida`);
+          continue;
+        } else {
+          // Canal não tem filtro de categoria e item não tem categoria - OK
+          logger.debug(`   ℹ️ Canal ${channel.id} não tem filtro de categoria e item não tem categoria - permitindo`);
         }
       }
 
@@ -214,6 +241,18 @@ class NotificationDispatcher {
         if (data.offer_score < minScore) {
           logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, produto tem ${data.offer_score}`);
           continue;
+        }
+      }
+
+      // 4.5. Filtro de score mínimo (se cupom com score)
+      // NOVO: Cupons também podem ter score de qualidade
+      if ((eventType === 'coupon_new' || eventType === 'coupon_expired') && data.offer_score !== undefined) {
+        const minScore = channel.min_offer_score || 0;
+        if (data.offer_score < minScore) {
+          logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, cupom tem ${data.offer_score}`);
+          continue;
+        } else {
+          logger.debug(`   ✅ Canal ${channel.id} aceita cupom com score ${data.offer_score} (mínimo: ${minScore})`);
         }
       }
 
