@@ -475,8 +475,9 @@ class PublishService {
         // E se não houver uma categoria manual explícita nas opções
         if (!options.skipAiCategory && !options.manualCategoryId) {
           product.category_id = editedProduct.ai_detected_category_id; // Usar categoria detectada
+          logger.info(`🤖 IA alterou categoria para: ${editedProduct.ai_detected_category_id}`);
         } else {
-          logger.info(`🛡️ Mantendo categoria manual: ${options.manualCategoryId || product.category_id} (ignorando sugestão IA: ${editedProduct.ai_detected_category_id})`);
+          logger.info(`🛡️ CATEGORIA MANUAL PROTEGIDA: ${options.manualCategoryId || product.category_id} (IA sugeriu: ${editedProduct.ai_detected_category_id}, mas foi IGNORADO)`);
 
           // Se tiver manualCategoryId explícito, garantir que está aplicado
           if (options.manualCategoryId) {

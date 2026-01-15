@@ -8,9 +8,10 @@ class SchedulerService {
     /**
      * Agendar publicação de um produto
      * @param {Object} product - Produto a ser agendado
+     * @param {Object} options - Opções de publicação (skipAiCategory, manualCategoryId, etc.)
      * @returns {Promise<void>}
      */
-    async scheduleProduct(product) {
+    async scheduleProduct(product, options = {}) {
         try {
             // 1. Tentar obter horário ótimo via IA
             let schedulingData = await schedulerAI.determineOptimalTime(product);
@@ -30,11 +31,20 @@ class SchedulerService {
                 scheduledTime.setTime(minTime.getTime());
             }
 
+            // NOVO: Preparar metadata com opções de categoria (se fornecidas)
+            const metadata = {};
+            if (options.skipAiCategory || options.manualCategoryId) {
+                metadata.skipAiCategory = options.skipAiCategory;
+                metadata.manualCategoryId = options.manualCategoryId;
+                logger.info(`📂 Agendamento com categoria manual protegida: ${options.manualCategoryId}`);
+            }
+
             // Criar agendamento para Telegram
             await ScheduledPost.create({
                 product_id: product.id,
                 platform: 'telegram',
-                scheduled_at: scheduledTime.toISOString()
+                scheduled_at: scheduledTime.toISOString(),
+                metadata: Object.keys(metadata).length > 0 ? metadata : null
             });
 
             // Criar agendamento para WhatsApp (+2~5 min de diferença para parecer natural)
@@ -44,7 +54,8 @@ class SchedulerService {
             await ScheduledPost.create({
                 product_id: product.id,
                 platform: 'whatsapp',
-                scheduled_at: whatsappTime.toISOString()
+                scheduled_at: whatsappTime.toISOString(),
+                metadata: Object.keys(metadata).length > 0 ? metadata : null
             });
 
             logger.info(`📅 Agendamento [${product.platform}]: ${product.name.substring(0, 30)}...`);
@@ -137,12 +148,20 @@ class SchedulerService {
                 return false;
             }
 
+            // NOVO: Recuperar opções de metadata (categoria manual, etc.)
+            const publishOptions = {};
+            if (post.metadata) {
+                if (post.metadata.skipAiCategory) publishOptions.skipAiCategory = post.metadata.skipAiCategory;
+                if (post.metadata.manualCategoryId) publishOptions.manualCategoryId = post.metadata.manualCategoryId;
+                logger.info(`📂 Publicando post agendado com categoria manual protegida: ${post.metadata.manualCategoryId}`);
+            }
+
             // Executar publicação
             let result = false;
             if (post.platform === 'telegram') {
-                result = await publishService.notifyTelegramBot(post.products);
+                result = await publishService.notifyTelegramBot(post.products, publishOptions);
             } else if (post.platform === 'whatsapp') {
-                result = await publishService.notifyWhatsAppBot(post.products);
+                result = await publishService.notifyWhatsAppBot(post.products, publishOptions);
             }
 
             // Atualizar status

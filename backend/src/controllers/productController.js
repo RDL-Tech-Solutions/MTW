@@ -41,12 +41,18 @@ class ProductController {
   // Criar produto (admin)
   static async create(req, res, next) {
     try {
-      const { schedule_mode } = req.body;
+      const { schedule_mode, category_id } = req.body;
 
       // Criar produto (status padrão é 'pending' no modelo)
       const product = await Product.create(req.body);
 
       logger.info(`Produto criado: ${product.id}`);
+
+      // NOVO: Detectar se categoria foi definida manualmente
+      const hasManualCategory = !!category_id;
+      if (hasManualCategory) {
+        logger.info(`📂 Categoria manual detectada: ${category_id} - IA não poderá alterar`);
+      }
 
       // Buscar dados completos do produto para publicação/agendamento
       const fullProduct = await Product.findById(product.id);
@@ -56,7 +62,12 @@ class ProductController {
         logger.info(`📅 Modo agendamento ativado para: ${product.name}`);
 
         const schedulerService = (await import('../services/autoSync/schedulerService.js')).default;
-        await schedulerService.scheduleProduct(fullProduct);
+
+        // NOVO: Passar categoria manual para o agendador
+        await schedulerService.scheduleProduct(fullProduct, {
+          skipAiCategory: hasManualCategory,
+          manualCategoryId: category_id
+        });
 
         // Atualizar status para 'approved' (aguardando publicação agendada)
         await Product.update(product.id, { status: 'approved' });
@@ -68,7 +79,12 @@ class ProductController {
       } else {
         // MODO NORMAL: Publicar imediatamente
         // IMPORTANTE: Passar manual: true para ignorar o agendador
-        const publishResult = await publishService.publishAll(fullProduct, { manual: true });
+        // NOVO: Passar skipAiCategory e manualCategoryId se categoria foi definida manualmente
+        const publishResult = await publishService.publishAll(fullProduct, {
+          manual: true,
+          skipAiCategory: hasManualCategory,
+          manualCategoryId: category_id
+        });
 
         // Atualizar status para 'published' após publicação bem-sucedida
         if (publishResult.success) {
