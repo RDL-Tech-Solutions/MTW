@@ -110,9 +110,17 @@ docs/
 
 ## 📝 Última Atualização
 
-**Data**: Dezembro 2024  
-**Versão**: 2.1.0  
+**Data**: Janeiro 2026  
+**Versão**: 2.2.0  
 **Status**: ✅ Documentação Completa
+
+### Novidades na Versão 2.2.0
+
+- ✅ **Guia Completo VPS**: Setup detalhado para deploy em VPS
+- ✅ **Correção Puppeteer**: Solução completa para problemas de web scraping
+- ✅ **Configuração de Captura**: Guia passo a passo para configurar captura de produtos e cupons
+- ✅ **Scripts de Diagnóstico**: Ferramentas automáticas para troubleshooting
+- ✅ **Otimizações VPS**: Configurações específicas para ambientes de produção
 
 ### Novidades na Versão 2.1.0
 
