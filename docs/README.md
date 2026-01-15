@@ -59,6 +59,9 @@ docs/
 - [Variáveis de Ambiente](./02-setup-installation/environment.md)
 - [Checklist de Setup](./02-setup-installation/checklist.md)
 - [Teste Rápido](./02-setup-installation/quick-test.md)
+- **[🚀 Setup Completo VPS](./VPS_SETUP_COMPLETO.md)** - **NOVO!**
+- **[🎯 Configuração de Captura](./CONFIGURACAO_CAPTURA.md)** - **NOVO!**
+- **[📋 Guia de Deploy](./DEPLOY_GUIDE.md)**
 
 ### 03. Módulos
 - [Backend API](./03-modules/backend/README.md)
@@ -90,6 +93,8 @@ docs/
 - [Erros de Conexão](./06-troubleshooting/connection-errors.md)
 - [Problemas de Autenticação](./06-troubleshooting/authentication.md)
 - [Problemas de Integração](./06-troubleshooting/integrations.md)
+- **[🔧 Correção Puppeteer VPS](./FIX_PUPPETEER_VPS.md)** - **NOVO!**
+- **[⚡ Solução Rápida Puppeteer](./QUICK_FIX_PUPPETEER.md)** - **NOVO!**
 
 ### 07. Architecture
 - [Arquitetura Geral](./07-architecture/README.md)
