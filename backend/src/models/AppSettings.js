@@ -138,6 +138,7 @@ class AppSettings {
         id: '00000000-0000-0000-0000-000000000001',
         amazon_marketplace: 'www.amazon.com.br',
         aliexpress_api_url: 'https://api-sg.aliexpress.com/rest',
+        aliexpress_product_origin: 'both',
         cleanup_schedule_hour: parseInt(process.env.CLEANUP_SCHEDULE_HOUR) || 3
       };
 

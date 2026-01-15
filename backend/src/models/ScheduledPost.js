@@ -16,7 +16,8 @@ class ScheduledPost {
                     platform: data.platform,
                     scheduled_at: data.scheduled_at,
                     status: 'pending',
-                    attempts: 0
+                    attempts: 0,
+                    metadata: data.metadata || null
                 }])
                 .select()
                 .single();
@@ -175,6 +176,118 @@ class ScheduledPost {
             return totalCount;
         } catch (error) {
             logger.error(`Erro ao deletar agendamentos pendentes em lote: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Marcar post como "processing" e registrar timestamp de início
+     * @param {string} id - ID do agendamento
+     * @returns {Promise<Object>}
+     */
+    static async markAsProcessing(id) {
+        try {
+            const { data, error } = await supabase
+                .from('scheduled_posts')
+                .update({
+                    status: 'processing',
+                    processing_started_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            logger.info(`🔄 Post ${id} marcado como "processing"`);
+            return data;
+        } catch (error) {
+            logger.error(`Erro ao marcar post ${id} como processing: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Buscar posts travados em "processing" há mais de X minutos
+     * @param {number} timeoutMinutes - Timeout em minutos (padrão: 5)
+     * @returns {Promise<Array>}
+     */
+    static async getStuckPosts(timeoutMinutes = 5) {
+        try {
+            const timeoutDate = new Date();
+            timeoutDate.setMinutes(timeoutDate.getMinutes() - timeoutMinutes);
+
+            const { data: posts, error } = await supabase
+                .from('scheduled_posts')
+                .select('*')
+                .eq('status', 'processing')
+                .lt('processing_started_at', timeoutDate.toISOString());
+
+            if (error) throw error;
+            return posts || [];
+        } catch (error) {
+            logger.error(`Erro ao buscar posts travados: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Liberar post travado, retornando para "pending" e incrementando tentativas
+     * @param {string} id - ID do agendamento
+     * @returns {Promise<Object>}
+     */
+    static async releaseStuckPost(id) {
+        try {
+            // Buscar post atual para pegar número de tentativas
+            const { data: currentPost, error: fetchError } = await supabase
+                .from('scheduled_posts')
+                .select('attempts')
+                .eq('id', id)
+                .single();
+
+            if (fetchError) throw fetchError;
+
+            const newAttempts = (currentPost.attempts || 0) + 1;
+            const maxAttempts = 3;
+
+            // Se já atingiu o máximo de tentativas, marcar como failed
+            if (newAttempts >= maxAttempts) {
+                const { data, error } = await supabase
+                    .from('scheduled_posts')
+                    .update({
+                        status: 'failed',
+                        error_message: `Timeout após ${maxAttempts} tentativas`,
+                        attempts: newAttempts,
+                        processing_started_at: null,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                logger.warn(`❌ Post ${id} marcado como "failed" após ${maxAttempts} tentativas`);
+                return data;
+            }
+
+            // Caso contrário, retornar para pending
+            const { data, error } = await supabase
+                .from('scheduled_posts')
+                .update({
+                    status: 'pending',
+                    attempts: newAttempts,
+                    processing_started_at: null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            logger.info(`🔓 Post ${id} liberado e retornado para "pending" (tentativa ${newAttempts}/${maxAttempts})`);
+            return data;
+        } catch (error) {
+            logger.error(`Erro ao liberar post travado ${id}: ${error.message}`);
             throw error;
         }
     }

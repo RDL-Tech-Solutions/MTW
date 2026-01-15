@@ -97,6 +97,18 @@ class AppSettingsController {
         });
       }
 
+      // Validar aliexpress_product_origin
+      if (updates.aliexpress_product_origin !== undefined) {
+        const validOrigins = ['brazil', 'international', 'both'];
+        if (!validOrigins.includes(updates.aliexpress_product_origin)) {
+          return res.status(400).json({
+            success: false,
+            message: `Origem de produto AliExpress inválida. Valores permitidos: ${validOrigins.join(', ')}`
+          });
+        }
+        logger.info(`✅ Configurando origem AliExpress: ${updates.aliexpress_product_origin}`);
+      }
+
       // Log dos campos que estão sendo atualizados (sem valores sensíveis)
       const logUpdates = { ...updates };
       if (logUpdates.meli_client_secret) logUpdates.meli_client_secret = '***';

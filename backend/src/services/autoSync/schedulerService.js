@@ -118,10 +118,34 @@ class SchedulerService {
     }
 
     /**
+     * Liberar posts travados em "processing" há mais de 5 minutos
+     * Chamado antes de processar a fila para recuperar posts que falharam silenciosamente
+     */
+    async releaseStuckPosts() {
+        try {
+            const stuckPosts = await ScheduledPost.getStuckPosts(5); // 5 minutos de timeout
+
+            if (stuckPosts.length === 0) return;
+
+            logger.warn(`⚠️ Encontrados ${stuckPosts.length} post(s) travado(s) em "processing"`);
+
+            for (const post of stuckPosts) {
+                await ScheduledPost.releaseStuckPost(post.id);
+            }
+        } catch (error) {
+            logger.error(`❌ Erro ao liberar posts travados: ${error.message}`);
+        }
+    }
+
+    /**
      * Processar fila de agendamentos pendentes (Cron Job)
      */
     async processScheduledQueue() {
         try {
+            // 1. Primeiro, liberar posts travados (timeout)
+            await this.releaseStuckPosts();
+
+            // 2. Buscar posts pendentes prontos para processar
             const posts = await ScheduledPost.getPendingPosts(10); // Processar 10 por vez
 
             if (posts.length === 0) return;
@@ -129,7 +153,19 @@ class SchedulerService {
             logger.info(`⏰ Processando ${posts.length} posts agendados...`);
 
             for (const post of posts) {
-                await this.processSinglePost(post);
+                // Marcar como "processing" antes de executar
+                try {
+                    await ScheduledPost.markAsProcessing(post.id);
+                    await this.processSinglePost(post);
+                } catch (error) {
+                    logger.error(`❌ Erro ao processar post ${post.id}: ${error.message}`);
+                    // Garantir que o post seja marcado como failed mesmo em caso de exceção
+                    await ScheduledPost.update(post.id, {
+                        status: 'failed',
+                        error_message: error.message,
+                        attempts: (post.attempts || 0) + 1
+                    });
+                }
             }
         } catch (error) {
             logger.error(`❌ Erro no processamento da fila de agendamento: ${error.message}`);
@@ -141,10 +177,21 @@ class SchedulerService {
      * @param {Object} post - Objeto do post agendado
      */
     async processSinglePost(post) {
+        const startTime = new Date();
+        const maxRetries = 3;
+        const currentAttempt = (post.attempts || 0) + 1;
+
         try {
+            logger.info(`📤 [${startTime.toISOString()}] Processando post ${post.id} (tentativa ${currentAttempt}/${maxRetries})`);
+            logger.info(`   Platform: ${post.platform}, Product: ${post.product_id}`);
+
             if (!post.products) {
                 logger.warn(`⚠️ Produto não encontrado para agendamento ${post.id}. Marcando como falha.`);
-                await ScheduledPost.update(post.id, { status: 'failed', error_message: 'Product not found' });
+                await ScheduledPost.update(post.id, {
+                    status: 'failed',
+                    error_message: 'Product not found',
+                    attempts: currentAttempt
+                });
                 return false;
             }
 
@@ -156,35 +203,92 @@ class SchedulerService {
                 logger.info(`📂 Publicando post agendado com categoria manual protegida: ${post.metadata.manualCategoryId}`);
             }
 
-            // Executar publicação
+            // Executar publicação com retry logic
             let result = false;
-            if (post.platform === 'telegram') {
-                result = await publishService.notifyTelegramBot(post.products, publishOptions);
-            } else if (post.platform === 'whatsapp') {
-                result = await publishService.notifyWhatsAppBot(post.products, publishOptions);
+            let lastError = null;
+
+            // Tentar publicar (com delay se for retry)
+            if (currentAttempt > 1) {
+                const delayMs = Math.pow(2, currentAttempt - 1) * 1000; // Backoff exponencial: 2s, 4s, 8s
+                logger.info(`⏳ Aguardando ${delayMs}ms antes de tentar novamente...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
             }
 
-            // Atualizar status
+            try {
+                if (post.platform === 'telegram') {
+                    result = await publishService.notifyTelegramBot(post.products, publishOptions);
+                } else if (post.platform === 'whatsapp') {
+                    result = await publishService.notifyWhatsAppBot(post.products, publishOptions);
+                }
+            } catch (publishError) {
+                lastError = publishError;
+                logger.error(`❌ Erro ao publicar: ${publishError.message}`);
+                logger.error(`   Stack: ${publishError.stack}`);
+            }
+
+            const endTime = new Date();
+            const duration = endTime - startTime;
+
+            // Atualizar status baseado no resultado
             if (result) {
-                await ScheduledPost.update(post.id, { status: 'published' });
-                logger.info(`✅ Post agendado executado: ${post.platform} - ${post.products.name}`);
+                await ScheduledPost.update(post.id, {
+                    status: 'published',
+                    attempts: currentAttempt,
+                    processing_started_at: null
+                });
+                logger.info(`✅ [${endTime.toISOString()}] Post agendado executado com sucesso: ${post.platform} - ${post.products.name} (${duration}ms)`);
                 return true;
             } else {
-                await ScheduledPost.update(post.id, {
-                    status: 'failed',
-                    error_message: 'Falha no envio do bot',
-                    attempts: (post.attempts || 0) + 1
-                });
-                return false;
+                // Falhou - verificar se deve tentar novamente
+                if (currentAttempt >= maxRetries) {
+                    // Atingiu o máximo de tentativas
+                    await ScheduledPost.update(post.id, {
+                        status: 'failed',
+                        error_message: lastError ? lastError.message : 'Falha no envio do bot após múltiplas tentativas',
+                        attempts: currentAttempt,
+                        processing_started_at: null
+                    });
+                    logger.error(`❌ [${endTime.toISOString()}] Post ${post.id} falhou após ${maxRetries} tentativas (${duration}ms)`);
+                    return false;
+                } else {
+                    // Ainda há tentativas restantes - retornar para pending
+                    await ScheduledPost.update(post.id, {
+                        status: 'pending',
+                        error_message: lastError ? lastError.message : 'Falha no envio do bot',
+                        attempts: currentAttempt,
+                        processing_started_at: null
+                    });
+                    logger.warn(`⚠️ [${endTime.toISOString()}] Post ${post.id} falhou (tentativa ${currentAttempt}/${maxRetries}). Será tentado novamente. (${duration}ms)`);
+                    return false;
+                }
             }
 
         } catch (postError) {
-            logger.error(`❌ Erro ao processar agendamento ${post.id}: ${postError.message}`);
-            await ScheduledPost.update(post.id, {
-                status: 'failed',
-                error_message: postError.message,
-                attempts: (post.attempts || 0) + 1
-            });
+            const endTime = new Date();
+            const duration = endTime - startTime;
+
+            logger.error(`❌ [${endTime.toISOString()}] Erro crítico ao processar agendamento ${post.id}: ${postError.message} (${duration}ms)`);
+            logger.error(`   Stack: ${postError.stack}`);
+
+            // Verificar se deve tentar novamente
+            if (currentAttempt >= maxRetries) {
+                await ScheduledPost.update(post.id, {
+                    status: 'failed',
+                    error_message: postError.message,
+                    attempts: currentAttempt,
+                    processing_started_at: null
+                });
+                logger.error(`❌ Post ${post.id} marcado como "failed" após ${maxRetries} tentativas`);
+            } else {
+                await ScheduledPost.update(post.id, {
+                    status: 'pending',
+                    error_message: postError.message,
+                    attempts: currentAttempt,
+                    processing_started_at: null
+                });
+                logger.warn(`⚠️ Post ${post.id} retornado para "pending" para nova tentativa (${currentAttempt}/${maxRetries})`);
+            }
+
             return false;
         }
     }
