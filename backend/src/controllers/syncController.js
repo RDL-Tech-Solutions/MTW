@@ -341,17 +341,31 @@ class SyncController {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
       // 1. Determinar keywords (Manual vs AI)
-      let searchKeywords = config.keywords;
+      let searchKeywords = config.keywords || '';
+
       if (config.use_ai_keywords) {
+        logger.info('🤖 IA Advanced habilitada - buscando keywords com TrendHunter...');
         const aiKeywords = await trendHunter.generateTrendingKeywords('mercadolivre');
         if (aiKeywords) {
           searchKeywords = aiKeywords;
+          logger.info(`✅ Usando keywords da IA: ${searchKeywords}`);
         } else {
-          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+          logger.warn('⚠️ TrendHunter falhou ou IA desabilitada, usando keywords manuais como fallback.');
+          searchKeywords = config.keywords || '';
         }
+      } else {
+        logger.info('📝 IA Advanced desabilitada - usando keywords manuais');
       }
+
+      // Validar que temos keywords para buscar
+      if (!searchKeywords || searchKeywords.trim() === '') {
+        throw new Error('Nenhuma keyword definida para busca. Configure keywords manuais em Auto-Sync ou habilite IA Advanced.');
+      }
+
+      logger.info(`🔍 Keywords finais para busca: ${searchKeywords}`);
+
+      // 2. Buscar produtos
 
       // 2. Buscar produtos
       const products = await meliSync.fetchMeliProducts(searchKeywords, 50);
@@ -494,17 +508,31 @@ class SyncController {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
       // 1. Determinar keywords (Manual vs AI)
-      let searchKeywords = config.keywords;
+      let searchKeywords = config.keywords || '';
+
       if (config.use_ai_keywords) {
+        logger.info('🤖 IA Advanced habilitada - buscando keywords com TrendHunter...');
         const aiKeywords = await trendHunter.generateTrendingKeywords('amazon');
         if (aiKeywords) {
           searchKeywords = aiKeywords;
+          logger.info(`✅ Usando keywords da IA: ${searchKeywords}`);
         } else {
-          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+          logger.warn('⚠️ TrendHunter falhou ou IA desabilitada, usando keywords manuais como fallback.');
+          searchKeywords = config.keywords || '';
         }
+      } else {
+        logger.info('📝 IA Advanced desabilitada - usando keywords manuais');
       }
+
+      // Validar que temos keywords para buscar
+      if (!searchKeywords || searchKeywords.trim() === '') {
+        throw new Error('Nenhuma keyword definida para busca. Configure keywords manuais em Auto-Sync ou habilite IA Advanced.');
+      }
+
+      logger.info(`🔍 Keywords finais para busca: ${searchKeywords}`);
+
+      // 2. Buscar produtos
 
       // 2. Buscar produtos
       const products = await amazonSync.fetchAmazonProducts(searchKeywords, 50);
@@ -632,17 +660,31 @@ class SyncController {
 
       logger.info(`🌍 Origem de produtos AliExpress: ${productOrigin}`);
 
-      // 1. Buscar produtos com origem especificada
       // 0. Determinar keywords (Manual vs AI)
-      let searchKeywords = config.keywords;
+      let searchKeywords = config.keywords || '';
+
       if (config.use_ai_keywords) {
+        logger.info('🤖 IA Advanced habilitada - buscando keywords com TrendHunter...');
         const aiKeywords = await trendHunter.generateTrendingKeywords('aliexpress');
         if (aiKeywords) {
           searchKeywords = aiKeywords;
+          logger.info(`✅ Usando keywords da IA: ${searchKeywords}`);
         } else {
-          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+          logger.warn('⚠️ TrendHunter falhou ou IA desabilitada, usando keywords manuais como fallback.');
+          searchKeywords = config.keywords || '';
         }
+      } else {
+        logger.info('📝 IA Advanced desabilitada - usando keywords manuais');
       }
+
+      // Validar que temos keywords para buscar
+      if (!searchKeywords || searchKeywords.trim() === '') {
+        throw new Error('Nenhuma keyword definida para busca. Configure keywords manuais em Auto-Sync ou habilite IA Advanced.');
+      }
+
+      logger.info(`🔍 Keywords finais para busca: ${searchKeywords}`);
+
+      // 1. Buscar produtos com origem especificada
 
       // 1. Buscar produtos com origem especificada
       const products = await aliExpressSync.fetchAliExpressProducts(searchKeywords, 50, productOrigin);
@@ -760,17 +802,31 @@ class SyncController {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
-      // 1. Buscar produtos
       // 1. Determinar keywords (Manual vs AI)
-      let searchKeywords = config.keywords;
+      let searchKeywords = config.keywords || '';
+
       if (config.use_ai_keywords) {
+        logger.info('🤖 IA Advanced habilitada - buscando keywords com TrendHunter...');
         const aiKeywords = await trendHunter.generateTrendingKeywords('shopee');
         if (aiKeywords) {
           searchKeywords = aiKeywords;
+          logger.info(`✅ Usando keywords da IA: ${searchKeywords}`);
         } else {
-          logger.warn('⚠️ Falha ao obter keywords da IA, usando manuais como fallback.');
+          logger.warn('⚠️ TrendHunter falhou ou IA desabilitada, usando keywords manuais como fallback.');
+          searchKeywords = config.keywords || '';
         }
+      } else {
+        logger.info('📝 IA Advanced desabilitada - usando keywords manuais');
       }
+
+      // Validar que temos keywords para buscar
+      if (!searchKeywords || searchKeywords.trim() === '') {
+        throw new Error('Nenhuma keyword definida para busca. Configure keywords manuais em Auto-Sync ou habilite IA Advanced.');
+      }
+
+      logger.info(`🔍 Keywords finais para busca: ${searchKeywords}`);
+
+      // 2. Buscar produtos
 
       // 2. Buscar produtos
       const products = await shopeeSync.fetchShopeeProducts(searchKeywords, 50);

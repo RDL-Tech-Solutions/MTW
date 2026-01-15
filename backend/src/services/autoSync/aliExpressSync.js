@@ -128,6 +128,61 @@ class AliExpressSync {
   }
 
   /**
+   * Validar se produto realmente é do Brasil (tem envio/estoque BR)
+   * @param {Object} item - Item bruto da API
+   * @param {Object} product - Produto parseado
+   * @returns {boolean} true se produto é do Brasil
+   */
+  validateBrazilOrigin(item, product) {
+    try {
+      // Verificar flags da API que indicam envio do Brasil
+      // A API AliExpress pode retornar campos como:
+      // - ship_from_country: 'BR'
+      // - warehouse_country: 'BR'
+      // - local_delivery: true
+      // - is_brazil_stock: true
+
+      // Método 1: Verificar ship_from_country
+      if (item.ship_from_country === 'BR' || item.ship_from_country === 'Brazil') {
+        logger.debug(`      ✅ Produto confirmado BR (ship_from_country: ${item.ship_from_country})`);
+        return true;
+      }
+
+      // Método 2: Verificar warehouse_country
+      if (item.warehouse_country === 'BR' || item.warehouse_country === 'Brazil') {
+        logger.debug(`      ✅ Produto confirmado BR (warehouse_country: ${item.warehouse_country})`);
+        return true;
+      }
+
+      // Método 3: Verificar local_delivery ou is_brazil_stock
+      if (item.local_delivery === true || item.is_brazil_stock === true) {
+        logger.debug(`      ✅ Produto confirmado BR (local_delivery/brazil_stock)`);
+        return true;
+      }
+
+      // Método 4: Verificar se foi buscado com ship_to_country BR e origin está marcado como brasil
+      if (product.origin === 'brasil') {
+        logger.debug(`      ✅ Produto confirmado BR (origin flag)`);
+        return true;
+      }
+
+      // Se nenhum método confirmou, considerar como internacional
+      logger.debug(`      ❌ Produto não confirmado como BR`);
+      logger.debug(`         ship_from_country: ${item.ship_from_country || 'N/A'}`);
+      logger.debug(`         warehouse_country: ${item.warehouse_country || 'N/A'}`);
+      logger.debug(`         local_delivery: ${item.local_delivery || 'N/A'}`);
+      logger.debug(`         origin: ${product.origin || 'N/A'}`);
+
+      return false;
+
+    } catch (error) {
+      logger.warn(`   ⚠️ Erro ao validar origem Brasil: ${error.message}`);
+      // Em caso de erro, ser conservador e rejeitar
+      return false;
+    }
+  }
+
+  /**
    * Buscar produtos do AliExpress baseado em palavras-chave
    */
   async fetchAliExpressProducts(keywords, limit = 50, productOrigin = 'both') {
@@ -228,6 +283,22 @@ class AliExpressSync {
                   if (product && product.price > 0) {
                     // Adicionar flag de origem ao produto
                     product.origin = search.label.toLowerCase();
+
+                    // VALIDAÇÃO BLOQUEANTE: Se filtro é "brazil", descartar produtos internacionais
+                    if (productOrigin === 'brazil' && search.label.toLowerCase() !== 'brasil') {
+                      logger.debug(`   ⚠️ Produto descartado (não é do Brasil): ${product.title?.substring(0, 50)}`);
+                      continue;
+                    }
+
+                    // Validação adicional: verificar se produto realmente tem envio BR quando filtro Brasil está ativo
+                    if (productOrigin === 'brazil') {
+                      const isBrazilProduct = this.validateBrazilOrigin(item, product);
+                      if (!isBrazilProduct) {
+                        logger.debug(`   ⚠️ Produto descartado (sem envio BR confirmado): ${product.title?.substring(0, 50)}`);
+                        continue;
+                      }
+                    }
+
                     allProducts.push(product);
                   } else {
                     logger.debug(`   ⚠️ Produto ignorado (sem preço válido): ${item.product_id || item.productId || 'N/A'}`);
@@ -260,7 +331,8 @@ class AliExpressSync {
         logger.warn(`   2. As palavras-chave estão corretas`);
         logger.warn(`   3. A API está retornando dados (verifique logs anteriores)`);
       } else {
-        logger.info(`✅ Total de ${allProducts.length} produtos AliExpress processados`);
+        const filterMsg = productOrigin === 'brazil' ? ' (filtrados para Brasil apenas)' : '';
+        logger.info(`✅ Total de ${allProducts.length} produtos AliExpress processados${filterMsg}`);
       }
 
       return allProducts;

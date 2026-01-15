@@ -35,8 +35,9 @@ class BrowserPool {
             headless: this.isVPSMode ? 'new' : true,
             ignoreDefaultArgs: ['--enable-automation'],
             ignoreHTTPSErrors: true,
-            timeout: parseInt(process.env.BROWSER_TIMEOUT) || 30000,
-            protocolTimeout: parseInt(process.env.BROWSER_TIMEOUT) || 30000,
+            // Aumentar timeouts para VPS (Cloudflare pode levar até 30s)
+            timeout: this.isVPSMode ? 60000 : 30000,
+            protocolTimeout: this.isVPSMode ? 60000 : 30000,
         };
 
         // Configuração otimizada para VPS (menos recursos)

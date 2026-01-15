@@ -37,12 +37,13 @@ class TerabyteSync {
                 try {
                     logger.info(`   📄 Analisando página com Puppeteer: ${pageUrl}`);
 
-                    // Usar método com espera por seletor (bypass Cloudflare)
-                    const links = await browserScraper.extractProductLinksWithWait(
+                    // Usar método com retry automático, bypass Cloudflare e validação
+                    const links = await browserScraper.extractProductLinksWithRetry(
                         pageUrl,
                         selectors,
                         '.pbox',  // Aguardar este elemento aparecer
-                        20000     // Timeout de 20s para Cloudflare
+                        3,        // 3 tentativas
+                        30000     // Timeout de 30s para Cloudflare
                     );
 
                     // Adicionar links únicos

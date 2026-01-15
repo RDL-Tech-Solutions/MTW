@@ -176,6 +176,130 @@ class BrowserScraper {
     }
 
     /**
+     * Extrair links com retry automático e validação robusta
+     * @param {string} url - URL da página
+     * @param {Array} selectors - Array de seletores CSS
+     * @param {string} waitForSelector - Seletor para aguardar aparecer
+     * @param {number} maxRetries - Número máximo de tentativas
+     * @param {number} timeout - Timeout máximo por tentativa (ms)
+     * @returns {Promise<string[]>} Array de URLs de produtos
+     */
+    async extractProductLinksWithRetry(url, selectors = [], waitForSelector = '.pbox', maxRetries = 3, timeout = 30000) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                logger.info(`   🔄 Tentativa ${attempt}/${maxRetries}: ${url}`);
+
+                const links = await this.pool.withPage(async (page) => {
+                    try {
+                        // Navegar para a página
+                        logger.info(`   🌐 Navegando para: ${url}`);
+                        await page.goto(url, {
+                            waitUntil: 'networkidle2',
+                            timeout: timeout
+                        });
+
+                        // Detectar Cloudflare
+                        const isCloudflare = await page.evaluate(() => {
+                            return document.title.includes('Just a moment') ||
+                                document.body.textContent.includes('Checking your browser') ||
+                                document.body.textContent.includes('Cloudflare');
+                        });
+
+                        if (isCloudflare) {
+                            logger.warn(`   ☁️ Cloudflare detectado! Aguardando bypass automático...`);
+                            // Aguardar até 30s para Cloudflare fazer bypass
+                            await page.waitForSelector(waitForSelector, { timeout: 30000 }).catch(() => {
+                                logger.warn(`   ⚠️ Timeout aguardando bypass Cloudflare`);
+                            });
+                        }
+
+                        // Aguardar seletor específico aparecer
+                        try {
+                            logger.info(`   ⏳ Aguardando elementos carregar (${waitForSelector})...`);
+                            await page.waitForSelector(waitForSelector, { timeout: timeout });
+                            logger.info(`   ✅ Elementos carregados!`);
+                        } catch (waitError) {
+                            logger.warn(`   ⚠️ Timeout aguardando ${waitForSelector}: ${waitError.message}`);
+                            // Continua mesmo se timeout (pode ter carregado parcialmente)
+                        }
+
+                        // Scroll para carregar lazy loading
+                        logger.debug(`   📜 Fazendo scroll para carregar lazy loading...`);
+                        await page.evaluate(() => {
+                            window.scrollBy(0, window.innerHeight * 2);
+                        });
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+
+                        // Scroll adicional
+                        await page.evaluate(() => {
+                            window.scrollBy(0, window.innerHeight);
+                        });
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+
+                        // Verificar se DOM está realmente carregado
+                        const domReady = await page.evaluate(() => {
+                            return document.readyState === 'complete';
+                        });
+
+                        if (!domReady) {
+                            logger.warn(`   ⚠️ DOM não está completamente carregado (readyState: ${await page.evaluate(() => document.readyState)})`);
+                        }
+
+                        // Tentar cada seletor
+                        let productLinks = [];
+                        for (const selector of selectors) {
+                            productLinks = await page.evaluate((sel) => {
+                                const links = Array.from(document.querySelectorAll(sel));
+                                return links
+                                    .map(link => link.href)
+                                    .filter(href => href && href.includes('/produto/'));
+                            }, selector);
+
+                            if (productLinks.length > 0) {
+                                logger.info(`   ✅ Seletor '${selector}' funcionou! ${productLinks.length} links encontrados`);
+                                break;
+                            } else {
+                                logger.debug(`   ⚠️ Seletor '${selector}' não encontrou produtos`);
+                            }
+                        }
+
+                        return productLinks;
+
+                    } catch (error) {
+                        logger.error(`   ❌ Erro ao extrair links: ${error.message}`);
+                        throw error;
+                    }
+                });
+
+                // VALIDAÇÃO: Verificar se dados foram capturados
+                if (!links || links.length === 0) {
+                    throw new Error('Nenhum produto capturado - DOM pode não ter carregado completamente');
+                }
+
+                logger.info(`   ✅ Sucesso! ${links.length} produtos capturados na tentativa ${attempt}`);
+                return links;
+
+            } catch (error) {
+                logger.warn(`   ⚠️ Tentativa ${attempt}/${maxRetries} falhou: ${error.message}`);
+
+                if (attempt < maxRetries) {
+                    // Exponential backoff: 2s, 4s, 8s...
+                    const delay = Math.pow(2, attempt) * 1000;
+                    logger.info(`   ⏳ Aguardando ${delay}ms antes de tentar novamente...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } else {
+                    logger.error(`   ❌ Todas as ${maxRetries} tentativas falharam para ${url}`);
+                    logger.error(`   Último erro: ${error.message}`);
+                    throw error;
+                }
+            }
+        }
+
+        // Fallback (não deve chegar aqui)
+        return [];
+    }
+
+    /**
      * Extrair informações completas de produto Kabum usando Puppeteer
      * @param {string} url - URL do produto
      * @returns {Promise<Object>} Informações do produto

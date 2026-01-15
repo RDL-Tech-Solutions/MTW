@@ -15,7 +15,7 @@ class TrendHunter {
             const aiConfig = await openrouterClient.getConfig();
             if (!aiConfig.enabled || !aiConfig.apiKey) {
                 logger.warn('⚠️ IA não habilitada. TrendHunter indisponível.');
-                return '';
+                return null; // Retorna null para indicar que IA não está disponível
             }
 
             // Ajustar contexto por plataforma
@@ -74,7 +74,7 @@ Retorne APENAS o JSON:
 
         } catch (error) {
             logger.error(`❌ Erro no TrendHunter: ${error.message}`);
-            return '';
+            return null; // Retorna null para indicar falha
         }
     }
 }

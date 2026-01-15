@@ -37,11 +37,13 @@ class KabumSync {
                 try {
                     logger.info(`   📄 Analisando página com Puppeteer: ${pageUrl}`);
 
-                    // Usar Puppeteer para extrair links (executa JavaScript)
-                    const links = await browserScraper.extractProductLinksMultiSelector(
+                    // Usar Puppeteer com retry automático e validação robusta
+                    const links = await browserScraper.extractProductLinksWithRetry(
                         pageUrl,
                         selectors,
-                        3000 // 3 segundos de espera para renderizar
+                        '.pbox', // Seletor para aguardar
+                        3, // 3 tentativas
+                        30000 // 30s timeout
                     );
 
                     // Adicionar links únicos
