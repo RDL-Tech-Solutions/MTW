@@ -1,5 +1,6 @@
 /**
  * Serviço de listener Telegram usando gramjs (Node.js)
+ * Otimizado para VPS com queue de mensagens e gerenciamento de recursos
  */
 import logger from '../../config/logger.js';
 import TelegramCollectorConfig from '../../models/TelegramCollectorConfig.js';
@@ -11,6 +12,7 @@ import crypto from 'crypto';
 import couponNotificationService from '../coupons/couponNotificationService.js';
 import CouponSettings from '../../models/CouponSettings.js';
 import couponAnalyzer from '../../ai/couponAnalyzer.js';
+import MessageQueue from '../../utils/messageQueue.js';
 
 class TelegramListenerService {
   constructor() {
@@ -29,6 +31,15 @@ class TelegramListenerService {
     this.listenerStartTime = null; // Timestamp de quando o listener foi iniciado
     this.schedulerInterval = null; // Intervalo do agendador automático
     this.isPausedByCycle = false; // Flag para indicar se está em pausa pelo ciclo de trabalho
+
+    // VPS Optimization: Message queue para processar mensagens de forma controlada
+    const maxConcurrent = parseInt(process.env.TELEGRAM_QUEUE_CONCURRENCY) || 5;
+    this.messageQueue = new MessageQueue(maxConcurrent);
+
+    // VPS Optimization: Healthcheck interval
+    this.healthCheckInterval = null;
+    this.healthCheckIntervalMs = 60000; // 1 minuto
+    this.lastHealthCheck = null;
   }
 
   /**
@@ -261,6 +272,22 @@ class TelegramListenerService {
       // Notificar bots e app apenas se não estiver pendente de aprovação
       if (coupon && !coupon.is_pending_approval) {
         try {
+          // IMPORTANTE: Verificar se já existe cupom publicado com o mesmo código
+          // Isso evita que o mesmo cupom seja enviado múltiplas vezes aos bots
+          const hasPublished = await Coupon.hasPublishedCouponWithCode(coupon.code, coupon.id);
+
+          if (hasPublished) {
+            logger.warn(`⚠️ ========== CUPOM JÁ PUBLICADO - NOTIFICAÇÃO BLOQUEADA ==========`);
+            logger.warn(`   Código: ${coupon.code}`);
+            logger.warn(`   ID atual: ${coupon.id}`);
+            logger.warn(`   Plataforma: ${coupon.platform}`);
+            logger.warn(`   Já existe cupom ativo e publicado com este código`);
+            logger.warn(`   Notificação NÃO será enviada para evitar duplicação nos bots`);
+            logger.warn(`   Cupom foi salvo no banco para estatísticas mas não será notificado`);
+            logger.info(`💾 Cupom ${coupon.code} salvo mas não notificado (já publicado anteriormente)`);
+            return coupon; // Retornar sem notificar
+          }
+
           // Verificar configuração de notificação
           const CouponSettings = (await import('../../models/CouponSettings.js')).default;
           const couponSettings = await CouponSettings.get();

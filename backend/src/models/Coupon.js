@@ -168,6 +168,36 @@ class Coupon {
     return data || [];
   }
 
+  /**
+   * Verificar se existe cupom publicado com o mesmo código
+   * Usado para evitar duplicação de notificações
+   * @param {string} code - Código do cupom
+   * @param {string} excludeId - ID do cupom a excluir da busca (opcional)
+   * @returns {Promise<boolean>}
+   */
+  static async hasPublishedCouponWithCode(code, excludeId = null) {
+    try {
+      let query = supabase
+        .from('coupons')
+        .select('id, code, is_active, is_pending_approval, created_at')
+        .eq('code', code.toUpperCase())
+        .eq('is_pending_approval', false) // Apenas cupons já aprovados
+        .eq('is_active', true); // Apenas cupons ativos
+
+      if (excludeId) {
+        query = query.neq('id', excludeId);
+      }
+
+      const { data, error } = await query.limit(1);
+
+      if (error) throw error;
+      return data && data.length > 0;
+    } catch (error) {
+      logger.error(`Erro ao verificar cupom publicado: ${error.message}`);
+      return false; // Em caso de erro, não bloquear (fail-safe)
+    }
+  }
+
   // Buscar cupom por message_hash (anti-duplicação)
   static async findByMessageHash(messageHash) {
     const { data, error } = await supabase

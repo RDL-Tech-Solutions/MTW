@@ -93,6 +93,31 @@ ${coupon.affiliate_link || 'Link não disponível'}
       logger.info(`   Plataforma: ${coupon.platform}`);
       logger.info(`   ID: ${coupon.id}`);
 
+      // IMPORTANTE: Verificar se já existe cupom publicado com o mesmo código
+      // (a menos que seja publicação manual via options.manual)
+      if (!options.manual) {
+        const Coupon = (await import('../../models/Coupon.js')).default;
+        const hasPublished = await Coupon.hasPublishedCouponWithCode(coupon.code, coupon.id);
+
+        if (hasPublished) {
+          logger.warn(`⚠️ ========== CUPOM JÁ PUBLICADO - NOTIFICAÇÃO BLOQUEADA ==========`);
+          logger.warn(`   Código: ${coupon.code}`);
+          logger.warn(`   ID: ${coupon.id}`);
+          logger.warn(`   Plataforma: ${coupon.platform}`);
+          logger.warn(`   Já existe cupom ativo e publicado com este código`);
+          logger.warn(`   Notificação cancelada para evitar duplicação nos bots`);
+
+          return {
+            success: false,
+            message: 'Cupom já publicado anteriormente',
+            code: coupon.code,
+            duplicate: true
+          };
+        }
+      } else {
+        logger.info(`   📝 Publicação MANUAL - verificação de duplicação ignorada`);
+      }
+
       // Preparar variáveis do template
       logger.debug(`   Preparando variáveis do template...`);
       const variables = templateRenderer.prepareCouponVariables(coupon);

@@ -228,10 +228,24 @@ class NotificationDispatcher {
    */
   async checkDuplicateSend(channelId, eventType, data, bypassDuplicates = false) {
     if (bypassDuplicates) return false;
+
     try {
       const entityId = data.id || data.product_id || data.coupon_id;
       if (!entityId) return false;
 
+      // NOVO: Para cupons, verificar também por código (defesa em profundidade)
+      // Isso evita que cupons com o mesmo código sejam enviados múltiplas vezes
+      if (eventType === 'coupon_new' && data.code) {
+        const Coupon = (await import('../../models/Coupon.js')).default;
+        const hasPublished = await Coupon.hasPublishedCouponWithCode(data.code, entityId);
+
+        if (hasPublished) {
+          logger.debug(`   🚫 Cupom com código ${data.code} já foi publicado anteriormente`);
+          return true; // Bloquear envio
+        }
+      }
+
+      // Verificação original por ID e tempo
       const BotSendLog = (await import('../../models/BotSendLog.js')).default;
       const channel = await BotChannel.findById(channelId);
 
