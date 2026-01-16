@@ -152,6 +152,7 @@ class PublishService {
           // IMPORTANTE: Usar imagem do produto diretamente (como estava antes)
           // A combinação com logo da plataforma pode ser feita opcionalmente no futuro
           logger.info(`📤 Enviando imagem do produto para Telegram: ${product.image_url.substring(0, 100)}...`);
+          logger.info(`   Publicação manual: ${!!options.manual} (bypassDuplicates: ${!!options.manual})`);
           const result = await notificationDispatcher.sendToTelegramWithImage(
             message,
             product.image_url,
@@ -212,6 +213,7 @@ class PublishService {
       if (hasValidImage) {
         try {
           logger.info(`📤 Enviando imagem para WhatsApp: ${product.image_url.substring(0, 80)}...`);
+          logger.info(`   Publicação manual: ${!!options.manual} (bypassDuplicates: ${!!options.manual})`);
           const result = await notificationDispatcher.sendToWhatsAppWithImage(
             message,
             product.image_url,

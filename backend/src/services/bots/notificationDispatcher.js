@@ -266,7 +266,10 @@ class NotificationDispatcher {
    * Verificar se já foi enviado recentemente (evitar duplicação)
    */
   async checkDuplicateSend(channelId, eventType, data, bypassDuplicates = false) {
-    if (bypassDuplicates) return false;
+    if (bypassDuplicates) {
+      logger.info(`✅ Bypass de duplicação ativo (publicação manual) - canal ${channelId}`);
+      return false;
+    }
 
     try {
       const entityId = data.id || data.product_id || data.coupon_id;
@@ -551,6 +554,7 @@ class NotificationDispatcher {
 
       for (const channel of channels) {
         // Verificar duplicação antes de enviar
+        logger.debug(`   🔍 Verificando duplicação para canal ${channel.id} (bypassDuplicates: ${options.bypassDuplicates || false})`);
         const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
         if (isDuplicate) {
           logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
@@ -691,6 +695,7 @@ class NotificationDispatcher {
 
       for (const channel of channels) {
         // Verificar duplicação antes de enviar
+        logger.debug(`   🔍 Verificando duplicação para canal ${channel.id} (bypassDuplicates: ${options.bypassDuplicates || false})`);
         const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id }, options.bypassDuplicates);
         if (isDuplicate) {
           logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
