@@ -966,16 +966,6 @@ class TemplateRenderer {
             }
           }
 
-          // ✅ LIMPEZA FINAL CORRETA
-// Preserva quebras de linha e espaçamento do template
-// Apenas normaliza excesso e espaços inúteis
-
-message = message
-  .replace(/\r\n/g, '\n')     // Windows → Unix
-  .replace(/\n{3,}/g, '\n\n') // Máximo 2 linhas em branco
-  .replace(/[ \t]+$/gm, '')   // Remove espaços no fim das linhas
-  .replace(/^\n+|\n+$/g, ''); // Remove linhas vazias só no início/fim
-
           // Verificação final de Markdown pendente
           const hasMarkdownFinal = message.includes('**') || /`[^`]+`/.test(message);
           if (hasMarkdownFinal) {
@@ -989,6 +979,46 @@ message = message
         }
       }
 
+      // IMPORTANTE: Preservar quebras de linha do template original
+      // Não remover quebras de linha, apenas limpar linhas completamente vazias
+      const lines = message.split('\n');
+      const cleanedLines = lines.map((line, index) => {
+        const trimmed = line.trim();
+
+        // Se a linha está completamente vazia, manter apenas se não for a primeira ou última
+        // Isso preserva quebras de linha intencionais no template
+        if (!trimmed) {
+          // Manter quebra de linha vazia se não for no início ou fim
+          return (index > 0 && index < lines.length - 1) ? '' : null;
+        }
+
+        // Se a linha contém apenas tags HTML vazias ou espaços, remover
+        if (trimmed.match(/^[\s<>\/]*$/)) {
+          return null;
+        }
+
+        // Se a linha contém apenas tags HTML sem conteúdo (ex: <b></b>, <code></code>)
+        if (trimmed.match(/^<[^>]+><\/[^>]+>$/)) {
+          return null;
+        }
+
+        // Remover conteúdo HTML para verificar se há texto real
+        const withoutHtml = trimmed.replace(/<[^>]+>/g, '').trim();
+
+        // Se após remover HTML não há conteúdo, remover linha
+        if (!withoutHtml || withoutHtml.match(/^[\s\p{Emoji}:]*$/u)) {
+          return null;
+        }
+
+        // NÃO remover linhas que contêm labels ou valores (mesmo que sozinhos na linha)
+        // O filtro anterior estava removendo <b>CÓDIGO:</b> e <code>ABC</code> por engano
+
+        // Preservar a linha original (com espaços se necessário)
+        return line;
+      }).filter(line => line !== null);
+
+      // Juntar linhas preservando quebras de linha
+      message = cleanedLines.join('\n');
 
       // Limitar apenas quebras de linha excessivas (mais de 2 consecutivas)
       message = message.replace(/\n{3,}/g, '\n\n');
