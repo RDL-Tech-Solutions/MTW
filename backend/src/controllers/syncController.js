@@ -7,7 +7,7 @@ import amazonSync from '../services/autoSync/amazonSync.js';
 import aliExpressSync from '../services/autoSync/aliExpressSync.js';
 import kabumSync from '../services/autoSync/kabumSync.js';
 import magaluSync from '../services/autoSync/magaluSync.js';
-import terabyteSync from '../services/autoSync/terabyteSync.js';
+import pichauSync from '../services/autoSync/pichauSync.js';
 import publishService from '../services/autoSync/publishService.js';
 import urlShortener from '../services/urlShortener.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
@@ -70,7 +70,7 @@ class SyncController {
       // Verificar se pelo menos uma plataforma está habilitada
       if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled &&
         !config.aliexpress_enabled && !config.kabum_enabled && !config.magazineluiza_enabled &&
-        !config.terabyteshop_enabled) {
+        !config.pichau_enabled) {
         return res.status(400).json(errorResponse(
           'Nenhuma plataforma habilitada para sincronização',
           'SYNC_DISABLED'
@@ -84,7 +84,7 @@ class SyncController {
         aliexpress: { total: 0, new: 0, errors: 0 },
         kabum: { total: 0, new: 0, errors: 0 },
         magazineluiza: { total: 0, new: 0, errors: 0 },
-        terabyteshop: { total: 0, new: 0, errors: 0 }
+        pichau: { total: 0, new: 0, errors: 0 }
       };
 
       // Sincronizar Mercado Livre
@@ -153,14 +153,14 @@ class SyncController {
         }
       }
 
-      // Sincronizar Terabyteshop
-      if (config.terabyteshop_enabled) {
+      // Sincronizar Pichau
+      if (config.pichau_enabled) {
         try {
-          const terabyteResults = await SyncController.syncTerabyte(config);
-          results.terabyteshop = terabyteResults;
+          const pichauResults = await SyncController.syncPichau(config);
+          results.pichau = pichauResults;
         } catch (error) {
-          logger.error(`❌ Erro na sincronização Terabyteshop: ${error.message}`);
-          results.terabyteshop.errors++;
+          logger.error(`❌ Erro na sincronização Pichau: ${error.message}`);
+          results.pichau.errors++;
         }
       }
 
@@ -247,12 +247,11 @@ class SyncController {
           results = await SyncController.syncMagalu(config);
           break;
 
-        case 'terabyteshop':
-        case 'terabyte':
-          if (!config.terabyteshop_enabled) {
-            return res.status(400).json(errorResponse('Terabyteshop não está habilitado', 'PLATFORM_DISABLED'));
+        case 'pichau':
+          if (!config.pichau_enabled) {
+            return res.status(400).json(errorResponse('Pichau não está habilitado', 'PLATFORM_DISABLED'));
           }
-          results = await SyncController.syncTerabyte(config);
+          results = await SyncController.syncPichau(config);
           break;
 
         default:
@@ -1242,23 +1241,23 @@ class SyncController {
   }
 
   /**
-   * Sincronizar Terabyteshop
+   * Sincronizar Pichau
    */
-  static async syncTerabyte(config) {
+  static async syncPichau(config) {
     const results = { total: 0, new: 0, errors: 0 };
 
     try {
       // Buscar URLs de produtos
-      const productUrls = await terabyteSync.fetchTerabyteProducts(null, config.max_products || 20);
+      const productUrls = await pichauSync.fetchPichauProducts(null, config.max_products || 20);
       results.total = productUrls.length;
 
-      logger.info(`📦 ${productUrls.length} produtos encontrados na Terabyteshop`);
+      logger.info(`📦 ${productUrls.length} produtos encontrados na Pichau`);
 
       // Processar cada URL
       for (const url of productUrls) {
         try {
           // Analisar produto individual
-          const productData = await terabyteSync.analyzeTerabyteLink(url);
+          const productData = await pichauSync.analyzePichauLink(url);
 
           if (!productData) {
             results.errors++;
@@ -1266,18 +1265,18 @@ class SyncController {
           }
 
           // Salvar no banco
-          const { product, isNew } = await terabyteSync.saveTerabyteToDatabase(productData, Product);
+          const { product, isNew } = await pichauSync.savePichauToDatabase(productData, Product);
 
           if (isNew) {
             results.new++;
 
             // Auto-publicar se habilitado
-            if (config.terabyteshop_auto_publish === true) {
+            if (config.pichau_auto_publish === true) {
               const { shouldPublish } = await SyncController.analyzeAndDecidePublish(product, true);
 
               if (shouldPublish) {
                 // Encurtar link se configurado
-                if (config.terabyteshop_shorten_link) {
+                if (config.pichau_shorten_link) {
                   try {
                     const shortLink = await urlShortener.shorten(product.affiliate_link);
                     if (shortLink) {
@@ -1292,20 +1291,20 @@ class SyncController {
                 await publishService.publishAll(product);
                 await Product.update(product.id, { status: 'active' });
 
-                logger.info(`✅ Terabyteshop - Produto publicado: ${product.name}`);
+                logger.info(`✅ Pichau - Produto publicado: ${product.name}`);
               }
             }
           }
         } catch (error) {
-          logger.error(`Erro ao processar produto Terabyteshop: ${error.message}`);
+          logger.error(`Erro ao processar produto Pichau: ${error.message}`);
           results.errors++;
         }
       }
 
-      logger.info(`✅ Terabyteshop sync concluído: ${results.new} novos de ${results.total}`);
+      logger.info(`✅ Pichau sync concluído: ${results.new} novos de ${results.total}`);
       return results;
     } catch (error) {
-      logger.error(`❌ Erro no sync Terabyteshop: ${error.message}`);
+      logger.error(`❌ Erro no sync Pichau: ${error.message}`);
       return results;
     }
   }

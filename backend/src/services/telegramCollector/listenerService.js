@@ -32,6 +32,11 @@ class TelegramListenerService {
     this.schedulerInterval = null; // Intervalo do agendador automático
     this.isPausedByCycle = false; // Flag para indicar se está em pausa pelo ciclo de trabalho
 
+    // Anti-duplicação: Cache de códigos processados recentemente
+    this.processedCodes = new Map(); // Map<code, timestamp>
+    this.processedCodesMaxSize = 1000; // Máximo de códigos no cache
+    this.processedCodesWindowMs = 24 * 60 * 60 * 1000; // 24 horas
+
     // VPS Optimization: Message queue para processar mensagens de forma controlada
     const maxConcurrent = parseInt(process.env.TELEGRAM_QUEUE_CONCURRENCY) || 5;
     this.messageQueue = new MessageQueue(maxConcurrent);
@@ -64,16 +69,77 @@ class TelegramListenerService {
   }
 
   /**
+   * Verificar se código de cupom foi processado recentemente (anti-duplicação)
+   * @param {string} code - Código do cupom
+   * @returns {boolean}
+   */
+  checkRecentlyProcessed(code) {
+    const upperCode = code.toUpperCase();
+    const lastProcessed = this.processedCodes.get(upperCode);
+
+    if (!lastProcessed) {
+      return false;
+    }
+
+    const now = Date.now();
+    const timeSinceProcessed = now - lastProcessed;
+
+    // Se foi processado há menos de 24h, considerar duplicata
+    if (timeSinceProcessed < this.processedCodesWindowMs) {
+      logger.debug(`Código ${code} foi processado há ${(timeSinceProcessed / 1000 / 60).toFixed(1)} minutos`);
+      return true;
+    }
+
+    // Remover do cache se já passou da janela de tempo
+    this.processedCodes.delete(upperCode);
+    return false;
+  }
+
+  /**
+   * Marcar código como processado (anti-duplicação)
+   * @param {string} code - Código do cupom
+   */
+  markAsProcessed(code) {
+    const upperCode = code.toUpperCase();
+    this.processedCodes.set(upperCode, Date.now());
+
+    // Limpar cache se exceder tamanho máximo (FIFO)
+    if (this.processedCodes.size > this.processedCodesMaxSize) {
+      const firstKey = this.processedCodes.keys().next().value;
+      this.processedCodes.delete(firstKey);
+      logger.debug(`Cache de códigos processados excedeu ${this.processedCodesMaxSize}, removendo mais antigo`);
+    }
+  }
+
+  /**
    * Salvar cupom no banco de dados
    * Agora com suporte a confidence_score e publicação automática
    * NOVO: Detecta cupons duplicados em múltiplos canais e aumenta confidence_score
    */
   async saveCoupon(couponData, messageHash) {
     try {
-      // Verificar duplicata por hash de mensagem
+      // VERIFICAÇÃO 1: Duplicata por hash de mensagem
       const isDuplicate = await this.checkDuplicate(messageHash);
       if (isDuplicate) {
-        logger.debug(`⚠️ Cupom duplicado ignorado (mesma mensagem): ${couponData.code}`);
+        logger.warn(`⚠️ [DUPLICATA] Cupom ${couponData.code} ignorado - mesma mensagem já processada`);
+        logger.debug(`   Hash: ${messageHash}`);
+        return null;
+      }
+
+      // VERIFICAÇÃO 2: Código processado recentemente (cache local)
+      if (this.checkRecentlyProcessed(couponData.code)) {
+        logger.warn(`⚠️ [DUPLICATA] Cupom ${couponData.code} ignorado - código processado recentemente (cache local)`);
+        return null;
+      }
+
+      // VERIFICAÇÃO 3: Cupons recentes no banco de dados (últimas 24h)
+      const recentCoupons = await Coupon.findRecentByCode(couponData.code, {
+        hoursWindow: 24
+      });
+
+      if (recentCoupons && recentCoupons.length > 0) {
+        logger.warn(`⚠️ [DUPLICATA] Cupom ${couponData.code} ignorado - ${recentCoupons.length} cupom(ns) recente(s) encontrado(s) no banco`);
+        logger.debug(`   Cupons encontrados: ${recentCoupons.map(c => `ID:${c.id} (${c.created_at})`).join(', ')}`);
         return null;
       }
 
@@ -272,19 +338,23 @@ class TelegramListenerService {
       // Notificar bots e app apenas se não estiver pendente de aprovação
       if (coupon && !coupon.is_pending_approval) {
         try {
-          // IMPORTANTE: Verificar se já existe cupom publicado com o mesmo código
+          // IMPORTANTE: Verificar se já existe cupom publicado com o mesmo código (últimas 48h)
           // Isso evita que o mesmo cupom seja enviado múltiplas vezes aos bots
-          const hasPublished = await Coupon.hasPublishedCouponWithCode(coupon.code, coupon.id);
+          // ATUALIZADO: Verifica apenas cupons das últimas 48h para permitir republicação
+          const hasPublished = await Coupon.hasPublishedCouponWithCode(coupon.code, coupon.id, 48);
 
           if (hasPublished) {
             logger.warn(`⚠️ ========== CUPOM JÁ PUBLICADO - NOTIFICAÇÃO BLOQUEADA ==========`);
             logger.warn(`   Código: ${coupon.code}`);
             logger.warn(`   ID atual: ${coupon.id}`);
             logger.warn(`   Plataforma: ${coupon.platform}`);
-            logger.warn(`   Já existe cupom ativo e publicado com este código`);
+            logger.warn(`   Já existe cupom ativo e publicado com este código nas últimas 48h`);
             logger.warn(`   Notificação NÃO será enviada para evitar duplicação nos bots`);
             logger.warn(`   Cupom foi salvo no banco para estatísticas mas não será notificado`);
-            logger.info(`💾 Cupom ${coupon.code} salvo mas não notificado (já publicado anteriormente)`);
+            logger.info(`💾 Cupom ${coupon.code} salvo mas não notificado (já publicado nas últimas 48h)`);
+
+            // Marcar como processado no cache local
+            this.markAsProcessed(coupon.code);
             return coupon; // Retornar sem notificar
           }
 
@@ -329,6 +399,12 @@ class TelegramListenerService {
         logger.info(`   Aguardando aprovação manual em /coupons`);
       } else {
         logger.error(`❌ Cupom não foi retornado após criação`);
+      }
+
+      // Marcar código como processado no cache local
+      if (coupon && coupon.code) {
+        this.markAsProcessed(coupon.code);
+        logger.debug(`✅ Código ${coupon.code} marcado como processado no cache local`);
       }
 
       return coupon;
@@ -540,13 +616,61 @@ class TelegramListenerService {
 
   /**
    * Verificar se a mensagem está dentro do período permitido (baseado no capture_mode)
+   * MODO REALTIME: Apenas mensagens publicadas APÓS o início do listener
    */
   isMessageWithinTimeRange(message, channel) {
     const captureMode = channel.capture_mode || 'new_only';
 
-    // Modo REALTIME: aceita todas as mensagens novas, sem restrições de tempo
+    // Modo REALTIME: REGRA ESTRITA - apenas mensagens APÓS início do listener
     if (captureMode === 'realtime') {
-      logger.debug(`   ⚡ Modo REALTIME: aceitando mensagem sem restrições de tempo`);
+      logger.debug(`   ⚡ Modo REALTIME ativado - verificando timestamp da mensagem`);
+
+      // OBRIGATÓRIO: Verificar se listener tem timestamp de início
+      if (!this.listenerStartTime) {
+        logger.warn(`   ⚠️ Listener não tem timestamp de início definido! Rejeitando mensagem por segurança.`);
+        return false;
+      }
+
+      // Extrair data da mensagem
+      let messageDate;
+      if (message.date) {
+        if (typeof message.date === 'number') {
+          messageDate = message.date < 1e12 ? new Date(message.date * 1000) : new Date(message.date);
+        } else if (message.date instanceof Date) {
+          messageDate = message.date;
+        } else {
+          messageDate = new Date(message.date);
+        }
+      } else {
+        // Se não tem data, assumir que é nova (foi recebida agora)
+        logger.debug(`   ⚡ Mensagem sem timestamp - assumindo como nova (recebida agora)`);
+        return true;
+      }
+
+      // REGRA ESTRITA: Mensagem deve ser IGUAL ou POSTERIOR ao início do listener
+      if (messageDate < this.listenerStartTime) {
+        const messageTime = messageDate.toISOString();
+        const listenerTime = this.listenerStartTime.toISOString();
+        const diffSeconds = (this.listenerStartTime - messageDate) / 1000;
+
+        logger.warn(`   ⛔ [MODO REALTIME] Mensagem REJEITADA - publicada ANTES do início do listener`);
+        logger.warn(`      Mensagem publicada em: ${messageTime}`);
+        logger.warn(`      Listener iniciado em:  ${listenerTime}`);
+        logger.warn(`      Diferença: ${diffSeconds.toFixed(1)}s antes do início`);
+        logger.warn(`      ❌ Descartando mensagem antiga conforme regras do modo REALTIME`);
+        return false;
+      }
+
+      // Mensagem é válida - publicada após início do listener
+      const messageTime = messageDate.toISOString();
+      const listenerTime = this.listenerStartTime.toISOString();
+      const diffSeconds = (messageDate - this.listenerStartTime) / 1000;
+
+      logger.debug(`   ✅ [MODO REALTIME] Mensagem ACEITA - publicada após início do listener`);
+      logger.debug(`      Mensagem publicada em: ${messageTime}`);
+      logger.debug(`      Listener iniciado em:  ${listenerTime}`);
+      logger.debug(`      Diferença: +${diffSeconds.toFixed(1)}s após início`);
+
       return true;
     }
 

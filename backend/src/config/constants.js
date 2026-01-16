@@ -6,7 +6,7 @@ export const PLATFORMS = {
   ALIEXPRESS: 'aliexpress',
   KABUM: 'kabum',
   MAGAZINELUIZA: 'magazineluiza',
-  TERABYTESHOP: 'terabyteshop',
+  PICHAU: 'pichau',
   GENERAL: 'general'
 };
 

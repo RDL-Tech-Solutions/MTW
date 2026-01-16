@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import * as cheerio from 'cheerio';
 
 class LinkAnalyzer {
@@ -37,9 +37,9 @@ class LinkAnalyzer {
     if (urlLower.includes('magazineluiza.com.br') || urlLower.includes('magalu.com.br')) {
       return 'magazineluiza';
     }
-    // Terabyteshop
-    if (urlLower.includes('terabyteshop.com.br')) {
-      return 'terabyteshop';
+    // Pichau
+    if (urlLower.includes('pichau.com.br')) {
+      return 'pichau';
     }
     return 'unknown';
   }
@@ -3917,13 +3917,14 @@ class LinkAnalyzer {
         return await this.extractKabumInfo(finalUrl);
       } else if (platform === 'magazineluiza') {
         return await this.extractMagaluInfo(finalUrl);
-      } else if (platform === 'terabyteshop') {
-        return await this.extractTerabyteInfo(finalUrl);
+      } else if (platform === 'pichau') {
+        return await this.extractPichauInfo(finalUrl);
+
       } else {
         return {
           platform: 'unknown',
           affiliateLink: finalUrl,
-          error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza ou Terabyteshop.'
+          error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza ou Pichau.'
         };
       }
     } catch (error) {
@@ -4155,79 +4156,158 @@ class LinkAnalyzer {
   }
 
   // ============================================
-  // TERABYTESHOP - Web Scraping
+  // PICHAU - Web Scraping com JSON-LD
   // ============================================
-  async extractTerabyteInfo(url) {
+  async extractPichauInfo(url) {
     try {
-      console.log('🔍 Extraindo informações da Terabyteshop...');
+      console.log('🔍 Extraindo informações da Pichau...');
 
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'pt-BR,pt;q=0.9',
-        },
-        timeout: 15000
+      // Usar browserScraper para garantir carregamento completo (React/Next.js)
+      const browserScraper = (await import('./browserScraper.js')).default;
+
+      return await browserScraper.pool.withPage(async (page) => {
+        // Aguardar carregamento da página
+        try {
+          await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }); await new Promise(resolve => setTimeout(resolve, 3000));
+
+          // PRIORIDADE 1: Extrair JSON-LD (fonte mais confiável)
+          const jsonLdData = await page.$$eval('script[type="application/ld+json"]', scripts => {
+            return scripts.map(script => {
+              try {
+                return JSON.parse(script.textContent);
+              } catch (e) {
+                return null;
+              }
+            }).filter(data => data !== null);
+          });
+
+          // Encontrar dados do produto no JSON-LD
+          const productJsonLd = jsonLdData.find(data => data['@type'] === 'Product');
+
+          if (productJsonLd) {
+            console.log('   ✅ JSON-LD encontrado, extraindo dados estruturados');
+
+            const name = productJsonLd.name || '';
+            const sku = productJsonLd.sku || '';
+            const brand = productJsonLd.brand?.name || '';
+            const description = productJsonLd.description || '';
+
+            // Imagens
+            let imageUrl = '';
+            if (productJsonLd.image) {
+              imageUrl = Array.isArray(productJsonLd.image)
+                ? productJsonLd.image[0]
+                : productJsonLd.image;
+            }
+
+            // Preços e disponibilidade
+            const offers = productJsonLd.offers || {};
+            const currentPrice = parseFloat(offers.price || 0);
+            const availability = offers.availability || '';
+            const inStock = availability.includes('InStock');
+
+            // Preço antigo (se houver) - tentar extrair do DOM
+            let oldPrice = 0;
+            const oldPriceText = await page.$eval('.mui-3ij2mi-strikeThrough', el => el.textContent).catch(() => null);
+            if (oldPriceText) {
+              oldPrice = parseFloat(oldPriceText.replace(/[^\d,]/g, '').replace(',', '.'));
+            }
+
+            return {
+              name,
+              sku,
+              brand,
+              description,
+              imageUrl,
+              currentPrice,
+              oldPrice,
+              inStock
+            };
+          }
+
+          // FALLBACK: Extrair via CSS selectors
+          console.log('   ⚠️ JSON-LD não encontrado, usando CSS selectors');
+
+          const name = await page.$eval('h1', el => el.textContent.trim()).catch(() => '');
+
+          // SKU
+          const skuText = await page.evaluate(() => {
+            const elements = Array.from(document.querySelectorAll('span, p, div'));
+            const skuElement = elements.find(el => el.textContent.includes('Sku:'));
+            return skuElement ? skuElement.textContent : '';
+          });
+          const sku = skuText.match(/Sku:\s*(\S+)/)?.[1] || '';
+
+          // Marca
+          const brand = await page.$eval('.mui-1yk9lkf-brandLink', el => el.textContent.trim()).catch(() => '');
+
+          // Preço à vista (PIX)
+          const priceText = await page.$eval('.mui-1jk88bq-price_vista-extraSpacePriceVista', el => el.textContent).catch(() => '0');
+          const currentPrice = parseFloat(priceText.replace(/[^\d,]/g, '').replace(',', '.'));
+
+          // Preço original (riscado)
+          const oldPriceText = await page.$eval('.mui-3ij2mi-strikeThrough', el => el.textContent).catch(() => null);
+          const oldPrice = oldPriceText ? parseFloat(oldPriceText.replace(/[^\d,]/g, '').replace(',', '.')) : 0;
+
+          // Imagem
+          const imageUrl = await page.$eval('figure img', el => el.src).catch(() => '');
+
+          // Disponibilidade
+          const availabilityText = await page.evaluate(() => {
+            const elements = Array.from(document.querySelectorAll('div, span, p'));
+            const availElement = elements.find(el =>
+              el.textContent.includes('PRODUTO DISPONÍVEL') ||
+              el.textContent.includes('ESGOTADO')
+            );
+            return availElement ? availElement.textContent : '';
+          });
+          const inStock = availabilityText.includes('DISPONÍVEL');
+
+          // Descrição
+          const description = await page.$eval('meta[property="og:description"]', el => el.content).catch(() => '');
+
+          return {
+            name,
+            sku,
+            brand,
+            description,
+            imageUrl,
+            currentPrice,
+            oldPrice,
+            inStock
+          };
+        } catch (pageError) {
+          console.error('   ❌ Erro ao extrair dados da página:', pageError.message);
+          return {
+            error: `Erro ao processar página: ${pageError.message}`,
+            name: 'Produto Pichau',
+            currentPrice: 0,
+            oldPrice: 0,
+            imageUrl: '',
+            inStock: false
+          };
+        }
       });
 
-      const $ = cheerio.load(response.data);
-
-      // Nome do produto
-      let name = $('h1.product-name, h1.prod-name, .product_page h1, h1').first().text().trim();
-      if (!name) {
-        name = $('meta[property="og:title"]').attr('content')?.trim();
-      }
-
-      // Preço atual
-      let currentPrice = 0;
-      const priceSelectors = [
-        '.prod-new-price',
-        '.product-price',
-        '[class*="price"] [class*="current"]',
-        'meta[property="product:price:amount"]'
-      ];
-
-      for (const selector of priceSelectors) {
-        const priceText = $(selector).first().text().trim() || $(selector).attr('content');
-        if (priceText) {
-          currentPrice = this.parsePrice(priceText);
-          if (currentPrice > 0) break;
-        }
-      }
-
-      // Preço antigo
-      let oldPrice = 0;
-      const oldPriceText = $('.prod-old-price, [class*="old-price"]').first().text().trim();
-      if (oldPriceText) {
-        oldPrice = this.parsePrice(oldPriceText);
-      }
-
-      // Imagem
-      let imageUrl = $('meta[property="og:image"]').attr('content') ||
-        $('.commerce_columns_item_image img, .product-image img, img[class*="product"]').first().attr('src') ||
-        '';
-
-      // Descrição
-      const description = $('meta[property="og:description"]').attr('content') ||
-        $('.description, .product-description').first().text().trim() ||
-        '';
-
-      console.log(`✅ Terabyteshop - ${name?.substring(0, 50)}, R$ ${currentPrice}`);
+      console.log(`✅ Pichau - ${productData.name?.substring(0, 50)}, R$ ${productData.currentPrice}`);
 
       return {
-        name: name || 'Produto Terabyteshop',
-        description: this.cleanText(description),
-        imageUrl: imageUrl,
-        currentPrice: currentPrice,
-        oldPrice: oldPrice > currentPrice ? oldPrice : 0,
-        platform: 'terabyteshop',
+        name: productData.name || 'Produto Pichau',
+        sku: productData.sku,
+        brand: productData.brand,
+        description: this.cleanText(productData.description),
+        imageUrl: productData.imageUrl,
+        currentPrice: productData.currentPrice,
+        oldPrice: productData.oldPrice > productData.currentPrice ? productData.oldPrice : 0,
+        inStock: productData.inStock,
+        platform: 'pichau',
         affiliateLink: url
       };
     } catch (error) {
-      console.error('❌ Erro ao extrair info Terabyteshop:', error.message);
+      console.error('❌ Erro ao extrair info Pichau:', error.message);
       return {
-        error: `Erro ao extrair informações da Terabyteshop: ${error.message}`,
-        platform: 'terabyteshop',
+        error: `Erro ao extrair informações da Pichau: ${error.message}`,
+        platform: 'pichau',
         affiliateLink: url
       };
     }
@@ -4235,3 +4315,4 @@ class LinkAnalyzer {
 }
 
 export default new LinkAnalyzer();
+

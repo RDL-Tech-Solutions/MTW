@@ -22,21 +22,21 @@ export default function AutoSync() {
     aliexpress_enabled: false,
     kabum_enabled: false,
     magazineluiza_enabled: false,
-    terabyteshop_enabled: false,
+    pichau_enabled: false,
     shopee_auto_publish: false,
     mercadolivre_auto_publish: false,
     amazon_auto_publish: false,
     aliexpress_auto_publish: false,
     kabum_auto_publish: false,
     magazineluiza_auto_publish: false,
-    terabyteshop_auto_publish: false,
+    pichau_auto_publish: false,
     shopee_shorten_link: false,
     mercadolivre_shorten_link: false,
     amazon_shorten_link: false,
     aliexpress_shorten_link: false,
     kabum_shorten_link: false,
     magazineluiza_shorten_link: false,
-    terabyteshop_shorten_link: false,
+    pichau_shorten_link: false,
     keywords: '',
     min_discount_percentage: 10,
     categories: [],
@@ -76,21 +76,21 @@ export default function AutoSync() {
         aliexpress_enabled: data.aliexpress_enabled || false,
         kabum_enabled: data.kabum_enabled || false,
         magazineluiza_enabled: data.magazineluiza_enabled || false,
-        terabyteshop_enabled: data.terabyteshop_enabled || false,
+        pichau_enabled: data.pichau_enabled || false,
         shopee_auto_publish: data.shopee_auto_publish || false,
         mercadolivre_auto_publish: data.mercadolivre_auto_publish || false,
         amazon_auto_publish: data.amazon_auto_publish || false,
         aliexpress_auto_publish: data.aliexpress_auto_publish || false,
         kabum_auto_publish: data.kabum_auto_publish || false,
         magazineluiza_auto_publish: data.magazineluiza_auto_publish || false,
-        terabyteshop_auto_publish: data.terabyteshop_auto_publish || false,
+        pichau_auto_publish: data.pichau_auto_publish || false,
         shopee_shorten_link: data.shopee_shorten_link || false,
         mercadolivre_shorten_link: data.mercadolivre_shorten_link || false,
         amazon_shorten_link: data.amazon_shorten_link || false,
         aliexpress_shorten_link: data.aliexpress_shorten_link || false,
         kabum_shorten_link: data.kabum_shorten_link || false,
         magazineluiza_shorten_link: data.magazineluiza_shorten_link || false,
-        terabyteshop_shorten_link: data.terabyteshop_shorten_link || false,
+        pichau_shorten_link: data.pichau_shorten_link || false,
         keywords: data.keywords || '',
         min_discount_percentage: data.min_discount_percentage || 10,
         categories: data.categories || [],
@@ -214,7 +214,7 @@ export default function AutoSync() {
 
   const handleRunNow = async () => {
     // Validação básica
-    if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled && !config.kabum_enabled && !config.magazineluiza_enabled && !config.terabyteshop_enabled) {
+    if (!config.shopee_enabled && !config.mercadolivre_enabled && !config.amazon_enabled && !config.aliexpress_enabled && !config.kabum_enabled && !config.magazineluiza_enabled && !config.pichau_enabled) {
       toast({
         title: "Atenção",
         description: "Selecione pelo menos uma plataforma para sincronizar.",
@@ -247,8 +247,8 @@ export default function AutoSync() {
       const response = await api.post('/sync/run-now');
       const results = response.data.data;
 
-      const totalNew = (results.mercadolivre?.new || 0) + (results.shopee?.new || 0) + (results.amazon?.new || 0) + (results.aliexpress?.new || 0) + (results.kabum?.new || 0) + (results.magazineluiza?.new || 0) + (results.terabyteshop?.new || 0);
-      const totalFound = (results.mercadolivre?.total || 0) + (results.shopee?.total || 0) + (results.amazon?.total || 0) + (results.aliexpress?.total || 0) + (results.kabum?.total || 0) + (results.magazineluiza?.total || 0) + (results.terabyteshop?.total || 0);
+      const totalNew = (results.mercadolivre?.new || 0) + (results.shopee?.new || 0) + (results.amazon?.new || 0) + (results.aliexpress?.new || 0) + (results.kabum?.new || 0) + (results.magazineluiza?.new || 0) + (results.pichau?.new || 0);
+      const totalFound = (results.mercadolivre?.total || 0) + (results.shopee?.total || 0) + (results.amazon?.total || 0) + (results.aliexpress?.total || 0) + (results.kabum?.total || 0) + (results.magazineluiza?.total || 0) + (results.pichau?.total || 0);
 
       toast({
         title: "Sincronização concluída!",
@@ -423,7 +423,7 @@ export default function AutoSync() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Automação de Produtos</h1>
           <p className="text-muted-foreground mt-2">
-            Capture automaticamente promoções de 7 plataformas: Mercado Livre, Shopee, Amazon, AliExpress, Kabum, Magazine Luiza e Terabyteshop
+            Capture automaticamente promoções de 7 plataformas: Mercado Livre, Shopee, Amazon, AliExpress, Kabum, Magazine Luiza e Pichau
           </p>
         </div>
         <Button
@@ -537,11 +537,11 @@ export default function AutoSync() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Terabyteshop</CardTitle>
-            <Package className="h-4 w-4 text-purple-600" />
+            <CardTitle className="text-sm font-medium">Pichau</CardTitle>
+            <Package className="h-4 w-4 text-indigo-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.terabyteshop || 0}</div>
+            <div className="text-2xl font-bold">{stats?.pichau || 0}</div>
             <p className="text-xs text-muted-foreground">Produtos capturados</p>
           </CardContent>
         </Card>
@@ -652,11 +652,11 @@ export default function AutoSync() {
 
             <div className="flex items-center space-x-2">
               <Switch
-                checked={config.terabyteshop_enabled}
-                onCheckedChange={(checked) => setConfig({ ...config, terabyteshop_enabled: checked })}
-                id="terabyteshop"
+                checked={config.pichau_enabled}
+                onCheckedChange={(checked) => setConfig({ ...config, pichau_enabled: checked })}
+                id="pichau"
               />
-              <Label htmlFor="terabyteshop" className="font-normal">Terabyteshop</Label>
+              <Label htmlFor="pichau" className="font-normal">Pichau</Label>
             </div>
           </div>
 
@@ -829,26 +829,26 @@ export default function AutoSync() {
 
               <div className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex-1">
-                  <Label htmlFor="terabyteshop_auto_publish" className="font-medium">Terabyteshop</Label>
+                  <Label htmlFor="pichau_auto_publish" className="font-medium">Pichau</Label>
                   <p className="text-xs text-muted-foreground mt-1">
                     Publicar automaticamente após análise estratégica da IA
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 border-r pr-4 mr-2">
-                    <Label htmlFor="terabyteshop_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
+                    <Label htmlFor="pichau_shorten_link" className="text-xs text-muted-foreground cursor-pointer">Encurtar Link</Label>
                     <Switch
-                      checked={config.terabyteshop_shorten_link || false}
-                      onCheckedChange={(checked) => setConfig({ ...config, terabyteshop_shorten_link: checked })}
-                      id="terabyteshop_shorten_link"
+                      checked={config.pichau_shorten_link || false}
+                      onCheckedChange={(checked) => setConfig({ ...config, pichau_shorten_link: checked })}
+                      id="pichau_shorten_link"
                       className="scale-75"
                     />
                   </div>
                   <Switch
-                    checked={config.terabyteshop_auto_publish || false}
-                    onCheckedChange={(checked) => setConfig({ ...config, terabyteshop_auto_publish: checked })}
-                    id="terabyteshop_auto_publish"
-                    disabled={!config.terabyteshop_enabled}
+                    checked={config.pichau_auto_publish || false}
+                    onCheckedChange={(checked) => setConfig({ ...config, pichau_auto_publish: checked })}
+                    id="pichau_auto_publish"
+                    disabled={!config.pichau_enabled}
                   />
                 </div>
               </div>
@@ -991,13 +991,13 @@ export default function AutoSync() {
               </Button>
 
               <Button
-                onClick={() => handleRunPlatform('terabyteshop')}
-                disabled={runningPlatform !== null || !config.terabyteshop_enabled}
+                onClick={() => handleRunPlatform('pichau')}
+                disabled={runningPlatform !== null || !config.pichau_enabled}
                 variant="outline"
                 size="sm"
                 className="w-full"
               >
-                {runningPlatform === 'terabyteshop' ? (
+                {runningPlatform === 'pichau' ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Executando...
@@ -1005,7 +1005,7 @@ export default function AutoSync() {
                 ) : (
                   <>
                     <Play className="mr-2 h-4 w-4" />
-                    Terabyteshop
+                    Pichau
                   </>
                 )}
               </Button>

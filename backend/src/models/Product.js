@@ -11,7 +11,7 @@ class Product {
     'aliexpress',
     'kabum',
     'magazineluiza',
-    'terabyteshop',
+    'pichau',
     'general',
     'unknown'
   ];
@@ -37,8 +37,7 @@ class Product {
       'magazineluiza': 'magazineluiza',
       'magazine luiza': 'magazineluiza',
       'magalu': 'magazineluiza',
-      'terabyteshop': 'terabyteshop',
-      'terabyte': 'terabyteshop',
+      'pichau': 'pichau',
       'general': 'general',
       'unknown': 'unknown'
     };

@@ -169,20 +169,72 @@ class Coupon {
   }
 
   /**
-   * Verificar se existe cupom publicado com o mesmo código
+   * Buscar cupons recentes com o mesmo código (últimas 48 horas)
+   * @param {string} code - Código do cupom
+   * @param {object} options - Opções de busca
+   * @returns {Promise<Array>}
+   */
+  static async findRecentByCode(code, options = {}) {
+    const {
+      excludeId = null,
+      onlyPublished = false,
+      hoursWindow = 48
+    } = options;
+
+    try {
+      // Calcular timestamp de 48 horas atrás
+      const windowDate = new Date();
+      windowDate.setHours(windowDate.getHours() - hoursWindow);
+      const windowTimestamp = windowDate.toISOString();
+
+      let query = supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', code.toUpperCase())
+        .gte('created_at', windowTimestamp) // Apenas cupons das últimas X horas
+        .order('created_at', { ascending: false });
+
+      if (excludeId) {
+        query = query.neq('id', excludeId);
+      }
+
+      if (onlyPublished) {
+        query = query.eq('is_pending_approval', false).eq('is_active', true);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      logger.error(`Erro ao buscar cupons recentes: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Verificar se existe cupom publicado com o mesmo código (últimas 48 horas)
    * Usado para evitar duplicação de notificações
+   * ATUALIZADO: Verifica apenas cupons recentes para permitir republicação
    * @param {string} code - Código do cupom
    * @param {string} excludeId - ID do cupom a excluir da busca (opcional)
+   * @param {number} hoursWindow - Janela de tempo em horas (padrão: 48h)
    * @returns {Promise<boolean>}
    */
-  static async hasPublishedCouponWithCode(code, excludeId = null) {
+  static async hasPublishedCouponWithCode(code, excludeId = null, hoursWindow = 48) {
     try {
+      // Calcular timestamp de X horas atrás
+      const windowDate = new Date();
+      windowDate.setHours(windowDate.getHours() - hoursWindow);
+      const windowTimestamp = windowDate.toISOString();
+
       let query = supabase
         .from('coupons')
         .select('id, code, is_active, is_pending_approval, created_at')
         .eq('code', code.toUpperCase())
         .eq('is_pending_approval', false) // Apenas cupons já aprovados
-        .eq('is_active', true); // Apenas cupons ativos
+        .eq('is_active', true) // Apenas cupons ativos
+        .gte('created_at', windowTimestamp); // Apenas cupons recentes (últimas X horas)
 
       if (excludeId) {
         query = query.neq('id', excludeId);
@@ -191,7 +243,14 @@ class Coupon {
       const { data, error } = await query.limit(1);
 
       if (error) throw error;
-      return data && data.length > 0;
+
+      const hasPublished = data && data.length > 0;
+
+      if (hasPublished) {
+        logger.debug(`Cupom ${code} já foi publicado nas últimas ${hoursWindow}h (criado em: ${data[0].created_at})`);
+      }
+
+      return hasPublished;
     } catch (error) {
       logger.error(`Erro ao verificar cupom publicado: ${error.message}`);
       return false; // Em caso de erro, não bloquear (fail-safe)
