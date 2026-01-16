@@ -126,7 +126,7 @@ export default function Coupons() {
           // Primeiro tentar buscar via API da plataforma selecionada
           const platform = formData.platform;
 
-          if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'terabyteshop'].includes(platform)) {
+          if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau'].includes(platform)) {
             try {
               const apiResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}?platform=${platform}`, {
                 validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
@@ -827,7 +827,7 @@ export default function Coupons() {
                       <option value="aliexpress">AliExpress</option>
                       <option value="kabum">Kabum</option>
                       <option value="magazineluiza">Magazine Luiza</option>
-                      <option value="terabyteshop">Terabyteshop</option>
+                      <option value="pichau">Pichau</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -1158,7 +1158,7 @@ export default function Coupons() {
                   <option value="aliexpress">AliExpress</option>
                   <option value="kabum">Kabum</option>
                   <option value="magazineluiza">Magazine Luiza</option>
-                  <option value="terabyteshop">Terabyteshop</option>
+                  <option value="pichau">Pichau</option>
                   <option value="general">Geral</option>
                 </select>
               </div>
@@ -1287,7 +1287,7 @@ export default function Coupons() {
                                     coupon.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
                                       coupon.platform === 'kabum' ? 'bg-orange-200 text-orange-900 border-orange-400' :
                                         coupon.platform === 'magazineluiza' ? 'bg-blue-200 text-blue-900 border-blue-400' :
-                                          coupon.platform === 'terabyteshop' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                          coupon.platform === 'pichau' ? 'bg-purple-100 text-purple-800 border-purple-300' :
                                             'bg-gray-100 text-gray-800 border-gray-300'
                             }
                           >
@@ -1297,7 +1297,7 @@ export default function Coupons() {
                                   coupon.platform === 'aliexpress' ? 'AliExpress' :
                                     coupon.platform === 'kabum' ? 'Kabum' :
                                       coupon.platform === 'magazineluiza' ? 'Magazine Luiza' :
-                                        coupon.platform === 'terabyteshop' ? 'Terabyteshop' :
+                                        coupon.platform === 'pichau' ? 'Pichau' :
                                           'Geral'}
                           </Badge>
                         </TableCell>
@@ -1640,7 +1640,7 @@ export default function Coupons() {
                   <option value="aliexpress">AliExpress</option>
                   <option value="kabum">Kabum</option>
                   <option value="magazineluiza">Magazine Luiza</option>
-                  <option value="terabyteshop">Terabyteshop</option>
+                  <option value="pichau">Pichau</option>
                 </select>
               </div>
               <div className="space-y-2">

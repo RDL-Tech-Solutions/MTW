@@ -120,6 +120,16 @@ ${coupon.affiliate_link || 'Link não disponível'}
 
       // Preparar variáveis do template
       logger.debug(`   Preparando variáveis do template...`);
+
+      // DEBUG: Verificar se applicable_products está presente no objeto coupon
+      logger.debug(`🔍 [DEBUG] Objeto coupon recebido:`);
+      logger.debug(`   ID: ${coupon.id}`);
+      logger.debug(`   Código: ${coupon.code}`);
+      logger.debug(`   is_general: ${coupon.is_general}`);
+      logger.debug(`   applicable_products: ${JSON.stringify(coupon.applicable_products)}`);
+      logger.debug(`   applicable_products presente? ${coupon.hasOwnProperty('applicable_products')}`);
+      logger.debug(`   applicable_products length: ${coupon.applicable_products?.length || 0}`);
+
       const variables = templateRenderer.prepareCouponVariables(coupon);
       logger.debug(`   Variáveis preparadas: ${Object.keys(variables).join(', ')}`);
       logger.debug(`   Código do cupom: ${variables.coupon_code}`);

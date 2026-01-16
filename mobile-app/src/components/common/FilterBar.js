@@ -9,7 +9,7 @@ const PLATFORMS = [
     { value: 'aliexpress', label: '🌐 AliExpress' },
     { value: 'kabum', label: '💻 Kabum' },
     { value: 'magazineluiza', label: '🏬 Magazine Luiza' },
-    { value: 'terabyteshop', label: '🖥️ Terabyteshop' },
+    { value: 'pichau', label: '🖥️ Pichau' },
 ];
 
 export default function FilterBar({

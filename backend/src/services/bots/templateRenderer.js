@@ -214,50 +214,55 @@ class TemplateRenderer {
           }
 
           // 2.1. IMPORTANTE: Garantir que {product_name} esteja presente na mensagem
-          // Se a IA não incluiu o título, adicionar no início
-          const productName = variables.product_name || contextData.product?.name || 'Produto';
+          // CORREÇÃO CRÍTICA: Só fazer isso para PRODUTOS/PROMOÇÕES, NÃO para CUPONS!
+          if (templateType === 'new_promotion' || templateType === 'promotion_with_coupon') {
+            // Se a IA não incluiu o título, adicionar no início
+            const productName = variables.product_name || contextData.product?.name || 'Produto';
 
-          // Verificar se a IA gerou uma descrição longa no lugar do título
-          // Se a primeira linha após o cabeçalho é muito longa (> 100 chars) e não contém o título, pode ser uma descrição
-          const lines = message.split('\n');
-          const headerLineIndex = lines.findIndex(line => (line.includes('🔥') || line.includes('⚡') || line.includes('🎯')) && line.includes('**'));
-          if (headerLineIndex >= 0 && headerLineIndex + 1 < lines.length) {
-            const lineAfterHeader = lines[headerLineIndex + 1].trim();
-            // Se a linha após o cabeçalho é muito longa e não contém o título, pode ser uma descrição no lugar do título
-            if (lineAfterHeader.length > 100 && !lineAfterHeader.includes(productName) && !lineAfterHeader.includes('{product_name}')) {
-              logger.warn(`⚠️ Detectada possível descrição longa no lugar do título, corrigindo...`);
-              // Adicionar o título antes dessa linha longa
-              lines[headerLineIndex + 1] = `📦 **{product_name}**\n\n${lineAfterHeader}`;
-              message = lines.join('\n');
-              logger.info(`✅ Título do produto adicionado antes da descrição: "${productName}"`);
-            }
-          }
-
-          // Verificar se {product_name} está presente (como variável ou já substituído)
-          const hasProductNameVar = message.includes('{product_name}');
-          const hasProductNameText = message.includes(productName) ||
-            message.toLowerCase().includes(productName.toLowerCase()) ||
-            (productName.length > 20 && message.includes(productName.substring(0, 20)));
-
-          if (!hasProductNameVar && !hasProductNameText) {
-            logger.warn(`⚠️ Título do produto não encontrado na mensagem da IA, adicionando...`);
-            // Se o Mixtral já retornou algo que se parece com um título mas não é idêntico, 
-            // vamos pesquisar por padrões comuns de títulos no início (📦, **Título**)
-            const hasInitialTitlePattern = message.trim().startsWith('📦') || message.trim().startsWith('**');
-
-            if (!hasInitialTitlePattern) {
-              const headerPattern = /(🔥|⚡|🎯).*\*\*.*\*\*.*(🔥|⚡|🎯)/;
-              if (headerPattern.test(message)) {
-                message = message.replace(headerPattern, `$&\n\n📦 **{product_name}**`);
-              } else {
-                message = `📦 **{product_name}**\n\n${message}`;
+            // Verificar se a IA gerou uma descrição longa no lugar do título
+            // Se a primeira linha após o cabeçalho é muito longa (> 100 chars) e não contém o título, pode ser uma descrição
+            const lines = message.split('\n');
+            const headerLineIndex = lines.findIndex(line => (line.includes('🔥') || line.includes('⚡') || line.includes('🎯')) && line.includes('**'));
+            if (headerLineIndex >= 0 && headerLineIndex + 1 < lines.length) {
+              const lineAfterHeader = lines[headerLineIndex + 1].trim();
+              // Se a linha após o cabeçalho é muito longa e não contém o título, pode ser uma descrição no lugar do título
+              if (lineAfterHeader.length > 100 && !lineAfterHeader.includes(productName) && !lineAfterHeader.includes('{product_name}')) {
+                logger.warn(`⚠️ Detectada possível descrição longa no lugar do título, corrigindo...`);
+                // Adicionar o título antes dessa linha longa
+                lines[headerLineIndex + 1] = `📦 **{product_name}**\n\n${lineAfterHeader}`;
+                message = lines.join('\n');
+                logger.info(`✅ Título do produto adicionado antes da descrição: "${productName}"`);
               }
-              logger.info(`✅ Título do produto adicionado: "{product_name}"`);
+            }
+
+            // Verificar se {product_name} está presente (como variável ou já substituído)
+            const hasProductNameVar = message.includes('{product_name}');
+            const hasProductNameText = message.includes(productName) ||
+              message.toLowerCase().includes(productName.toLowerCase()) ||
+              (productName.length > 20 && message.includes(productName.substring(0, 20)));
+
+            if (!hasProductNameVar && !hasProductNameText) {
+              logger.warn(`⚠️ Título do produto não encontrado na mensagem da IA, adicionando...`);
+              // Se o Mixtral já retornou algo que se parece com um título mas não é idêntico, 
+              // vamos pesquisar por padrões comuns de títulos no início (📦, **Título**)
+              const hasInitialTitlePattern = message.trim().startsWith('📦') || message.trim().startsWith('**');
+
+              if (!hasInitialTitlePattern) {
+                const headerPattern = /(🔥|⚡|🎯).*\*\*.*\*\*.*(🔥|⚡|🎯)/;
+                if (headerPattern.test(message)) {
+                  message = message.replace(headerPattern, `$&\n\n📦 **{product_name}**`);
+                } else {
+                  message = `📦 **{product_name}**\n\n${message}`;
+                }
+                logger.info(`✅ Título do produto adicionado: "{product_name}"`);
+              } else {
+                logger.info(`✅ Detectado padrão de título inicial na IA, assumindo que product_name já está lá.`);
+              }
             } else {
-              logger.info(`✅ Detectado padrão de título inicial na IA, assumindo que product_name já está lá.`);
+              logger.debug(`✅ Título do produto encontrado na mensagem`);
             }
           } else {
-            logger.debug(`✅ Título do produto encontrado na mensagem`);
+            logger.debug(`📝 Template tipo ${templateType}: NÃO adicionar product_name (é cupom ou outro tipo)`);
           }
 
           // 3. IMPORTANTE: Garantir que coupon_code seja formatado com backticks para facilitar cópia no Telegram (sem duplicar)
@@ -981,15 +986,16 @@ class TemplateRenderer {
 
       // IMPORTANTE: Preservar quebras de linha do template original
       // Não remover quebras de linha, apenas limpar linhas completamente vazias
+      logger.debug(`📋 Processando limpeza de linhas - quebras de linha antes: ${(message.match(/\n/g) || []).length}`);
+
       const lines = message.split('\n');
       const cleanedLines = lines.map((line, index) => {
         const trimmed = line.trim();
 
-        // Se a linha está completamente vazia, manter apenas se não for a primeira ou última
-        // Isso preserva quebras de linha intencionais no template
+        // Se a linha está completamente vazia, SEMPRE manter (preservar quebras de linha intencionais)
+        // CORREÇÃO: Não remover linhas vazias - elas representam espaçamento intencional
         if (!trimmed) {
-          // Manter quebra de linha vazia se não for no início ou fim
-          return (index > 0 && index < lines.length - 1) ? '' : null;
+          return ''; // Manter linha vazia
         }
 
         // Se a linha contém apenas tags HTML vazias ou espaços, remover
@@ -1020,8 +1026,17 @@ class TemplateRenderer {
       // Juntar linhas preservando quebras de linha
       message = cleanedLines.join('\n');
 
-      // Limitar apenas quebras de linha excessivas (mais de 2 consecutivas)
-      message = message.replace(/\n{3,}/g, '\n\n');
+      logger.debug(`📋 Após limpeza de linhas - quebras de linha: ${(message.match(/\n/g) || []).length}`);
+
+      // CORREÇÃO: Permitir até 3 quebras de linha consecutivas (mais flexível)
+      // Limitar apenas quebras de linha excessivas (mais de 3 consecutivas)
+      const beforeExcessiveCleanup = (message.match(/\n/g) || []).length;
+      message = message.replace(/\n{4,}/g, '\n\n\n');
+      const afterExcessiveCleanup = (message.match(/\n/g) || []).length;
+
+      if (beforeExcessiveCleanup !== afterExcessiveCleanup) {
+        logger.debug(`📋 Removidas quebras excessivas: ${beforeExcessiveCleanup} → ${afterExcessiveCleanup}`);
+      }
 
       // Remover espaços em branco apenas no início e fim da mensagem completa
       // IMPORTANTE: Não usar trim() se isso remover quebras de linha importantes
@@ -1046,11 +1061,36 @@ class TemplateRenderer {
       // VALIDAÇÃO: Verificar se todas as variáveis foram substituídas
       const remainingVariables = message.match(/\{[^}]+\}/g);
       if (remainingVariables && remainingVariables.length > 0) {
-        // Filtrar variáveis que são permitidas permanecer (como {product_name} se ainda não foi substituído)
-        const allowedVars = ['{product_name}', '{affiliate_link}', '{coupon_code}', '{applicability}'];
+        // CORREÇÃO: Filtrar variáveis permitidas baseado no tipo de template
+        // Para CUPONS: product_name e affiliate_link NÃO são permitidos
+        // Para PRODUTOS/PROMOÇÕES: são permitidos
+        let allowedVars = [];
+
+        if (templateType === 'new_coupon' || templateType === 'expired_coupon') {
+          // Cupons: NÃO permitir variáveis de produto
+          allowedVars = ['{coupon_code}', '{applicability}', '{platform_name}'];
+        } else {
+          // Produtos/Promoções: permitir variáveis de produto
+          allowedVars = ['{product_name}', '{affiliate_link}', '{coupon_code}', '{applicability}'];
+        }
+
         const unexpectedVars = remainingVariables.filter(v => !allowedVars.includes(v));
+
         if (unexpectedVars.length > 0) {
           logger.warn(`⚠️ Variáveis não substituídas encontradas: ${unexpectedVars.join(', ')}`);
+
+          // CORREÇÃO CRÍTICA: Remover variáveis inválidas para cupons
+          if (templateType === 'new_coupon' || templateType === 'expired_coupon') {
+            logger.info(`🧹 Removendo variáveis inválidas de cupom: ${unexpectedVars.join(', ')}`);
+            unexpectedVars.forEach(varName => {
+              // Remover a variável e a linha inteira se necessário
+              const regex = new RegExp(`.*\\${varName.replace(/[{}]/g, '\\$&')}.*\\n?`, 'gi');
+              message = message.replace(regex, '');
+            });
+            // Limpar quebras de linha excessivas resultantes
+            message = message.replace(/\n{3,}/g, '\n\n').trim();
+            logger.debug(`✅ Mensagem limpa após remoção de variáveis inválidas`);
+          }
         }
       }
 
@@ -1411,17 +1451,29 @@ class TemplateRenderer {
     // Aplicabilidade - SEMPRE incluir quando houver informação (geral ou produtos selecionados)
     // Se is_general for null, não incluir (deixar vazio)
     let applicability = '';
+
+    // DEBUG: Log detalhado para investigar problema
+    logger.debug(`🔍 [applicability] Preparando variável applicability:`);
+    logger.debug(`   is_general: ${coupon.is_general}`);
+    logger.debug(`   applicable_products: ${JSON.stringify(coupon.applicable_products)}`);
+    logger.debug(`   applicable_products length: ${coupon.applicable_products?.length || 0}`);
+
     if (coupon.is_general === true) {
       // Cupom válido para todos os produtos
       applicability = '✅ **Válido para todos os produtos**';
+      logger.debug(`   ✅ Aplicabilidade definida: TODOS OS PRODUTOS`);
     } else if (coupon.is_general === false && coupon.applicable_products?.length > 0) {
       // Cupom para produtos selecionados
       const productCount = coupon.applicable_products.length;
       applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
+      logger.debug(`   ✅ Aplicabilidade definida: PRODUTOS SELECIONADOS (${productCount})`);
     } else {
       // is_general é null ou false sem produtos - não mencionar nada
       applicability = '';
+      logger.debug(`   ⚠️ Aplicabilidade VAZIA (is_general=${coupon.is_general}, produtos=${coupon.applicable_products?.length || 0})`);
     }
+
+    logger.debug(`   📝 Valor final de applicability: "${applicability}"`);
 
     // IMPORTANTE: NÃO incluir data de validade (valid_until) na mensagem do bot
     // Sempre retornar vazio, independente de ter ou não data de expiração
@@ -1759,6 +1811,30 @@ class TemplateRenderer {
 
       message = message.replace(placeholder, restoredCode);
     });
+
+    // CORREÇÃO CRÍTICA: Telegram HTML ignora quebras de linha simples (\n)
+    // e as trata como espaços. Precisamos converter \n para \n\n para que
+    // o Telegram renderize as quebras de linha corretamente.
+    if (platform === 'telegram' && parseMode === 'HTML') {
+      logger.debug(`📋 Convertendo quebras de linha para Telegram HTML...`);
+      const lineBreaksBefore = (message.match(/\n/g) || []).length;
+
+      // Converter quebras de linha simples para duplas
+      // IMPORTANTE: Fazer isso ANTES de limitar quebras excessivas
+      // Primeiro, proteger quebras duplas/triplas existentes
+      message = message.replace(/\n\n\n/g, '__TRIPLE_BREAK__');
+      message = message.replace(/\n\n/g, '__DOUBLE_BREAK__');
+
+      // Converter quebras simples para duplas
+      message = message.replace(/\n/g, '\n\n');
+
+      // Restaurar quebras que já eram duplas/triplas (agora serão quádruplas/sêxtuplas)
+      message = message.replace(/__DOUBLE_BREAK__/g, '\n\n');
+      message = message.replace(/__TRIPLE_BREAK__/g, '\n\n\n');
+
+      const lineBreaksAfter = (message.match(/\n/g) || []).length;
+      logger.debug(`📋 Quebras de linha convertidas: ${lineBreaksBefore} → ${lineBreaksAfter} (para Telegram HTML)`);
+    }
 
     return message;
   }

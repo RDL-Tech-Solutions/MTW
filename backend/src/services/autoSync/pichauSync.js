@@ -17,7 +17,17 @@ class PichauSync {
                 'https://www.pichau.com.br/hardware/placa-de-video',
                 'https://www.pichau.com.br/hardware/processador',
                 'https://www.pichau.com.br/perifericos/teclado',
-                'https://www.pichau.com.br/perifericos/mouse'
+                'https://www.pichau.com.br/perifericos/mouse',
+                'https://www.pichau.com.br/hardware/ssd',
+                'https://www.pichau.com.br/hardware/placa-m-e',
+                'https://www.pichau.com.br/hardware/gabinete',
+                'https://www.pichau.com.br/hardware/fonte',
+                'https://www.pichau.com.br/hardware/cooler-processador',
+                'https://www.pichau.com.br/hardware',
+                'https://www.pichau.com.br/perifericos',
+                'https://www.pichau.com.br/computadores/pichau-gamer',
+                'https://www.pichau.com.br/monitores/monitores-gamer',
+                'https://www.pichau.com.br/cadeiras'
             ];
 
             const allProductUrls = [];

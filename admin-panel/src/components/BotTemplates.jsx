@@ -306,12 +306,18 @@ export default function BotTemplates() {
         old_price: ' ~~R$ 199,90~~',
         discount_percentage: '50',
         platform_name: 'Mercado Livre',
+        category_name: 'Eletrônicos',
         affiliate_link: 'https://exemplo.com/produto',
+        shopee_offer_info: '🔥 Oferta Shopee: Frete Grátis',
+        is_shopee_offer: 'true',
         coupon_section: '\n🎟️ *CUPOM DISPONÍVEL*\n\n💬 *Código:* `CUPOM10`\n💰 *Desconto:* 10% OFF\n',
         coupon_code: 'CUPOM10',
         discount_value: '10%',
         valid_until: '31/12/2024',
         min_purchase: '💳 *Compra mínima:* R$ 50,00\n',
+        max_discount: '💰 *Limite de desconto:* R$ 50,00\n',
+        usage_limit: '📊 *Limite de usos:* 10 / 100\n',
+        applicability: '✅ *Válido para todos os produtos*',
         coupon_title: 'Cupom de Desconto',
         coupon_description: '\nDescrição do cupom de exemplo\n',
         expired_date: '31/12/2024'
@@ -351,15 +357,18 @@ export default function BotTemplates() {
         old_price: ' ~~R$ 199,90~~',
         discount_percentage: '50',
         platform_name: 'Mercado Livre',
+        category_name: 'Eletrônicos',
         affiliate_link: 'https://exemplo.com/produto',
+        shopee_offer_info: '🔥 Oferta Shopee: Frete Grátis',
+        is_shopee_offer: 'true',
         coupon_section: '\n🎟️ **CUPOM DISPONÍVEL**\n\n💬 **Código:** `CUPOM10`\n💰 **Desconto:** 10% OFF\n',
         // Variáveis para new_coupon
         coupon_code: 'CUPOM10',
         discount_value: '10%',
         valid_until: '31/12/2024',
         min_purchase: '💳 **Compra mínima:** R$ 50,00\n',
-        max_discount: '',
-        usage_limit: '',
+        max_discount: '💰 **Limite de desconto:** R$ 50,00\n',
+        usage_limit: '📊 **Limite de usos:** 10 / 100\n',
         applicability: '✅ **Válido para todos os produtos**',
         coupon_title: 'Cupom de Desconto',
         coupon_description: '\nDescrição do cupom de exemplo\n',
@@ -906,8 +915,8 @@ export default function BotTemplates() {
                 key={key}
                 onClick={() => setActiveType(key)}
                 className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeType === key
-                    ? 'text-primary border-b-2 border-primary'
-                    : 'text-muted-foreground hover:text-foreground'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-muted-foreground hover:text-foreground'
                   }`}
               >
                 {label}

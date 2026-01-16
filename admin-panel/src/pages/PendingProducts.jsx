@@ -564,7 +564,7 @@ export default function PendingProducts() {
       aliexpress: 'bg-red-500',
       kabum: 'bg-orange-600',
       magazineluiza: 'bg-blue-700',
-      terabyteshop: 'bg-purple-600'
+      pichau: 'bg-purple-600'
     };
     return colors[platform] || 'bg-gray-500';
   };
@@ -577,7 +577,7 @@ export default function PendingProducts() {
       aliexpress: 'AliExpress',
       kabum: 'Kabum',
       magazineluiza: 'Magazine Luiza',
-      terabyteshop: 'Terabyteshop'
+      pichau: 'Pichau'
     };
     return names[platform] || platform;
   };
@@ -637,7 +637,7 @@ export default function PendingProducts() {
                 <option value="aliexpress">AliExpress</option>
                 <option value="kabum">Kabum</option>
                 <option value="magazineluiza">Magazine Luiza</option>
-                <option value="terabyteshop">Terabyteshop</option>
+                <option value="pichau">Pichau</option>
               </select>
             </div>
             {showAdvancedFilters && (

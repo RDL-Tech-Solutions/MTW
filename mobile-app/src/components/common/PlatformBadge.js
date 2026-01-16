@@ -33,10 +33,10 @@ const PLATFORM_CONFIG = {
         icon: '🏬',
         name: 'Magazine Luiza',
     },
-    terabyteshop: {
-        color: '#00A8E1',
+    pichau: {
+        color: '#FF6600',
         icon: '🖥️',
-        name: 'Terabyteshop',
+        name: 'Pichau',
     },
     general: {
         color: '#6B7280',

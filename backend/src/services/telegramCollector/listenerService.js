@@ -209,10 +209,14 @@ class TelegramListenerService {
       const confidenceThreshold = settings.ai_auto_publish_confidence_threshold || 0.90;
       const aiAutoPublishEnabled = settings.ai_enable_auto_publish !== false; // Default true
 
-      // Determinar se deve publicar automaticamente baseado em confidence_score
-      const shouldAutoPublish = aiAutoPublishEnabled && confidenceScore >= confidenceThreshold;
+      // CORREÇÃO: Determinar se deve publicar automaticamente baseado em:
+      // 1. confidence_score >= threshold OU
+      // 2. Cupom detectado em 2+ canais diferentes (validação por múltiplas fontes)
+      const shouldAutoPublishByConfidence = aiAutoPublishEnabled && confidenceScore >= confidenceThreshold;
+      const shouldAutoPublishByMultiChannel = channelCount >= 2; // NOVO: Publicar se encontrado em 2+ canais
+      const shouldAutoPublish = shouldAutoPublishByConfidence || shouldAutoPublishByMultiChannel;
 
-      // Definir is_pending_approval baseado em confidence_score
+      // Definir is_pending_approval baseado na decisão de publicação automática
       couponData.is_pending_approval = !shouldAutoPublish;
 
       // Adicionar motivo da decisão da IA
@@ -221,16 +225,25 @@ class TelegramListenerService {
         decisionReason = `Cupom encontrado em ${channelCount} canal(is) diferente(s). `;
       }
 
-      if (confidenceScore >= confidenceThreshold) {
+      if (shouldAutoPublishByMultiChannel && !shouldAutoPublishByConfidence) {
+        // Publicação automática por múltiplos canais (mesmo com confidence baixa)
+        couponData.ai_decision_reason = `${decisionReason}Publicação automática por validação em múltiplos canais (${channelCount} >= 2). Confidence: ${confidenceScore.toFixed(2)}.`;
+      } else if (confidenceScore >= confidenceThreshold) {
         couponData.ai_decision_reason = `${decisionReason}Confiança alta (${confidenceScore.toFixed(2)} >= ${confidenceThreshold}). Publicação automática.`;
       } else {
-        couponData.ai_decision_reason = `${decisionReason}Confiança abaixo do threshold (${confidenceScore.toFixed(2)} < ${confidenceThreshold}). Requer revisão manual.`;
+        couponData.ai_decision_reason = `${decisionReason}Confiança abaixo do threshold (${confidenceScore.toFixed(2)} < ${confidenceThreshold}) e apenas 1 canal. Requer revisão manual.`;
       }
 
       logger.info(`💾 Salvando cupom capturado: ${couponData.code} (${couponData.platform})`);
       logger.info(`   Confidence Score: ${confidenceScore.toFixed(2)}`);
       logger.info(`   Threshold: ${confidenceThreshold}`);
+      logger.info(`   Canais detectados: ${channelCount}`);
       logger.info(`   Publicação Automática: ${shouldAutoPublish ? 'SIM ✅' : 'NÃO ⏸️'}`);
+      if (shouldAutoPublishByMultiChannel && !shouldAutoPublishByConfidence) {
+        logger.info(`   Motivo: Validação por múltiplos canais (${channelCount} >= 2) 🎯`);
+      } else if (shouldAutoPublishByConfidence) {
+        logger.info(`   Motivo: Confiança alta (${confidenceScore.toFixed(2)} >= ${confidenceThreshold})`);
+      }
       logger.info(`   Status: ${shouldAutoPublish ? 'Aprovado automaticamente' : 'Pendente de revisão'}`);
       logger.debug(`   Motivo: ${couponData.ai_decision_reason}`);
 

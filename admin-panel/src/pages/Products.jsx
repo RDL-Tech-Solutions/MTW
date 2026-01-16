@@ -671,7 +671,7 @@ export default function Products() {
                       <option value="aliexpress">AliExpress</option>
                       <option value="kabum">Kabum</option>
                       <option value="magazineluiza">Magazine Luiza</option>
-                      <option value="terabyteshop">Terabyteshop</option>
+                      <option value="pichau">Pichau</option>
                       <option value="general">Geral</option>
                     </select>
                   </div>
@@ -897,7 +897,7 @@ export default function Products() {
                   <option value="aliexpress">Ali</option>
                   <option value="kabum">Kabum</option>
                   <option value="magazineluiza">Magalu</option>
-                  <option value="terabyteshop">Terabyte</option>
+                  <option value="pichau">Pichau</option>
                   <option value="general">Geral</option>
                 </select>
                 <select
@@ -1027,7 +1027,7 @@ export default function Products() {
                                     product.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
                                       product.platform === 'kabum' ? 'bg-orange-200 text-orange-900 border-orange-400' :
                                         product.platform === 'magazineluiza' ? 'bg-blue-200 text-blue-900 border-blue-400' :
-                                          product.platform === 'terabyteshop' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                          product.platform === 'pichau' ? 'bg-purple-100 text-purple-800 border-purple-300' :
                                             'bg-gray-100 text-gray-800 border-gray-300'
                                 }`}
                             >
@@ -1037,7 +1037,7 @@ export default function Products() {
                                     product.platform === 'aliexpress' ? 'AliExpress' :
                                       product.platform === 'kabum' ? 'Kabum' :
                                         product.platform === 'magazineluiza' ? 'Magazine Luiza' :
-                                          product.platform === 'terabyteshop' ? 'Terabyteshop' :
+                                          product.platform === 'pichau' ? 'Pichau' :
                                             product.platform}
                             </Badge>
                           </TableCell>

@@ -154,6 +154,19 @@ class AdvancedTemplateGenerator {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&amp;/g, '&')
+        // CORREÇÃO CRÍTICA: Remover variáveis de PRODUTO que não existem em cupons
+        // A IA às vezes gera {product_name}, {affiliate_link}, etc. que são inválidos para cupons
+        .replace(/\{product_name\}/gi, '')
+        .replace(/\{affiliate_link\}/gi, '')
+        .replace(/\{current_price\}/gi, '')
+        .replace(/\{old_price\}/gi, '')
+        .replace(/\{discount_percentage\}/gi, '')
+        .replace(/\{final_price\}/gi, '')
+        .replace(/\{original_price\}/gi, '')
+        // Remover emojis órfãos que ficaram após remoção de variáveis
+        .replace(/📦\s*\n/g, '')
+        .replace(/💰\s*\n/g, '')
+        .replace(/🏷️\s*\n/g, '')
         // Garantir quebras de linha DUPLAS para visualização correta no Telegram
         // Se houver apenas uma quebra de linha entre caracteres não vazio, transforma em duas
         .replace(/([^\n])\n([^\n])/g, '$1\n\n$2')

@@ -657,21 +657,31 @@ class Coupon {
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      // 1. Excluir pendentes com mais de 24h
+      // 1. Excluir cupons pendentes OU rejeitados com mais de 24h
+      // CORREÇÃO: Incluir cupons rejeitados (is_pending_approval=false AND is_active=false)
+      // Query: (is_pending_approval=true) OR (is_pending_approval=false AND is_active=false)
+      logger.debug(`🔍 Buscando cupons para exclusão (>24h):`);
+      logger.debug(`   - Pendentes de aprovação (is_pending_approval=true)`);
+      logger.debug(`   - Rejeitados (is_pending_approval=false AND is_active=false)`);
+
       const { data: deletedPending, count: pendingCount, error: pendingError } = await supabase
         .from('coupons')
         .delete({ count: 'exact' })
-        .eq('is_pending_approval', true)
+        .or('is_pending_approval.eq.true,and(is_pending_approval.eq.false,is_active.eq.false)')
         .lt('created_at', twentyFourHoursAgo)
-        .select('id, code, created_at');
+        .select('id, code, created_at, is_pending_approval, is_active');
 
       if (pendingError) throw pendingError;
 
       if (pendingCount > 0) {
-        const codes = deletedPending.map(c => c.code).join(', ');
-        logger.info(`✅ Removidos ${pendingCount} cupons pendentes antigos (>24h): ${codes}`);
+        logger.info(`✅ Removidos ${pendingCount} cupons pendentes/rejeitados antigos (>24h):`);
+        deletedPending.forEach(c => {
+          const status = c.is_pending_approval ? 'PENDENTE' : 'REJEITADO';
+          const createdDate = new Date(c.created_at).toLocaleString('pt-BR');
+          logger.info(`   - ${c.code} (${status}) - Criado em: ${createdDate}`);
+        });
       } else {
-        logger.debug('ℹ️ Nenhum cupom pendente antigo para remover');
+        logger.debug('ℹ️ Nenhum cupom pendente/rejeitado antigo para remover');
       }
 
       // 2. Excluir processados (não pendentes) com mais de 7 dias

@@ -111,26 +111,50 @@ class CouponController {
   // Criar cupom (admin)
   static async create(req, res, next) {
     try {
+      // CORREÇÃO: Adicionar validação e logs detalhados antes de criar cupom
+      logger.info(`📝 Criando novo cupom...`);
+      logger.debug(`   Dados recebidos: ${JSON.stringify(req.body, null, 2)}`);
+
+      // Validar campos obrigatórios
+      const requiredFields = ['code', 'platform', 'discount_type', 'discount_value'];
+      const missingFields = requiredFields.filter(field => !req.body[field]);
+
+      if (missingFields.length > 0) {
+        const errorMsg = `Campos obrigatórios ausentes: ${missingFields.join(', ')}`;
+        logger.error(`❌ ${errorMsg}`);
+        return res.status(400).json(errorResponse(errorMsg, 'VALIDATION_ERROR'));
+      }
+
       const coupon = await Coupon.create(req.body);
       await cacheDel('coupons:*');
 
-      logger.info(`Cupom criado: ${coupon.code}`);
+      logger.info(`✅ Cupom criado com sucesso: ${coupon.code} (ID: ${coupon.id})`);
+      logger.debug(`   Dados do cupom criado: ${JSON.stringify(coupon, null, 2)}`);
 
       // Enviar notificação automática via bots COM IMAGEM DA PLATAFORMA
       // IMPORTANTE: Usar couponNotificationService que envia imagem com logo da plataforma
       try {
-        logger.info(`📢 Enviando notificação de novo cupom com imagem da plataforma: ${coupon.code}`);
+        logger.info(`📢 Iniciando envio de notificação para cupom: ${coupon.code}`);
+        logger.debug(`   Plataforma: ${coupon.platform}`);
+        logger.debug(`   is_pending_approval: ${coupon.is_pending_approval}`);
+
         const notificationResult = await couponNotificationService.notifyNewCoupon(coupon);
-        logger.info(`✅ Notificação de novo cupom enviada com imagem: ${coupon.code}`);
-        logger.info(`   Resultado: ${JSON.stringify(notificationResult)}`);
+
+        logger.info(`✅ Notificação enviada com sucesso para cupom: ${coupon.code}`);
+        logger.debug(`   Resultado da notificação: ${JSON.stringify(notificationResult, null, 2)}`);
       } catch (notifError) {
         logger.error(`❌ Erro ao enviar notificação de cupom: ${notifError.message}`);
+        logger.error(`   Cupom: ${coupon.code} (ID: ${coupon.id})`);
         logger.error(`   Stack: ${notifError.stack}`);
+        logger.warn(`   ⚠️ Cupom foi criado mas a notificação falhou. Verifique os logs acima.`);
         // Não falhar a criação do cupom se a notificação falhar
       }
 
       res.status(201).json(successResponse(coupon, 'Cupom criado com sucesso'));
     } catch (error) {
+      logger.error(`❌ Erro ao criar cupom: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+      logger.error(`   Dados recebidos: ${JSON.stringify(req.body, null, 2)}`);
       next(error);
     }
   }
@@ -350,20 +374,62 @@ class CouponController {
       const { id } = req.params;
       const updates = req.body;
 
+      // CORREÇÃO: Adicionar validação e logs detalhados antes de aprovar
+      logger.info(`📝 Aprovando cupom ID: ${id}`);
+      logger.debug(`   Atualizações recebidas: ${JSON.stringify(updates, null, 2)}`);
+
+      // Verificar se o cupom existe antes de aprovar
+      const existingCoupon = await Coupon.findById(id);
+      if (!existingCoupon) {
+        const errorMsg = `Cupom não encontrado: ID ${id}`;
+        logger.error(`❌ ${errorMsg}`);
+        return res.status(404).json(errorResponse(errorMsg, ERROR_CODES.NOT_FOUND));
+      }
+
+      logger.debug(`   Cupom encontrado: ${existingCoupon.code} (${existingCoupon.platform})`);
+      logger.debug(`   Status atual: is_pending_approval=${existingCoupon.is_pending_approval}, is_active=${existingCoupon.is_active}`);
+
       const coupon = await Coupon.approve(id, updates);
       await cacheDel('coupons:*');
 
+      logger.info(`✅ Cupom aprovado com sucesso: ${coupon.code} (ID: ${coupon.id})`);
+      logger.debug(`   Novo status: is_pending_approval=${coupon.is_pending_approval}, is_active=${coupon.is_active}`);
+
+      // CORREÇÃO CRÍTICA: Buscar cupom completo do banco antes de notificar
+      // O método approve() pode não retornar todos os campos (como applicable_products)
+      // Precisamos do objeto completo para renderizar o template corretamente
+      const fullCoupon = await Coupon.findById(coupon.id);
+
+      if (!fullCoupon) {
+        logger.error(`❌ Erro crítico: Cupom aprovado mas não encontrado no banco: ID ${coupon.id}`);
+        return res.status(500).json(errorResponse('Cupom aprovado mas não encontrado', ERROR_CODES.INTERNAL_ERROR));
+      }
+
+      logger.debug(`📦 Cupom completo carregado do banco:`);
+      logger.debug(`   applicable_products: ${JSON.stringify(fullCoupon.applicable_products)}`);
+      logger.debug(`   is_general: ${fullCoupon.is_general}`);
+
       // Notificar sobre novo cupom aprovado
       try {
-        await couponNotificationService.notifyNewCoupon(coupon, { manual: true });
-        logger.info(`✅ Cupom ${coupon.code} aprovado e notificado com sucesso`);
+        logger.info(`📢 Iniciando envio de notificação para cupom aprovado: ${fullCoupon.code}`);
+        logger.debug(`   Plataforma: ${fullCoupon.platform}`);
+
+        await couponNotificationService.notifyNewCoupon(fullCoupon, { manual: true });
+
+        logger.info(`✅ Cupom ${fullCoupon.code} aprovado e notificado com sucesso`);
       } catch (notifError) {
         logger.warn(`⚠️ Erro ao notificar cupom aprovado: ${notifError.message}`);
+        logger.warn(`   Cupom: ${coupon.code} (ID: ${coupon.id})`);
+        logger.warn(`   Stack: ${notifError.stack}`);
+        logger.warn(`   ⚠️ Cupom foi aprovado mas a notificação falhou. Verifique os logs acima.`);
       }
 
       logger.info(`Cupom aprovado: ${id} (${coupon.code})`);
       res.json(successResponse(coupon, 'Cupom aprovado com sucesso'));
     } catch (error) {
+      logger.error(`❌ Erro ao aprovar cupom ID ${req.params.id}: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+      logger.error(`   Atualizações recebidas: ${JSON.stringify(req.body, null, 2)}`);
       next(error);
     }
   }

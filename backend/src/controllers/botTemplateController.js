@@ -10,7 +10,7 @@ class BotTemplateController {
   async list(req, res) {
     try {
       const { template_type, platform, is_active } = req.query;
-      
+
       const filters = {};
       if (template_type) filters.template_type = template_type;
       if (platform) filters.platform = platform;
@@ -136,7 +136,7 @@ class BotTemplateController {
 
       // Verificar se o template existe e se é do sistema
       const template = await BotMessageTemplate.findById(id);
-      
+
       if (!template) {
         return res.status(404).json({
           success: false,
@@ -149,7 +149,7 @@ class BotTemplateController {
         // Campos permitidos para templates do sistema
         const allowedFields = ['is_active', 'description'];
         const restrictedFields = Object.keys(updates).filter(field => !allowedFields.includes(field));
-        
+
         if (restrictedFields.length > 0) {
           return res.status(403).json({
             success: false,
@@ -198,10 +198,10 @@ class BotTemplateController {
   async delete(req, res) {
     try {
       const { id } = req.params;
-      
+
       // Verificar se o template existe e se é do sistema
       const template = await BotMessageTemplate.findById(id);
-      
+
       if (!template) {
         return res.status(404).json({
           success: false,
@@ -351,9 +351,9 @@ class BotTemplateController {
       for (const templateData of defaultTemplates) {
         try {
           // Marcar apenas os 3 templates padrão ativos (Modelo Padrão 1) como sistema
-          const isSystemTemplate = templateData.is_active === true && 
-                                   templateData.description?.includes('Modelo Padrão 1');
-          
+          const isSystemTemplate = templateData.is_active === true &&
+            templateData.description?.includes('Modelo Padrão 1');
+
           const template = await BotMessageTemplate.create({
             ...templateData,
             is_system: isSystemTemplate
@@ -401,7 +401,7 @@ class BotTemplateController {
       const { platform, is_active } = req.body;
 
       const original = await BotMessageTemplate.findById(id);
-      
+
       if (!original) {
         return res.status(404).json({
           success: false,
@@ -450,7 +450,10 @@ class BotTemplateController {
           'old_price',
           'discount_percentage',
           'platform_name',
-          'affiliate_link'
+          'category_name',
+          'affiliate_link',
+          'shopee_offer_info',
+          'is_shopee_offer'
         ],
         promotion_with_coupon: [
           'product_name',
@@ -460,11 +463,13 @@ class BotTemplateController {
           'old_price',
           'discount_percentage',
           'platform_name',
+          'category_name',
           'affiliate_link',
           'coupon_section',
           'coupon_code',
           'coupon_discount',
-          'price_with_coupon'
+          'price_with_coupon',
+          'shopee_offer_info'
         ],
         new_coupon: [
           'platform_name',
@@ -472,9 +477,13 @@ class BotTemplateController {
           'discount_value',
           'valid_until',
           'min_purchase',
+          'max_discount',
+          'usage_limit',
+          'applicability',
           'coupon_title',
           'coupon_description',
-          'affiliate_link'
+          'affiliate_link',
+          'category_name'
         ],
         expired_coupon: [
           'platform_name',
@@ -489,8 +498,11 @@ class BotTemplateController {
           current_price: 'Preço atual formatado (R$ X,XX)',
           old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
           discount_percentage: 'Percentual de desconto',
-          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
-          affiliate_link: 'Link de afiliado do produto'
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre, etc.)',
+          category_name: 'Nome da categoria do produto',
+          affiliate_link: 'Link de afiliado do produto',
+          shopee_offer_info: 'Informações de oferta Shopee (se aplicável)',
+          is_shopee_offer: 'Se é oferta Shopee (true/false)'
         },
         promotion_with_coupon: {
           product_name: 'Nome do produto',
@@ -499,12 +511,14 @@ class BotTemplateController {
           final_price: 'Preço final com cupom (R$ X,XX)',
           old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
           discount_percentage: 'Percentual de desconto do produto',
-          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre, etc.)',
+          category_name: 'Nome da categoria do produto',
           affiliate_link: 'Link de afiliado do produto',
           coupon_section: 'Seção completa do cupom - inclui código, desconto, validade',
           coupon_code: 'Código do cupom',
           coupon_discount: 'Desconto do cupom (ex: 10% OFF)',
-          price_with_coupon: 'Preço final com cupom formatado'
+          price_with_coupon: 'Preço final com cupom formatado',
+          shopee_offer_info: 'Informações de oferta Shopee (se aplicável)'
         },
         new_coupon: {
           platform_name: 'Nome da plataforma',
@@ -512,9 +526,13 @@ class BotTemplateController {
           discount_value: 'Valor do desconto formatado',
           valid_until: 'Data de validade formatada',
           min_purchase: 'Compra mínima (se houver)',
+          max_discount: 'Limite máximo de desconto (se houver)',
+          usage_limit: 'Limite de usos do cupom (se houver)',
+          applicability: 'Aplicabilidade do cupom (todos os produtos ou selecionados)',
           coupon_title: 'Título do cupom',
           coupon_description: 'Descrição do cupom',
-          affiliate_link: 'Link de afiliado'
+          affiliate_link: 'Link de afiliado',
+          category_name: 'Nome da categoria (se cupom tiver categoria)'
         },
         expired_coupon: {
           platform_name: 'Nome da plataforma',
@@ -574,7 +592,10 @@ class BotTemplateController {
           'old_price',
           'discount_percentage',
           'platform_name',
-          'affiliate_link'
+          'category_name',
+          'affiliate_link',
+          'shopee_offer_info',
+          'is_shopee_offer'
         ],
         promotion_with_coupon: [
           'product_name',
@@ -584,11 +605,13 @@ class BotTemplateController {
           'old_price',
           'discount_percentage',
           'platform_name',
+          'category_name',
           'affiliate_link',
           'coupon_section',
           'coupon_code',
           'coupon_discount',
-          'price_with_coupon'
+          'price_with_coupon',
+          'shopee_offer_info'
         ],
         new_coupon: [
           'platform_name',
@@ -596,9 +619,13 @@ class BotTemplateController {
           'discount_value',
           'valid_until',
           'min_purchase',
+          'max_discount',
+          'usage_limit',
+          'applicability',
           'coupon_title',
           'coupon_description',
-          'affiliate_link'
+          'affiliate_link',
+          'category_name'
         ],
         expired_coupon: [
           'platform_name',
@@ -613,8 +640,11 @@ class BotTemplateController {
           current_price: 'Preço atual formatado (R$ X,XX)',
           old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
           discount_percentage: 'Percentual de desconto',
-          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
-          affiliate_link: 'Link de afiliado do produto'
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre, etc.)',
+          category_name: 'Nome da categoria do produto',
+          affiliate_link: 'Link de afiliado do produto',
+          shopee_offer_info: 'Informações de oferta Shopee (se aplicável)',
+          is_shopee_offer: 'Se é oferta Shopee (true/false)'
         },
         promotion_with_coupon: {
           product_name: 'Nome do produto',
@@ -623,12 +653,14 @@ class BotTemplateController {
           final_price: 'Preço final com cupom (R$ X,XX)',
           old_price: 'Preço antigo formatado com riscado (~~R$ X,XX~~)',
           discount_percentage: 'Percentual de desconto do produto',
-          platform_name: 'Nome da plataforma (Shopee, Mercado Livre)',
+          platform_name: 'Nome da plataforma (Shopee, Mercado Livre, etc.)',
+          category_name: 'Nome da categoria do produto',
           affiliate_link: 'Link de afiliado do produto',
           coupon_section: 'Seção completa do cupom - inclui código, desconto, validade',
           coupon_code: 'Código do cupom',
           coupon_discount: 'Desconto do cupom (ex: 10% OFF)',
-          price_with_coupon: 'Preço final com cupom formatado'
+          price_with_coupon: 'Preço final com cupom formatado',
+          shopee_offer_info: 'Informações de oferta Shopee (se aplicável)'
         },
         new_coupon: {
           platform_name: 'Nome da plataforma',
@@ -636,9 +668,13 @@ class BotTemplateController {
           discount_value: 'Valor do desconto formatado',
           valid_until: 'Data de validade formatada',
           min_purchase: 'Compra mínima (se houver)',
+          max_discount: 'Limite máximo de desconto (se houver)',
+          usage_limit: 'Limite de usos do cupom (se houver)',
+          applicability: 'Aplicabilidade do cupom (todos os produtos ou selecionados)',
           coupon_title: 'Título do cupom',
           coupon_description: 'Descrição do cupom',
-          affiliate_link: 'Link de afiliado'
+          affiliate_link: 'Link de afiliado',
+          category_name: 'Nome da categoria (se cupom tiver categoria)'
         },
         expired_coupon: {
           platform_name: 'Nome da plataforma',

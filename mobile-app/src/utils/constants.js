@@ -5,7 +5,7 @@ export const PLATFORMS = {
   ALIEXPRESS: 'aliexpress',
   KABUM: 'kabum',
   MAGAZINELUIZA: 'magazineluiza',
-  TERABYTESHOP: 'terabyteshop',
+  PICHAU: 'pichau',
   GENERAL: 'general',
 };
 
@@ -16,7 +16,7 @@ export const PLATFORM_LABELS = {
   [PLATFORMS.ALIEXPRESS]: 'AliExpress',
   [PLATFORMS.KABUM]: 'Kabum',
   [PLATFORMS.MAGAZINELUIZA]: 'Magazine Luiza',
-  [PLATFORMS.TERABYTESHOP]: 'Terabyteshop',
+  [PLATFORMS.PICHAU]: 'Pichau',
   [PLATFORMS.GENERAL]: 'Geral',
 };
 
@@ -27,7 +27,7 @@ export const PLATFORM_COLORS = {
   [PLATFORMS.ALIEXPRESS]: '#FF4747',
   [PLATFORMS.KABUM]: '#FF6500',
   [PLATFORMS.MAGAZINELUIZA]: '#0086FF',
-  [PLATFORMS.TERABYTESHOP]: '#00A8E1',
+  [PLATFORMS.PICHAU]: '#FF6600',
   [PLATFORMS.GENERAL]: '#6B7280',
 };
 
