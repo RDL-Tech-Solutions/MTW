@@ -161,21 +161,21 @@ class PublishService {
             { bypassDuplicates: !!options.manual }
           );
 
-          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
+          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total, reason: result?.reason })}`);
 
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação Telegram com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
-            return true;
+            return { success: true, sent: result.sent };
           } else {
             logger.error(`❌ Telegram com imagem: falha no envio. Result: ${JSON.stringify(result)}`);
             // NÃO fazer fallback - se a imagem falhou, não enviar apenas mensagem
-            return false;
+            return { success: false, reason: result?.reason || 'Falha ao enviar para Telegram' };
           }
         } catch (imageError) {
           logger.error(`❌ Erro ao enviar imagem Telegram: ${imageError.message}`);
           logger.error(`   Stack: ${imageError.stack}`);
           // NÃO fazer fallback - se a imagem falhou, não enviar apenas mensagem
-          return false;
+          return { success: false, reason: `Erro ao enviar imagem Telegram: ${imageError.message}` };
         }
       } else {
         logger.error(`❌ Produto sem imagem válida. Produto: ${product.name}`);
@@ -183,12 +183,12 @@ class PublishService {
         logger.error(`   Tipo: ${typeof product.image_url}`);
         logger.error(`   Produto completo: ${JSON.stringify({ id: product.id, name: product.name, image_url: product.image_url })}`);
         // NÃO enviar mensagem sem imagem - a imagem é obrigatória
-        return false;
+        return { success: false, reason: 'Produto sem imagem válida para publicação no Telegram' };
       }
     } catch (error) {
       logger.error(`❌ Erro ao notificar Telegram: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
-      return false;
+      return { success: false, reason: `Erro ao notificar Telegram: ${error.message}` };
     }
   }
 
@@ -222,18 +222,21 @@ class PublishService {
             { bypassDuplicates: !!options.manual }
           );
 
-          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total })}`);
+          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total, reason: result?.reason })}`);
 
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação WhatsApp com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
-            return true;
+            return { success: true, sent: result.sent };
           } else {
             logger.warn(`⚠️ WhatsApp com imagem: nenhuma mensagem enviada. Tentando sem imagem...`);
+            // Store reason for potential use if text-only also fails
+            var imageFailureReason = result?.reason;
           }
         } catch (imageError) {
           logger.error(`❌ Erro ao enviar imagem WhatsApp: ${imageError.message}`);
           logger.error(`   Stack: ${imageError.stack}`);
           logger.warn(`⚠️ Tentando enviar apenas mensagem sem imagem...`);
+          var imageFailureReason = `Erro ao enviar imagem: ${imageError.message}`;
         }
       } else {
         logger.warn(`⚠️ Produto sem imagem válida, enviando apenas mensagem`);
@@ -248,15 +251,16 @@ class PublishService {
 
       if (result && result.success && result.sent > 0) {
         logger.info(`✅ Notificação WhatsApp enviada para produto: ${product.name} (${result.sent} canal(is))`);
-        return true;
+        return { success: true, sent: result.sent };
       } else {
         logger.warn(`⚠️ WhatsApp: nenhuma mensagem enviada para ${product.name}. Canais: ${result?.total || 0}, Enviados: ${result?.sent || 0}`);
-        return false;
+        const finalReason = result?.reason || (typeof imageFailureReason !== 'undefined' ? imageFailureReason : 'Falha ao enviar para WhatsApp');
+        return { success: false, reason: finalReason };
       }
     } catch (error) {
       logger.error(`❌ Erro ao notificar WhatsApp: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);
-      return false;
+      return { success: false, reason: `Erro ao notificar WhatsApp: ${error.message}` };
     }
   }
 
@@ -623,14 +627,22 @@ class PublishService {
       if (options.manual) {
         // Telegram (apenas se should_send_to_bots = true)
         if (product.should_send_to_bots !== false) {
-          results.telegram = await this.notifyTelegramBot(product, options);
+          const telegramResult = await this.notifyTelegramBot(product, options);
+          results.telegram = telegramResult?.success || telegramResult === true;
+          if (telegramResult?.reason) {
+            results.telegramReason = telegramResult.reason;
+          }
         } else {
           logger.info(`⏸️ Telegram desabilitado pela IA para este produto`);
         }
 
         // WhatsApp (apenas se should_send_to_bots = true)
         if (product.should_send_to_bots !== false) {
-          results.whatsapp = await this.notifyWhatsAppBot(product, options);
+          const whatsappResult = await this.notifyWhatsAppBot(product, options);
+          results.whatsapp = whatsappResult?.success || whatsappResult === true;
+          if (whatsappResult?.reason) {
+            results.whatsappReason = whatsappResult.reason;
+          }
         } else {
           logger.info(`⏸️ WhatsApp desabilitado pela IA para este produto`);
         }
@@ -648,11 +660,28 @@ class PublishService {
 
       const success = results.telegram || results.whatsapp;
 
+      // Build comprehensive reason if publication failed
+      let reason = undefined;
+      if (!success) {
+        const reasons = [];
+        if (results.telegramReason) reasons.push(`Telegram: ${results.telegramReason}`);
+        if (results.whatsappReason) reasons.push(`WhatsApp: ${results.whatsappReason}`);
+
+        if (reasons.length > 0) {
+          reason = reasons.join('; ');
+        } else if (product.should_send_to_bots === false) {
+          reason = 'Publicação em bots desabilitada pela IA';
+        } else {
+          reason = 'Nenhum canal disponível para publicação';
+        }
+      }
+
       logger.info(`✅ Publicação completa: ${product.name}`, results);
 
       return {
         success,
-        results
+        results,
+        reason
       };
     } catch (error) {
       logger.error(`❌ Erro na publicação completa: ${error.message}`);

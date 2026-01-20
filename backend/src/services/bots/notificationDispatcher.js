@@ -529,7 +529,12 @@ class NotificationDispatcher {
 
       if (!allChannels || allChannels.length === 0) {
         logger.warn('⚠️ Nenhum canal Telegram ativo encontrado');
-        return { success: false, sent: 0, total: 0 };
+        return {
+          success: false,
+          sent: 0,
+          total: 0,
+          reason: 'Nenhum canal Telegram ativo encontrado. Configure canais ativos no painel admin.'
+        };
       }
 
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
@@ -544,7 +549,27 @@ class NotificationDispatcher {
 
       if (channels.length === 0) {
         logger.info(`⏸️ Nenhum canal Telegram passou nos filtros de segmentação`);
-        return { success: false, sent: 0, total: 0, filtered: allChannels.length };
+
+        // Build detailed reason explaining why channels were filtered
+        let reason = `Nenhum canal Telegram passou nos filtros de segmentação (${allChannels.length} canal(is) filtrado(s)). `;
+
+        if (data.category_id) {
+          reason += `Categoria: ${data.category_id}. `;
+        } else {
+          reason += `Produto sem categoria definida. `;
+        }
+
+        if (data.coupon_id) {
+          reason += `Produto com cupom vinculado (alguns canais podem ter no_coupons=true). `;
+        }
+
+        if (data.offer_score !== undefined) {
+          reason += `Score: ${data.offer_score}. `;
+        }
+
+        reason += `Verifique os filtros dos canais (categoria, plataforma, horário, score mínimo, cupons).`;
+
+        return { success: false, sent: 0, total: 0, filtered: allChannels.length, reason };
       }
 
       logger.info(`   Canais encontrados: ${channels.length}/${allChannels.length} (${allChannels.length - channels.length} filtrados)`);
@@ -644,11 +669,28 @@ class NotificationDispatcher {
         }
       }
 
+      // Build reason if no messages were sent
+      let reason = undefined;
+      if (sent === 0) {
+        const skippedDuplicates = results.filter(r => r.skipped && r.reason?.includes('Duplicado')).length;
+        const failedSending = results.filter(r => !r.success && !r.skipped).length;
+
+        if (skippedDuplicates > 0 && skippedDuplicates === channels.length) {
+          reason = `Todos os ${channels.length} canal(is) Telegram ignoraram o produto (já enviado recentemente). Aguarde ou desative o controle de duplicados.`;
+        } else if (failedSending > 0) {
+          const errorMessages = results.filter(r => r.error).map(r => r.error).join(', ');
+          reason = `Falha ao enviar para ${failedSending} canal(is) Telegram: ${errorMessages}`;
+        } else {
+          reason = `Nenhuma mensagem Telegram enviada (${channels.length} canal(is) tentado(s))`;
+        }
+      }
+
       return {
         success: sent > 0,
         sent,
         total: channels.length,
-        results
+        results,
+        reason
       };
     } catch (error) {
       logger.error(`❌ Erro ao enviar mensagem com imagem para Telegram: ${error.message}`);
@@ -670,7 +712,12 @@ class NotificationDispatcher {
 
       if (!allChannels || allChannels.length === 0) {
         logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
-        return { success: false, sent: 0, total: 0 };
+        return {
+          success: false,
+          sent: 0,
+          total: 0,
+          reason: 'Nenhum canal WhatsApp ativo encontrado. Configure canais ativos no painel admin.'
+        };
       }
 
       // Filtrar canais usando segmentação inteligente (se data for fornecido)
@@ -685,7 +732,27 @@ class NotificationDispatcher {
 
       if (channels.length === 0) {
         logger.info(`⏸️ Nenhum canal WhatsApp passou nos filtros de segmentação`);
-        return { success: false, sent: 0, total: 0, filtered: allChannels.length };
+
+        // Build detailed reason explaining why channels were filtered
+        let reason = `Nenhum canal WhatsApp passou nos filtros de segmentação (${allChannels.length} canal(is) filtrado(s)). `;
+
+        if (data.category_id) {
+          reason += `Categoria: ${data.category_id}. `;
+        } else {
+          reason += `Produto sem categoria definida. `;
+        }
+
+        if (data.coupon_id) {
+          reason += `Produto com cupom vinculado (alguns canais podem ter no_coupons=true). `;
+        }
+
+        if (data.offer_score !== undefined) {
+          reason += `Score: ${data.offer_score}. `;
+        }
+
+        reason += `Verifique os filtros dos canais (categoria, plataforma, horário, score mínimo, cupons).`;
+
+        return { success: false, sent: 0, total: 0, filtered: allChannels.length, reason };
       }
 
       logger.info(`   Canais encontrados: ${channels.length}/${allChannels.length} (${allChannels.length - channels.length} filtrados)`);
@@ -805,12 +872,29 @@ class NotificationDispatcher {
         }
       }
 
+      // Build reason if no messages were sent
+      let reason = undefined;
+      if (sent === 0) {
+        const skippedDuplicates = results.filter(r => r.skipped && r.reason?.includes('Duplicado')).length;
+        const failedSending = results.filter(r => !r.success && !r.skipped).length;
+
+        if (skippedDuplicates > 0 && skippedDuplicates === channels.length) {
+          reason = `Todos os ${channels.length} canal(is) WhatsApp ignoraram o produto (já enviado recentemente). Aguarde ou desative o controle de duplicados.`;
+        } else if (failedSending > 0) {
+          const errorMessages = results.filter(r => r.error).map(r => r.error).join(', ');
+          reason = `Falha ao enviar para ${failedSending} canal(is) WhatsApp: ${errorMessages}`;
+        } else {
+          reason = `Nenhuma mensagem WhatsApp enviada (${channels.length} canal(is) tentado(s))`;
+        }
+      }
+
       return {
         success: sent > 0,
         sent,
         total: channels.length,
         filtered: allChannels.length - channels.length,
-        results
+        results,
+        reason
       };
     } catch (error) {
       logger.error(`❌ Erro ao enviar mensagem com imagem para WhatsApp: ${error.message}`);

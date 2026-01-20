@@ -99,7 +99,11 @@ class ProductController {
         // Buscar produto atualizado para retornar
         const updatedProduct = await Product.findById(product.id);
 
-        res.status(201).json(successResponse(updatedProduct, publishResult.success ? 'Produto criado e publicado com sucesso' : 'Produto criado, mas falha na publicação imediata.'));
+        const successMessage = publishResult.success
+          ? 'Produto criado e publicado com sucesso'
+          : `Produto criado, mas falha na publicação: ${publishResult.reason || 'Verifique os logs'}`;
+
+        res.status(201).json(successResponse(updatedProduct, successMessage));
       }
     } catch (error) {
       next(error);
@@ -482,14 +486,15 @@ class ProductController {
         logger.info(`✅ Produto aprovado e publicado: ${fullProduct.name}${coupon_id ? ` com cupom (preço final: R$ ${finalPrice.toFixed(2)})` : ''}`);
       } else {
         // Se falhou por algum motivo (ex: duplicado), o status ficará como approved mas não published
-        logger.warn(`⚠️ Produto aprovado mas NÃO publicado: ${fullProduct.name}. Motivo: ${publishResult.reason || 'Erro desconhecido'}`);
+        const detailedReason = publishResult.reason || 'Erro desconhecido';
+        logger.warn(`⚠️ Produto aprovado mas NÃO publicado: ${fullProduct.name}. Motivo: ${detailedReason}`);
       }
 
       res.json(successResponse({
         product: approvedProduct,
         publishResult,
         final_price: coupon_id ? finalPrice : null
-      }, publishResult.success ? 'Produto aprovado e publicado com sucesso' : 'Produto aprovado, mas não publicado (verifique logs)'));
+      }, publishResult.success ? 'Produto aprovado e publicado com sucesso' : `Produto aprovado, mas não publicado: ${publishResult.reason || 'Verifique os logs'}`));
     } catch (error) {
       logger.error(`❌ Erro ao aprovar produto: ${error.message}`);
       next(error);
