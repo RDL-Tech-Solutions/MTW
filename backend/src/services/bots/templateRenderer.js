@@ -1,7 +1,33 @@
 import BotMessageTemplate from '../../models/BotMessageTemplate.js';
 import Coupon from '../../models/Coupon.js';
 import logger from '../../config/logger.js';
+import baseRenderer from './renderers/baseRenderer.js';
 
+/**
+ * TemplateRenderer - Renderizador principal de templates
+ * 
+ * ORGANIZAÇÃO:
+ * - render() - Método principal que coordena a renderização
+ * - prepare*Variables() - Métodos para preparar variáveis específicas
+ * - getDefaultTemplate() - Templates padrão do sistema
+ * - Funções auxiliares delegadas ao baseRenderer:
+ *   ├── removeDuplicateCouponCode()
+ *   ├── convertBoldFormatting()
+ *   ├── formatDate()
+ *   ├── getPlatformName()
+ *   └── getTemplateMode()
+ * 
+ * TIPOS DE TEMPLATE SUPORTADOS:
+ * 1. new_promotion - Nova Promoção (Sem Cupom)
+ * 2. promotion_with_coupon - Promoção + Cupom
+ * 3. new_coupon - Novo Cupom
+ * 4. expired_coupon - Cupom Expirado
+ * 
+ * MODOS DE RENDERIZAÇÃO:
+ * - default: Template padrão do sistema
+ * - custom: Template customizado do admin panel
+ * - ai_advanced: Template gerado dinamicamente pela IA
+ */
 class TemplateRenderer {
   /**
    * Remover código de cupom duplicado da mensagem
@@ -10,28 +36,7 @@ class TemplateRenderer {
    * @returns {string} - Mensagem sem duplicatas
    */
   removeDuplicateCouponCode(message, couponCode) {
-    if (!couponCode) return message;
-
-    const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'gi');
-    const codeMatches = message.match(codePattern);
-    const codeCount = codeMatches ? codeMatches.length : 0;
-
-    if (codeCount > 1) {
-      logger.warn(`⚠️ Código do cupom duplicado detectado (${codeCount} vezes), removendo duplicatas...`);
-      // Remover todas as ocorrências
-      message = message.replace(codePattern, '');
-      // Adicionar apenas uma ocorrência formatada antes do link ou no final
-      const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-      if (message.includes('{affiliate_link}') || message.includes('affiliate_link') || message.match(/(🔗|👉)/i)) {
-        message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
-      } else {
-        message += codeSection;
-      }
-      logger.info(`   ✅ Código duplicado removido, mantendo apenas uma ocorrência: \`${couponCode}\``);
-    }
-
-    return message;
+    return baseRenderer.removeDuplicateCouponCode(message, couponCode);
   }
 
   /**
@@ -45,1205 +50,53 @@ class TemplateRenderer {
     try {
       logger.info(`🎨 Renderizando template: ${templateType} para ${platform}`);
 
-      // Verificar modo de template configurado
       const templateMode = await this.getTemplateMode(templateType);
       logger.info(`📋 Modo de template: ${templateMode} para ${templateType}`);
 
       let message = '';
 
-      // Modo IA ADVANCED: Gerar template dinamicamente
       if (templateMode === 'ai_advanced') {
-        logger.info(`🤖 [IA ADVANCED] Gerando template dinamicamente para ${templateType}`);
         const advancedTemplateGenerator = (await import('../../ai/advancedTemplateGenerator.js')).default;
 
-        try {
-          if (templateType === 'new_promotion' || templateType === 'promotion_with_coupon') {
-            // Gerar template de promoção
-            message = await advancedTemplateGenerator.generatePromotionTemplate(contextData.product || contextData, platform);
-          } else if (templateType === 'new_coupon') {
-            // Gerar template de cupom
-            message = await advancedTemplateGenerator.generateCouponTemplate(contextData.coupon || contextData, platform);
-
-            // IMPORTANTE: Remover qualquer menção à data de validade que a IA possa ter incluído
-            // Remover padrões comuns de data de validade (mais abrangente)
-            message = message
-              // Padrões com emojis e formatação
-              .replace(/\n?📅\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
-              .replace(/\n?📅\s*\*\*?Válido até\*\*?:\s*[^\n]*\n?/gi, '')
-              .replace(/\n?📅\s*Válido até:\s*[^\n]*\n?/gi, '')
-              .replace(/\n?⏰\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
-              .replace(/\n?⏳\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
-              .replace(/\n?📅\s*\{valid_until\}[^\n]*\n?/gi, '')
-              // Padrões sem emoji
-              .replace(/\n?.*[Vv]álido\s+até.*\n?/gi, '')
-              .replace(/\n?.*valid_until.*\n?/gi, '')
-              .replace(/\n?.*[Ee]xpira.*\n?/gi, '')
-              .replace(/\n?.*[Vv]alidade.*\n?/gi, '')
-              // Limpar linhas vazias resultantes
-              .replace(/\n{3,}/g, '\n\n');
-
-            // IMPORTANTE: Remover menções à plataforma (nome da plataforma) já que a imagem será enviada
-            const coupon = contextData.coupon || contextData;
-            if (coupon && coupon.platform) {
-              const platformNames = [
-                'Mercado Livre', 'MercadoLivre', 'Mercado Livre',
-                'Shopee',
-                'Amazon',
-                'AliExpress', 'AliExpress', 'Ali Express'
-              ];
-              platformNames.forEach(name => {
-                // Remover nome da plataforma (case-insensitive, palavra completa)
-                const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
-                message = message.replace(regex, '');
-              });
-              // Remover linhas que contenham apenas o nome da plataforma ou padrões relacionados
-              message = message
-                .replace(/^.*(Mercado\s+Livre|Shopee|Amazon|AliExpress).*$/gmi, '')
-                .replace(/^.*[Dd]isponível\s+no\s+(Mercado\s+Livre|Shopee|Amazon|AliExpress).*$/gmi, '')
-                .replace(/^.*[Pp]lataforma:\s*(Mercado\s+Livre|Shopee|Amazon|AliExpress).*$/gmi, '')
-                // Limpar linhas vazias resultantes
-                .replace(/\n{3,}/g, '\n\n');
-            }
-
-            logger.debug(`📝 Template de cupom após remoção de data de validade e plataforma: ${message.length} chars`);
-
-            // CRÍTICO: Garantir que o código do cupom esteja presente no template (sem duplicar)
-            const couponCode = coupon?.code;
-            if (couponCode) {
-              // Verificar se o código já está presente (formatado ou não)
-              const codePattern = new RegExp(`\\b${couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-              const codeAlreadyPresent = codePattern.test(message) || message.includes(`\`${couponCode}\``) || message.includes(`{coupon_code}`);
-
-              if (!codeAlreadyPresent) {
-                logger.warn(`⚠️ [IA ADVANCED] Código do cupom não encontrado no template gerado, adicionando...`);
-                // Adicionar código do cupom formatado antes do link
-                const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-                message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
-                logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
-              } else {
-                logger.debug(`   ✅ Código do cupom já está presente na mensagem: ${couponCode}`);
-              }
-            }
-          } else if (templateType === 'expired_coupon') {
-            // Gerar template de cupom expirado
-            message = await advancedTemplateGenerator.generateExpiredCouponTemplate(contextData.coupon || contextData, platform);
-          } else {
-            throw new Error(`Tipo de template não suportado para IA ADVANCED: ${templateType}`);
-          }
-
-          logger.info(`✅ [IA ADVANCED] Template gerado com sucesso (${message.length} chars)`);
-
-          // IMPORTANTE: Processar template gerado pela IA para garantir formatação correta
-          // 1. Converter qualquer HTML literal que a IA possa ter gerado para Markdown
-          // IMPORTANTE: Processar na ordem correta para evitar conflitos
-          message = message
-            // Primeiro, proteger código já formatado
-            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
-            // Converter HTML para Markdown
-            .replace(/<code>(.*?)<\/code>/gi, '`$1`')  // <code> primeiro
-            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-            .replace(/<i>(.*?)<\/i>/gi, '_$1_')
-            .replace(/<em>(.*?)<\/em>/gi, '_$1_')
-            .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')  // Strikethrough
-            .replace(/<br\s*\/?>/gi, '\n')
-            // Desescapar entidades HTML que a IA pode ter gerado
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&quot;/g, '"')
-            // Converter tags HTML remanescentes para Markdown
-            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-            // Remover tags HTML quebradas ou literais
-            .replace(/<\/?code>/gi, '')
-            .replace(/<\/?b>/gi, '')
-            .replace(/<\/?strong>/gi, '')
-            .replace(/<\/?i>/gi, '')
-            .replace(/<\/?em>/gi, '')
-            // Corrigir tildes múltiplos incorretos (~~~~ → ~~)
-            .replace(/~{3,}/g, '~~')
-            // Corrigir padrões mal formatados como "(de ~~ R$ 44,88)" - remover "(de" e manter apenas o preço formatado
-            // Corrigir padrões mal formatados como "(de ~~ R$ 44,88)" - remover "(de" e manter apenas o preço formatado
-            .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
-            .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
-            // Limpeza AGRESSIVA FINAL de tildes duplicados ou mal formados
-            .replace(/(~~\s*)+~~/g, '~~')
-            .replace(/~{3,}/g, '~~')
-            .replace(/R\$\s*~~\s*~*R\$/gi, '~~R$') // R$ ~~ ~~R$ -> ~~R$
-            .replace(/~~.*?~~\s*R\$/gi, '~~R$')  // ~~ ~~ R$ -> ~~R$
-            // Remover texto "mensagem truncada" que a IA pode adicionar
-            .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
-            .replace(/\s*\(mensagem\s+truncada\)/gi, '')
-            .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
-            .replace(/\s*\(truncada\)/gi, '')
-            .replace(/\s*\[continua\s+na\s+próxima\s+mensagem\]/gi, '')
-            .replace(/\s*\(continua\s+na\s+próxima\s+mensagem\)/gi, '')
-            .replace(/\s*\[\.\.\.\s+continua\]/gi, '')
-            .replace(/\s*\(ver\s+mais\)/gi, '')
-            .replace(/\s*\[ver\s+mais\]/gi, '')
-            // Remover explicações ou comentários que a IA pode adicionar
-            .replace(/\n\s*\/\/.*$/gm, '')
-            .replace(/\n\s*<!--.*?-->/g, '')
-            .replace(/\n\s*Nota:.*$/gmi, '')
-            .replace(/\n\s*Observação:.*$/gmi, '')
-            .replace(/\n\s*Importante:.*$/gmi, '')
-            .replace(/\n\s*Lembre-se:.*$/gmi, '')
-            // Remover tags HTML não convertidas (última tentativa)
-            .replace(/<[^>]+>/g, '')
-            // Restaurar código protegido
-            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
-
-          // 2. Se a IA ADVANCED otimizou o título, atualizar nas variáveis também
-          if (contextData.product && contextData.product.name) {
-            // O título já foi otimizado dentro do generatePromotionTemplate
-            // IMPORTANTE: O título otimizado está em contextData.product.name
-            const optimizedTitle = contextData.product.name;
-            if (variables.product_name && optimizedTitle !== variables.product_name) {
-              logger.info(`📝 Atualizando product_name de "${variables.product_name}" para título otimizado: "${optimizedTitle}"`);
-              variables.product_name = optimizedTitle;
-            } else if (!variables.product_name) {
-              variables.product_name = optimizedTitle;
-              logger.info(`📝 Definindo product_name com título otimizado: "${optimizedTitle}"`);
-            } else {
-              logger.debug(`📝 product_name já está atualizado: "${variables.product_name}"`);
-            }
-          }
-
-          // 2.1. IMPORTANTE: Garantir que {product_name} esteja presente na mensagem
-          // CORREÇÃO CRÍTICA: Só fazer isso para PRODUTOS/PROMOÇÕES, NÃO para CUPONS!
-          if (templateType === 'new_promotion' || templateType === 'promotion_with_coupon') {
-            // Se a IA não incluiu o título, adicionar no início
-            const productName = variables.product_name || contextData.product?.name || 'Produto';
-
-            // Verificar se a IA gerou uma descrição longa no lugar do título
-            // Se a primeira linha após o cabeçalho é muito longa (> 100 chars) e não contém o título, pode ser uma descrição
-            const lines = message.split('\n');
-            const headerLineIndex = lines.findIndex(line => (line.includes('🔥') || line.includes('⚡') || line.includes('🎯')) && line.includes('**'));
-            if (headerLineIndex >= 0 && headerLineIndex + 1 < lines.length) {
-              const lineAfterHeader = lines[headerLineIndex + 1].trim();
-              // Se a linha após o cabeçalho é muito longa e não contém o título, pode ser uma descrição no lugar do título
-              if (lineAfterHeader.length > 100 && !lineAfterHeader.includes(productName) && !lineAfterHeader.includes('{product_name}')) {
-                logger.warn(`⚠️ Detectada possível descrição longa no lugar do título, corrigindo...`);
-                // Adicionar o título antes dessa linha longa
-                lines[headerLineIndex + 1] = `📦 **{product_name}**\n\n${lineAfterHeader}`;
-                message = lines.join('\n');
-                logger.info(`✅ Título do produto adicionado antes da descrição: "${productName}"`);
-              }
-            }
-
-            // Verificar se {product_name} está presente (como variável ou já substituído)
-            const hasProductNameVar = message.includes('{product_name}');
-            const hasProductNameText = message.includes(productName) ||
-              message.toLowerCase().includes(productName.toLowerCase()) ||
-              (productName.length > 20 && message.includes(productName.substring(0, 20)));
-
-            if (!hasProductNameVar && !hasProductNameText) {
-              logger.warn(`⚠️ Título do produto não encontrado na mensagem da IA, adicionando...`);
-              // Se o Mixtral já retornou algo que se parece com um título mas não é idêntico, 
-              // vamos pesquisar por padrões comuns de títulos no início (📦, **Título**)
-              const hasInitialTitlePattern = message.trim().startsWith('📦') || message.trim().startsWith('**');
-
-              if (!hasInitialTitlePattern) {
-                const headerPattern = /(🔥|⚡|🎯).*\*\*.*\*\*.*(🔥|⚡|🎯)/;
-                if (headerPattern.test(message)) {
-                  message = message.replace(headerPattern, `$&\n\n📦 **{product_name}**`);
-                } else {
-                  message = `📦 **{product_name}**\n\n${message}`;
-                }
-                logger.info(`✅ Título do produto adicionado: "{product_name}"`);
-              } else {
-                logger.info(`✅ Detectado padrão de título inicial na IA, assumindo que product_name já está lá.`);
-              }
-            } else {
-              logger.debug(`✅ Título do produto encontrado na mensagem`);
-            }
-          } else {
-            logger.debug(`📝 Template tipo ${templateType}: NÃO adicionar product_name (é cupom ou outro tipo)`);
-          }
-
-          // 3. IMPORTANTE: Garantir que coupon_code seja formatado com backticks para facilitar cópia no Telegram (sem duplicar)
-          if (contextData.coupon && contextData.coupon.code && variables.coupon_code) {
-            const couponCode = variables.coupon_code;
-            // Verificar quantas vezes o código aparece na mensagem
-            const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'gi');
-            const codeMatches = message.match(codePattern);
-            const codeCount = codeMatches ? codeMatches.length : 0;
-
-            // Se o código aparece mais de uma vez, remover duplicatas
-            if (codeCount > 1) {
-              logger.warn(`⚠️ [IA ADVANCED] Código do cupom duplicado detectado (${codeCount} vezes), removendo duplicatas...`);
-              // Manter apenas a primeira ocorrência formatada
-              const firstMatch = message.match(new RegExp(`([<\\\`]?)${escapedCode}([>\\\`]?)`, 'i'));
-              if (firstMatch) {
-                // Remover todas as ocorrências e adicionar apenas uma formatada
-                message = message.replace(new RegExp(`\\b${escapedCode}\\b`, 'gi'), '');
-                // Adicionar o código formatado uma vez antes do link ou no final
-                const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-                if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
-                  message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
-                } else {
-                  message += codeSection;
-                }
-                logger.info(`   ✅ Código duplicado removido, mantendo apenas uma ocorrência: \`${couponCode}\``);
-              }
-            } else {
-              // Verificar se já está formatado
-              const codeInMessage = message.includes(`\`${couponCode}\``) ||
-                message.includes(`<code>${couponCode}</code>`) ||
-                message.match(new RegExp(`[<\\\`]${escapedCode}[>\\\`]`));
-
-              if (!codeInMessage && codeCount === 1) {
-                logger.info(`📝 Garantindo que código do cupom seja formatado para cópia fácil`);
-                // Substituir código sem formatação por código formatado (apenas uma vez)
-                const codeRegex = new RegExp(`\\b${escapedCode}\\b`, 'g');
-                message = message.replace(codeRegex, `\`${couponCode}\``);
-                logger.info(`   ✅ Código formatado: \`${couponCode}\``);
-              } else {
-                logger.debug(`   ✅ Código do cupom já está formatado corretamente (${codeCount} ocorrência(s))`);
-              }
-            }
-          }
-        } catch (aiError) {
-          logger.error(`❌ [IA ADVANCED] Erro ao gerar template: ${aiError.message}`);
-          logger.error(`   Stack: ${aiError.stack}`);
-          logger.warn(`⚠️ [IA ADVANCED] Fallback para template padrão devido ao erro...`);
-
-          // IMPORTANTE: Usar template padrão quando IA ADVANCED falhar
-          // Isso garante que a publicação não seja bloqueada por erros da IA
-          try {
-            logger.info(`📋 [FALLBACK] Usando template padrão do sistema para ${templateType}`);
-            logger.debug(`📋 Variáveis disponíveis: ${JSON.stringify(Object.keys(variables))}`);
-            message = this.getDefaultTemplate(templateType, variables, platform);
-            logger.info(`✅ [FALLBACK] Template padrão gerado (${message.length} chars)`);
-            logger.debug(`📋 Template padrão gerado (primeiros 300 chars): ${message.substring(0, 300)}`);
-          } catch (fallbackError) {
-            logger.error(`❌ [FALLBACK] Erro ao gerar template padrão: ${fallbackError.message}`);
-            // Último recurso: tentar template customizado
-            logger.warn(`⚠️ Tentando template customizado como último recurso...`);
-            const template = await BotMessageTemplate.findByType(templateType, platform);
-            if (!template || !template.is_active) {
-              throw new Error(`IA ADVANCED falhou, template padrão falhou e não há template customizado disponível: ${aiError.message}`);
-            }
-            message = template.template;
-            logger.info(`✅ [FALLBACK] Usando template customizado como último recurso`);
-          }
+        // Verifica se é Mixtral (Gratuito) para forçar fallback se necessário
+        if (advancedTemplateGenerator.modelProvider === 'mixtral' ||
+          advancedTemplateGenerator.modelProvider === 'huggingface') {
+          // Apenas log informativo
+          logger.info(`ℹ️ Provedor Mixtral detectado em render()`);
         }
+
+        message = await this._renderWithAiAdvanced(templateType, platform, variables, contextData);
       }
-      // Modo DEFAULT: Usar template padrão do sistema
       else if (templateMode === 'default') {
-        logger.info(`📋 [MODO PADRÃO] Usando template padrão do sistema para ${templateType}`);
-        logger.debug(`📋 Variáveis disponíveis: ${JSON.stringify(Object.keys(variables))}`);
-        logger.debug(`📋 coupon_code: ${variables.coupon_code || 'N/A'}`);
-        logger.debug(`📋 original_price: ${variables.original_price || 'N/A'}`);
-        logger.debug(`📋 final_price: ${variables.final_price || 'N/A'}`);
-        message = this.getDefaultTemplate(templateType, variables, platform);
-        logger.info(`✅ Template padrão gerado (${message.length} chars)`);
-        logger.debug(`📋 Template gerado (primeiros 300 chars): ${message.substring(0, 300)}`);
+        message = this._renderWithDefault(templateType, platform, variables);
       }
-      // Modo CUSTOM: Usar template salvo no painel admin
       else if (templateMode === 'custom') {
-        logger.info(`📋 [MODO CUSTOMIZADO] Usando template customizado do painel admin para ${templateType}`);
-        const template = await BotMessageTemplate.findByType(templateType, platform);
-
-        if (!template) {
-          const errorMsg = `Template customizado não encontrado: ${templateType} para ${platform}.`;
-          logger.warn(`⚠️ ${errorMsg}`);
-          logger.info(`📋 Fazendo fallback para template padrão do sistema...`);
-
-          // IMPORTANTE: Fallback para template padrão do sistema ao invés de lançar erro
-          // Isso garante que a publicação continue mesmo se o template não estiver no banco
-          message = this.getDefaultTemplate(templateType, variables, platform);
-          logger.info(`✅ Template padrão do sistema usado como fallback (${message.length} chars)`);
-        }
-        else if (!template.is_active) {
-          const errorMsg = `Template encontrado mas está inativo: ${templateType} para ${platform}.`;
-          logger.warn(`⚠️ ${errorMsg}`);
-          logger.info(`📋 Fazendo fallback para template padrão do sistema...`);
-
-          // IMPORTANTE: Fallback para template padrão do sistema
-          message = this.getDefaultTemplate(templateType, variables, platform);
-          logger.info(`✅ Template padrão do sistema usado como fallback (${message.length} chars)`);
-        }
-        else if (!template.template || template.template.trim().length === 0) {
-          const errorMsg = `Template está vazio: ${templateType} para ${platform}.`;
-          logger.warn(`⚠️ ${errorMsg}`);
-          logger.info(`📋 Fazendo fallback para template padrão do sistema...`);
-
-          // IMPORTANTE: Fallback para template padrão do sistema
-          message = this.getDefaultTemplate(templateType, variables, platform);
-          logger.info(`✅ Template padrão do sistema usado como fallback (${message.length} chars)`);
-        }
-        else {
-          logger.info(`✅ Template customizado encontrado e ativo: ${template.id} - ${template.template_type} para ${template.platform}`);
-          message = template.template;
-        }
+        message = await this._renderWithCustom(templateType, platform, variables);
       }
-      // Fallback: Se o modo não for reconhecido, usar customizado
       else {
-        logger.warn(`⚠️ Modo de template desconhecido: ${templateMode}, usando customizado como fallback`);
-        const template = await BotMessageTemplate.findByType(templateType, platform);
-        if (template && template.is_active && template.template) {
-          message = template.template;
-        } else {
-          // Se não houver template customizado, usar padrão
-          logger.warn(`⚠️ Template customizado não encontrado, usando padrão do sistema`);
-          message = this.getDefaultTemplate(templateType, variables, platform);
-        }
+        logger.warn(`⚠️ Modo desconhecido: ${templateMode}, fallback para custom`);
+        message = await this._renderWithCustom(templateType, platform, variables);
       }
 
-      logger.debug(`📋 Template original (primeiros 200 chars): ${message.substring(0, 200)}...`);
-      logger.debug(`📋 Template original tem ${(message.match(/\n/g) || []).length} quebras de linha`);
+      logger.debug(`📋 Template gerado (${message.length} chars) antes da finalização`);
 
-      // IMPORTANTE: Corrigir padrões mal formatados ANTES de substituir variáveis (especialmente para IA ADVANCED)
-      // Corrigir "(de ~~ R$ 44,88)" que pode ser gerado pela IA
-      if (templateMode === 'ai_advanced') {
-        message = message
-          // Corrigir padrão "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)" - remover "(de" e manter apenas o preço
-          .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
-          .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
-          // Remover texto "mensagem truncada" que a IA pode adicionar
-          .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
-          .replace(/\s*\(mensagem\s+truncada\)/gi, '')
-          .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
-          .replace(/\s*\(truncada\)/gi, '');
-      }
+      // 1. Substituição de variáveis
+      message = this._replaceVariables(message, variables, templateMode, platform, contextData);
 
-      // IMPORTANTE: Corrigir formatação de preços mal formatados APÓS substituição de variáveis
-      // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF" (tudo junto)
-      message = message
-        // Separar preço e emoji que estão juntos
-        .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)/g, '$1\n$2')
-        // Separar "Por:" que está junto com preço
-        .replace(/(R\$\s*[\d.,]+)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)/g, '$1\n$2 $3')
-        // Separar desconto que está junto com preço
-        .replace(/(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, '$1\n🏷️ **$2**')
-        // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
-        .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi,
-          '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
-        // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo
-        .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~')
-        // Garantir que emojis de preço tenham espaço antes
-        .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
-        // Garantir que emojis de preço tenham espaço depois se não tiver quebra de linha
-        .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(?!\s|\n)/g, '$1 $2')
-        // Corrigir "🔗 Link:" que pode estar junto
-        .replace(/(🔗|👉)\s*(Link:|link:|LINK:)\s*(https?:\/\/[^\s]+)/gi, '$1 $3')
-        // Garantir quebra de linha antes de emojis de seção (apenas se não houver espaço/quebra antes)
-        .replace(/([^\n\s])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2');
+      // 2. Limpeza e finalização
+      // 2. Limpeza e finalização
+      message = this._finalizeMessage(message, templateMode, templateType, variables, contextData, platform);
 
-      // Primeiro, substituir todas as variáveis (mesmo as vazias)
-      // IMPORTANTE: Preservar quebras de linha durante substituição
-      // NOTA: Para IA ADVANCED, o template já vem completo, mas pode ter variáveis que precisam ser substituídas
-      for (const [key, value] of Object.entries(variables)) {
-        const regex = new RegExp(`\\{${key}\\}`, 'g');
-        let replacement = value !== null && value !== undefined ? String(value) : '';
-
-        // IMPORTANTE: Se for valid_until, SEMPRE remover (não incluir data de validade no bot)
-        if (key === 'valid_until') {
-          replacement = ''; // Sempre vazio para não incluir data de validade
-          logger.debug(`📝 Removendo data de validade ({valid_until}) do template`);
-        }
-
-        // IMPORTANTE: Se for platform_name e estiver usando IA ADVANCED, remover (não mencionar plataforma)
-        // A imagem do logo da plataforma será enviada, então não precisa mencionar no texto
-        if (key === 'platform_name' && templateMode === 'ai_advanced') {
-          replacement = ''; // Remover menção à plataforma
-          logger.debug(`📝 Removendo menção à plataforma ({platform_name}) do template IA ADVANCED`);
-          // Remover linhas que contenham apenas a variável ou texto sobre plataforma
-          message = message.replace(new RegExp(`.*\\{${key}\\}.*\\n?`, 'gi'), '');
-          message = message.replace(/.*(Mercado Livre|Shopee|Amazon|AliExpress).*$/gmi, '');
-        }
-
-        // IMPORTANTE: Se for coupon_code, SEMPRE formatar para facilitar cópia
-        if (key === 'coupon_code' && replacement && replacement !== 'N/A') {
-          // Verificar se o template já tem backticks ao redor da variável
-          const hasBackticks = message.includes(`\`{${key}}\``);
-          if (!hasBackticks) {
-            // Se não tiver backticks no template, adicionar na substituição
-            // Para Telegram HTML, usar <code>, caso contrário usar backticks
-            if (platform === 'telegram') {
-              // Será convertido para <code> depois se parseMode for HTML
-              replacement = `\`${replacement}\``;
-            } else {
-              replacement = `\`${replacement}\``;
-            }
-            logger.debug(`📝 Formatando coupon_code: ${replacement}`);
-          }
-        }
-
-        // IMPORTANTE: Se for min_purchase, garantir que seja apenas o valor (sem emoji/texto duplicado)
-        if (key === 'min_purchase' && replacement) {
-          // Remover qualquer emoji e texto "Compra mínima:" que possa estar na variável
-          // A variável deve conter apenas "R$ X.XX"
-          replacement = replacement
-            .replace(/💳\s*/g, '')
-            .replace(/\*\*/g, '')
-            .replace(/Compra\s+mínima:\s*/gi, '')
-            .replace(/<b>.*?<\/b>/gi, '')
-            .trim();
-
-          // Se ainda não começa com R$, adicionar
-          if (replacement && !replacement.startsWith('R$')) {
-            // Tentar extrair apenas o número
-            const numberMatch = replacement.match(/[\d,]+\.?\d*/);
-            if (numberMatch) {
-              replacement = `R$ ${numberMatch[0]}`;
-            }
-          }
-
-          logger.debug(`📝 min_purchase limpo: ${replacement}`);
-        }
-
-        // IMPORTANTE: Se for affiliate_link, garantir que seja um link válido
-        if (key === 'affiliate_link') {
-          if (!replacement || replacement === 'Link não disponível' || replacement.trim().length === 0) {
-            logger.warn(`⚠️ affiliate_link está vazio ou inválido: "${replacement}"`);
-            // Tentar obter do produto se disponível
-            if (contextData.product && contextData.product.affiliate_link) {
-              replacement = contextData.product.affiliate_link;
-              logger.info(`✅ Usando affiliate_link do produto: ${replacement.substring(0, 50)}...`);
-            }
-          } else {
-            logger.debug(`📝 Substituindo {affiliate_link} com: ${replacement.substring(0, 50)}...`);
-          }
-        }
-
-        // IMPORTANTE: Para applicability, só substituir se não estiver vazio
-        // Se estiver vazio, remover a linha inteira que contém {applicability}
-        if (key === 'applicability') {
-          if (replacement && replacement.trim().length > 0) {
-            message = message.replace(regex, replacement);
-            logger.debug(`📝 Substituindo {applicability} com: ${replacement.substring(0, 50)}...`);
-          } else {
-            // Remover linha que contém {applicability} se estiver vazia
-            // Remover a linha inteira e quebras de linha extras
-            message = message.replace(new RegExp(`.*\\{applicability\\}.*\\n?`, 'gi'), '');
-            // Limpar quebras de linha duplicadas resultantes
-            message = message.replace(/\n{3,}/g, '\n\n');
-            logger.debug(`📝 Removendo linha com {applicability} vazia`);
-          }
-        } else if (!(key === 'platform_name' && templateMode === 'ai_advanced')) {
-          message = message.replace(regex, replacement);
-        }
-      }
-
-      // IMPORTANTE: Corrigir formatação após substituição de variáveis (especialmente para IA ADVANCED)
-      // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF" que podem aparecer após substituição
-      if (templateMode === 'ai_advanced') {
-        message = message
-          // Separar preço e emoji que estão juntos após substituição
-          .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)/g, '$1\n$2')
-          // Separar "Por:" que está junto com preço
-          .replace(/(R\$\s*[\d.,]+)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)/g, '$1\n$2 $3')
-          // Separar desconto que está junto com preço
-          .replace(/(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi, '$1\n🏷️ **$2**')
-          // Corrigir padrões como "R$ 78,00💰 Por: R$ 48,00 38% OFF"
-          .replace(/(R\$\s*[\d.,]+)(💰|💵|💴|💶|💷|💸|💳)\s*(Por:|por:|POR:)\s*(R\$\s*[\d.,]+)\s*(\d+%?\s*OFF)/gi,
-            '💰 **Preço:** $1\n🎟️ **Com Cupom:** $4\n🏷️ **$5**')
-          // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo
-          .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~')
-          // Garantir que emojis de preço tenham espaço antes
-          .replace(/(💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️)(R\$\s*[\d.,]+)/g, '$1 $2')
-          // Corrigir "🔗 Link:" que pode estar junto
-          .replace(/(🔗|👉)\s*(Link:|link:|LINK:)\s*(https?:\/\/[^\s]+)/gi, '$1 $3')
-          // Garantir quebra de linha antes de emojis de seção (apenas se não houver espaço/quebra antes)
-          .replace(/([^\n\s])(🔗|👉|💰|💵|💴|💶|💷|💸|💳|🏷️|🎟️|📦|⚡|⏳|🔥)/g, '$1\n$2')
-          // Limpar múltiplas quebras de linha
-          .replace(/\n{4,}/g, '\n\n\n');
-      }
-
-      // VALIDAÇÃO FINAL: Garantir que código do cupom esteja presente (especialmente para IA ADVANCED) - SEM DUPLICAR
-      if (templateMode === 'ai_advanced' && variables.coupon_code && variables.coupon_code !== 'N/A') {
-        const couponCode = variables.coupon_code;
-        // Primeiro, remover duplicatas se existirem usando a função auxiliar
-        message = this.removeDuplicateCouponCode(message, couponCode);
-
-        // Verificar se o código está presente após remoção de duplicatas
-        const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'i');
-        const codeCount = message.match(new RegExp(`\\b${escapedCode}\\b`, 'gi'))?.length || 0;
-
-        if (codeCount === 0) {
-          // Verificar se o código está presente na mensagem final
-          if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
-            logger.warn(`⚠️ [VALIDAÇÃO FINAL] Código do cupom não encontrado após substituição, adicionando...`);
-            // Adicionar código do cupom de forma destacada
-            const codeSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-            // Tentar adicionar antes do link ou no final
-            if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
-              message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
-            } else {
-              message += codeSection;
-            }
-            logger.info(`   ✅ Código do cupom adicionado na validação final: \`${couponCode}\``);
-          } else {
-            logger.debug(`   ✅ Código do cupom confirmado na mensagem final: ${couponCode}`);
-          }
-        } else {
-          logger.debug(`   ✅ Código do cupom confirmado na mensagem final (1 ocorrência): ${couponCode}`);
-        }
-      }
-
-      // IMPORTANTE: Remover qualquer texto literal "[Link de afiliado]" que a IA possa ter gerado
-      // e substituir pelo link real se ainda não foi substituído
-      if (message.includes('[Link de afiliado]') || message.includes('\\[Link de afiliado\\]')) {
-        logger.warn(`⚠️ Detectado texto literal "[Link de afiliado]" na mensagem, substituindo...`);
-        const realLink = variables.affiliate_link || contextData.product?.affiliate_link || 'Link não disponível';
-        message = message.replace(/\[Link de afiliado\]|\\\[Link de afiliado\\\]/g, realLink);
-        logger.info(`✅ Texto literal substituído por link real`);
-      }
-
-      // IMPORTANTE: Remover qualquer linha que contenha apenas data de validade ou variável {valid_until}
-      // Isso garante que mesmo se a IA incluir, será removido
-      if (templateType === 'new_coupon') {
-        message = message
-          .split('\n')
-          .filter(line => {
-            const trimmed = line.trim();
-            // Remover linhas que contenham apenas data de validade ou padrões relacionados
-            return !trimmed.match(/^📅.*[Vv]álido.*$/i) &&
-              !trimmed.match(/^⏰.*[Vv]álido.*$/i) &&
-              !trimmed.match(/.*\{valid_until\}.*/) &&
-              !trimmed.match(/^.*válido até.*$/i) &&
-              !trimmed.match(/^.*Válido até.*$/i) &&
-              trimmed.length > 0;
-          })
-          .join('\n');
-        logger.debug(`📝 Template após remoção de linhas com data de validade`);
-      }
-
-      // IMPORTANTE: Corrigir duplicações de "Compra mínima" e tags HTML não renderizadas
-      // Isso deve acontecer APÓS a substituição de variáveis
-      if (templateType === 'new_coupon') {
-        // PRIMEIRO: Converter qualquer HTML restante para Markdown
-        // (caso a IA tenha gerado HTML após a conversão inicial)
-        if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
-          logger.warn(`⚠️ Detectadas tags HTML na mensagem após substituição, convertendo para Markdown...`);
-          message = message
-            // Proteger código dentro de backticks antes de converter
-            .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
-            // Converter HTML para Markdown
-            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-            .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-            .replace(/<i>(.*?)<\/i>/gi, '_$1_')
-            .replace(/<em>(.*?)<\/em>/gi, '_$1_')
-            // Restaurar código protegido
-            .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
-        }
-
-        // SEGUNDO: Remover padrões duplicados de "Compra mínima" (múltiplas tentativas)
-        message = message
-          // Padrão 1: HTML com duplicação completa
-          .replace(/💳\s*Compra\s+mínima:\s*<b>💳\s*<\/b>Compra\s+mínima:<b>\s*/gi, '💳 **Compra mínima:** ')
-          // Padrão 2: Markdown com duplicação
-          .replace(/💳\s*Compra\s+mínima:\s*\*\*💳\s*\*\*\s*Compra\s+mínima:\s*\*\*\s*/gi, '💳 **Compra mínima:** ')
-          // Padrão 3: Duplicação simples sem tags
-          .replace(/💳\s*Compra\s+mínima:\s*💳\s*Compra\s+mínima:\s*/gi, '💳 **Compra mínima:** ')
-          // Padrão 4: Com espaços e tags misturadas
-          .replace(/💳\s*Compra\s+mínima:\s*<b>\s*💳\s*<\/b>\s*Compra\s+mínima:\s*<b>\s*/gi, '💳 **Compra mínima:** ')
-          // Padrão 5: Com texto "Compra mínima:" duplicado dentro de tags
-          .replace(/💳\s*Compra\s+mínima:\s*<b>\s*💳\s*Compra\s+mínima:\s*<\/b>\s*<b>\s*/gi, '💳 **Compra mínima:** ')
-          // Padrão 6: Com Markdown já convertido mas ainda duplicado
-          .replace(/(💳\s*\*\*Compra\s+mínima:\*\*\s*R\$\s*[\d,]+\.?\d*)\s*\n?\s*\1/gi, '$1');
-
-        // TERCEIRO: Limpeza final - remover qualquer duplicação restante de "Compra mínima"
-        // Procurar por múltiplas ocorrências da linha completa
-        const minPurchaseLines = message.match(/💳\s*\*\*Compra\s+mínima:\*\*\s*R\$\s*[\d,]+\.?\d*/gi);
-        if (minPurchaseLines && minPurchaseLines.length > 1) {
-          logger.warn(`⚠️ Detectada ${minPurchaseLines.length} ocorrência(s) de "Compra mínima", removendo duplicatas...`);
-          // Manter apenas a primeira ocorrência
-          const firstOccurrence = minPurchaseLines[0];
-          let foundFirst = false;
-          message = message.replace(/💳\s*\*\*Compra\s+mínima:\*\*\s*R\$\s*[\d,]+\.?\d*/gi, (match) => {
-            if (!foundFirst && match === firstOccurrence) {
-              foundFirst = true;
-              return match;
-            }
-            return ''; // Remover duplicatas
-          });
-          // Limpar linhas vazias resultantes e espaços extras
-          message = message.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '');
-        }
-      }
-
-      // IMPORTANTE: Após substituir variáveis, garantir que código do cupom esteja formatado
-      // Mesmo que a IA não tenha formatado, garantir formatação agora
-      if (variables.coupon_code && variables.coupon_code !== 'N/A') {
-        const couponCode = variables.coupon_code;
-        // Verificar se já está formatado
-        const codeFormatted = message.includes(`\`${couponCode}\``) ||
-          message.includes(`<code>${couponCode}</code>`);
-
-        if (!codeFormatted) {
-          logger.info(`📝 Garantindo formatação do código do cupom após substituição de variáveis`);
-          const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const codeRegex = new RegExp(`\\b${escapedCode}\\b`, 'g');
-          message = message.replace(codeRegex, `\`${couponCode}\``);
-          logger.info(`   ✅ Código formatado: \`${couponCode}\``);
-        }
-
-        // IMPORTANTE: Verificar se o código está presente e não duplicado
-        const escapedCode = couponCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const codePattern = new RegExp(`\\b${escapedCode}\\b`, 'gi');
-        const codeMatches = message.match(codePattern);
-        const codeCount = codeMatches ? codeMatches.length : 0;
-
-        // Se o código aparece mais de uma vez, remover duplicatas
-        if (codeCount > 1) {
-          logger.warn(`⚠️ Código do cupom duplicado detectado (${codeCount} vezes), removendo duplicatas...`);
-          // Remover todas as ocorrências e adicionar apenas uma formatada
-          message = message.replace(codePattern, '');
-          const couponSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-          if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
-            message = message.replace(/(🔗|👉|{affiliate_link})/i, `${couponSection}$1`);
-          } else {
-            message += couponSection;
-          }
-          logger.info(`   ✅ Código duplicado removido, mantendo apenas uma ocorrência: \`${couponCode}\``);
-        } else if (codeCount === 0) {
-          // Se o código do cupom não está na mensagem, adicionar
-          // Isso garante que mesmo se a IA não incluir, o código será adicionado
-          if (!message.includes(couponCode) && !message.includes(`{coupon_code}`)) {
-            logger.warn(`⚠️ Código do cupom não encontrado na mensagem, adicionando...`);
-            // Adicionar código do cupom após a seção de desconto ou antes do link
-            const discountPattern = /(💰.*?OFF)/i;
-            const linkPattern = /(🔗|👉).*?\{?affiliate_link\}?/i;
-
-            const couponSection = `\n\n🔑 **Código:** \`${couponCode}\`\n\n`;
-
-            if (discountPattern.test(message)) {
-              message = message.replace(discountPattern, `$1${couponSection}`);
-            } else if (linkPattern.test(message)) {
-              message = message.replace(linkPattern, `${couponSection}$1`);
-            } else {
-              // Adicionar antes do link de afiliado ou no final
-              if (message.includes('{affiliate_link}') || message.includes('affiliate_link')) {
-                message = message.replace(/(🔗|👉|{affiliate_link})/i, `${couponSection}$1`);
-              } else {
-                // Adicionar no final se não houver link
-                message += couponSection;
-              }
-            }
-
-            logger.info(`   ✅ Código do cupom adicionado: \`${couponCode}\``);
-          } else {
-            logger.debug(`   ✅ Código do cupom encontrado na mensagem: ${couponCode}`);
-          }
-        } else {
-          logger.debug(`   ✅ Código do cupom encontrado na mensagem (1 ocorrência): ${couponCode}`);
-        }
-      }
-
-      // IMPORTANTE: Verificar se o título do produto está presente na mensagem após substituição
-      // Se não estiver, adicionar (especialmente importante para IA ADVANCED)
-      if (templateMode === 'ai_advanced' && variables.product_name && variables.product_name !== 'N/A') {
-        const productName = variables.product_name;
-        // Verificar se o título está na mensagem (pode estar formatado ou não)
-        const hasProductName = message.includes(productName) ||
-          message.includes(`{product_name}`) ||
-          message.match(new RegExp(productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
-
-        if (!hasProductName) {
-          logger.warn(`⚠️ Título do produto não encontrado na mensagem após substituição, adicionando...`);
-          // Adicionar título após o primeiro cabeçalho (se houver) ou no início
-          const headerPattern = /(🔥\s*\*\*[^*]+\*\*\s*🔥)/;
-          if (headerPattern.test(message)) {
-            message = message.replace(headerPattern, `$1\n\n📦 **${productName}**`);
-          } else {
-            // Se não houver cabeçalho, adicionar no início
-            message = `📦 **${productName}**\n\n${message}`;
-          }
-          logger.info(`✅ Título do produto adicionado: "${productName}"`);
-        } else {
-          logger.debug(`✅ Título do produto encontrado na mensagem: "${productName}"`);
-        }
-      }
-
-      logger.debug(`📋 Mensagem após substituição tem ${(message.match(/\n/g) || []).length} quebras de linha`);
-
-      // Determinar parse_mode para Telegram
-      let parseMode = 'HTML'; // Padrão HTML para melhor compatibilidade
-      if (platform === 'telegram') {
-        try {
-          const BotConfig = (await import('../../models/BotConfig.js')).default;
-          const botConfig = await BotConfig.get();
-          const configuredMode = botConfig.telegram_parse_mode || 'HTML';
-
-          // HTML é mais confiável e suporta tudo (negrito, riscado, itálico, etc)
-          if (configuredMode === 'Markdown' || configuredMode === 'MarkdownV2') {
-            parseMode = 'HTML';
-          } else {
-            parseMode = configuredMode;
-          }
-        } catch (error) {
-          logger.warn(`Erro ao buscar parse_mode, usando HTML: ${error.message}`);
-          parseMode = 'HTML';
-        }
-      }
-
-      // IMPORTANTE: Preservar o template exatamente como configurado no painel admin
-      // O template já deve estar no formato correto quando salvo no painel
-      // Apenas fazer validação mínima necessária, sem alterar a estrutura
-
-      // IMPORTANTE: Corrigir padrões mal formatados de preço antigo como "(de ~~ R$ 44,88)"
-      // Isso pode acontecer quando a IA gera "(de {old_price})" e a variável já vem com tildes
-      message = message
-        // Corrigir padrão "(de ~~ R$ 44,88)" ou "(de ~~R$ 44,88)" - remover "(de" e manter apenas o preço
-        .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
-        .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
-        // Detectar dois preços reais juntos (R$ 10 R$ 20) e aplicar riscado no segundo (final absolute check)
-        .replace(/(R\$\s*[\d,.]+)\s+(R\$\s*[\d,.]+)(?![^~]*~~)/gi, '$1 ~~$2~~')
-        // Remover texto "mensagem truncada" que a IA pode adicionar
-        .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
-        .replace(/\s*\(mensagem\s+truncada\)/gi, '')
-        .replace(/\s*\.\.\.\s*\(truncada\)/gi, '')
-        .replace(/\s*\(truncada\)/gi, '');
-
-      // IMPORTANTE: Limpar tildes múltiplos incorretos antes de processar
-      // Corrigir ~~~~ ou mais tildes para ~~ (strikethrough correto)
-      // Mas preservar ~~texto~~ válido
-      // Processar em múltiplas passadas para garantir correção completa
-      let previousMessage = '';
-      let iterations = 0;
-      while (message !== previousMessage && iterations < 5) {
-        previousMessage = message;
-        // Corrigir 3 ou mais tildes consecutivos (exceto se já for parte de ~~texto~~)
-        message = message.replace(/(?<!~)~{3,}(?!~)/g, '~~');
-        // Corrigir padrões como -R$ 165,00~~~~ para -R$ 165,00~~
-        message = message.replace(/([^~])~{3,}(?!~)/g, '$1~~');
-        iterations++;
-      }
-      if (iterations > 1) {
-        logger.debug(`📝 Corrigidos tildes múltiplos (${iterations} iterações)`);
-      }
-
-      // IMPORTANTE: Se ainda houver tags HTML literais após processamento da IA, converter para Markdown primeiro
-      // Isso garante que mesmo se a IA gerar HTML por engano, será convertido corretamente
-      const hasHtmlTags = /<[a-z][\s\S]*>/i.test(message);
-      if (hasHtmlTags && templateMode === 'ai_advanced') {
-        logger.warn(`⚠️ Detectadas tags HTML literais no template da IA, convertendo para Markdown...`);
-        // Converter HTML para Markdown antes de processar
-        message = message
-          .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-          .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-          .replace(/<i>(.*?)<\/i>/gi, '_$1_')
-          .replace(/<em>(.*?)<\/em>/gi, '_$1_')
-          .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
-          .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-          .replace(/<br\s*\/?>/gi, '\n');
-        logger.info(`✅ Tags HTML convertidas para Markdown`);
-      }
-
-      // Verificar se o template já está em HTML ou Markdown (após conversão)
-      const hasHtmlTagsAfter = /<[a-z][\s\S]*>/i.test(message);
-      // Detectar Markdown: **texto** ou *texto* (mas não dentro de tags HTML)
-      const hasMarkdownBold = (/\*\*([\s\S]+?)\*\*/.test(message) || /\*[^*\n<]+\*/.test(message)) && !hasHtmlTagsAfter;
-      // Detectar backticks que precisam ser convertidos
-      const hasBackticks = /`[^`]+`/.test(message);
-
-      logger.debug(`📋 Template análise: HTML=${hasHtmlTagsAfter}, Markdown=${hasMarkdownBold}, Backticks=${hasBackticks}, parseMode=${parseMode}, platform=${platform}`);
-
-      // IMPORTANTE: Verificação final ANTES da conversão - garantir que não há tags HTML não renderizadas
-      // Se ainda houver tags HTML, converter para Markdown primeiro
-      if (message.includes('<b>') || message.includes('<code>') || message.includes('<strong>')) {
-        logger.warn(`⚠️ Detectadas tags HTML não renderizadas na mensagem final, convertendo para Markdown...`);
-        message = message
-          // Proteger código dentro de backticks
-          .replace(/`([^`]+)`/g, '__CODE_PROTECTED_$1__')
-          // Converter HTML para Markdown
-          .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-          .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-          .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-          .replace(/<i>(.*?)<\/i>/gi, '_$1_')
-          .replace(/<em>(.*?)<\/em>/gi, '_$1_')
-          // Restaurar código protegido
-          .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`');
-      }
-
-      // IMPORTANTE: Para Telegram com parse_mode HTML, SEMPRE converter Markdown para HTML
-      if (platform === 'telegram' && parseMode === 'HTML') {
-        // Verificar se há backticks que precisam ser convertidos para <code>
-        const hasBackticks = /`[^`]+`/.test(message);
-
-        if (hasMarkdownBold || message.includes('**') || hasBackticks) {
-          // Template tem Markdown - converter OBRIGATORIAMENTE para HTML
-          logger.info(`🔄 Convertendo Markdown (**texto**, \`código\`) para HTML (<b>texto</b>, <code>código</code>) para Telegram`);
-          message = this.convertBoldFormatting(message, platform, parseMode);
-          logger.debug(`📋 Mensagem após conversão (primeiros 200 chars): ${message.substring(0, 200)}`);
-
-          // Verificar se backticks foram convertidos
-          const stillHasBackticks = /`[^`]+`/.test(message);
-          if (hasBackticks && stillHasBackticks) {
-            // Ainda há backticks, tentar converter novamente
-            logger.warn(`⚠️ Backticks ainda presentes após conversão, tentando novamente...`);
-            message = this.convertBoldFormatting(message, platform, parseMode);
-          }
-        } else if (hasHtmlTagsAfter) {
-          // Template ainda tem HTML - converter para Markdown primeiro, depois para HTML
-          logger.warn(`⚠️ Template ainda contém HTML após processamento, convertendo...`);
-          message = message
-            .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-            .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-            .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
-            .replace(/<code>(.*?)<\/code>/gi, '`$1`');
-          // Agora converter Markdown para HTML
-          message = this.convertBoldFormatting(message, platform, parseMode);
-        }
-
-        // IMPORTANTE: Verificação adicional - garantir que backticks sejam convertidos para <code>
-        if (message.includes('`') && !message.includes('<code>')) {
-          logger.warn(`⚠️ Detectados backticks não convertidos, convertendo para <code>...`);
-          message = this.convertBoldFormatting(message, platform, parseMode);
-        }
-
-        // IMPORTANTE: Verificação final - garantir que não há Markdown não convertido
-        const hasMarkdownLeft = message.includes('**') || /`[^`]+`/.test(message);
-        if (hasMarkdownLeft) {
-          logger.warn(`⚠️ Markdown ainda presente após conversão, forçando processamento final...`);
-          message = this.convertBoldFormatting(message, platform, parseMode);
-        }
-
-        // IMPORTANTE: Verificação final para garantir que padrões como "(de  ~~R$ 252,00~~)" sejam convertidos
-        // Isso pode acontecer quando a variável old_price é substituída e tem espaços
-        if (message.includes('~~') && !message.match(/<s>[^<]+<\/s>/)) {
-          logger.debug(`📝 Verificação final: corrigindo padrões de strikethrough não convertidos...`);
-          // Tentar converter padrões restantes que não foram capturados
-          message = message.replace(/(\s+)(~~)([^~]+?)(~~\))/g, (match, spaces, openTildes, content, suffix) => {
-            if (content.includes('<') || content.includes('>')) {
-              return match;
-            }
-            const escaped = content
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;');
-            return `${spaces}<s>${escaped}</s>)`;
-          });
-        }
-      } else if (platform === 'telegram' && (parseMode === 'Markdown' || parseMode === 'MarkdownV2')) {
-        // Para Markdown/MarkdownV2, converter ** para *
-        if (hasMarkdownBold) {
-          logger.debug(`📋 Convertendo **texto** para *texto* para Markdown/MarkdownV2`);
-          message = this.convertBoldFormatting(message, platform, parseMode);
-        }
-      } else if (hasHtmlTags && platform === 'telegram' && parseMode !== 'HTML') {
-        // Se parse_mode não é HTML mas template tem HTML, converter
-        logger.warn(`⚠️ Template tem HTML mas parse_mode é ${parseMode}, convertendo...`);
-        message = this.convertHtmlToFormat(message, parseMode);
-      }
-      // Para WhatsApp, manter formatação original (WhatsApp processa automaticamente)
-
-      // IMPORTANTE: Verificação final absoluta - garantir que não há tags HTML não renderizadas
-      // Esta é a última chance antes de retornar a mensagem
-      if (platform === 'telegram' && parseMode === 'HTML') {
-        try {
-          // CRÍTICO: Verificar se há backticks que não foram convertidos para <code>
-          const backtickPattern = /`([^`]+)`/g;
-          let backtickMatches;
-          try {
-            backtickMatches = message.match(backtickPattern);
-          } catch (regexError) {
-            logger.warn(`⚠️ Erro ao fazer match de backticks: ${regexError.message}`);
-            backtickMatches = null;
-          }
-
-          if (backtickMatches && backtickMatches.length > 0) {
-            logger.warn(`⚠️ Verificação final: ${backtickMatches.length} backtick(s) detectado(s), convertendo para <code>...`);
-            // Converter cada backtick para <code>
-            try {
-              message = message.replace(backtickPattern, (match, content) => {
-                if (!content) return match; // Se não há conteúdo, manter original
-                const escaped = content
-                  .replace(/&/g, '&amp;')
-                  .replace(/</g, '&lt;')
-                  .replace(/>/g, '&gt;');
-                return `<code>${escaped}</code>`;
-              });
-              logger.info(`✅ Backticks convertidos para <code> tags`);
-            } catch (replaceError) {
-              logger.error(`❌ Erro ao converter backticks: ${replaceError.message}`);
-              // Continuar mesmo com erro
-            }
-          }
-
-          // Verificação final de Markdown pendente
-          const hasMarkdownFinal = message.includes('**') || /`[^`]+`/.test(message);
-          if (hasMarkdownFinal) {
-            logger.warn(`⚠️ Verificação final: Markdown ainda presente, convertendo...`);
-            message = this.convertBoldFormatting(message, platform, parseMode);
-          }
-        } catch (finalError) {
-          logger.error(`❌ Erro na verificação final de formatação: ${finalError.message}`);
-          logger.error(`   Stack: ${finalError.stack}`);
-          // Continuar mesmo com erro - não bloquear publicação
-        }
-      }
-
-      // IMPORTANTE: Preservar quebras de linha do template original
-      // Não remover quebras de linha, apenas limpar linhas completamente vazias
-      logger.debug(`📋 Processando limpeza de linhas - quebras de linha antes: ${(message.match(/\n/g) || []).length}`);
-
-      const lines = message.split('\n');
-      const cleanedLines = lines.map((line, index) => {
-        const trimmed = line.trim();
-
-        // Se a linha está completamente vazia, SEMPRE manter (preservar quebras de linha intencionais)
-        // CORREÇÃO: Não remover linhas vazias - elas representam espaçamento intencional
-        if (!trimmed) {
-          return ''; // Manter linha vazia
-        }
-
-        // Se a linha contém apenas tags HTML vazias ou espaços, remover
-        if (trimmed.match(/^[\s<>\/]*$/)) {
-          return null;
-        }
-
-        // Se a linha contém apenas tags HTML sem conteúdo (ex: <b></b>, <code></code>)
-        if (trimmed.match(/^<[^>]+><\/[^>]+>$/)) {
-          return null;
-        }
-
-        // Remover conteúdo HTML para verificar se há texto real
-        const withoutHtml = trimmed.replace(/<[^>]+>/g, '').trim();
-
-        // Se após remover HTML não há conteúdo, remover linha
-        if (!withoutHtml || withoutHtml.match(/^[\s\p{Emoji}:]*$/u)) {
-          return null;
-        }
-
-        // NÃO remover linhas que contêm labels ou valores (mesmo que sozinhos na linha)
-        // O filtro anterior estava removendo <b>CÓDIGO:</b> e <code>ABC</code> por engano
-
-        // Preservar a linha original (com espaços se necessário)
-        return line;
-      }).filter(line => line !== null);
-
-      // Juntar linhas preservando quebras de linha
-      message = cleanedLines.join('\n');
-
-      logger.debug(`📋 Após limpeza de linhas - quebras de linha: ${(message.match(/\n/g) || []).length}`);
-
-      // CORREÇÃO: Permitir até 3 quebras de linha consecutivas (mais flexível)
-      // Limitar apenas quebras de linha excessivas (mais de 3 consecutivas)
-      const beforeExcessiveCleanup = (message.match(/\n/g) || []).length;
-      message = message.replace(/\n{4,}/g, '\n\n\n');
-      const afterExcessiveCleanup = (message.match(/\n/g) || []).length;
-
-      if (beforeExcessiveCleanup !== afterExcessiveCleanup) {
-        logger.debug(`📋 Removidas quebras excessivas: ${beforeExcessiveCleanup} → ${afterExcessiveCleanup}`);
-      }
-
-      // Remover espaços em branco apenas no início e fim da mensagem completa
-      // IMPORTANTE: Não usar trim() se isso remover quebras de linha importantes
-      message = message.replace(/^\s+/, '').replace(/\s+$/, '');
-
-      logger.debug(`📋 Mensagem final tem ${(message.match(/\n/g) || []).length} quebras de linha`);
-      logger.debug(`📋 Mensagem final (primeiros 500 chars):\n${message.substring(0, 500).replace(/\n/g, '\\n')}`);
-
-      // VALIDAÇÃO: Garantir que a mensagem é uma string válida
-      if (!message || typeof message !== 'string') {
-        logger.error(`❌ Template renderizado é inválido (não é string) para ${templateType} (${platform})`);
-        logger.error(`   Tipo: ${typeof message}, Valor: ${JSON.stringify(message)}`);
-        throw new Error(`Template renderizado é inválido. Verifique se o template no painel admin tem conteúdo válido.`);
-      }
-
-      // VALIDAÇÃO: Garantir que a mensagem não está vazia
-      if (message.trim().length === 0) {
-        logger.error(`❌ Template renderizado está vazio para ${templateType} (${platform})`);
-        throw new Error(`Template renderizado está vazio. Verifique se o template no painel admin tem conteúdo válido.`);
-      }
-
-      // VALIDAÇÃO: Verificar se todas as variáveis foram substituídas
-      const remainingVariables = message.match(/\{[^}]+\}/g);
-      if (remainingVariables && remainingVariables.length > 0) {
-        // CORREÇÃO: Filtrar variáveis permitidas baseado no tipo de template
-        // Para CUPONS: product_name e affiliate_link NÃO são permitidos
-        // Para PRODUTOS/PROMOÇÕES: são permitidos
-        let allowedVars = [];
-
-        if (templateType === 'new_coupon' || templateType === 'expired_coupon') {
-          // Cupons: NÃO permitir variáveis de produto
-          allowedVars = ['{coupon_code}', '{applicability}', '{platform_name}'];
-        } else {
-          // Produtos/Promoções: permitir variáveis de produto
-          allowedVars = ['{product_name}', '{affiliate_link}', '{coupon_code}', '{applicability}'];
-        }
-
-        const unexpectedVars = remainingVariables.filter(v => !allowedVars.includes(v));
-
-        if (unexpectedVars.length > 0) {
-          logger.warn(`⚠️ Variáveis não substituídas encontradas: ${unexpectedVars.join(', ')}`);
-
-          // CORREÇÃO CRÍTICA: Remover variáveis inválidas para cupons
-          if (templateType === 'new_coupon' || templateType === 'expired_coupon') {
-            logger.info(`🧹 Removendo variáveis inválidas de cupom: ${unexpectedVars.join(', ')}`);
-            unexpectedVars.forEach(varName => {
-              // Remover a variável e a linha inteira se necessário
-              const regex = new RegExp(`.*\\${varName.replace(/[{}]/g, '\\$&')}.*\\n?`, 'gi');
-              message = message.replace(regex, '');
-            });
-            // Limpar quebras de linha excessivas resultantes
-            message = message.replace(/\n{3,}/g, '\n\n').trim();
-            logger.debug(`✅ Mensagem limpa após remoção de variáveis inválidas`);
-          }
-        }
-      }
-
-      // VALIDAÇÃO ESPECIAL PARA IA ADVANCED: Garantir que variáveis obrigatórias estão presentes
-      // IMPORTANTE: Validações mais flexíveis para não bloquear publicação
-      if (templateMode === 'ai_advanced') {
-        // Para promoções: product_name e affiliate_link são obrigatórios
-        if ((templateType === 'new_promotion' || templateType === 'promotion_with_coupon')) {
-          const productName = variables.product_name || '';
-          const affiliateLink = variables.affiliate_link || '';
-
-          // Verificar product_name de forma mais flexível
-          const hasProductName = productName && (
-            message.includes(productName) ||
-            message.includes('{product_name}') ||
-            message.toLowerCase().includes(productName.toLowerCase()) ||
-            productName.length > 0 // Se product_name existe nas variáveis, assumir que foi substituído
-          );
-
-          // Verificar affiliate_link de forma mais flexível
-          const hasAffiliateLink = affiliateLink && (
-            message.includes(affiliateLink) ||
-            message.includes('{affiliate_link}') ||
-            message.includes('http://') ||
-            message.includes('https://') ||
-            affiliateLink.length > 0 // Se affiliate_link existe nas variáveis, assumir que foi substituído
-          );
-
-          logger.debug(`🔍 [IA ADVANCED] Validação de variáveis:`);
-          logger.debug(`   product_name: ${productName ? `"${productName.substring(0, 50)}..."` : 'N/A'} - Presente: ${hasProductName}`);
-          logger.debug(`   affiliate_link: ${affiliateLink ? `"${affiliateLink.substring(0, 50)}..."` : 'N/A'} - Presente: ${hasAffiliateLink}`);
-
-          if (!hasProductName && productName) {
-            logger.warn(`⚠️ [IA ADVANCED] Template de promoção pode não conter product_name, mas continuando...`);
-            logger.warn(`   product_name nas variáveis: "${productName.substring(0, 100)}"`);
-            logger.warn(`   Mensagem (primeiros 200 chars): "${message.substring(0, 200)}"`);
-            // NÃO bloquear - apenas avisar
-          }
-
-          if (!hasAffiliateLink && affiliateLink) {
-            logger.warn(`⚠️ [IA ADVANCED] Template de promoção pode não conter affiliate_link, mas continuando...`);
-            logger.warn(`   affiliate_link nas variáveis: "${affiliateLink.substring(0, 100)}"`);
-            logger.warn(`   Mensagem (primeiros 200 chars): "${message.substring(0, 200)}"`);
-            // NÃO bloquear - apenas avisar
-          }
-
-          // Para promoções com cupom: coupon_code também é obrigatório (apenas para IA ADVANCED)
-          // Para templates padrão/customizados, o código pode estar na variável {coupon_code} que será substituída
-          if (templateType === 'promotion_with_coupon' && variables.coupon_code && variables.coupon_code !== 'N/A') {
-            const couponCode = variables.coupon_code;
-            // Verificar de forma mais flexível
-            const hasCouponCode = message.includes(couponCode) ||
-              message.includes('{coupon_code}') ||
-              message.toLowerCase().includes(couponCode.toLowerCase()) ||
-              message.includes('CUPOM') ||
-              message.includes('cupom') ||
-              message.includes('Código') ||
-              message.includes('código');
-
-            logger.debug(`   coupon_code: ${couponCode} - Presente: ${hasCouponCode}`);
-
-            if (!hasCouponCode) {
-              logger.warn(`⚠️ [IA ADVANCED] Template de promoção com cupom pode não conter coupon_code, mas continuando...`);
-              logger.warn(`   coupon_code nas variáveis: "${couponCode}"`);
-              logger.warn(`   Mensagem (primeiros 200 chars): "${message.substring(0, 200)}"`);
-              // NÃO bloquear - apenas avisar e tentar adicionar o código
-              // Tentar adicionar o código se não estiver presente
-              if (!message.includes(couponCode) && !message.includes('{coupon_code}')) {
-                logger.info(`📝 Tentando adicionar código do cupom ao template...`);
-                const codeSection = `\n\n🎟️ CUPOM: \`${couponCode}\`\n\n`;
-                if (message.includes('{affiliate_link}') || message.includes(affiliateLink)) {
-                  message = message.replace(/(🔗|👉|{affiliate_link})/i, `${codeSection}$1`);
-                } else {
-                  message += codeSection;
-                }
-                logger.info(`✅ Código do cupom adicionado ao template`);
-              }
-            }
-          }
-        }
-
-        // Para cupons: coupon_code e affiliate_link são obrigatórios
-        if (templateType === 'new_coupon') {
-          const couponCode = variables.coupon_code || '';
-          const affiliateLink = variables.affiliate_link || '';
-
-          const hasCouponCode = couponCode && (
-            message.includes(couponCode) ||
-            message.includes('{coupon_code}') ||
-            message.toLowerCase().includes(couponCode.toLowerCase())
-          );
-
-          const hasAffiliateLink = affiliateLink && (
-            message.includes(affiliateLink) ||
-            message.includes('{affiliate_link}') ||
-            message.includes('http://') ||
-            message.includes('https://')
-          );
-
-          if (!hasCouponCode && couponCode) {
-            logger.warn(`⚠️ [IA ADVANCED] Template de cupom pode não conter coupon_code, mas continuando...`);
-            // NÃO bloquear - apenas avisar
-          }
-
-          if (!hasAffiliateLink && affiliateLink) {
-            logger.warn(`⚠️ [IA ADVANCED] Template de cupom pode não conter affiliate_link, mas continuando...`);
-            // NÃO bloquear - apenas avisar
-          }
-        }
-      }
-
-      // VALIDAÇÃO: Verificar quebra de linha preservada (apenas se não for IA ADVANCED)
-      // Para IA ADVANCED, não temos template original para comparar
-      if (templateMode !== 'ai_advanced') {
-        // Tentar obter template original para comparação (se disponível)
-        try {
-          const originalTemplate = await BotMessageTemplate.findByType(templateType, platform);
-          if (originalTemplate && originalTemplate.template) {
-            const originalLineBreaks = (originalTemplate.template.match(/\n/g) || []).length;
-            const finalLineBreaks = (message.match(/\n/g) || []).length;
-            if (finalLineBreaks < originalLineBreaks * 0.5) {
-              logger.warn(`⚠️ Muitas quebras de linha foram removidas (original: ${originalLineBreaks}, final: ${finalLineBreaks})`);
-            }
-          }
-        } catch (e) {
-          // Ignorar erro se não conseguir buscar template original
-          logger.debug(`Não foi possível comparar quebras de linha: ${e.message}`);
-        }
-      }
-
-      const finalLineBreaks = (message.match(/\n/g) || []).length;
-
-      logger.info(`✅ Template renderizado com sucesso: ${message.length} caracteres, ${finalLineBreaks} quebras de linha`);
-      logger.debug(`📋 Mensagem final completa:\n${message}`);
-
-      // Retornar mensagem EXATAMENTE como configurado no painel admin
       return message;
-    } catch (error) {
-      logger.error(`❌ ERRO CRÍTICO ao renderizar template: ${error.message}`);
-      logger.error(`   Tipo: ${templateType}, Plataforma: ${platform}`);
-      logger.error(`   Stack: ${error.stack}`);
 
-      // NÃO usar fallback - template do painel admin é obrigatório
-      // Re-lançar o erro para que o chamador saiba que falhou
-      throw new Error(`Falha ao renderizar template do painel admin para ${templateType} (${platform}): ${error.message}. Verifique se o template está configurado corretamente no painel admin.`);
+    } catch (error) {
+      logger.error(`❌ Erro fatal no render(): ${error.message}`);
+      logger.error(error.stack);
+      // Fallback final de emergência
+      return this.getDefaultTemplate(templateType, variables, platform);
     }
   }
 
-  /**
-   * Preparar variáveis para template de promoção
-   * @param {Object} product - Dados do produto
-   * @returns {Promise<Object>}
-   */
   async preparePromotionVariables(product) {
     // Log do affiliate_link que será usado
     logger.info(`🔗 Preparando variáveis de template. affiliate_link: ${product.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
@@ -1528,324 +381,22 @@ class TemplateRenderer {
     };
   }
 
+
   /**
    * Converter formatação de texto baseado na plataforma e parse_mode
-   * Telegram MarkdownV2: *texto* = negrito, ~texto~ = riscado
-   * Telegram HTML: <b>texto</b> = negrito, <s>texto</s> = riscado
-   * Telegram Markdown (legado): *texto* = negrito, _texto_ = itálico (não suporta riscado)
-   * WhatsApp: *texto* = negrito, ~texto~ = riscado
-   * @param {string} message - Mensagem com formatação
-   * @param {string} platform - Plataforma (telegram, whatsapp)
-   * @param {string} parseMode - Parse mode do Telegram (Markdown, MarkdownV2, HTML) - opcional
-   * @returns {string}
+   * @delegated baseRenderer.convertBoldFormatting()
    */
   convertBoldFormatting(message, platform, parseMode = 'MarkdownV2') {
-    if (!message) return '';
-
-    // Proteger código dentro de backticks
-    const codeBlocks = [];
-    let codeIndex = 0;
-
-    // Substituir código por placeholders temporários
-    message = message.replace(/`([^`]+)`/g, (match, content) => {
-      const placeholder = `__CODE_BLOCK_${codeIndex}__`;
-      // Armazenar o conteúdo e o formato original
-      codeBlocks[codeIndex] = {
-        original: match,
-        content: content
-      };
-      codeIndex++;
-      return placeholder;
-    });
-
-    if (platform === 'whatsapp') {
-      // Converter **texto** para *texto* - negrito
-      message = message.replace(/\*\*([^*]+?)\*\*/g, '*$1*');
-
-      // Converter ~~texto~~ para ~texto~ - riscado
-      message = message.replace(/~~([^~]+?)~~/g, '~$1~');
-
-    } else if (platform === 'telegram') {
-      // Converter negrito: **texto** para formato correto
-      if (parseMode === 'HTML') {
-        // HTML: <b>texto</b> para negrito
-        // IMPORTANTE: Converter **texto** para <b>texto</b>
-        // Processar em múltiplas passadas para garantir conversão completa
-
-        // Primeiro, converter **texto** (duplo asterisco) - mais comum
-        // Usar regex global para capturar todas as ocorrências
-        let previousMessage = '';
-        let iterations = 0;
-        const maxIterations = 10; // Prevenir loop infinito
-
-        // Converter todas as ocorrências de **texto**
-        while (message !== previousMessage && iterations < maxIterations) {
-          previousMessage = message;
-          // Regex melhorado para bold: aceita qualquer caractere inclusive asteriscos isolados
-          // Padrão: ** seguido de qualquer coisa que não seja **, seguido de **
-          message = message.replace(/\*\*([\s\S]+?)\*\*/g, (match, content) => {
-            // Escapar caracteres HTML especiais dentro do conteúdo
-            const escaped = content
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;');
-            return `<b>${escaped}</b>`;
-          });
-          iterations++;
-        }
-
-        // Depois, converter *texto* (asterisco simples) que não foi capturado
-        // Mas apenas se não estiver dentro de uma tag HTML já existente
-        message = message.replace(/\*([^*\n<]+?)\*/g, (match, content) => {
-          // Verificar se não está dentro de uma tag HTML (não contém < ou >)
-          if (!match.includes('<') && !match.includes('>') && !match.includes('&lt;') && !match.includes('&gt;')) {
-            const escaped = content
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;');
-            return `<b>${escaped}</b>`;
-          }
-          return match; // Manter original se já está em HTML
-        });
-
-        logger.debug(`📋 Conversão Markdown→HTML concluída (${iterations} iterações)`);
-      } else if (parseMode === 'MarkdownV2') {
-        // MarkdownV2: *texto* para negrito
-        message = message.replace(/\*\*([^*]+?)\*\*/g, '*$1*');
-      } else {
-        // Markdown (legado): *texto* para negrito
-        message = message.replace(/\*\*([^*]+?)\*\*/g, '*$1*');
-      }
-
-      // Converter riscado: ~~texto~~ para formato correto
-      if (parseMode === 'HTML') {
-        // HTML: <s>texto</s> para riscado
-        // IMPORTANTE: Processar ~~texto~~ (dois tildes) primeiro, depois ~texto~ (um tilde)
-        // Usar múltiplas passadas para garantir conversão completa
-
-        let previousMessage = '';
-        let iterations = 0;
-        const maxIterations = 10;
-
-        // Converter todas as ocorrências de ~~texto~~ (dois tildes)
-        // Padrão melhorado: captura qualquer conteúdo entre ~~, incluindo parênteses, vírgulas, etc.
-        while (message !== previousMessage && iterations < maxIterations) {
-          previousMessage = message;
-          // Padrão: ~~ seguido de qualquer conteúdo (incluindo espaços, números, vírgulas, parênteses), seguido de ~~
-          // Usar [\s\S]*? para capturar qualquer caractere incluindo quebras de linha (non-greedy)
-          // IMPORTANTE: Não capturar se já está dentro de tags HTML
-          message = message.replace(/~~([\s\S]*?)~~/g, (match, content) => {
-            // Não processar se já está dentro de tags HTML
-            if (content.includes('<') || content.includes('>') || content.includes('&lt;') || content.includes('&gt;')) {
-              return match; // Manter como está
-            }
-            // Não processar se está vazio ou só tem espaços
-            if (!content || content.trim().length === 0) {
-              return match; // Manter como está
-            }
-            // Verificar se não está dentro de uma tag <s> já existente (evitar duplicação)
-            if (message.includes(`<s>${content}</s>`)) {
-              return match; // Já foi processado
-            }
-            // Escapar caracteres HTML especiais
-            const escaped = content
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;');
-            return `<s>${escaped}</s>`;
-          });
-          iterations++;
-        }
-
-        logger.debug(`📋 Conversão strikethrough ~~texto~~ → <s>texto</s> concluída (${iterations} iterações)`);
-
-        // Processar padrões mal formatados como "(de ~~R$ 252,00~~)" ou "(de R$ 252,00~~)"
-        // Corrigir casos onde há ~~ mas o padrão não foi capturado corretamente
-        // Padrão 1: "(de ~~R$ 252,00~~)" - já tem os tildes corretos, mas pode não ter sido capturado
-        message = message.replace(/(\(de\s+)(~~)([^~]+?)(~~\))/g, (match, prefix, openTildes, price, suffix) => {
-          if (price.includes('<') || price.includes('>')) {
-            return match;
-          }
-          const escaped = price
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `${prefix}<s>${escaped}</s>)`;
-        });
-
-        // Padrão 2: "(de  ~~R$ 252,00~~)" - com espaço extra entre "de" e "~~"
-        // Também corrigir "(de ~~ R$ 44,88)" (com espaço entre ~~ e preço)
-        message = message.replace(/(\(de\s+)(\s*~~\s*)([^~]+?)(~~\))/g, (match, prefix, spacesAndTildes, price, suffix) => {
-          if (price.includes('<') || price.includes('>')) {
-            return match;
-          }
-          const escaped = price
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `${prefix}<s>${escaped}</s>)`;
-        });
-
-        // Padrão 3: "(de R$ 252,00~~)" - tildes apenas no final
-        message = message.replace(/(\(de\s+)([^~]+?)(~~\))/g, (match, prefix, price, suffix) => {
-          if (price.includes('<') || price.includes('>')) {
-            return match;
-          }
-          const escaped = price
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `${prefix}<s>${escaped}</s>)`;
-        });
-
-        // Padrão 4: "~~R$ 252,00~~)" - tildes no início e no final com parêntese
-        message = message.replace(/(~~)([^~]+?)(~~\))/g, (match, prefix, content, suffix) => {
-          if (content.includes('<') || content.includes('>')) {
-            return match;
-          }
-          const escaped = content
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `<s>${escaped}</s>)`;
-        });
-
-        // Padrão 5: Corrigir casos onde há tildes soltos no final como "R$ 252,00~~)"
-        // Isso pode acontecer se a variável foi substituída incorretamente
-        message = message.replace(/([R$]\s*[\d.,]+?)(~~\))/g, (match, price, suffix) => {
-          // Se o preço não está dentro de uma tag <s>, converter
-          if (!message.includes(`<s>${price}</s>`)) {
-            const escaped = price
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;');
-            return `<s>${escaped}</s>)`;
-          }
-          return match;
-        });
-
-        // Padrão 6: Corrigir casos onde há " ~~R$ 252,00~~)" (com espaço antes dos tildes)
-        // Isso acontece quando a variável old_price é substituída e tem espaço antes
-        message = message.replace(/(\s+)(~~)([^~]+?)(~~\))/g, (match, spaces, openTildes, content, suffix) => {
-          // Verificar se não está dentro de tags HTML
-          if (content.includes('<') || content.includes('>')) {
-            return match;
-          }
-          // Verificar se não está dentro de uma tag <s> já existente
-          if (message.includes(`<s>${content}</s>`)) {
-            return match;
-          }
-          const escaped = content
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `${spaces}<s>${escaped}</s>)`;
-        });
-
-        // Processar ~texto~ (um tilde) apenas se não foi processado acima e não está dentro de tags HTML
-        message = message.replace(/(?<!~)~([^~\n<]+?)~(?!~)/g, (match, content) => {
-          // Verificar se não está dentro de tags HTML
-          if (content.includes('<') || content.includes('>') || content.includes('&lt;') || content.includes('&gt;')) {
-            return match; // Manter como está
-          }
-          // Verificar se não está dentro de uma tag <s> já existente
-          if (message.includes(`<s>${content}</s>`)) {
-            return match; // Já foi processado
-          }
-          const escaped = content
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          return `<s>${escaped}</s>`;
-        });
-      } else if (parseMode === 'MarkdownV2') {
-        // MarkdownV2: ~texto~ para riscado (não ~~texto~~)
-        // Converter ~~texto~~ para ~texto~
-        message = message.replace(/~~([^~]+?)~~/g, '~$1~');
-      } else {
-        // Markdown (legado): não suporta riscado, remover formatação mas manter texto
-        message = message.replace(/~~([^~]+?)~~/g, '$1');
-        message = message.replace(/~([^~\n]+?)~/g, '$1');
-      }
-    }
-    // Se platform for 'all', manter como está (será convertido quando usado)
-
-    // Restaurar código com formatação correta baseada no parse_mode
-    codeBlocks.forEach((codeBlock, index) => {
-      const placeholder = `__CODE_BLOCK_${index}__`;
-      let restoredCode;
-
-      if (platform === 'telegram' && parseMode === 'HTML') {
-        // HTML: converter backticks para <code>texto</code>
-        const escapedContent = codeBlock.content
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-        restoredCode = `<code>${escapedContent}</code>`;
-      } else if (platform === 'telegram' && parseMode === 'MarkdownV2') {
-        // MarkdownV2: manter backticks mas escapar caracteres especiais dentro
-        const escapedContent = codeBlock.content
-          .replace(/_/g, '\\_')
-          .replace(/\*/g, '\\*')
-          .replace(/\[/g, '\\[')
-          .replace(/\]/g, '\\]')
-          .replace(/\(/g, '\\(')
-          .replace(/\)/g, '\\)')
-          .replace(/~/g, '\\~')
-          .replace(/`/g, '\\`')
-          .replace(/>/g, '\\>')
-          .replace(/#/g, '\\#')
-          .replace(/\+/g, '\\+')
-          .replace(/-/g, '\\-')
-          .replace(/=/g, '\\=')
-          .replace(/\|/g, '\\|')
-          .replace(/\{/g, '\\{')
-          .replace(/\}/g, '\\}')
-          .replace(/\./g, '\\.')
-          .replace(/!/g, '\\!');
-        restoredCode = `\`${escapedContent}\``;
-      } else {
-        // Markdown (legado) ou WhatsApp: manter backticks originais
-        restoredCode = codeBlock.original;
-      }
-
-      message = message.replace(placeholder, restoredCode);
-    });
-
-    // CORREÇÃO CRÍTICA: Telegram HTML ignora quebras de linha simples (\n)
-    // e as trata como espaços. Precisamos converter \n para \n\n para que
-    // o Telegram renderize as quebras de linha corretamente.
-    if (platform === 'telegram' && parseMode === 'HTML') {
-      logger.debug(`📋 Convertendo quebras de linha para Telegram HTML...`);
-      const lineBreaksBefore = (message.match(/\n/g) || []).length;
-
-      // Converter quebras de linha simples para duplas
-      // IMPORTANTE: Fazer isso ANTES de limitar quebras excessivas
-      // Primeiro, proteger quebras duplas/triplas existentes
-      message = message.replace(/\n\n\n/g, '__TRIPLE_BREAK__');
-      message = message.replace(/\n\n/g, '__DOUBLE_BREAK__');
-
-      // Converter quebras simples para duplas
-      message = message.replace(/\n/g, '\n\n');
-
-      // Restaurar quebras que já eram duplas/triplas (agora serão quádruplas/sêxtuplas)
-      message = message.replace(/__DOUBLE_BREAK__/g, '\n\n');
-      message = message.replace(/__TRIPLE_BREAK__/g, '\n\n\n');
-
-      const lineBreaksAfter = (message.match(/\n/g) || []).length;
-      logger.debug(`📋 Quebras de linha convertidas: ${lineBreaksBefore} → ${lineBreaksAfter} (para Telegram HTML)`);
-    }
-
-    return message;
+    return baseRenderer.convertBoldFormatting(message, platform, parseMode);
   }
 
   /**
-   * Garantir que HTML está válido para Telegram
-   * Escapa apenas caracteres especiais no conteúdo, mantendo tags HTML intactas
-   * IMPORTANTE: Preservar o template exatamente como configurado, apenas fazer escape mínimo necessário
-   * @param {string} message - Mensagem com HTML
-   * @returns {string}
-   */
+* Garantir que HTML está válido para Telegram
+* Escapa apenas caracteres especiais no conteúdo, mantendo tags HTML intactas
+* IMPORTANTE: Preservar o template exatamente como configurado, apenas fazer escape mínimo necessário
+* @param {string} message - Mensagem com HTML
+* @returns {string}
+*/
   ensureValidHtml(message) {
     if (!message) return '';
 
@@ -1924,241 +475,56 @@ class TemplateRenderer {
 
   /**
    * Converter HTML para formato específico (Markdown/MarkdownV2)
-   * @param {string} message - Mensagem com HTML
-   * @param {string} targetFormat - Formato alvo (Markdown, MarkdownV2)
-   * @returns {string}
+   * @delegated baseRenderer.convertHtmlToFormat()
    */
   convertHtmlToFormat(message, targetFormat) {
-    if (!message) return '';
-
-    // Converter <b>texto</b> para **texto** ou *texto*
-    if (targetFormat === 'MarkdownV2' || targetFormat === 'Markdown') {
-      message = message.replace(/<b>(.*?)<\/b>/gi, '*$1*');
-      message = message.replace(/<strong>(.*?)<\/strong>/gi, '*$1*');
-      message = message.replace(/<i>(.*?)<\/i>/gi, '_$1_');
-      message = message.replace(/<em>(.*?)<\/em>/gi, '_$1_');
-      message = message.replace(/<s>(.*?)<\/s>/gi, '~$1~');
-      message = message.replace(/<strike>(.*?)<\/strike>/gi, '~$1~');
-      message = message.replace(/<code>(.*?)<\/code>/gi, '`$1`');
-      message = message.replace(/<pre>(.*?)<\/pre>/gi, '```$1```');
-    }
-
-    // Remover outras tags HTML não suportadas
-    message = message.replace(/<[^>]+>/g, '');
-
-    // Decodificar entidades HTML
-    message = message
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
-
-    return message;
+    return baseRenderer.convertHtmlToFormat(message, targetFormat);
   }
 
   /**
    * Escapar caracteres especiais do MarkdownV2
-   * MarkdownV2 requer escape de: _ * [ ] ( ) ~ ` > # + - = | { } . !
-   * Mas não dentro de entidades de formatação (*texto*, ~texto~, etc)
-   * @param {string} message - Mensagem para escapar
-   * @returns {string}
+   * @delegated baseRenderer.escapeMarkdownV2()
    */
   escapeMarkdownV2(message) {
-    if (!message) return '';
-
-    // Caracteres que precisam ser escapados no MarkdownV2
-    const specialChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
-
-    // Proteger entidades de formatação (negrito, riscado, código, links)
-    const entities = [];
-    let entityIndex = 0;
-
-    // Proteger código: `texto`
-    message = message.replace(/`([^`]+)`/g, (match) => {
-      const placeholder = `__ENTITY_${entityIndex}__`;
-      entities[entityIndex] = match;
-      entityIndex++;
-      return placeholder;
-    });
-
-    // Proteger negrito: *texto*
-    message = message.replace(/\*([^*\n]+?)\*/g, (match) => {
-      const placeholder = `__ENTITY_${entityIndex}__`;
-      entities[entityIndex] = match;
-      entityIndex++;
-      return placeholder;
-    });
-
-    // Proteger riscado: ~texto~
-    message = message.replace(/~([^~\n]+?)~/g, (match) => {
-      const placeholder = `__ENTITY_${entityIndex}__`;
-      entities[entityIndex] = match;
-      entityIndex++;
-      return placeholder;
-    });
-
-    // Proteger links: [texto](url)
-    message = message.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match) => {
-      const placeholder = `__ENTITY_${entityIndex}__`;
-      entities[entityIndex] = match;
-      entityIndex++;
-      return placeholder;
-    });
-
-    // Escapar caracteres especiais no resto do texto
-    for (const char of specialChars) {
-      const regex = new RegExp(`\\${char}`, 'g');
-      message = message.replace(regex, `\\${char}`);
-    }
-
-    // Restaurar entidades
-    entities.forEach((entity, index) => {
-      message = message.replace(`__ENTITY_${index}__`, entity);
-    });
-
-    return message;
+    return baseRenderer.escapeMarkdownV2(message);
   }
 
   /**
    * Escapar caracteres Markdown
-   * @param {string} text - Texto para escapar
-   * @param {string} platform - Plataforma (telegram, whatsapp) - opcional
-   * @returns {string}
+   * @delegated baseRenderer.escapeMarkdown()
    */
   escapeMarkdown(text, platform = 'telegram') {
-    if (!text) return '';
-
-    // Para WhatsApp, não escapar asteriscos simples (usados para negrito)
-    // Para Telegram, não escapar asteriscos duplos (usados para negrito)
-    let escaped = String(text);
-
-    if (platform === 'whatsapp') {
-      // Escapar apenas asteriscos duplos e outros caracteres especiais
-      // Manter asteriscos simples para negrito
-      escaped = escaped
-        .replace(/\*\*/g, '\\*\\*') // Escapar **
-        .replace(/_/g, '\\_')
-        .replace(/\[/g, '\\[')
-        .replace(/\]/g, '\\]')
-        .replace(/\(/g, '\\(')
-        .replace(/\)/g, '\\)')
-        .replace(/~/g, '\\~')
-        .replace(/`/g, '\\`')
-        .replace(/>/g, '\\>')
-        .replace(/#/g, '\\#')
-        .replace(/\+/g, '\\+')
-        .replace(/-/g, '\\-')
-        .replace(/=/g, '\\=')
-        .replace(/\|/g, '\\|')
-        .replace(/\{/g, '\\{')
-        .replace(/\}/g, '\\}')
-        .replace(/\./g, '\\.')
-        .replace(/!/g, '\\!');
-    } else {
-      // Telegram: escapar todos os asteriscos simples, mas não duplos (usados para negrito)
-      // Isso é mais complexo, então vamos escapar tudo e depois restaurar **
-      escaped = escaped
-        .replace(/\*\*/g, '___DOUBLE_ASTERISK___') // Temporariamente substituir **
-        .replace(/\*/g, '\\*') // Escapar todos os *
-        .replace(/___DOUBLE_ASTERISK___/g, '**') // Restaurar **
-        .replace(/_/g, '\\_')
-        .replace(/\[/g, '\\[')
-        .replace(/\]/g, '\\]')
-        .replace(/\(/g, '\\(')
-        .replace(/\)/g, '\\)')
-        .replace(/~/g, '\\~')
-        .replace(/`/g, '\\`')
-        .replace(/>/g, '\\>')
-        .replace(/#/g, '\\#')
-        .replace(/\+/g, '\\+')
-        .replace(/-/g, '\\-')
-        .replace(/=/g, '\\=')
-        .replace(/\|/g, '\\|')
-        .replace(/\{/g, '\\{')
-        .replace(/\}/g, '\\}')
-        .replace(/\./g, '\\.')
-        .replace(/!/g, '\\!');
-    }
-
-    return escaped;
+    return baseRenderer.escapeMarkdown(text, platform);
   }
 
   /**
    * Formatar data
+   * @delegated baseRenderer.formatDate()
    * @param {string|Date} date - Data para formatar
    * @returns {string}
    */
   formatDate(date) {
-    if (!date) return 'N/A';
-    const d = new Date(date);
-    return d.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return baseRenderer.formatDate(date);
   }
 
   /**
    * Obter nome da plataforma
+   * @delegated baseRenderer.getPlatformName()
    * @param {string} platform - Código da plataforma
    * @returns {string}
    */
   getPlatformName(platform) {
-    const names = {
-      shopee: 'Shopee',
-      mercadolivre: 'Mercado Livre',
-      amazon: 'Amazon',
-      aliexpress: 'AliExpress',
-      general: 'Geral'
-    };
-    return names[platform] || platform;
+    return baseRenderer.getPlatformName(platform);
   }
 
   /**
    * Obter modo de template configurado
+   * @delegated baseRenderer.getTemplateMode()
    * @param {string} templateType - Tipo do template
    * @returns {Promise<string>} - 'default', 'custom', ou 'ai_advanced'
    */
   async getTemplateMode(templateType) {
-    try {
-      const AppSettings = (await import('../../models/AppSettings.js')).default;
-      const settings = await AppSettings.get();
-
-      // Mapear tipo de template para campo de configuração
-      const modeMap = {
-        'new_promotion': settings.template_mode_promotion,
-        'promotion_with_coupon': settings.template_mode_promotion_coupon,
-        'new_coupon': settings.template_mode_coupon,
-        'expired_coupon': settings.template_mode_expired_coupon
-      };
-
-      const mode = modeMap[templateType];
-
-      // Bloqueio Estratégico: O modelo Mixtral 8x7B (Gratuito) tem dificuldades com a IA ADVANCED
-      // Se ele estiver sendo usado, forçamos o modo 'default' para garantir estabilidade
-      if (settings.openrouter_model === 'mistralai/mixtral-8x7b-instruct' && mode === 'ai_advanced') {
-        logger.warn('⚠️ IA ADVANCED desabilitada para o modelo Mixtral (Gratuito) - Usando template padrão para garantir estabilidade');
-        return 'default';
-      }
-
-      // Validar que o modo é um dos valores permitidos
-      const validModes = ['default', 'custom', 'ai_advanced'];
-      if (mode && validModes.includes(mode)) {
-        logger.debug(`📋 Modo de template para ${templateType}: ${mode} (do banco de dados)`);
-        return mode;
-      }
-
-      // Se não for válido ou não existir, usar 'custom' como padrão
-      logger.warn(`⚠️ Modo de template inválido ou não configurado para ${templateType}: "${mode}", usando 'custom' como padrão`);
-      return 'custom';
-    } catch (error) {
-      logger.error(`❌ Erro ao buscar modo de template: ${error.message}`);
-      logger.warn(`⚠️ Usando 'custom' como fallback`);
-      return 'custom';
-    }
+    return baseRenderer.getTemplateMode(templateType);
   }
 
   /**
@@ -2273,7 +639,295 @@ ${variables.coupon_section || ''}
         return 'Mensagem não configurada';
     }
   }
+
+  // ============================================================================
+  // MÉTODOS PRIVADOS - PROCESSAMENTO DE TEMPLATES
+  // ============================================================================
+
+  /**
+   * Remover menções à data de validade do template de cupom gerado por IA
+   * @private
+   */
+  _removeCouponValidityFromAiTemplate(message) {
+    return message
+      // Padrões com emojis e formatação
+      .replace(/\n?📅\s*\*\*?Válido até:\*\*?\s*\{?valid_until\}?[^\n]*\n?/gi, '')
+      .replace(/\n?📅\s*\*\*?Válido até\*\*?:\s*[^\n]*\n?/gi, '')
+      .replace(/\n?📅\s*Válido até:\s*[^\n]*\n?/gi, '')
+      .replace(/\n?⏳\s*Expira em:\s*[^\n]*\n?/gi, '')
+      .replace(/\n?⏰\s*Válido por tempo limitado[^\n]*\n?/gi, '')
+      // Padrões de texto simples
+      .replace(/Válido até \d{2}\/\d{2}\/\d{4}/gi, '')
+      .replace(/Oferta válida até [^\n]*/gi, '')
+      // Remover linhas vazias extras criadas
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
+  /**
+   * Remover menções à plataforma do template
+   * @private
+   */
+  _removePlatformMentions(message, platform) {
+    const platformName = this.getPlatformName(platform);
+    if (!platformName) return message;
+
+    // Remover "no [Plataforma]" ou "na [Plataforma]"
+    const regex = new RegExp(`\\s+(no|na|em)\\s+${platformName}`, 'gi');
+    return message.replace(regex, '');
+  }
+
+  /**
+   * Garantir que o código do cupom esteja presente
+   * @private
+   */
+  _ensureCouponCodePresent(message, couponCode) {
+    if (!couponCode) return message;
+
+    // Se o código já está na mensagem, retornar
+    if (message.includes(couponCode)) return message;
+
+    // Tentar encontrar onde inserir
+    if (message.includes('CUPOM:')) {
+      return message.replace(/CUPOM:/i, `CUPOM: \`${couponCode}\``);
+    }
+
+    // Inserir no final antes do link
+    if (message.includes('🔗') || message.includes('http')) {
+      const parts = message.split(/(?=🔗|http)/);
+      return `${parts[0]}\n🎟️ Cupom: \`${couponCode}\`\n\n${parts.slice(1).join('')}`;
+    }
+
+    return `${message}\n\n🎟️ Cupom: \`${couponCode}\``;
+  }
+
+  /**
+   * Processar template de cupom gerado por IA
+   * @private
+   */
+  _processCouponAiTemplate(message, contextData) {
+    let processedMessage = message;
+
+    // 1. Remover data de validade (cupons são atemporais no sistema até expirarem)
+    processedMessage = this._removeCouponValidityFromAiTemplate(processedMessage);
+
+    // 2. Remover menção à plataforma (será injetada via variável se necessário)
+    if (contextData.platform) {
+      processedMessage = this._removePlatformMentions(processedMessage, contextData.platform);
+    }
+
+    // 3. Garantir que o código do cupom esteja presente
+    if (contextData.coupon && contextData.coupon.code) {
+      processedMessage = this._ensureCouponCodePresent(processedMessage, contextData.coupon.code);
+    }
+
+    return processedMessage;
+  }
+
+  /**
+   * Pós-processamento de cleanup para templates de IA
+   * @private
+   */
+  _postProcessAiTemplate(message, templateType, variables, contextData) {
+    let processedMessage = message;
+
+    // 1. Limpeza de artefatos da IA
+    processedMessage = processedMessage
+      .replace(/\(de\s+~~\s*([^~]+?)~~\)/g, ' ~~$1~~')
+      .replace(/\(de\s+~~\s+([^~]+?)~~\)/g, ' ~~$1~~')
+      .replace(/(~~\s*)+~~/g, '~~')
+      .replace(/~{3,}/g, '~~')
+      .replace(/R\$\s*~~\s*~*R\$/gi, '~~R$')
+      .replace(/~~.*?~~\s*R\$/gi, '~~R$')
+      .replace(/\s*\.\.\.\s*\(mensagem\s+truncada\)/gi, '')
+      .replace(/\s*\(mensagem\s+truncada\)/gi, '')
+      .replace(/\s*\[continua\s+na\s+próxima\s+mensagem\]/gi, '')
+      .replace(/\s*\/\/.*$/gm, '')
+      .replace(/\n\s*Nota:.*$/gmi, '')
+      .replace(/<[^>]+>/g, '') // Remover HTML residual
+      .replace(/__CODE_PROTECTED_(.+?)__/g, '`$1`'); // Restaurar código
+
+    // 2. Garantir product_name para promoções
+    if ((templateType === 'new_promotion' || templateType === 'promotion_with_coupon') &&
+      contextData.product && contextData.product.name) {
+
+      const productName = variables.product_name || contextData.product.name;
+      // Lógica simplificada de verificação de título
+      if (!processedMessage.includes('{product_name}') &&
+        !processedMessage.toLowerCase().includes(productName.toLowerCase().substring(0, 20))) {
+
+        // Adicionar título no topo se não encontrado
+        processedMessage = `📦 **{product_name}**\n\n${processedMessage}`;
+        logger.info(`✅ [IA CLEANUP] Título do produto adicionado ao topo`);
+      }
+    }
+
+    // 3. Formatação segura de código de cupom
+    if (contextData.coupon && contextData.coupon.code && variables.coupon_code) {
+      const code = variables.coupon_code;
+      // Evitar duplicidade de formatação (ex: ` `CODE` `)
+      const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // Se não estiver formatado com backticks ou code, formatar
+      if (!processedMessage.match(new RegExp(`\`${escapedCode}\``)) &&
+        !processedMessage.match(new RegExp(`<code>${escapedCode}</code>`))) {
+        processedMessage = processedMessage.replace(new RegExp(`\\b${escapedCode}\\b`, 'g'), `\`${code}\``);
+      }
+    }
+
+    return processedMessage;
+  }
+
+  /**
+   * Renderizar usando IA Advanced
+   * @private
+   */
+  async _renderWithAiAdvanced(templateType, platform, variables, contextData) {
+    logger.info(`🤖 [IA ADVANCED] Gerando template dinamicamente para ${templateType}`);
+    const advancedTemplateGenerator = (await import('../../ai/advancedTemplateGenerator.js')).default;
+    let message = '';
+
+    try {
+      if (templateType === 'new_promotion' || templateType === 'promotion_with_coupon') {
+        message = await advancedTemplateGenerator.generatePromotionTemplate(contextData.product || contextData, platform);
+      } else if (templateType === 'new_coupon') {
+        message = await advancedTemplateGenerator.generateCouponTemplate(contextData.coupon || contextData, platform);
+        message = this._processCouponAiTemplate(message, contextData);
+      } else if (templateType === 'expired_coupon') {
+        message = await advancedTemplateGenerator.generateExpiredCouponTemplate(contextData.coupon || contextData, platform);
+      } else {
+        throw new Error(`Tipo de template não suportado para IA ADVANCED: ${templateType}`);
+      }
+
+      message = this._postProcessAiTemplate(message, templateType, variables, contextData);
+      return message;
+
+    } catch (aiError) {
+      logger.error(`❌ [IA ADVANCED] Erro: ${aiError.message}. Usando Fallback.`);
+
+      try {
+        return this._renderWithDefault(templateType, platform, variables);
+      } catch (fallbackError) {
+        const template = await BotMessageTemplate.findByType(templateType, platform);
+        if (template && template.is_active) return template.template;
+        throw new Error(`Falha total na renderização IA + Fallback: ${aiError.message}`);
+      }
+    }
+  }
+
+  /**
+   * Renderizar usando template padrão
+   * @private
+   */
+  _renderWithDefault(templateType, platform, variables) {
+    return this.getDefaultTemplate(templateType, variables, platform);
+  }
+
+  /**
+   * Renderizar usando template customizado
+   * @private
+   */
+  async _renderWithCustom(templateType, platform, variables) {
+    const template = await BotMessageTemplate.findByType(templateType, platform);
+    if (template && template.is_active) {
+      return template.template;
+    }
+    logger.warn(`⚠️ Template customizado não encontrado/ativo para ${templateType}, usando default`);
+    return this._renderWithDefault(templateType, platform, variables);
+  }
+
+  /**
+   * Substituir variáveis no template
+   * @private
+   */
+  _replaceVariables(message, variables, templateMode, platform, contextData) {
+    let finalMessage = message;
+
+    for (const [key, value] of Object.entries(variables)) {
+      const regex = new RegExp(`\\{${key}\\}`, 'g');
+      let replacement = value !== null && value !== undefined ? String(value) : '';
+
+      // Trazendo a lógica de limpeza de variáveis do render() original
+      if (key === 'valid_until') replacement = '';
+
+      // Remover menção à plataforma em AI Advanced (logo já diz tudo)
+      if (key === 'platform_name' && templateMode === 'ai_advanced') {
+        replacement = '';
+        // Também limpar linhas que só tinham a plataforma
+        finalMessage = finalMessage.replace(new RegExp(`.*\\{${key}\\}.*\\n?`, 'gi'), '');
+        finalMessage = finalMessage.replace(/.*(Mercado Livre|Shopee|Amazon|AliExpress).*$/gmi, '');
+      }
+
+      if (key === 'coupon_code' && replacement && replacement !== 'N/A') {
+        // Lógica de formatação de cupom simplificada se não estiver formatado
+        if (!finalMessage.includes(`\`${replacement}\``) && !finalMessage.includes(replacement)) {
+          replacement = `\`${replacement}\``;
+        }
+      }
+
+      if (key === 'min_purchase' && replacement) {
+        // Limpar "Compra mínima:" duplicado na variável
+        replacement = replacement.replace(/.*Compra\s+mínima:\s*/gi, '').trim();
+        if (!replacement.startsWith('R$')) replacement = `R$ ${replacement}`;
+      }
+
+      if (key === 'affiliate_link') {
+        if (!replacement || replacement === 'Link não disponível' || !replacement.trim()) {
+          if (contextData?.product?.affiliate_link) replacement = contextData.product.affiliate_link;
+        }
+      }
+
+      if (key === 'applicability') {
+        if (!replacement || !replacement.trim()) {
+          // Remover linha vazia
+          finalMessage = finalMessage.replace(new RegExp(`.*\\{applicability\\}.*\\n?`, 'gi'), '');
+          continue;
+        }
+      }
+
+      finalMessage = finalMessage.replace(regex, replacement);
+    }
+    return finalMessage;
+  }
+
+  /**
+   * Finalizar mensagem (limpeza final e formatação)
+   * @private
+   */
+  _finalizeMessage(message, templateMode, templateType, variables, contextData, platform) {
+    let final = message;
+
+    // Limpeza de formatação de preços quebrados
+    if (templateMode === 'ai_advanced') {
+      final = final
+        .replace(/(R\$\s*[\d.,]+)(💰|💵|🏷️|🎟️)/g, '$1\n$2')
+        .replace(/([^\n\s])(🔗|👉|⚡|🔥)/g, '$1\n$2')
+        .replace(/\n{3,}/g, '\n\n');
+    }
+
+    // Se for cupom, remover linhas de validade residuais
+    if (templateType === 'new_coupon') {
+      final = this._removeCouponValidityFromAiTemplate(final);
+    }
+
+    // Validação final de código de cupom
+    if (variables.coupon_code && variables.coupon_code !== 'N/A') {
+      final = this._ensureCouponCodePresent(final, variables.coupon_code);
+    }
+
+
+
+    // Converter formatação para o padrão da plataforma
+    // Telegram: Forçamos HTML pois o NotificationDispatcher força HTML
+    if (platform === 'telegram') {
+      final = baseRenderer.convertBoldFormatting(final, platform, 'HTML');
+      logger.debug(`🔍 Output Telegram (HTML): ${final.substring(final.indexOf('CUPOM:'), final.indexOf('CUPOM:') + 50)}`);
+    } else if (platform === 'whatsapp') {
+      final = baseRenderer.convertBoldFormatting(final, platform, 'Markdown');
+    }
+
+    return final.trim();
+  }
+
 }
 
 export default new TemplateRenderer();
-

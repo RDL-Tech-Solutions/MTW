@@ -311,6 +311,7 @@ ${hasCoupon ? '8. Use CODIGO_CUPOM para o cupom extra\n9. Use PRECO_FINAL para p
 ${hasDiscount ? '11. DESTAQUE a economia!' : ''}
 12. Termine OBRIGATORIAMENTE a mensagem com a palavra LINK_PRODUTO
 13. NUNCA mencione datas ou prazos
+14. MÁXIMO DE 850 CARACTERES (para caber na legenda da foto)
 
 💡 EXEMPLOS DE ABERTURA VENDEDORA (inspire-se):
 
@@ -402,6 +403,7 @@ Crie uma mensagem curta e PERFEITA para vender este cupom no Telegram/WhatsApp s
     7. Use APLICABILIDADE se tiver is_general definido
     8. NUNCA mencione datas, validades ou links
     9. Use QUEBRA DE LINHA DUPLA entre frases/parágrafos para não ficar tudo junto
+    10. MÁXIMO DE 850 CARACTERES
 
     Agora escreva SUA mensagem única (texto puro com quebras de linha DUPLAS):`;
   }
