@@ -21,6 +21,12 @@ const __dirname = path.dirname(__filename);
 // Carregar variáveis de ambiente
 dotenv.config();
 
+// IMPORTANTE: Configurar timezone ANTES de qualquer operação com datas
+// Isso garante que Date.now() e new Date() usem o timezone correto
+// Essencial para o funcionamento correto dos posts agendados
+process.env.TZ = process.env.TZ || 'America/Sao_Paulo';
+logger.info(`🌍 Timezone configurado: ${process.env.TZ}`);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 

@@ -123,17 +123,25 @@ class SchedulerService {
      */
     async releaseStuckPosts() {
         try {
+            logger.debug(`🔍 Verificando posts travados em "processing"...`);
             const stuckPosts = await ScheduledPost.getStuckPosts(5); // 5 minutos de timeout
 
-            if (stuckPosts.length === 0) return;
+            if (stuckPosts.length === 0) {
+                logger.debug(`   ✅ Nenhum post travado encontrado`);
+                return;
+            }
 
             logger.warn(`⚠️ Encontrados ${stuckPosts.length} post(s) travado(s) em "processing"`);
+            for (const post of stuckPosts) {
+                logger.warn(`   Post ${post.id}: travado há ${Math.floor((Date.now() - new Date(post.processing_started_at).getTime()) / 60000)} minutos`);
+            }
 
             for (const post of stuckPosts) {
                 await ScheduledPost.releaseStuckPost(post.id);
             }
         } catch (error) {
             logger.error(`❌ Erro ao liberar posts travados: ${error.message}`);
+            logger.error(`   Stack: ${error.stack}`);
         }
     }
 
@@ -142,15 +150,28 @@ class SchedulerService {
      */
     async processScheduledQueue() {
         try {
+            const now = new Date();
+            logger.debug(`📊 [processScheduledQueue] Iniciando processamento`);
+            logger.debug(`   Horário atual (ISO): ${now.toISOString()}`);
+            logger.debug(`   Horário atual (Local BR): ${now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
+            logger.debug(`   Timezone do processo: ${process.env.TZ || 'não configurado'}`);
+
             // 1. Primeiro, liberar posts travados (timeout)
             await this.releaseStuckPosts();
 
             // 2. Buscar posts pendentes prontos para processar
+            logger.debug(`🔍 Buscando posts pendentes prontos para processar...`);
             const posts = await ScheduledPost.getPendingPosts(10); // Processar 10 por vez
 
-            if (posts.length === 0) return;
+            if (posts.length === 0) {
+                logger.debug(`   ℹ️ Nenhum post pendente encontrado para processar agora`);
+                return;
+            }
 
             logger.info(`⏰ Processando ${posts.length} posts agendados...`);
+            posts.forEach((post, index) => {
+                logger.info(`   ${index + 1}. Post ${post.id}: agendado para ${post.scheduled_at} (${post.platform})`);
+            });
 
             for (const post of posts) {
                 // Marcar como "processing" antes de executar
@@ -159,12 +180,25 @@ class SchedulerService {
                     await this.processSinglePost(post);
                 } catch (error) {
                     logger.error(`❌ Erro ao processar post ${post.id}: ${error.message}`);
-                    // Garantir que o post seja marcado como failed mesmo em caso de exceção
-                    await ScheduledPost.update(post.id, {
-                        status: 'failed',
-                        error_message: error.message,
-                        attempts: (post.attempts || 0) + 1
-                    });
+                    logger.error(`   Stack: ${error.stack}`);
+                    // CRÍTICO: Garantir que o post seja marcado como failed ou pending mesmo em caso de exceção
+                    // Isso evita que posts fiquem travados em "processing" indefinidamente
+                    try {
+                        const currentAttempts = (post.attempts || 0) + 1;
+                        const maxRetries = 3;
+
+                        await ScheduledPost.update(post.id, {
+                            status: currentAttempts >= maxRetries ? 'failed' : 'pending',
+                            error_message: error.message,
+                            attempts: currentAttempts,
+                            processing_started_at: null
+                        });
+
+                        logger.info(`   Post ${post.id} marcado como "${currentAttempts >= maxRetries ? 'failed' : 'pending'}" após erro (tentativa ${currentAttempts}/${maxRetries})`);
+                    } catch (updateError) {
+                        logger.error(`   ❌ ERRO CRÍTICO: Falha ao atualizar status do post ${post.id}: ${updateError.message}`);
+                        logger.error(`   Post pode estar travado em "processing"!`);
+                    }
                 }
             }
         } catch (error) {
@@ -184,6 +218,8 @@ class SchedulerService {
         try {
             logger.info(`📤 [${startTime.toISOString()}] Processando post ${post.id} (tentativa ${currentAttempt}/${maxRetries})`);
             logger.info(`   Platform: ${post.platform}, Product: ${post.product_id}`);
+            logger.info(`   Scheduled at: ${post.scheduled_at}`);
+            logger.info(`   Current time: ${startTime.toISOString()}`);
 
             if (!post.products) {
                 logger.warn(`⚠️ Produto não encontrado para agendamento ${post.id}. Marcando como falha.`);

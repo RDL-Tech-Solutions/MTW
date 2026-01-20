@@ -80,6 +80,117 @@ class ScheduledPostController {
             next(error);
         }
     }
+
+    /**
+     * GET /api/scheduled-posts/debug
+     * Endpoint de debug para diagnosticar problemas com posts agendados
+     */
+    static async debug(req, res, next) {
+        try {
+            const { supabase } = await import('../config/database.js');
+            const now = new Date();
+
+            logger.info('🔍 Executando diagnóstico de posts agendados...');
+
+            // 1. Buscar posts pendentes
+            const pending = await ScheduledPost.getPendingPosts(100);
+
+            // 2. Buscar posts em processamento
+            const { data: processing, error: processingError } = await supabase
+                .from('scheduled_posts')
+                .select('*')
+                .eq('status', 'processing');
+
+            if (processingError) throw processingError;
+
+            // 3. Buscar posts travados
+            const stuck = await ScheduledPost.getStuckPosts(5);
+
+            // 4. Buscar todos os posts (últimos 50)
+            const { data: allRecent, error: allError } = await supabase
+                .from('scheduled_posts')
+                .select('id, status, scheduled_at, created_at, attempts, platform')
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (allError) throw allError;
+
+            // 5. Contar por status
+            const { data: statusCounts, error: countError } = await supabase
+                .from('scheduled_posts')
+                .select('status')
+                .then(result => {
+                    if (result.error) throw result.error;
+                    const counts = {};
+                    result.data.forEach(post => {
+                        counts[post.status] = (counts[post.status] || 0) + 1;
+                    });
+                    return { data: counts, error: null };
+                });
+
+            if (countError) throw countError;
+
+            const diagnostics = {
+                serverInfo: {
+                    currentTime: now.toISOString(),
+                    localTime: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+                    timezone: process.env.TZ || 'not set (using system default)',
+                    nodeVersion: process.version,
+                    platform: process.platform,
+                    uptime: process.uptime()
+                },
+                postsStatus: {
+                    pending: pending.length,
+                    processing: processing?.length || 0,
+                    stuck: stuck.length,
+                    totalByStatus: statusCounts
+                },
+                details: {
+                    pendingPosts: pending.map(p => ({
+                        id: p.id,
+                        scheduled_at: p.scheduled_at,
+                        platform: p.platform,
+                        product_id: p.product_id,
+                        attempts: p.attempts,
+                        minutesOverdue: Math.floor((now - new Date(p.scheduled_at)) / 60000)
+                    })),
+                    processingPosts: processing?.map(p => ({
+                        id: p.id,
+                        scheduled_at: p.scheduled_at,
+                        platform: p.platform,
+                        processing_started_at: p.processing_started_at,
+                        minutesInProcessing: p.processing_started_at
+                            ? Math.floor((now - new Date(p.processing_started_at)) / 60000)
+                            : null
+                    })) || [],
+                    stuckPosts: stuck.map(p => ({
+                        id: p.id,
+                        scheduled_at: p.scheduled_at,
+                        platform: p.platform,
+                        processing_started_at: p.processing_started_at,
+                        minutesStuck: Math.floor((now - new Date(p.processing_started_at)) / 60000)
+                    })),
+                    recentPosts: allRecent?.slice(0, 10).map(p => ({
+                        id: p.id,
+                        status: p.status,
+                        scheduled_at: p.scheduled_at,
+                        platform: p.platform,
+                        attempts: p.attempts
+                    })) || []
+                },
+                cronStatus: {
+                    schedulerCronRunning: 'Check logs for cron execution messages',
+                    lastExecutionTime: 'Check logs for last execution timestamp'
+                }
+            };
+
+            logger.info('✅ Diagnóstico concluído');
+            res.json(successResponse(diagnostics, 'Diagnóstico de posts agendados'));
+        } catch (error) {
+            logger.error(`❌ Erro no diagnóstico: ${error.message}`);
+            next(error);
+        }
+    }
 }
 
 export default ScheduledPostController;

@@ -38,6 +38,11 @@ class ScheduledPost {
     static async getPendingPosts(limit = 10) {
         try {
             const now = new Date().toISOString();
+            logger.debug(`📋 [ScheduledPost.getPendingPosts] Buscando posts pendentes...`);
+            logger.debug(`   Limite: ${limit}`);
+            logger.debug(`   Horário de referência (now): ${now}`);
+            logger.debug(`   Query: status='pending' AND scheduled_at <= '${now}'`);
+
             const { data: posts, error } = await supabase
                 .from('scheduled_posts')
                 .select('*, products!product_id(*)')
@@ -47,9 +52,21 @@ class ScheduledPost {
                 .limit(limit);
 
             if (error) throw error;
+
+            logger.debug(`   ✅ Encontrados ${posts?.length || 0} posts pendentes`);
+            if (posts && posts.length > 0) {
+                posts.forEach((post, index) => {
+                    const scheduledDate = new Date(post.scheduled_at);
+                    const nowDate = new Date(now);
+                    const diffMinutes = Math.floor((nowDate - scheduledDate) / 60000);
+                    logger.debug(`      ${index + 1}. Post ${post.id}: agendado ${diffMinutes} min atrás (${post.scheduled_at})`);
+                });
+            }
+
             return posts;
         } catch (error) {
             logger.error(`Erro ao buscar posts pendentes: ${error.message}`);
+            logger.error(`   Stack: ${error.stack}`);
             throw error;
         }
     }

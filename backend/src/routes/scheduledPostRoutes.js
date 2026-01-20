@@ -7,6 +7,8 @@ const router = express.Router();
 // Todas as rotas requerem autenticação
 router.use(authenticateToken);
 
+
+router.get('/debug', ScheduledPostController.debug); // Debug endpoint (deve vir antes de /:id)
 router.get('/', ScheduledPostController.index);
 router.delete('/bulk/pending', ScheduledPostController.bulkDeletePending); // Deve vir antes de /:id
 router.delete('/:id', ScheduledPostController.destroy);

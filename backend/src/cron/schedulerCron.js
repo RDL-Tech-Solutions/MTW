@@ -11,14 +11,16 @@ class SchedulerCron {
         try {
             // Run every minute
             logger.info('⏰ Iniciando Cron de Agendamento Inteligente (verificando a cada 1 min)');
+            logger.info(`   Timezone do servidor: ${process.env.TZ || 'não configurado (usando padrão do sistema)'}`);
             this.task = cron.schedule('* * * * *', async () => {
                 const executionStart = new Date();
                 try {
-                    logger.debug(`🔄 [${executionStart.toISOString()}] Executando verificação de posts agendados...`);
+                    logger.info(`🔄 [${executionStart.toISOString()}] Executando verificação de posts agendados...`);
+                    logger.info(`   Horário local: ${executionStart.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
                     await schedulerService.processScheduledQueue();
                     const executionEnd = new Date();
                     const duration = executionEnd - executionStart;
-                    logger.debug(`✅ [${executionEnd.toISOString()}] Verificação concluída (${duration}ms)`);
+                    logger.info(`✅ [${executionEnd.toISOString()}] Verificação concluída (${duration}ms)`);
                 } catch (error) {
                     const executionEnd = new Date();
                     const duration = executionEnd - executionStart;
