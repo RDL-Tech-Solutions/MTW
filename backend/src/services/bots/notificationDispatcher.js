@@ -166,16 +166,11 @@ class NotificationDispatcher {
           continue;
         }
 
-        // CORREÇÃO: Remover o bloqueio de produtos com cupom vinculado
-        // O cliente quer que o produto seja enviado mesmo se tiver cupom,
-        // pois a flag no_coupons deve bloquear apenas cupons avulsos (standalone)
-        /*
         // NOVO: Bloquear produtos que têm cupom vinculado
         if (eventType === 'promotion_new' && data.coupon_id) {
           logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando produto com cupom vinculado (coupon_id: ${data.coupon_id})`);
           continue;
         }
-        */
       }
 
       // 1. Filtro de categoria (produtos E cupons)
