@@ -541,40 +541,45 @@ class PublishService {
       }
 
       // 3. Detectar duplicados (antes de publicar)
-      try {
-        const duplicateDetector = (await import('../duplicateDetector.js')).default;
-        const duplicate = await duplicateDetector.detectDuplicate(product);
+      // Se for manual (options.manual = true), PULAR verificação de duplicidade
+      if (!options.manual) {
+        try {
+          const duplicateDetector = (await import('../duplicateDetector.js')).default;
+          const duplicate = await duplicateDetector.detectDuplicate(product);
 
-        if (duplicate && duplicate.canonical_id) {
-          logger.info(`🔄 Produto duplicado detectado. Usando produto canônico: ${duplicate.canonical_id}`);
+          if (duplicate && duplicate.canonical_id) {
+            logger.info(`🔄 Produto duplicado detectado. Usando produto canônico: ${duplicate.canonical_id}`);
 
-          // Atualizar produto para apontar para o canônico
-          if (product.id) {
-            await Product.update(product.id, {
-              canonical_product_id: duplicate.canonical_id
-            });
-            product.canonical_product_id = duplicate.canonical_id;
+            // Atualizar produto para apontar para o canônico
+            if (product.id) {
+              await Product.update(product.id, {
+                canonical_product_id: duplicate.canonical_id
+              });
+              product.canonical_product_id = duplicate.canonical_id;
+            }
+
+            // Criar relação de duplicado
+            await duplicateDetector.createDuplicateRelation(
+              duplicate.canonical_id,
+              product.id,
+              duplicate.similarity_score
+            );
+
+            // Se é duplicado, não publicar (evitar spam)
+            logger.info(`⏸️ Produto duplicado não será publicado para evitar spam`);
+            return {
+              success: false,
+              results,
+              reason: 'Produto duplicado detectado',
+              canonical_id: duplicate.canonical_id
+            };
           }
-
-          // Criar relação de duplicado
-          await duplicateDetector.createDuplicateRelation(
-            duplicate.canonical_id,
-            product.id,
-            duplicate.similarity_score
-          );
-
-          // Se é duplicado, não publicar (evitar spam)
-          logger.info(`⏸️ Produto duplicado não será publicado para evitar spam`);
-          return {
-            success: false,
-            results,
-            reason: 'Produto duplicado detectado',
-            canonical_id: duplicate.canonical_id
-          };
+        } catch (dupError) {
+          logger.warn(`⚠️ Erro ao detectar duplicados: ${dupError.message}`);
+          // Continuar publicação mesmo se detecção falhar
         }
-      } catch (dupError) {
-        logger.warn(`⚠️ Erro ao detectar duplicados: ${dupError.message}`);
-        // Continuar publicação mesmo se detecção falhar
+      } else {
+        logger.info(`⏩ Puxando verificação de duplicidade por ser publicação manual`);
       }
 
       // Log detalhado do produto recebido
