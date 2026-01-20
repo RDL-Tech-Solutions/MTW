@@ -157,21 +157,20 @@ class NotificationDispatcher {
         continue;
       }
 
-      // 0.2. Filtro de no_coupons (NOVO)
-      // se o canal não aceita cupons, não enviar cupons NEM produtos com cupons vinculados
+      // 0.2. Filtro de no_coupons
+      // Se o canal não aceita cupons, não enviar cupons STANDALONE
+      // MAS ainda permite produtos com cupons vinculados (promoção + cupom)
       if (channel.no_coupons === true) {
-        // Bloquear cupons standalone
+        // Bloquear cupons standalone (notificações apenas de cupom)
         if (eventType === 'coupon_new' || eventType === 'coupon_expired') {
-          logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando cupom`);
+          logger.debug(`   🚫 Canal ${channel.id} não aceita cupons standalone (no_coupons = true), ignorando cupom`);
           continue;
         }
 
-        // NOVO: Bloquear produtos que têm cupom vinculado
-        if (eventType === 'promotion_new' && data.coupon_id) {
-          logger.debug(`   🚫 Canal ${channel.id} não aceita cupons (no_coupons = true), ignorando produto com cupom vinculado (coupon_id: ${data.coupon_id})`);
-          continue;
-        }
+        // IMPORTANTE: Produtos com cupons vinculados SÃO PERMITIDOS
+        // O filtro no_coupons bloqueia apenas cupons standalone, não produtos+cupom
       }
+
 
       // 1. Filtro de categoria (produtos E cupons)
       // IMPORTANTE: Cupons também podem ter categoria!
@@ -559,9 +558,7 @@ class NotificationDispatcher {
           reason += `Produto sem categoria definida. `;
         }
 
-        if (data.coupon_id) {
-          reason += `Produto com cupom vinculado (alguns canais podem ter no_coupons=true). `;
-        }
+
 
         if (data.offer_score !== undefined) {
           reason += `Score: ${data.offer_score}. `;
@@ -740,10 +737,6 @@ class NotificationDispatcher {
           reason += `Categoria: ${data.category_id}. `;
         } else {
           reason += `Produto sem categoria definida. `;
-        }
-
-        if (data.coupon_id) {
-          reason += `Produto com cupom vinculado (alguns canais podem ter no_coupons=true). `;
         }
 
         if (data.offer_score !== undefined) {
