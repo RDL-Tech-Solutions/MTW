@@ -35,9 +35,9 @@ class BrowserPool {
             headless: this.isVPSMode ? 'new' : true,
             ignoreDefaultArgs: ['--enable-automation'],
             ignoreHTTPSErrors: true,
-            // Aumentar timeouts para VPS (Cloudflare pode levar até 30s)
-            timeout: this.isVPSMode ? 60000 : 30000,
-            protocolTimeout: this.isVPSMode ? 60000 : 30000,
+            // Aumentar timeouts para permitir Target discovery e Cloudflare bypass
+            timeout: this.isVPSMode ? 90000 : 30000,
+            protocolTimeout: this.isVPSMode ? 120000 : 60000, // Mais tempo para protocolo interno
         };
 
         // Configuração otimizada para VPS (menos recursos)
@@ -57,11 +57,14 @@ class BrowserPool {
                 '--no-first-run',
                 '--safebrowsing-disable-auto-update',
                 '--disable-web-security',
-                '--single-process', // Importante para VPS com pouca RAM
+                // REMOVIDO: '--single-process' (causa instabilidade)
+                // REMOVIDO: '--disable-features=IsolateOrigins,site-per-process' (conflita com multi-process)
                 '--memory-pressure-off',
                 '--disable-blink-features=AutomationControlled',
-                '--disable-features=IsolateOrigins,site-per-process',
                 '--window-size=1920,1080',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
             ];
 
             // Se tiver caminho customizado do Chromium (comum em VPS)
@@ -78,7 +81,6 @@ class BrowserPool {
                 '--disable-gpu',
                 '--window-size=1920x1080',
                 '--disable-blink-features=AutomationControlled',
-                '--disable-features=IsolateOrigins,site-per-process'
             ];
         }
 
@@ -88,35 +90,65 @@ class BrowserPool {
     /**
      * Criar uma nova instância de browser
      */
-    async createBrowser() {
-        try {
-            logger.info(`🌐 [BrowserPool] Criando nova instância de browser (${this.browsers.length + 1}/${this.maxInstances})...`);
+    async createBrowser(retries = 3) {
+        let lastError;
 
-            const config = this.getBrowserConfig();
-            const browser = await puppeteer.launch(config);
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                logger.info(`🌐 [BrowserPool] Criando nova instância de browser (${this.browsers.length + 1}/${this.maxInstances})...`);
+                if (attempt > 1) {
+                    logger.info(`   🔄 Tentativa ${attempt}/${retries}`);
+                }
 
-            // Adicionar metadata
-            browser._poolMetadata = {
-                createdAt: Date.now(),
-                lastUsed: Date.now(),
-                usageCount: 0,
-                id: this.metrics.totalCreated
-            };
+                const config = this.getBrowserConfig();
+                const browser = await puppeteer.launch(config);
 
-            this.browsers.push(browser);
-            this.metrics.totalCreated++;
-            this.metrics.currentActive++;
+                // Aguardar um pouco para garantir que o browser está estável
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
-            logger.info(`✅ [BrowserPool] Browser #${browser._poolMetadata.id} criado com sucesso`);
-            logger.debug(`   Modo: ${this.isVPSMode ? 'VPS (otimizado)' : 'Desenvolvimento'}`);
-            logger.debug(`   Headless: ${config.headless}`);
-            logger.debug(`   Instâncias ativas: ${this.browsers.length}/${this.maxInstances}`);
+                // Verificar se o browser está realmente conectado
+                const version = await browser.version();
+                logger.debug(`   📌 Browser versão: ${version}`);
 
-            return browser;
-        } catch (error) {
-            logger.error(`❌ [BrowserPool] Erro ao criar browser: ${error.message}`);
-            throw error;
+                // Adicionar metadata
+                browser._poolMetadata = {
+                    createdAt: Date.now(),
+                    lastUsed: Date.now(),
+                    usageCount: 0,
+                    id: this.metrics.totalCreated
+                };
+
+                this.browsers.push(browser);
+                this.metrics.totalCreated++;
+                this.metrics.currentActive++;
+
+                logger.info(`✅ [BrowserPool] Browser #${browser._poolMetadata.id} criado com sucesso`);
+                logger.debug(`   Modo: ${this.isVPSMode ? 'VPS (otimizado)' : 'Desenvolvimento'}`);
+                logger.debug(`   Headless: ${config.headless}`);
+                logger.debug(`   Instâncias ativas: ${this.browsers.length}/${this.maxInstances}`);
+
+                return browser;
+            } catch (error) {
+                lastError = error;
+                logger.error(`❌ [BrowserPool] Erro ao criar browser (tentativa ${attempt}/${retries}): ${error.message}`);
+
+                // Se for erro de Protocol/Target, aguardar antes de tentar novamente
+                if (error.message.includes('Protocol error') || error.message.includes('Target closed')) {
+                    if (attempt < retries) {
+                        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+                        logger.info(`   ⏳ Aguardando ${delay}ms antes de tentar novamente...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                } else {
+                    // Para outros erros, falhar imediatamente
+                    throw error;
+                }
+            }
         }
+
+        // Se todas as tentativas falharam
+        logger.error(`❌ [BrowserPool] Falha ao criar browser após ${retries} tentativas`);
+        throw lastError;
     }
 
     /**

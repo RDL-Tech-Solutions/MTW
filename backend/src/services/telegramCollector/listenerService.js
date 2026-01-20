@@ -2153,6 +2153,9 @@ class TelegramListenerService {
       // Garantir novamente que está marcado
       telegramClient.setListenerActive(true);
 
+      // Atualizar status no banco de dados
+      await TelegramCollectorConfig.updateListenerStatus('running', process.pid);
+
       logger.info(`✅ Listener iniciado. Monitorando ${this.monitoredChannels.size} canais.`);
       logger.info(`📡 Cliente conectado: ${client && (client.connected || client._connected) ? '✅ Sim' : '❌ Não'}`);
 
@@ -2184,6 +2187,9 @@ class TelegramListenerService {
       } catch (disconnectError) {
         // Ignorar erros de desconexão
       }
+
+      // Atualizar status de erro no banco
+      await TelegramCollectorConfig.updateListenerStatus('error', null, error.message).catch(() => { });
 
       throw error;
     }
@@ -2341,6 +2347,50 @@ class TelegramListenerService {
   }
 
   /**
+   * Auto-restaurar estado do listener ao iniciar o backend
+   * Verifica o status persistido no banco e inicia o listener se necessário
+   */
+  async autoRestoreState() {
+    try {
+      logger.info('🔄 Verificando estado anterior do listener...');
+
+      const config = await TelegramCollectorConfig.get();
+
+      // Log do estado encontrado
+      logger.info(`   Estado persistido: ${config.listener_status}`);
+      logger.info(`   Modo automático: ${config.is_automatic_mode ? 'Ativado' : 'Desativado'}`);
+
+      // Caso 1: Listener estava rodando antes do restart
+      if (config.listener_status === 'running') {
+        logger.info('✅ Listener estava rodando antes do restart. Restaurando...');
+        try {
+          await this.start();
+          logger.info('✅ Listener restaurado com sucesso');
+        } catch (error) {
+          logger.error(`❌ Erro ao restaurar listener: ${error.message}`);
+          logger.info('💡 O listener pode ser iniciado manualmente pelo admin panel');
+        }
+        return;
+      }
+
+      // Caso 2: Modo automático está ativado (mesmo que listener estava stopped)
+      if (config.is_automatic_mode) {
+        logger.info('📅 Modo automático está ativado. Iniciando agendador...');
+        await this.startScheduler();
+        return;
+      }
+
+      // Caso 3: Listener estava stopped e modo automático desativado
+      logger.info('ℹ️ Listener estava parado. Aguardando início manual.');
+      logger.info('💡 Para iniciar automaticamente no restart, ative o "Modo Automático" nas configurações');
+
+    } catch (error) {
+      logger.error(`❌ Erro ao auto-restaurar estado do listener: ${error.message}`);
+      logger.info('💡 O listener pode ser iniciado manualmente pelo admin panel');
+    }
+  }
+
+  /**
    * Parar listener
    */
   async stop() {
@@ -2361,9 +2411,14 @@ class TelegramListenerService {
 
       await telegramClient.disconnect();
 
+      // Atualizar status no banco de dados
+      await TelegramCollectorConfig.updateListenerStatus('stopped', null);
+
       logger.info('✅ Listener parado');
     } catch (error) {
       logger.error(`Erro ao parar listener: ${error.message}`);
+      // Atualizar status de erro no banco
+      await TelegramCollectorConfig.updateListenerStatus('error', null, error.message).catch(() => { });
     }
   }
 
@@ -2825,11 +2880,11 @@ class TelegramListenerService {
 
 const listenerInstance = new TelegramListenerService();
 
-// Iniciar o agendador automático em background
+// Auto-restaurar estado do listener em background
 // Aguarda 10 segundos para garantir que o sistema de banco de dados e logger estejam prontos
 setTimeout(() => {
-  listenerInstance.startScheduler().catch(err => {
-    logger.error(`Erro ao iniciar agendador automático: ${err.message}`);
+  listenerInstance.autoRestoreState().catch(err => {
+    logger.error(`Erro ao auto-restaurar estado do listener: ${err.message}`);
   });
 }, 10000);
 
