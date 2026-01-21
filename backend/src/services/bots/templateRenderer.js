@@ -550,9 +550,7 @@ class TemplateRenderer {
 🏷️ **${variables.discount_percentage || 0}% OFF**
 
 🛒 ${variables.platform_name || '{platform_name}'}
-
 ${variables.coupon_section || ''}
-
 🔗 ${variables.affiliate_link || '{affiliate_link}'}
 
 ⚡ Corre que está acabando!`;
