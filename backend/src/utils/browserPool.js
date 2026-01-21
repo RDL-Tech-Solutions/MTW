@@ -40,31 +40,14 @@ class BrowserPool {
             protocolTimeout: this.isVPSMode ? 120000 : 60000, // Mais tempo para protocolo interno
         };
 
-        // Configuração otimizada para VPS (menos recursos)
+        // Configuração obrigatória para VPS/Linux (sem interface gráfica)
         if (this.isVPSMode) {
             baseConfig.args = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions',
-                '--disable-background-networking',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--metrics-recording-only',
-                '--mute-audio',
-                '--no-first-run',
-                '--safebrowsing-disable-auto-update',
-                '--disable-web-security',
-                // REMOVIDO: '--single-process' (causa instabilidade)
-                // REMOVIDO: '--disable-features=IsolateOrigins,site-per-process' (conflita com multi-process)
-                '--memory-pressure-off',
-                '--disable-blink-features=AutomationControlled',
-                '--window-size=1920,1080',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
+                '--no-zygote'
             ];
 
             // Se tiver caminho customizado do Chromium (comum em VPS)
@@ -72,15 +55,13 @@ class BrowserPool {
                 baseConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
             }
         } else {
-            // Configuração para desenvolvimento (mais recursos)
+            // Configuração para desenvolvimento
             baseConfig.args = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
                 '--disable-gpu',
-                '--window-size=1920x1080',
-                '--disable-blink-features=AutomationControlled',
+                '--no-zygote'
             ];
         }
 

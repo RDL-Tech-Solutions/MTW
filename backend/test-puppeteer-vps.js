@@ -32,21 +32,7 @@ console.log(`   Timeout: ${process.env.BROWSER_TIMEOUT || 60000}ms\n`);
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions',
-                '--disable-background-networking',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--metrics-recording-only',
-                '--mute-audio',
-                '--no-first-run',
-                '--safebrowsing-disable-auto-update',
-                '--disable-web-security',
-                '--single-process',
-                '--memory-pressure-off',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--window-size=1920,1080',
+                '--no-zygote'
             ]
         };
 
