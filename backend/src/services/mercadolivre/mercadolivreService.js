@@ -37,9 +37,9 @@ class MercadoLivreService {
       if (!this.settingsLoaded) {
         await this.loadSettings();
       }
-      
+
       const url = `${this.apiUrl}${endpoint}`;
-      
+
       // IMPORTANTE: Sempre tentar obter token se disponível (recomendação de segurança)
       let token = this.accessToken;
       if (!token && this.clientId && this.clientSecret) {
@@ -61,7 +61,7 @@ class MercadoLivreService {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      
+
       const response = await axios.get(url, {
         params,
         headers,
@@ -77,12 +77,12 @@ class MercadoLivreService {
       if (status === 403) {
         const errorCode = errorData?.code || errorData?.error;
         const errorMessage = errorData?.message || error.message;
-        
+
         logger.warn(`⚠️ Erro 403 na API Mercado Livre:`);
         logger.warn(`   Endpoint: ${endpoint}`);
         logger.warn(`   Código: ${errorCode}`);
         logger.warn(`   Mensagem: ${errorMessage}`);
-        
+
         // Sugestões baseadas na documentação
         if (errorCode === 'FORBIDDEN' || errorMessage?.includes('Invalid scopes')) {
           logger.warn(`   💡 Verifique se os scopes necessários estão configurados no DevCenter`);
@@ -124,6 +124,38 @@ class MercadoLivreService {
     }
   }
 
+  // Buscar produtos com filtros avançados
+  async searchProductsAdvanced(query, options = {}) {
+    try {
+      const {
+        limit = 50,
+        offset = 0,
+        sort = 'price_asc',
+        minDiscount = 0,
+        freeShipping = false,
+        category = null
+      } = options;
+
+      const params = {
+        q: query,
+        limit: Math.min(limit, 50),
+        offset,
+        sort
+      };
+
+      // Adicionar filtros opcionais
+      if (category) params.category = category;
+      if (freeShipping) params.shipping_cost = 'free';
+      if (minDiscount > 0) params.discount = `${minDiscount}-100`;
+
+      const data = await this.makeRequest('/sites/MLB/search', params);
+      return data.results || [];
+    } catch (error) {
+      logger.error(`Erro ao buscar produtos ML com filtros: ${error.message}`);
+      return [];
+    }
+  }
+
   // Buscar detalhes de um produto
   async getProductDetails(itemId) {
     try {
@@ -138,10 +170,10 @@ class MercadoLivreService {
   // Buscar ofertas do dia
   async getDailyDeals(categoryId = null) {
     try {
-      const endpoint = categoryId 
+      const endpoint = categoryId
         ? `/sites/MLB/search?category=${categoryId}&discount=5-100`
         : '/sites/MLB/search?discount=5-100';
-      
+
       const data = await this.makeRequest(endpoint, {
         limit: 50,
         sort: 'price_asc'
@@ -166,8 +198,8 @@ class MercadoLivreService {
       affiliateTag = process.env.MELI_AFFILIATE_TAG || '';
     }
     const baseUrl = `https://produto.mercadolivre.com.br/MLB-${itemId}`;
-    
-    return affiliateTag 
+
+    return affiliateTag
       ? `${baseUrl}?${affiliateTag}`
       : baseUrl;
   }
@@ -176,12 +208,12 @@ class MercadoLivreService {
   async syncProducts(searchTerms = ['eletrônicos', 'games', 'informática']) {
     try {
       logger.info('Iniciando sincronização Mercado Livre...');
-      
+
       const allProducts = [];
 
       for (const term of searchTerms) {
         const results = await this.searchProducts(term, 20);
-        
+
         for (const item of results) {
           // Apenas produtos com desconto
           if (item.original_price && item.price < item.original_price) {

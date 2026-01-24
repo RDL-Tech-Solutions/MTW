@@ -18,13 +18,46 @@ class CouponIntelligentFilter {
     try {
       logger.info(`🤖 Filtrando ${coupons.length} cupons com IA...`);
 
+      // Thresholds dinâmicos baseados na plataforma
+      const platformThresholds = {
+        'shopee': {
+          minQualityScore: 0.65,
+          minRelevanceScore: 0.6,
+          minValueScore: 0.6
+        },
+        'mercadolivre': {
+          minQualityScore: 0.7,
+          minRelevanceScore: 0.65,
+          minValueScore: 0.65
+        },
+        'amazon': {
+          minQualityScore: 0.7,
+          minRelevanceScore: 0.7,
+          minValueScore: 0.7
+        },
+        'aliexpress': {
+          minQualityScore: 0.6,
+          minRelevanceScore: 0.55,
+          minValueScore: 0.6
+        },
+        'default': {
+          minQualityScore: 0.65,
+          minRelevanceScore: 0.6,
+          minValueScore: 0.6
+        }
+      };
+
+      // Usar thresholds da plataforma ou padrão
+      const platform = config.platform?.toLowerCase() || 'default';
+      const thresholds = platformThresholds[platform] || platformThresholds.default;
+
+      // Permitir override manual
       const {
-        minQualityScore = 0.6,
-        minRelevanceScore = 0.5,
-        minPriceScore = 0.5,
+        minQualityScore = thresholds.minQualityScore,
+        minRelevanceScore = thresholds.minRelevanceScore,
+        minPriceScore = thresholds.minValueScore,
         requireGoodDeal = false,
-        useAI = true,
-        platform = null
+        useAI = true
       } = config;
 
       if (!useAI) {
@@ -319,6 +352,50 @@ Retorne SOMENTE o JSON.`;
       }
     }
     return 0.5;
+  }
+
+  /**
+   * Calcular score composto ponderado
+   * Diferentes aspectos têm pesos diferentes
+   * @param {Object} analysis - Análise do cupom
+   * @returns {Object} - Score composto e grade
+   */
+  calculateCompositeScore(analysis) {
+    const weights = {
+      quality: 0.35,    // 35% - Qualidade do cupom
+      value: 0.40,      // 40% - Valor do desconto (mais importante)
+      relevance: 0.25   // 25% - Relevância
+    };
+
+    const compositeScore =
+      (analysis.quality_score * weights.quality) +
+      (analysis.value_score * weights.value) +
+      (analysis.relevance_score * weights.relevance);
+
+    return {
+      composite_score: compositeScore,
+      grade: this.getGrade(compositeScore),
+      auto_approve: compositeScore >= 0.75 && analysis.should_promote
+    };
+  }
+
+  /**
+   * Converter score em grade (A-F)
+   * @param {number} score - Score de 0.0 a 1.0
+   * @returns {string} - Grade
+   */
+  getGrade(score) {
+    if (score >= 0.9) return 'A+';
+    if (score >= 0.85) return 'A';
+    if (score >= 0.8) return 'A-';
+    if (score >= 0.75) return 'B+';
+    if (score >= 0.7) return 'B';
+    if (score >= 0.65) return 'B-';
+    if (score >= 0.6) return 'C+';
+    if (score >= 0.55) return 'C';
+    if (score >= 0.5) return 'C-';
+    if (score >= 0.4) return 'D';
+    return 'F';
   }
 }
 

@@ -268,15 +268,42 @@ class LinkAnalyzer {
   }
 
   // Extrair IDs da URL da Shopee
-  extractShopeeIds(url) {
+  async extractShopeeIds(url) {
     // Múltiplos padrões de URL da Shopee:
     // 1. https://shopee.com.br/{shop_name}/{shop_id}/{item_id}
     // 2. https://shopee.com.br/product/{shop_name}/{shop_id}/{item_id}
     // 3. https://www.shopee.com.br/{shop_name}/{shop_id}/{item_id}
     // 4. https://s.shopee.com.br/{code} (link encurtado - precisa seguir redirecionamento)
 
+    let urlToCheck = url;
+
+    // Se for link encurtado, fazer requisição HEAD para pegar URL real
+    if (url.includes('s.shopee.com.br') || url.includes('shp.ee')) {
+      try {
+        const response = await axios.head(url, {
+          maxRedirects: 5,
+          validateStatus: () => true,
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+          }
+        });
+
+        // Pegar URL final do redirecionamento
+        if (response.request && response.request.res && response.request.res.responseUrl) {
+          urlToCheck = response.request.res.responseUrl;
+          console.log(`   🔄 Link encurtado expandido: ${urlToCheck.substring(0, 80)}...`);
+        }
+      } catch (e) {
+        console.log(`   ⚠️ Erro ao expandir link encurtado: ${e.message}`);
+        // Continuar com URL original
+      }
+    }
+
     // Padrão 1: URL padrão com shop_name
-    let match = url.match(/shopee\.com(?:\.br)?\/[^/]+\/(\d+)\/(\d+)/);
+    let match = urlToCheck.match(/shopee\.com(?:\.br)?\/[^/]+\/(\d+)\/(\d+)/);
     if (match) {
       return {
         shopId: match[1],
@@ -285,7 +312,7 @@ class LinkAnalyzer {
     }
 
     // Padrão 2: URL com /product/
-    match = url.match(/shopee\.com(?:\.br)?\/product\/[^/]+\/(\d+)\/(\d+)/);
+    match = urlToCheck.match(/shopee\.com(?:\.br)?\/product\/[^/]+\/(\d+)\/(\d+)/);
     if (match) {
       return {
         shopId: match[1],
@@ -293,11 +320,20 @@ class LinkAnalyzer {
       };
     }
 
-    // Padrão 3: Tentar extrair apenas item_id (menos confiável, mas pode funcionar)
-    match = url.match(/[?&]item[_-]?id=(\d+)/i);
+    // Padrão 3: URL com -i.shopId.itemId (comum em links expandidos)
+    match = urlToCheck.match(/-i\.(\d+)\.(\d+)/);
+    if (match) {
+      return {
+        shopId: match[1],
+        itemId: match[2]
+      };
+    }
+
+    // Padrão 4: Tentar extrair apenas item_id (menos confiável, mas pode funcionar)
+    match = urlToCheck.match(/[?&]item[_-]?id=(\d+)/i);
     if (match) {
       // Tentar encontrar shop_id também
-      const shopMatch = url.match(/[?&]shop[_-]?id=(\d+)/i);
+      const shopMatch = urlToCheck.match(/[?&]shop[_-]?id=(\d+)/i);
       return {
         shopId: shopMatch ? shopMatch[1] : '0', // Shop ID pode ser 0 para alguns casos
         itemId: match[1]
@@ -310,7 +346,7 @@ class LinkAnalyzer {
   // Usar API interna da Shopee ou API oficial
   async extractShopeeFromAPI(url) {
     try {
-      const ids = this.extractShopeeIds(url);
+      const ids = await this.extractShopeeIds(url);
       if (!ids) {
         console.log('⚠️ Não foi possível extrair IDs da URL da Shopee');
         return null;
@@ -505,42 +541,58 @@ class LinkAnalyzer {
         console.log('🔗 URL Shopee original:', url);
         let finalUrl = url;
 
-        // Sempre seguir redirecionamentos para garantir que chegamos na URL final
-        // Links encurtados (s.shopee.com.br, shp.ee) e links normais podem ter redirecionamentos
-        // Links de afiliado podem ter múltiplos redirecionamentos e JavaScript
-        console.log('   🔄 Seguindo redirecionamentos para obter URL final...');
-        finalUrl = await this.followRedirects(url, 5); // Até 5 tentativas
-        console.log('   ✅ URL final após redirecionamento(s):', finalUrl);
+        // ESTRATÉGIA MELHORADA: Para links encurtados, tentar API PRIMEIRO
+        // porque followRedirects pode levar para unsupported.html
+        const isShortLink = url.includes('s.shopee.com.br') || url.includes('shp.ee');
 
-        // IMPORTANTE: Para links de afiliado da Shopee, aguardar 10 segundos
-        // para permitir que redirecionamentos JavaScript aconteçam antes de extrair dados
-        if (url.includes('s.shopee.com.br') || url.includes('shp.ee') || finalUrl.includes('s.shopee.com.br') || finalUrl.includes('shp.ee')) {
-          console.log('   ⏳ Aguardando 10 segundos para redirecionamentos JavaScript completarem...');
-          await new Promise(resolve => setTimeout(resolve, 10000));
+        if (isShortLink) {
+          console.log('   🔗 Link encurtado detectado, tentando API primeiro...');
 
-          // Tentar seguir redirecionamentos novamente após o delay de 10 segundos
-          console.log('   🔄 Verificando URL final após delay de 10 segundos...');
-          const delayedUrl = await this.followRedirects(finalUrl, 3);
-          if (delayedUrl !== finalUrl && !delayedUrl.includes('s.shopee.com.br') && !delayedUrl.includes('shp.ee')) {
-            console.log('   ✅ URL final após delay de 10 segundos:', delayedUrl);
-            finalUrl = delayedUrl;
-          } else if (delayedUrl !== finalUrl) {
-            console.log('   ⚠️ URL mudou mas ainda parece encurtada:', delayedUrl);
-            finalUrl = delayedUrl;
-          } else {
-            console.log('   ℹ️ URL não mudou após delay, usando:', finalUrl);
+          // Tentar seguir redirecionamento apenas para pegar IDs
+          try {
+            const tempUrl = await this.followRedirects(url, 3);
+            if (tempUrl && !tempUrl.includes('unsupported.html')) {
+              finalUrl = tempUrl;
+              console.log('   ✅ URL expandida:', finalUrl);
+            } else {
+              console.log('   ⚠️ Redirecionamento levou para unsupported.html, usando URL original');
+              finalUrl = url;
+            }
+          } catch (e) {
+            console.log('   ⚠️ Erro ao seguir redirecionamento:', e.message);
+            finalUrl = url;
           }
-        }
 
-        // TENTAR API DA SHOPEE PRIMEIRO (mais confiável)
-        try {
-          const shopeeApiData = await this.extractShopeeFromAPI(finalUrl);
-          if (shopeeApiData && shopeeApiData.name && shopeeApiData.currentPrice > 0) {
-            console.log('✅ Dados obtidos via API da Shopee!');
-            return shopeeApiData;
+          // TENTAR API OFICIAL DA SHOPEE PRIMEIRO
+          try {
+            const ids = await this.extractShopeeIds(finalUrl);
+            if (ids && ids.itemId) {
+              console.log(`   🔍 IDs extraídos - Shop: ${ids.shopId}, Item: ${ids.itemId}`);
+              const apiData = await this.extractShopeeFromAPI(finalUrl);
+              if (apiData && apiData.name && apiData.currentPrice > 0) {
+                console.log('   ✅ Dados obtidos via API da Shopee!');
+                return apiData;
+              }
+            }
+          } catch (apiError) {
+            console.log('   ⚠️ API da Shopee falhou:', apiError.message);
           }
-        } catch (apiError) {
-          console.log('⚠️ API da Shopee falhou, tentando scraping:', apiError.message);
+        } else {
+          // Para links normais, seguir redirecionamentos normalmente
+          console.log('   🔄 Seguindo redirecionamentos para obter URL final...');
+          finalUrl = await this.followRedirects(url, 5);
+          console.log('   ✅ URL final após redirecionamento(s):', finalUrl);
+
+          // TENTAR API DA SHOPEE PRIMEIRO (mais confiável)
+          try {
+            const shopeeApiData = await this.extractShopeeFromAPI(finalUrl);
+            if (shopeeApiData && shopeeApiData.name && shopeeApiData.currentPrice > 0) {
+              console.log('✅ Dados obtidos via API da Shopee!');
+              return shopeeApiData;
+            }
+          } catch (apiError) {
+            console.log('⚠️ API da Shopee falhou, tentando scraping:', apiError.message);
+          }
         }
 
         // Validar que a URL final é realmente da Shopee
@@ -569,24 +621,35 @@ class LinkAnalyzer {
         }
 
         // Fazer requisição com headers completos para simular navegador real
+        // MELHORADO: Headers mais realistas para evitar bloqueio da Shopee
         const response = await axios.get(cleanUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
             'Accept-Encoding': 'gzip, deflate, br',
             'Referer': 'https://shopee.com.br/',
+            'Origin': 'https://shopee.com.br',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
             'Sec-Fetch-Site': 'same-origin',
             'Sec-Fetch-User': '?1',
             'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'max-age=0',
-            'Connection': 'keep-alive'
+            'Connection': 'keep-alive',
+            'DNT': '1',
+            'Pragma': 'no-cache'
           },
-          timeout: 20000, // Aumentar timeout para páginas mais pesadas
+          timeout: 20000,
           maxRedirects: 5,
-          validateStatus: (status) => status >= 200 && status < 400
+          validateStatus: (status) => status >= 200 && status < 400,
+          // IMPORTANTE: Seguir redirecionamentos mas manter headers
+          maxRedirects: 10,
+          // Aceitar cookies
+          withCredentials: false
         });
 
         // Verificar se a resposta contém HTML válido
@@ -599,6 +662,48 @@ class LinkAnalyzer {
           };
         }
 
+        // DETECTAR BLOQUEIO: Se redirecionou para unsupported.html
+        if (cleanUrl.includes('unsupported.html') || response.data.includes('Seu navegador não é mais aceito')) {
+          console.warn('   ⚠️ Shopee bloqueou o acesso (unsupported.html)');
+          console.warn('   🔄 Tentando abordagem alternativa...');
+
+          // Tentar com User-Agent mobile (às vezes funciona melhor)
+          try {
+            const mobileResponse = await axios.get(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9',
+                'Referer': 'https://shopee.com.br/'
+              },
+              timeout: 15000,
+              maxRedirects: 10
+            });
+
+            if (!mobileResponse.data.includes('unsupported.html') && !mobileResponse.data.includes('Seu navegador não é mais aceito')) {
+              console.log('   ✅ Versão mobile funcionou!');
+              response.data = mobileResponse.data;
+              cleanUrl = mobileResponse.request.res.responseUrl || url;
+            } else {
+              console.error('   ❌ Versão mobile também foi bloqueada');
+              return {
+                error: 'A Shopee está bloqueando o acesso. Por favor, configure a API oficial da Shopee em /settings para captura confiável de produtos.',
+                platform: 'shopee',
+                affiliateLink: url,
+                warning: 'Recomendamos usar a API oficial da Shopee (https://open.shopee.com/) para evitar bloqueios.'
+              };
+            }
+          } catch (mobileError) {
+            console.error('   ❌ Erro na tentativa mobile:', mobileError.message);
+            return {
+              error: 'A Shopee está bloqueando o acesso. Configure a API oficial em /settings.',
+              platform: 'shopee',
+              affiliateLink: url
+            };
+          }
+        }
+
+        console.log(`   📄 Tamanho do HTML recebido: ${(response.data.length / 1024).toFixed(2)} KB`);
         // Verificar se a página está bloqueando (captcha, erro, etc)
         if (response.data.includes('captcha') ||
           response.data.includes('Access Denied') ||
@@ -619,6 +724,10 @@ class LinkAnalyzer {
         // PRIORIDADE 0: Buscar diretamente no HTML bruto (antes do cheerio processar)
         // A Shopee pode ter dados em atributos data-* ou em estruturas específicas
         let name = '';
+        let currentPrice = 0;
+        let oldPrice = 0;
+        let imageUrl = '';
+        let description = '';
 
         // Tentar extrair do HTML bruto primeiro (mais rápido)
         const titleMatch = response.data.match(/<title[^>]*>(.*?)<\/title>/i);
@@ -646,13 +755,13 @@ class LinkAnalyzer {
           }
         }
 
-        let description = $('meta[property="og:description"]').attr('content') ||
+        description = $('meta[property="og:description"]').attr('content') ||
           $('meta[name="og:description"]').attr('content') ||
           $('meta[property="twitter:description"]').attr('content') ||
           $('meta[name="description"]').attr('content') ||
           '';
 
-        let imageUrl = $('meta[property="og:image"]').attr('content') ||
+        imageUrl = $('meta[property="og:image"]').attr('content') ||
           $('meta[name="og:image"]').attr('content') ||
           $('meta[property="twitter:image"]').attr('content') ||
           $('meta[name="image"]').attr('content') ||
@@ -721,6 +830,10 @@ class LinkAnalyzer {
           });
         }
 
+        // Validar preços
+        if (oldPrice > 0 && oldPrice <= currentPrice) {
+          oldPrice = 0; // Desconto inválido
+        }
         // PRIORIDADE 3: Seletores CSS da Shopee (atualizados)
         // Seletores modernos da Shopee 2024
         const shopeeSelectors = {
@@ -825,8 +938,7 @@ class LinkAnalyzer {
         }
 
         // Extrair preços - método robusto
-        let currentPrice = 0;
-        let oldPrice = 0;
+        // (variáveis já declaradas no início)
 
         // PRIORIDADE 0: Buscar dados em scripts JSON da Shopee (mais confiável)
         // A Shopee usa window.__INITIAL_STATE__, window.__NEXT_DATA__, ou window._shopee para hidratação
@@ -1569,14 +1681,11 @@ class LinkAnalyzer {
         if (!name || name.length < 5) {
           // Buscar em elementos com classes específicas da Shopee
           const shopeeNameSelectors = [
-            '[class*="product-name"]',
-            '[class*="product_title"]',
-            '[class*="item-name"]',
-            '[data-testid*="product-name"]',
-            '[data-testid*="product-title"]',
-            '.pdp-product-name',
-            '.product-title',
-            '[class*="pdp"] [class*="name"]'
+            '.product-briefing .product-title',
+            '[data-testid="pdp-product-title"]',
+            '.pdp-product-title',
+            '.product-name',
+            'h1.product-title'
           ];
 
           for (const selector of shopeeNameSelectors) {
@@ -1596,30 +1705,36 @@ class LinkAnalyzer {
           oldPrice = 0; // Desconto inválido
         }
 
-        console.log('📦 Dados extraídos da Shopee:');
-        console.log('   Nome:', name?.substring(0, 50) || 'N/A');
-        console.log('   Preço Atual:', currentPrice || 'N/A');
-        console.log('   Preço Original:', oldPrice || 'N/A');
-        console.log('   Imagem:', imageUrl ? 'Sim' : 'Não');
+        // FALLBACK FINAL: Se não conseguimos dados essenciais, tentar Puppeteer
+        if ((!name || name.trim().length < 5) || currentPrice === 0) {
+          console.warn('⚠️ Scraping HTTP falhou, tentando Puppeteer como último recurso...');
 
-        // Validar se extraímos pelo menos algum dado útil
-        if (!name || name.trim().length === 0) {
-          console.warn('⚠️ Nome do produto não foi extraído');
-          console.warn('   📋 Debug: Verificando HTML...');
-          // Debug: verificar se há algum texto na página
-          const bodyText = $('body').text();
-          console.warn(`   📋 Tamanho do texto do body: ${bodyText.length} caracteres`);
-          if (bodyText.length < 100) {
-            console.error('   ❌ Body muito pequeno, página pode estar vazia ou bloqueada');
-          }
-        }
-        if (currentPrice === 0) {
-          console.warn('⚠️ Preço do produto não foi extraído');
-          // Debug: verificar se há números que parecem preços
-          const allText = $('body').text();
-          const priceMatches = allText.match(/R\$\s*[\d.,]+/g);
-          if (priceMatches) {
-            console.warn(`   📋 Preços encontrados no texto (mas não extraídos): ${priceMatches.slice(0, 5).join(', ')}`);
+          try {
+            const shopeePuppeteerScraper = (await import('./shopeePuppeteerScraper.js')).default;
+            const puppeteerData = await shopeePuppeteerScraper.scrapeProduct(finalUrl);
+
+            if (puppeteerData) {
+              // Usar dados do Puppeteer se forem melhores
+              if (!name || name.trim().length < 5) {
+                name = puppeteerData.name || name;
+              }
+              if (currentPrice === 0 && puppeteerData.currentPrice > 0) {
+                currentPrice = puppeteerData.currentPrice;
+              }
+              if (oldPrice === 0 && puppeteerData.oldPrice > 0) {
+                oldPrice = puppeteerData.oldPrice;
+              }
+              if (!imageUrl && puppeteerData.imageUrl) {
+                imageUrl = puppeteerData.imageUrl;
+              }
+              if (!description && puppeteerData.description) {
+                description = puppeteerData.description;
+              }
+
+              console.log('✅ Dados obtidos via Puppeteer!');
+            }
+          } catch (puppeteerError) {
+            console.error('❌ Puppeteer também falhou:', puppeteerError.message);
           }
         }
 
@@ -1633,118 +1748,38 @@ class LinkAnalyzer {
           affiliateLink: finalUrl
         };
 
-        // Se não extraímos dados essenciais, fazer uma última tentativa agressiva
-        if ((!name || name.trim().length === 0) && currentPrice === 0) {
-          // Última tentativa: buscar em qualquer texto visível na página
-          const bodyText = $('body').text();
+        console.log('📦 Dados extraídos da Shopee:');
+        console.log('   Nome:', result.name?.substring(0, 50) || 'N/A');
+        console.log('   Preço Atual:', result.currentPrice || 'N/A');
+        console.log('   Preço Original:', result.oldPrice || 'N/A');
+        console.log('   Imagem:', result.imageUrl ? 'Sim' : 'Não');
 
-          // Buscar nome em qualquer h1, h2, h3 que tenha mais de 10 caracteres
-          $('h1, h2, h3, [role="heading"]').each((i, el) => {
-            if (name && name.length > 10) return false;
-            const headingText = $(el).text().trim();
-            if (headingText.length > 10 && headingText.length < 200 && !headingText.toLowerCase().includes('shopee')) {
-              name = headingText.replace(/\s*-\s*Shopee\s*$/i, '').replace(/\s*\|.*$/i, '').trim();
-              if (name.length > 10) {
-                console.log(`   💡 Nome encontrado em heading: ${name.substring(0, 50)}`);
-                return false;
-              }
-            }
-          });
+        // Validações finais
+        if (!result.name || result.name.trim().length === 0) {
+          console.warn('⚠️ Nome do produto não foi extraído');
+        }
 
-          // Buscar preço em qualquer texto que contenha R$ seguido de número
-          if (currentPrice === 0) {
-            const priceMatches = bodyText.match(/R\$\s*(\d{1,4}(?:[.,]\d{2})?)/g);
-            if (priceMatches && priceMatches.length > 0) {
-              const prices = priceMatches.map(m => {
-                const match = m.match(/R\$\s*(\d{1,4}(?:[.,]\d{2})?)/);
-                return match ? this.parsePrice(match[1]) : 0;
-              }).filter(p => p > 1 && p < 100000);
+        if (result.currentPrice === 0) {
+          console.warn('⚠️ Preço do produto não foi extraído');
+        }
 
-              if (prices.length > 0) {
-                // Pegar o menor preço (provavelmente é o preço atual)
-                currentPrice = Math.min(...prices);
-                console.log(`   💡 Preço encontrado em texto da página: ${currentPrice}`);
-              }
-            }
-          }
-
-          // Se ainda não tiver nome, tentar extrair da URL
-          if (!name || name.trim().length < 5) {
-            const urlParts = finalUrl.split('/');
-            if (urlParts.length > 0) {
-              const lastPart = urlParts[urlParts.length - 1].split('?')[0];
-              if (lastPart && lastPart.length > 3 && !lastPart.match(/^\d+$/)) {
-                const candidate = decodeURIComponent(lastPart).replace(/-/g, ' ').trim();
-                if (candidate.length > 5 && candidate.length < 100) {
-                  name = candidate;
-                  console.log(`   ⚠️ Usando nome extraído da URL: ${name.substring(0, 50)}`);
-                }
-              }
-            }
-          }
-
-          // Se ainda não tiver nome válido, tentar uma última busca agressiva no HTML bruto
-          if (!name || name.trim().length < 5 || name === 'Produto Shopee' || name === 'opaanlp') {
-            console.warn('   ⚠️ Última tentativa: busca agressiva no HTML bruto...');
-
-            // Buscar qualquer padrão que pareça nome de produto no HTML
-            const namePatterns = [
-              /"name"\s*:\s*"([^"]{15,200})"/i,
-              /"item_name"\s*:\s*"([^"]{15,200})"/i,
-              /"product_name"\s*:\s*"([^"]{15,200})"/i,
-              /"title"\s*:\s*"([^"]{15,200})"/i,
-              /<h1[^>]*>([^<]{15,200})<\/h1>/i,
-              /data-name=["']([^"']{15,200})["']/i
-            ];
-
-            for (const pattern of namePatterns) {
-              const matches = response.data.match(pattern);
-              if (matches && matches[1]) {
-                const candidate = matches[1].trim();
-                if (candidate.length > 10 && candidate.length < 200 &&
-                  !candidate.includes('__') &&
-                  !candidate.includes('shopee__') &&
-                  candidate !== 'Produto Shopee' &&
-                  candidate !== 'opaanlp' &&
-                  candidate.includes(' ')) {
-                  name = candidate;
-                  console.log(`   💡 Nome encontrado em busca agressiva: ${name.substring(0, 50)}`);
-                  break;
-                }
-              }
-            }
-
-            // Se ainda não encontrou, retornar erro
-            if (!name || name.trim().length < 5 || name === 'Produto Shopee' || name === 'opaanlp') {
-              console.error('❌ Falha na extração: Nome e preço não foram encontrados');
-              console.error(`   📋 Debug: Tamanho do HTML: ${response.data.length} chars`);
-              console.error(`   📋 Debug: Scripts encontrados: ${scriptMatches ? scriptMatches.length : 0}`);
-              console.error(`   📋 Debug: URL final: ${cleanUrl}`);
-
-              return {
-                error: 'Não foi possível extrair informações do produto. O link pode estar inválido, o produto pode não estar mais disponível, ou a página pode estar bloqueando o acesso.',
-                platform: 'shopee',
-                affiliateLink: finalUrl,
-                warning: 'A página da Shopee pode estar bloqueando o acesso ou retornando HTML diferente do esperado. Verifique se o link está correto e se o produto ainda está disponível.'
-              };
-            }
-          }
-
-          // Atualizar resultado com nome encontrado
-          result.name = name;
-
-          // Se ainda não temos preço, retornar com dados parciais mas com warning claro
-          if (currentPrice === 0) {
-            console.warn('⚠️ Preço não foi extraído, mas retornando dados parciais');
-            return {
-              ...result,
-              currentPrice: 0,
-              warning: 'Preço não pôde ser extraído. O produto pode estar indisponível ou o link pode estar inválido. Verifique se as credenciais da API Shopee estão corretas. O Partner ID atual está sendo rejeitado pela API.'
-            };
+        // Se ainda não temos nome, usar algo da URL
+        if (!result.name || result.name.trim().length < 5) {
+          const urlParts = finalUrl.split('/');
+          const lastPart = urlParts[urlParts.length - 1] || urlParts[urlParts.length - 2];
+          if (lastPart && lastPart.length > 3) {
+            result.name = lastPart.replace(/-/g, ' ').replace(/_/g, ' ');
+            console.warn(`   ⚠️ Usando nome extraído da URL: ${result.name}`);
           }
         }
 
+        // Se não conseguimos preço, avisar mas retornar dados parciais
+        if (result.currentPrice === 0) {
+          console.warn('   ⚠️ Preço não foi extraído, mas retornando dados parciais');
+        }
+
         return result;
+
       } catch (error) {
         console.error('❌ Erro ao extrair info Shopee:', error.message);
         console.error('   Stack:', error.stack);
@@ -1982,10 +2017,20 @@ class LinkAnalyzer {
 
       // Decidir Old Price - PRIORIDADE: Seletores específicos primeiro
       const oldPriceSelectors = [
+        // Seletores mais específicos para preço riscado
+        '.ui-pdp-price__old-value .andes-money-amount__fraction',  // CORRETO para Meli
         '.ui-pdp-price__original-value .andes-money-amount__fraction',
+        '.ui-pdp-price s .andes-money-amount__fraction',
+        '.ui-pdp-price del .andes-money-amount__fraction',
+        's.andes-money-amount .andes-money-amount__fraction',
+        'del.andes-money-amount .andes-money-amount__fraction',
+        // Fallbacks
         's .andes-money-amount__fraction',
+        'del .andes-money-amount__fraction',
         '.andes-money-amount--previous .andes-money-amount__fraction',
-        '[class*="original"] .andes-money-amount__fraction'
+        '[class*="old"] .andes-money-amount__fraction',
+        '[class*="original"] .andes-money-amount__fraction',
+        '[class*="strikethrough"] .andes-money-amount__fraction'
       ];
 
       let oldPriceFound = false;
@@ -2026,23 +2071,36 @@ class LinkAnalyzer {
       // O preço atual geralmente está em uma seção específica de destaque
 
       // Tentar seletores específicos para preço atual (principal)
+      // ORDEM DE PRIORIDADE: Mais específico primeiro
       const mainPriceSelectors = [
+        // Seletores mais específicos para página de produto
+        '.ui-pdp-price__second-line--main .andes-money-amount__fraction',
+        '.ui-pdp-price__second-line .andes-money-amount--cents-superscript .andes-money-amount__fraction',
         '.ui-pdp-price__second-line .andes-money-amount__fraction',
         '.ui-pdp-price__part--medium .andes-money-amount__fraction',
+        // Seletores de fallback
+        '.ui-pdp-price .andes-money-amount--cents-superscript .andes-money-amount__fraction',
         '.ui-pdp-price .andes-money-amount__fraction',
-        '[data-testid="price"] .andes-money-amount__fraction'
+        '[data-testid="price"] .andes-money-amount__fraction',
+        '.andes-money-amount--cents-superscript .andes-money-amount__fraction'
       ];
 
       let mainPriceFound = false;
       for (const selector of mainPriceSelectors) {
         const mainPriceEl = $(selector).first();
         if (mainPriceEl.length) {
-          const mainPrice = extractFullPrice(mainPriceEl.closest('.andes-money-amount'));
-          if (mainPrice > 0) {
-            currentPrice = mainPrice;
-            mainPriceFound = true;
-            console.log('   ✅ Preço principal encontrado via seletor:', selector, '=', currentPrice);
-            break;
+          // Verificar se não está em tag <s> (riscado) ou em seção de parcelas
+          const isStrikethrough = mainPriceEl.closest('s, del, .ui-pdp-price__original-value').length > 0;
+          const isInstallment = mainPriceEl.closest('.ui-pdp-installments, [class*="installment"]').length > 0;
+
+          if (!isStrikethrough && !isInstallment) {
+            const mainPrice = extractFullPrice(mainPriceEl.closest('.andes-money-amount'));
+            if (mainPrice > 0) {
+              currentPrice = mainPrice;
+              mainPriceFound = true;
+              console.log('   ✅ Preço principal encontrado via seletor:', selector, '=', currentPrice);
+              break;
+            }
           }
         }
       }
@@ -3827,7 +3885,9 @@ class LinkAnalyzer {
         url.includes('s.click.aliexpress.com') ||
         url.includes('aliexpress.com/e/_');
 
-      if (isShortLink) {
+      // IMPORTANTE: Para Shopee, NÃO seguir redirecionamentos aqui
+      // Deixar extractShopeeInfo fazer isso com lógica API-first
+      if (isShortLink && platform !== 'shopee') {
         try {
           console.log('🔗 Link encurtado detectado, seguindo redirecionamentos...');
           finalUrl = await this.followRedirects(url);
@@ -3836,6 +3896,9 @@ class LinkAnalyzer {
           console.warn('⚠️ Erro ao seguir redirecionamentos:', redirectError.message);
           finalUrl = url; // Usar URL original se falhar
         }
+      } else if (platform === 'shopee') {
+        console.log('🔗 Link Shopee detectado, deixando extractShopeeInfo gerenciar redirecionamentos');
+        finalUrl = url; // Manter URL original para Shopee
       } else {
         console.log('🔗 Link direto, pulando redirecionamentos');
       }

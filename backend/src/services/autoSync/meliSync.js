@@ -66,15 +66,19 @@ class MeliSync {
                 params: {
                   q: term,
                   limit: Math.min(limit, 50),
+                  offset: 0
                 },
                 headers,
                 timeout: 10000
               });
 
-              if (response.data && response.data.results && response.data.results.length > 0) {
+              // Validação robusta da resposta da API
+              if (response.data && Array.isArray(response.data.results) && response.data.results.length > 0) {
                 products = response.data.results;
                 logger.info(`   ✅ (API) ${products.length} resultados para "${term}"`);
                 usedApi = true;
+              } else if (response.data && !response.data.results) {
+                logger.warn(`   ⚠️ Resposta da API em formato inesperado - sem campo 'results'`);
               }
             } catch (apiError) {
               const status = apiError.response?.status;
@@ -85,8 +89,13 @@ class MeliSync {
                 const errorCode = errorData?.code || errorData?.error;
                 const errorMessage = errorData?.message || apiError.message;
 
-                logger.warn(`   ⚠️ Erro 403 na busca: ${errorMessage}`);
-                logger.warn(`   💡 Verifique: scopes, IPs permitidos, aplicação ativa, usuário validado`);
+                // Se não temos credenciais configuradas, 403 é esperado
+                if (!meliAuth.isConfigured()) {
+                  logger.info(`   ℹ️ API retornou 403 (esperado sem credenciais). Usando scraping como alternativa...`);
+                } else {
+                  logger.warn(`   ⚠️ Erro 403 na busca: ${errorMessage}`);
+                  logger.warn(`   💡 Verifique: scopes, IPs permitidos, aplicação ativa, usuário validado`);
+                }
               } else if (status === 401) {
                 logger.warn(`   ⚠️ Token expirado/inválido. Tentando renovar...`);
                 // Tentar renovar token e continuar
@@ -95,10 +104,10 @@ class MeliSync {
                   headers['Authorization'] = `Bearer ${token}`;
                   // Não retentar automaticamente aqui para evitar loop
                 } catch (e) {
-                  logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
+                  logger.info(`   ℹ️ Não foi possível renovar token. Usando scraping como alternativa...`);
                 }
               } else {
-                logger.warn(`   ⚠️ Erro na API (${apiError.message}). Tentando scraping...`);
+                logger.info(`   ℹ️ API não disponível (${status || 'erro'}). Usando scraping como alternativa...`);
               }
             }
           }
@@ -207,30 +216,61 @@ class MeliSync {
             thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
           }
 
-          // Preço Atual
-          const priceContainer = container.find('.ui-search-price__second-line');
-          let priceText = priceContainer.find('.andes-money-amount__fraction').first().text();
-          // Fallback se second-line falhar
-          if (!priceText) {
-            priceText = container.find('.ui-search-price__part--medium .andes-money-amount__fraction').first().text();
-          }
-          const price = linkAnalyzer.parsePrice(priceText);
+          // Preço Atual - Múltiplos seletores para maior precisão
+          let price = 0;
+          const currentPriceSelectors = [
+            '.ui-search-price__second-line .andes-money-amount__fraction',
+            '.ui-search-price__part--medium .andes-money-amount__fraction',
+            '.andes-money-amount--cents-superscript .andes-money-amount__fraction',
+            '.price-tag-fraction',
+            '.andes-money-amount__fraction'
+          ];
 
-          // Preço Original (Vários seletores possíveis)
+          for (const sel of currentPriceSelectors) {
+            const priceText = container.find(sel).first().text();
+            if (priceText) {
+              price = linkAnalyzer.parsePrice(priceText);
+              if (price > 0) break;
+            }
+          }
+
+          // Preço Original - Seletores expandidos e melhorados
           let originalPrice = 0;
           const originalSelectors = [
+            // Seletores específicos para preço riscado
             '.ui-search-price__original-value .andes-money-amount__fraction',
-            's .andes-money-amount__fraction',
+            '.ui-search-price__second-line--strikethrough .andes-money-amount__fraction',
+            's .andes-money-amount__fraction',  // Tag <s> indica preço riscado
+            'del .andes-money-amount__fraction', // Tag <del> também indica preço riscado
             '.andes-money-amount--previous .andes-money-amount__fraction',
-            '.ui-search-price__part--original .andes-money-amount__fraction'
+            '.ui-search-price__part--original .andes-money-amount__fraction',
+            '.ui-search-price__original .andes-money-amount__fraction',
+            // Fallback: procurar qualquer preço riscado
+            's.andes-money-amount',
+            'del.andes-money-amount'
           ];
 
           for (const sel of originalSelectors) {
-            const val = container.find(sel).first().text();
-            if (val) {
-              originalPrice = linkAnalyzer.parsePrice(val);
-              if (originalPrice > 0) break;
+            const element = container.find(sel).first();
+            if (element.length > 0) {
+              // Se for tag s ou del, pegar o texto completo
+              const val = sel.startsWith('s') || sel.startsWith('del')
+                ? element.text()
+                : element.text();
+
+              if (val) {
+                const parsed = linkAnalyzer.parsePrice(val);
+                if (parsed > 0 && parsed > price) { // Validar que original > atual
+                  originalPrice = parsed;
+                  break;
+                }
+              }
             }
+          }
+
+          // Validação adicional: se original_price <= price, ignorar
+          if (originalPrice > 0 && originalPrice <= price) {
+            originalPrice = 0;
           }
 
           // Verificar Cupom na Busca (Classico)
@@ -245,12 +285,16 @@ class MeliSync {
             const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9]{3,20})/i);
 
             if (couponValue > 0 && codeMatch) {
-              coupon = {
-                discount_value: couponValue,
-                discount_type: 'fixed',
-                code: codeMatch[1].toUpperCase(),
-                platform: 'mercadolivre'
-              };
+              const code = codeMatch[1].toUpperCase();
+              // Validar se é um código válido
+              if (this.isValidCouponCode(code)) {
+                coupon = {
+                  discount_value: couponValue,
+                  discount_type: 'fixed',
+                  code: code,
+                  platform: 'mercadolivre'
+                };
+              }
             }
           } else {
             // Tentar texto solto de 'CUPOM' 
@@ -260,7 +304,7 @@ class MeliSync {
 
             if (codeMatch) {
               const potentialCode = codeMatch[1];
-              if (!['DE', 'DA', 'DO', 'OFF', 'R$', 'COM', 'PARA'].includes(potentialCode.toUpperCase())) {
+              if (this.isValidCouponCode(potentialCode)) {
                 const couponMatch = allText.match(/R\$\s*([\d.,]+)/);
                 const val = couponMatch ? linkAnalyzer.parsePrice(couponMatch[1]) : 0;
 
@@ -333,23 +377,55 @@ class MeliSync {
               thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
             }
 
-            const priceText = container.find('.poly-price__current .andes-money-amount__fraction').first().text();
-            const price = linkAnalyzer.parsePrice(priceText);
+            // Preço Atual - Layout Poly com múltiplos seletores
+            let price = 0;
+            const currentPriceSelectors = [
+              '.poly-price__current .andes-money-amount__fraction',
+              '.poly-component__price .andes-money-amount__fraction',
+              '.andes-money-amount--cents-superscript .andes-money-amount__fraction',
+              '.andes-money-amount__fraction'
+            ];
 
+            for (const sel of currentPriceSelectors) {
+              const priceText = container.find(sel).first().text();
+              if (priceText) {
+                price = linkAnalyzer.parsePrice(priceText);
+                if (price > 0) break;
+              }
+            }
+
+            // Preço Original - Layout Poly com seletores expandidos
             let originalPrice = 0;
-            // Seletores Poly para preço antigo
             const originalSelectors = [
               '.poly-price__original-value .andes-money-amount__fraction',
+              '.poly-price__original .andes-money-amount__fraction',
               '.andes-money-amount--previous .andes-money-amount__fraction',
-              's .andes-money-amount__fraction'
+              's .andes-money-amount__fraction',
+              'del .andes-money-amount__fraction',
+              's.andes-money-amount',
+              'del.andes-money-amount'
             ];
 
             for (const sel of originalSelectors) {
-              const val = container.find(sel).first().text();
-              if (val) {
-                originalPrice = linkAnalyzer.parsePrice(val);
-                if (originalPrice > 0) break;
+              const element = container.find(sel).first();
+              if (element.length > 0) {
+                const val = sel.startsWith('s') || sel.startsWith('del')
+                  ? element.text()
+                  : element.text();
+
+                if (val) {
+                  const parsed = linkAnalyzer.parsePrice(val);
+                  if (parsed > 0 && parsed > price) {
+                    originalPrice = parsed;
+                    break;
+                  }
+                }
               }
+            }
+
+            // Validação: se original_price <= price, ignorar
+            if (originalPrice > 0 && originalPrice <= price) {
+              originalPrice = 0;
             }
 
             // Verificar Cupom na Busca (Poly)
@@ -360,25 +436,20 @@ class MeliSync {
               const couponText = polyCoupon.text().trim();
               const couponValue = linkAnalyzer.parsePrice(couponText);
 
-              // Tentar extrair um código real se houver (ex: "CUPOM: VALE20")
-              // Na busca do ML geralmente não mostra o código, apenas "CUPOM R$ 20 OFF"
-              // Se não tiver código explícito, não vamos inventar um código aleatório.
-              // Vamos verificar se há algum padrão de código no título ou tag
+              // Tentar extrair código
               const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9]{3,20})/i);
 
               if (couponValue > 0 && codeMatch) {
-                coupon = {
-                  discount_value: couponValue,
-                  discount_type: 'fixed',
-                  code: codeMatch[1].toUpperCase(),
-                  platform: 'mercadolivre'
-                };
-              } else if (couponValue > 0) {
-                // Se achou valor mas não código, marcamos como cupom de clique (sem código)
-                // Mas para o sistema funcionar precisava de código. 
-                // Vamos ignorar por enquanto para não gerar lixo "MELI-RANDOM" que não funciona.
-                // O usuário relatou que "não funcionam", então melhor não capturar do que capturar lixo.
-                coupon = null;
+                const code = codeMatch[1].toUpperCase();
+                // Validar se é um código válido
+                if (this.isValidCouponCode(code)) {
+                  coupon = {
+                    discount_value: couponValue,
+                    discount_type: 'fixed',
+                    code: code,
+                    platform: 'mercadolivre'
+                  };
+                }
               }
             } else {
               // Tentar texto solto de 'CUPOM' no container
@@ -388,9 +459,9 @@ class MeliSync {
 
               if (codeMatch) {
                 const potentialCode = codeMatch[1];
-                // Verificar se o "código" não é uma palavra comum como "DE", "R$", "OFF"
-                if (!['DE', 'DA', 'DO', 'OFF', 'R$', 'COM', 'PARA'].includes(potentialCode.toUpperCase())) {
-                  const couponMatch = allText.match(/R\$\s*([\d.,]+)/); // Tentar achar valor perto
+                // Validar código antes de usar
+                if (this.isValidCouponCode(potentialCode)) {
+                  const couponMatch = allText.match(/R\$\s*([\d.,]+)/);
                   const val = couponMatch ? linkAnalyzer.parsePrice(couponMatch[1]) : 0;
 
                   if (val > 0) {
@@ -428,6 +499,32 @@ class MeliSync {
       logger.error(`   ❌ Falha no scraping: ${error.message}`);
       return [];
     }
+  }
+
+  /**
+   * Validar se um código de cupom é válido
+   * @param {string} code - Código do cupom a ser validado
+   * @returns {boolean} - true se o código for válido
+   */
+  isValidCouponCode(code) {
+    if (!code || typeof code !== 'string') return false;
+
+    // Código deve ter entre 4 e 20 caracteres
+    if (code.length < 4 || code.length > 20) return false;
+
+    // Não deve ser palavra comum em português ou inglês
+    const invalidWords = [
+      'DE', 'DA', 'DO', 'OFF', 'COM', 'PARA', 'CUPOM', 'DESCONTO',
+      'VALOR', 'REAL', 'REAIS', 'GRATIS', 'FREE', 'FRETE'
+    ];
+    if (invalidWords.includes(code.toUpperCase())) return false;
+
+    // Deve conter pelo menos uma letra E um número (padrão comum de cupons válidos)
+    const hasLetter = /[A-Z]/i.test(code);
+    const hasNumber = /[0-9]/.test(code);
+
+    // Cupons válidos geralmente têm letras e números
+    return hasLetter && hasNumber;
   }
 
   /**
