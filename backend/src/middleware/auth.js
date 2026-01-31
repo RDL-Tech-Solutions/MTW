@@ -51,15 +51,10 @@ export const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Middleware para verificar se é VIP
+// DEPRECATED: VIP feature removed - all users have full access
+// Middleware kept for backward compatibility but now passes all authenticated users
 export const requireVIP = (req, res, next) => {
-  if (!req.user || (!req.user.is_vip && req.user.role !== 'admin')) {
-    return res.status(403).json({
-      success: false,
-      error: 'Acesso restrito a usuários VIP',
-      code: ERROR_CODES.FORBIDDEN
-    });
-  }
+  // No VIP check - all authenticated users pass
   next();
 };
 

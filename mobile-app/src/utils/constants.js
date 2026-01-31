@@ -33,7 +33,6 @@ export const PLATFORM_COLORS = {
 
 export const USER_ROLES = {
   USER: 'user',
-  VIP: 'vip',
   ADMIN: 'admin',
 };
 
@@ -84,7 +83,6 @@ export const SCREEN_NAMES = {
   SETTINGS: 'Settings',
   NOTIFICATION_SETTINGS: 'NotificationSettings',
   HOME_FILTERS: 'HomeFilters',
-  VIP_UPGRADE: 'VIPUpgrade',
   ABOUT: 'About',
 };
 

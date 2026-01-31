@@ -1,341 +1,392 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Animated } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
 import { getPlatformIcon, getPlatformColor, getPlatformName } from '../../utils/platformIcons';
 
 /**
- * Componente de card de cupom baseado no design do Mercado Livre e Shopee
+ * Componente de card de cupom profissional com animações
  */
-export default function CouponCard({ coupon, onPress }) {
+export default function CouponCard({ coupon, onPress, index = 0 }) {
   const { colors } = useThemeStore();
-  const getPlatformStyle = () => {
-    switch (coupon.platform) {
-      case 'mercadolivre':
-        return styles.meliCard;
-      case 'shopee':
-        return styles.shopeeCard;
-      case 'amazon':
-        return styles.amazonCard;
-      case 'aliexpress':
-        return styles.aliCard;
-      default:
-        return styles.defaultCard;
-    }
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index]);
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+    }).start();
   };
 
-  // Usar ícone oficial da plataforma
-  const PlatformIconComponent = getPlatformIcon(coupon.platform, 24);
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const platformColor = getPlatformColor(coupon.platform);
+  const PlatformIconComponent = getPlatformIcon(coupon.platform, 28);
 
   const formatDiscount = () => {
     if (coupon.discount_type === 'percentage') {
-      return `${coupon.discount_value}% OFF`;
+      return `${coupon.discount_value}%`;
     }
-    return `R$ ${coupon.discount_value} OFF`;
-  };
-
-  const formatMinPurchase = () => {
-    if (coupon.min_purchase > 0) {
-      return `Compra mínima: R$ ${coupon.min_purchase.toFixed(2)}`;
-    }
-    return null;
-  };
-
-  const formatMaxDiscount = () => {
-    if (coupon.max_discount_value > 0) {
-      return `Limite máximo: R$ ${coupon.max_discount_value.toFixed(2)}`;
-    }
-    return null;
+    return `R$ ${coupon.discount_value}`;
   };
 
   const formatExpiry = () => {
-    if (coupon.valid_until) {
-      const date = new Date(coupon.valid_until);
-      const today = new Date();
-      const diffTime = date - today;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (!coupon.valid_until) return null;
 
-      if (diffDays === 0) {
-        return 'Vence hoje';
-      } else if (diffDays === 1) {
-        return 'Vence amanhã';
-      } else if (diffDays <= 7) {
-        return `Vence em ${diffDays} dias`;
-      } else {
-        const day = date.getDate();
-        const monthNames = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-        return `Vence em ${day} de ${monthNames[date.getMonth()]}`;
-      }
-    }
+    const date = new Date(coupon.valid_until);
+    const today = new Date();
+    const diffTime = date - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return '⚠️ Expirado';
+    if (diffDays === 0) return '🔥 Expira hoje';
+    if (diffDays === 1) return '⏰ Expira amanhã';
+    if (diffDays <= 3) return `⚡ ${diffDays} dias restantes`;
+    if (diffDays <= 7) return `${diffDays} dias`;
+
     return null;
   };
 
-  const getApplicabilityText = () => {
-    if (coupon.is_general) {
-      return 'Válido para todos os produtos';
-    }
-    return `Em produtos selecionados${coupon.applicable_products?.length ? ` (${coupon.applicable_products.length})` : ''}`;
-  };
+  const expiryText = formatExpiry();
+  const isExpiringSoon = expiryText && expiryText.includes('⚡');
+  const isExpiringToday = expiryText && expiryText.includes('🔥');
 
-  const cardStyles = StyleSheet.create({
-    card: {
-      backgroundColor: coupon.is_exclusive ? '#FFF9E6' : colors.card,
-      borderRadius: 12,
-      padding: 16,
-      marginVertical: 8,
-      marginHorizontal: 16,
-      borderWidth: coupon.is_exclusive ? 2 : 0,
-      borderColor: coupon.is_exclusive ? '#FFD700' : 'transparent',
-      ...(Platform.OS === 'web' ? {
-        boxShadow: coupon.is_exclusive 
-          ? '0 4px 12px rgba(255, 215, 0, 0.3)' 
-          : '0 2px 4px rgba(0, 0, 0, 0.1)',
-      } : {
-        elevation: coupon.is_exclusive ? 6 : 3,
-      }),
-    },
-  });
+  const dynamicStyles = createDynamicStyles(colors, platformColor);
 
   return (
-    <TouchableOpacity
-      style={[cardStyles.card, getPlatformStyle(), coupon.is_out_of_stock && styles.outOfStockCard]}
-      onPress={onPress}
-      activeOpacity={0.8}
-      disabled={coupon.is_out_of_stock}
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [
+          { scale: scaleAnim },
+          { translateY: slideAnim },
+        ],
+      }}
     >
-      {/* Badge de Esgotado */}
-      {coupon.is_out_of_stock && (
-        <View style={styles.outOfStockBadge}>
-          <Ionicons name="close-circle" size={16} color="#FFFFFF" />
-          <Text style={styles.outOfStockText}>ESGOTADO</Text>
+      <TouchableOpacity
+        style={[
+          dynamicStyles.card,
+          coupon.is_out_of_stock && dynamicStyles.outOfStockCard
+        ]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+        disabled={coupon.is_out_of_stock}
+      >
+        {/* Gradient Overlay - Subtle */}
+        <LinearGradient
+          colors={coupon.is_exclusive
+            ? ['rgba(255, 215, 0, 0.08)', 'transparent']
+            : ['transparent', 'transparent']
+          }
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Conteúdo */}
+        <View style={dynamicStyles.content}>
+          {/* Seção Esquerda - Desconto */}
+          <View style={dynamicStyles.discountSection}>
+            <View style={[dynamicStyles.discountCircle, { backgroundColor: platformColor + '15' }]}>
+              <Text style={[dynamicStyles.discountValue, { color: platformColor }]}>
+                {formatDiscount()}
+              </Text>
+              <Text style={[dynamicStyles.offText, { color: platformColor }]}>OFF</Text>
+            </View>
+
+            {/* Badges */}
+            <View style={dynamicStyles.badgesContainer}>
+              {coupon.is_exclusive && !coupon.is_out_of_stock && (
+                <View style={dynamicStyles.exclusiveBadge}>
+                  <Ionicons name="star" size={12} color="#FFD700" />
+                  <Text style={dynamicStyles.exclusiveText}>VIP</Text>
+                </View>
+              )}
+              {expiryText && (
+                <View style={[
+                  dynamicStyles.expiryBadge,
+                  (isExpiringSoon || isExpiringToday) && dynamicStyles.expiryUrgent
+                ]}>
+                  <Text style={[
+                    dynamicStyles.expiryText,
+                    (isExpiringSoon || isExpiringToday) && dynamicStyles.expiryTextUrgent
+                  ]}>
+                    {expiryText}
+                  </Text>
+                </View>
+              )}
+              {coupon.is_out_of_stock && (
+                <View style={dynamicStyles.outOfStockBadge}>
+                  <Text style={dynamicStyles.outOfStockText}>Esgotado</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Divisor vertical com tracejado */}
+          <View style={dynamicStyles.dividerContainer}>
+            <View style={[dynamicStyles.divider, { backgroundColor: colors.border }]} />
+          </View>
+
+          {/* Seção Direita - Informações */}
+          <View style={dynamicStyles.infoSection}>
+            {/* Header com plataforma */}
+            <View style={dynamicStyles.platformHeader}>
+              <View style={[dynamicStyles.platformIcon, { backgroundColor: platformColor + '15' }]}>
+                {PlatformIconComponent}
+              </View>
+              <Text style={[dynamicStyles.platformName, { color: colors.textMuted }]}>
+                {getPlatformName(coupon.platform)}
+              </Text>
+            </View>
+
+            {/* Título */}
+            {coupon.title && (
+              <Text style={[dynamicStyles.title, { color: colors.text }]} numberOfLines={2}>
+                {coupon.title}
+              </Text>
+            )}
+
+            {/* Condições */}
+            <View style={dynamicStyles.conditions}>
+              {coupon.min_purchase > 0 && (
+                <View style={dynamicStyles.conditionItem}>
+                  <Ionicons name="cash-outline" size={14} color={colors.textMuted} />
+                  <Text style={[dynamicStyles.conditionText, { color: colors.textMuted }]}>
+                    Mín. R$ {coupon.min_purchase.toFixed(0)}
+                  </Text>
+                </View>
+              )}
+              {coupon.code && (
+                <View style={dynamicStyles.conditionItem}>
+                  <Ionicons name="ticket-outline" size={14} color={platformColor} />
+                  <Text style={[dynamicStyles.codeText, { color: platformColor }]}>
+                    {coupon.code}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Botão de ação */}
+            <TouchableOpacity
+              style={[
+                dynamicStyles.actionButton,
+                { backgroundColor: platformColor },
+                coupon.is_out_of_stock && dynamicStyles.actionButtonDisabled
+              ]}
+              disabled={coupon.is_out_of_stock}
+            >
+              <Text style={dynamicStyles.actionButtonText}>
+                {coupon.is_out_of_stock ? 'Indisponível' : 'Ver oferta'}
+              </Text>
+              {!coupon.is_out_of_stock && (
+                <Ionicons name="arrow-forward" size={16} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
-
-      {/* Badge de Exclusivo */}
-      {coupon.is_exclusive && !coupon.is_out_of_stock && (
-        <View style={styles.exclusiveBadge}>
-          <Ionicons name="star" size={16} color="#FFD700" />
-          <Text style={styles.exclusiveText}>EXCLUSIVO</Text>
-        </View>
-      )}
-
-      {/* Header com ícone e plataforma */}
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          {PlatformIconComponent}
-        </View>
-        <View style={styles.headerText}>
-          <Text style={[styles.platformName, { color: colors.textMuted }]}>
-            {getPlatformName(coupon.platform).toUpperCase()}
-          </Text>
-          {coupon.title && (
-            <Text style={[styles.couponTitle, { color: colors.text }]} numberOfLines={2}>
-              {coupon.title}
-            </Text>
-          )}
-        </View>
-      </View>
-
-      {/* Valor do desconto */}
-      <View style={styles.discountContainer}>
-        <Text style={[styles.discountValue, { color: colors.text }]}>{formatDiscount()}</Text>
-      </View>
-
-      {/* Condições */}
-      <View style={styles.conditionsContainer}>
-        {formatMinPurchase() && (
-          <Text style={[styles.conditionText, { color: colors.textMuted }]}>{formatMinPurchase()}</Text>
-        )}
-        {formatMaxDiscount() && (
-          <Text style={[styles.conditionText, { color: colors.textMuted }]}>{formatMaxDiscount()}</Text>
-        )}
-        <Text style={[styles.applicabilityText, { color: colors.textLight }]}>{getApplicabilityText()}</Text>
-      </View>
-
-      {/* Divisor */}
-      <View style={[styles.divider, { backgroundColor: colors.border, borderColor: colors.borderDark }]} />
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.expiryContainer}>
-          <Text style={styles.clockIcon}>🕐</Text>
-          <Text style={[styles.expiryText, { color: colors.textMuted }]}>{formatExpiry() || 'Sem data de expiração'}</Text>
-        </View>
-        <TouchableOpacity 
-          style={[styles.actionButton, coupon.is_out_of_stock && styles.actionButtonDisabled]}
-          disabled={coupon.is_out_of_stock}
-        >
-          <Text style={[styles.actionButtonText, coupon.is_out_of_stock && styles.actionButtonTextDisabled]}>
-            {coupon.is_out_of_stock 
-              ? 'Esgotado' 
-              : coupon.platform === 'mercadolivre' 
-                ? 'Eu quero' 
-                : 'Conferir produtos'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const createDynamicStyles = (colors, platformColor) => StyleSheet.create({
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+    } : {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    }),
+  },
   outOfStockCard: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
-  outOfStockBadge: {
+  content: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
-    gap: 4,
+    padding: 16,
+    minHeight: 140,
   },
-  outOfStockText: {
-    fontSize: 11,
+  discountSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingRight: 16,
+  },
+  discountCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  discountValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  offText: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+    marginTop: -4,
+  },
+  badgesContainer: {
+    alignItems: 'center',
+    gap: 6,
   },
   exclusiveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: '#000',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
     gap: 4,
   },
   exclusiveText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#000000',
-    letterSpacing: 0.5,
+    color: '#FFD700',
   },
-  meliCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFE600', // Amarelo Mercado Livre
+  expiryBadge: {
+    backgroundColor: colors.infoLight || '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-  shopeeCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#EE4D2D', // Laranja Shopee
+  expiryUrgent: {
+    backgroundColor: '#FEF3C7',
   },
-  amazonCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9900', // Laranja Amazon
+  expiryText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
-  aliCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6A00', // Laranja AliExpress
+  expiryTextUrgent: {
+    color: '#92400E',
   },
-  defaultCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#6366F1', // Indigo padrão
+  outOfStockBadge: {
+    backgroundColor: colors.error,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-  header: {
+  outOfStockText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  dividerContainer: {
+    width: 1,
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  divider: {
+    width: 1,
+    height: '100%',
+    opacity: 0.3,
+  },
+  infoSection: {
+    flex: 1,
+    paddingLeft: 16,
+    justifyContent: 'space-between',
+  },
+  platformHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 8,
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
+  platformIcon: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
-  icon: {
-    fontSize: 24,
-  },
-  headerText: {
-    flex: 1,
+    justifyContent: 'center',
   },
   platformName: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 4,
   },
-  couponTitle: {
-    fontSize: 16,
+  title: {
+    fontSize: 15,
     fontWeight: '600',
-  },
-  discountContainer: {
-    marginBottom: 12,
-  },
-  discountValue: {
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  conditionsContainer: {
-    marginBottom: 12,
-  },
-  conditionText: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  applicabilityText: {
-    fontSize: 13,
+    lineHeight: 20,
     marginBottom: 8,
   },
-  limitBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+  conditions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
   },
-  limitText: {
-    fontSize: 11,
-    color: '#92400E',
+  conditionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  conditionText: {
+    fontSize: 12,
     fontWeight: '500',
   },
-  divider: {
-    height: 1,
-    marginVertical: 12,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  expiryContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  clockIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  expiryText: {
+  codeText: {
     fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   actionButton: {
-    backgroundColor: '#EE4D2D', // Cor padrão (Shopee/Mercado Livre)
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 6,
   },
   actionButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: colors.border,
   },
-  actionButtonTextDisabled: {
-    color: '#FFFFFF',
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
-

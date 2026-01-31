@@ -10,6 +10,7 @@ const router = express.Router();
 router.get('/pending', authenticateToken, requireAdmin, ProductController.listPending);
 router.post('/pending/:id/approve', authenticateToken, requireAdmin, ProductController.approve);
 router.post('/pending/:id/approve-schedule', authenticateToken, requireAdmin, ProductController.approveAndSchedule);
+router.post('/pending/:id/approve-only', authenticateToken, requireAdmin, ProductController.approveOnly); // NOVO: Aprovar sem publicar
 router.post('/pending/:id/reject', authenticateToken, requireAdmin, ProductController.reject);
 
 // Estatísticas de produtos
@@ -26,6 +27,7 @@ router.post('/:id/click', authenticateToken, ProductController.trackClick);
 
 // Rotas admin
 router.post('/', authenticateToken, requireAdmin, createLimiterDefault, validate(createProductSchema), ProductController.create);
+router.post('/save', authenticateToken, requireAdmin, createLimiterDefault, validate(createProductSchema), ProductController.saveOnly); // NOVO: Salvar sem publicar
 router.put('/:id', authenticateToken, requireAdmin, validate(updateProductSchema), ProductController.update);
 router.delete('/:id', authenticateToken, requireAdmin, ProductController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, ProductController.batchDelete);

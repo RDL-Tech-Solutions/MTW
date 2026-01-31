@@ -29,7 +29,7 @@ export const useNotificationStore = create((set, get) => ({
     try {
       // Aguardar um pouco para garantir que os módulos nativos estejam prontos
       await new Promise(resolve => setTimeout(resolve, 300));
-      
+
       // Carregar preferências do cache
       const cachedPrefs = await storage.getNotificationPreferences();
       if (cachedPrefs) {
@@ -67,7 +67,7 @@ export const useNotificationStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await api.get('/notification-preferences');
       const preferences = response.data.data;
-      
+
       if (preferences) {
         set({ preferences });
         await storage.setNotificationPreferences(preferences);
@@ -103,16 +103,16 @@ export const useNotificationStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await api.put('/notification-preferences', updates);
       const preferences = response.data.data;
-      
+
       set({ preferences, isEnabled: preferences?.push_enabled ?? true });
       await storage.setNotificationPreferences(preferences);
-      
+
       return { success: true };
     } catch (error) {
       console.error('Erro ao atualizar preferências:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || error.message 
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
       };
     } finally {
       set({ isLoading: false });
@@ -124,10 +124,14 @@ export const useNotificationStore = create((set, get) => ({
     try {
       // Push notifications não são suportadas no web sem configuração VAPID
       if (Platform.OS === 'web') {
-        console.log('Push notifications não são suportadas no web sem configuração VAPID');
+        console.log('🔔 Push notifications não são suportadas no web sem configuração VAPID');
         set({ isEnabled: false });
         return null;
       }
+
+      // IMPORTANTE: Expo Go SDK 53+ não suporta remote push notifications
+      // Para testar notificações, use um development build: npx expo run:android ou npx expo run:ios
+      // Ou faça build com EAS: eas build --profile development --platform android
 
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -138,6 +142,7 @@ export const useNotificationStore = create((set, get) => ({
       }
 
       if (finalStatus !== 'granted') {
+        console.log('❌ Permissão de notificação negada');
         set({ isEnabled: false });
         return null;
       }
@@ -146,9 +151,9 @@ export const useNotificationStore = create((set, get) => ({
       // Usar projectId diretamente do app.json (sem depender de expo-constants)
       // Isso evita erros de PlatformConstants durante o carregamento do módulo
       const projectId = PROJECT_ID;
-      
+
       if (!projectId) {
-        console.warn('ProjectId não encontrado. Push notifications podem não funcionar.');
+        console.warn('⚠️ ProjectId não encontrado. Push notifications podem não funcionar.');
         set({ isEnabled: false });
         return null;
       }
@@ -157,6 +162,7 @@ export const useNotificationStore = create((set, get) => ({
         projectId: projectId,
       });
 
+      console.log('✅ Push token obtido:', token.data);
       set({ pushToken: token.data, isEnabled: true });
 
       // Registrar token no backend
@@ -164,28 +170,40 @@ export const useNotificationStore = create((set, get) => ({
         await api.post('/notifications/register-token', {
           push_token: token.data,
         });
+        console.log('✅ Token registrado no backend');
       } catch (error) {
-        console.error('Erro ao registrar token no backend:', error);
+        console.error('❌ Erro ao registrar token no backend:', error);
       }
 
       return token.data;
     } catch (error) {
       // Silenciar erros conhecidos
       const errorMessage = error?.message || error?.toString() || '';
-      
+
+      // Erro específico do Expo Go SDK 53+
+      if (errorMessage.includes('removed from Expo Go') || errorMessage.includes('SDK 53')) {
+        console.log('⚠️ EXPO GO LIMITAÇÃO: Push Notifications remotas foram removidas do Expo Go no SDK 53.');
+        console.log('📱 Para testar notificações, use um development build:');
+        console.log('   - Android: npx expo run:android');
+        console.log('   - iOS: npx expo run:ios');
+        console.log('   - EAS Build: eas build --profile development');
+        set({ isEnabled: false });
+        return null;
+      }
+
       if (Platform.OS === 'web' && errorMessage.includes('vapidPublicKey')) {
-        console.log('Push notifications não configuradas para web (VAPID keys necessárias)');
+        console.log('🌐 Push notifications não configuradas para web (VAPID keys necessárias)');
         set({ isEnabled: false });
         return null;
       }
-      
+
       if (errorMessage.includes('PlatformConstants') || errorMessage.includes('TurboModuleRegistry')) {
-        console.log('Módulos nativos não disponíveis. Push notifications podem não funcionar.');
+        console.log('⚠️ Módulos nativos não disponíveis. Push notifications podem não funcionar.');
         set({ isEnabled: false });
         return null;
       }
-      
-      console.error('Erro ao registrar push notifications:', error);
+
+      console.error('❌ Erro ao registrar push notifications:', error);
       set({ isEnabled: false });
       return null;
     }

@@ -39,7 +39,7 @@
       "expo-web-browser"
     ],
     "extra": {
-      "apiUrl": "http://192.168.7.8:3000/api",
+      "apiUrl": "http://192.168.7.9:3000/api",
       "eas": {
         "projectId": "967ccc1a-3521-4c83-91a4-851bed949c45"
       }

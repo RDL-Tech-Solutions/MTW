@@ -1,15 +1,18 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../theme/theme';
+import GradientHeader from '../../components/common/GradientHeader';
+import MenuCard from '../../components/common/MenuCard';
 import { SCREEN_NAMES } from '../../utils/constants';
 
 export default function ProfileScreen({ navigation }) {
@@ -22,10 +25,10 @@ export default function ProfileScreen({ navigation }) {
       'Tem certeza que deseja sair?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Sair', 
+        {
+          text: 'Sair',
           style: 'destructive',
-          onPress: logout 
+          onPress: logout
         },
       ]
     );
@@ -33,104 +36,109 @@ export default function ProfileScreen({ navigation }) {
 
   const dynamicStyles = createStyles(colors);
 
-  const MenuItem = ({ icon, title, subtitle, onPress, danger }) => (
-    <TouchableOpacity 
-      style={dynamicStyles.menuItem}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={[dynamicStyles.menuIconContainer, danger && dynamicStyles.menuIconDanger]}>
-        <Ionicons 
-          name={icon} 
-          size={24} 
-          color={danger ? colors.error : colors.primary} 
-        />
-      </View>
-      <View style={dynamicStyles.menuContent}>
-        <Text style={[dynamicStyles.menuTitle, danger && dynamicStyles.menuTitleDanger]}>
-          {title}
-        </Text>
-        {subtitle && (
-          <Text style={dynamicStyles.menuSubtitle}>{subtitle}</Text>
-        )}
-      </View>
-      <Ionicons 
-        name="chevron-forward" 
-        size={20} 
-        color={colors.textMuted} 
-      />
-    </TouchableOpacity>
-  );
-
   return (
-    <ScrollView style={dynamicStyles.container}>
-      <View style={dynamicStyles.header}>
-        <View style={dynamicStyles.avatarContainer}>
-          <Text style={dynamicStyles.avatarText}>
-            {user?.name?.charAt(0).toUpperCase() || 'U'}
+    <View style={dynamicStyles.container}>
+      {/* Gradient Header with avatar */}
+      <GradientHeader
+        title={user?.name || 'Usuário'}
+        subtitle={user?.email || ''}
+        gradientColors={colors.gradients.primary}
+        height={160}
+        leftComponent={
+          <View style={dynamicStyles.avatarLarge}>
+            <Text style={dynamicStyles.avatarText}>
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
+            </Text>
+          </View>
+        }
+        rightComponent={
+          <TouchableOpacity
+            style={dynamicStyles.editButton}
+            onPress={() => navigation.navigate(SCREEN_NAMES.EDIT_PROFILE)}
+          >
+            <Ionicons name="create-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+        }
+      />
+
+      <ScrollView
+        style={dynamicStyles.content}
+        contentContainerStyle={dynamicStyles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Conta Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>CONTA</Text>
+
+          <MenuCard
+            icon="person-outline"
+            iconColor={colors.iconColors.account}
+            title="Editar Perfil"
+            subtitle="Nome, email e senha"
+            onPress={() => navigation.navigate(SCREEN_NAMES.EDIT_PROFILE)}
+          />
+
+          <MenuCard
+            icon="settings-outline"
+            iconColor={colors.iconColors.settings}
+            title="Configurações"
+            subtitle="Notificações e preferências"
+            onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
+          />
+
+          <MenuCard
+            icon="heart-outline"
+            iconColor={colors.error}
+            title="Favoritos"
+            subtitle="Produtos que você salvou"
+            onPress={() => navigation.navigate(SCREEN_NAMES.FAVORITES)}
+          />
+        </View>
+
+        {/* Sobre Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>SOBRE</Text>
+
+          <MenuCard
+            icon="information-circle-outline"
+            iconColor={colors.iconColors.about}
+            title="Sobre o App"
+            subtitle="Versão 1.0.0"
+            onPress={() => navigation.navigate(SCREEN_NAMES.ABOUT)}
+          />
+
+          <MenuCard
+            icon="help-circle-outline"
+            iconColor={colors.info}
+            title="Ajuda e Suporte"
+            subtitle="Central de ajuda"
+            onPress={() => {
+              // TODO: Implementar ajuda
+              Alert.alert('Em breve', 'Central de ajuda em desenvolvimento');
+            }}
+          />
+        </View>
+
+        {/* Danger Zone */}
+        <View style={dynamicStyles.section}>
+          <MenuCard
+            icon="log-out-outline"
+            title="Sair da Conta"
+            subtitle="Desconectar do aplicativo"
+            onPress={handleLogout}
+            danger
+          />
+        </View>
+
+        {/* Footer */}
+        <View style={dynamicStyles.footer}>
+          <Text style={dynamicStyles.footerText}>PreçoCerto © 2024</Text>
+          <Text style={dynamicStyles.footerSubtext}>
+            Feito com ❤️ para você economizar
           </Text>
         </View>
-        <Text style={dynamicStyles.name}>{user?.name || 'Usuário'}</Text>
-        <Text style={dynamicStyles.email}>{user?.email || ''}</Text>
-        
-        {user?.is_vip && (
-          <View style={dynamicStyles.vipBadge}>
-            <Ionicons name="star" size={16} color={colors.warning} />
-            <Text style={dynamicStyles.vipText}>VIP</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={dynamicStyles.section}>
-        <Text style={dynamicStyles.sectionTitle}>Conta</Text>
-        
-        <MenuItem
-          icon="person-outline"
-          title="Editar Perfil"
-          subtitle="Nome, email e senha"
-          onPress={() => navigation.navigate(SCREEN_NAMES.EDIT_PROFILE)}
-        />
-        <MenuItem
-          icon="settings-outline"
-          title="Configurações"
-          subtitle="Notificações e preferências"
-          onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
-        />
-        
-        {!user?.is_vip && (
-          <MenuItem
-            icon="star-outline"
-            title="Seja VIP"
-            subtitle="Acesso a ofertas exclusivas"
-            onPress={() => navigation.navigate(SCREEN_NAMES.VIP_UPGRADE)}
-          />
-        )}
-      </View>
-
-      <View style={dynamicStyles.section}>
-        <Text style={dynamicStyles.sectionTitle}>Sobre</Text>
-        
-        <MenuItem
-          icon="information-circle-outline"
-          title="Sobre o App"
-          subtitle="Versão 1.0.0"
-          onPress={() => navigation.navigate(SCREEN_NAMES.ABOUT)}
-        />
-      </View>
-
-      <View style={dynamicStyles.section}>
-        <MenuItem
-          icon="log-out-outline"
-          title="Sair"
-          onPress={handleLogout}
-          danger
-        />
-      </View>
-
-      <View style={dynamicStyles.footer}>
-        <Text style={dynamicStyles.footerText}>PreçoCerto © 2024</Text>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -139,109 +147,77 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    alignItems: 'center',
-    padding: 24,
-    paddingTop: 32,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  content: {
+    flex: 1,
   },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  avatarLarge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+    } : {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+    }),
   },
   avatarText: {
     fontSize: 32,
     fontWeight: '700',
-    color: colors.white,
+    color: '#fff',
   },
-  name: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  email: {
-    fontSize: 14,
-    color: colors.textMuted,
-  },
-  vipBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.warningLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 12,
-    gap: 4,
-  },
-  vipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.warning,
-  },
-  section: {
-    marginTop: 24,
-    backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  menuIconContainer: {
+  editButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primaryLight + '20',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+    } : {
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+    }),
   },
-  menuIconDanger: {
-    backgroundColor: colors.errorLight,
+  section: {
+    marginBottom: 24,
   },
-  menuContent: {
-    flex: 1,
-  },
-  menuTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  menuTitleDanger: {
-    color: colors.error,
-  },
-  menuSubtitle: {
+  sectionTitle: {
     fontSize: 12,
+    fontWeight: '700',
     color: colors.textMuted,
-    marginTop: 2,
+    letterSpacing: 1,
+    marginBottom: 12,
+    marginLeft: 4,
   },
   footer: {
     alignItems: 'center',
-    padding: 24,
+    marginTop: 24,
+    paddingVertical: 20,
   },
   footerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  footerSubtext: {
     fontSize: 12,
     color: colors.textMuted,
   },

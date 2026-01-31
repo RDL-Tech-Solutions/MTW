@@ -110,6 +110,33 @@ class ProductController {
     }
   }
 
+  // Salvar produto SEM publicar (aparece no app mas não nos canais)
+  static async saveOnly(req, res, next) {
+    try {
+      const { category_id } = req.body;
+
+      // Criar produto com status 'created' (salvo mas não publicado)
+      const product = await Product.create({
+        ...req.body,
+        status: 'created'
+      });
+
+      logger.info(`💾 Produto salvo (não publicado): ${product.id} - ${product.name}`);
+      logger.info(`   Status: created (aparecerá no app mas não será publicado nos canais)`);
+
+      // Buscar produto completo para retornar
+      const fullProduct = await Product.findById(product.id);
+
+      res.status(201).json(successResponse(
+        fullProduct,
+        'Produto salvo com sucesso! Ele aparecerá no app mas não foi publicado nos canais.'
+      ));
+    } catch (error) {
+      logger.error(`❌ Erro ao salvar produto: ${error.message}`);
+      next(error);
+    }
+  }
+
   // Atualizar produto (admin)
   static async update(req, res, next) {
     try {
@@ -654,6 +681,144 @@ class ProductController {
       res.json(successResponse(null, 'Produto rejeitado com sucesso'));
     } catch (error) {
       logger.error(`❌ Erro ao rejeitar produto: ${error.message}`);
+      next(error);
+    }
+  }
+
+  // Aprovar produto SEM publicar (apenas aprovar e aparecer no app)
+  static async approveOnly(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { affiliate_link, coupon_id, category_id, shorten_link, current_price, old_price } = req.body;
+
+      logger.info(`✅ ========== APROVAR SEM PUBLICAR ==========`);
+      logger.info(`   Produto ID: ${id}`);
+      logger.info(`   affiliate_link: ${affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
+      logger.info(`   coupon_id: ${coupon_id || 'NÃO DEFINIDO'}`);
+      logger.info(`   category_id: ${category_id || 'NÃO DEFINIDO'}`);
+
+      if (!affiliate_link || !affiliate_link.trim()) {
+        return res.status(400).json(
+          errorResponse('Link de afiliado é obrigatório', 'MISSING_AFFILIATE_LINK')
+        );
+      }
+
+      // Encurtar link se solicitado
+      let finalAffiliateLink = affiliate_link.trim();
+      const shouldShorten = shorten_link === true ||
+        shorten_link === 'true' ||
+        shorten_link === 1 ||
+        shorten_link === '1' ||
+        String(shorten_link).toLowerCase() === 'true';
+
+      if (shouldShorten) {
+        try {
+          const urlShortener = (await import('../services/urlShortener.js')).default;
+          const shortenedUrl = await urlShortener.shorten(affiliate_link.trim());
+          if (shortenedUrl && shortenedUrl !== affiliate_link.trim()) {
+            try {
+              new URL(shortenedUrl);
+              finalAffiliateLink = shortenedUrl;
+              logger.info(`✅ Link encurtado: ${finalAffiliateLink}`);
+            } catch (e) {
+              logger.warn(`⚠️ URL encurtada inválida, usando original`);
+            }
+          }
+        } catch (error) {
+          logger.warn(`⚠️ Erro ao encurtar link: ${error.message}`);
+        }
+      }
+
+      // Buscar produto
+      const product = await Product.findById(id);
+      if (!product) {
+        return res.status(404).json(
+          errorResponse(ERROR_MESSAGES.NOT_FOUND, ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      if (product.status !== 'pending') {
+        return res.status(400).json(
+          errorResponse('Produto já foi processado', 'PRODUCT_ALREADY_PROCESSED')
+        );
+      }
+
+      // Preparar dados de atualização
+      let updateData = {
+        affiliate_link: finalAffiliateLink,
+        status: 'approved' // Aprovado mas não publicado
+      };
+
+      if (category_id) {
+        updateData.category_id = category_id;
+        logger.info(`📂 Categoria atualizada: ${category_id}`);
+      }
+
+      // Atualizar preços se editados
+      if (current_price !== undefined && !isNaN(parseFloat(current_price))) {
+        updateData.current_price = parseFloat(current_price);
+        logger.info(`💰 Preço atual atualizado: R$ ${current_price}`);
+      }
+
+      if (old_price !== undefined && !isNaN(parseFloat(old_price))) {
+        updateData.old_price = parseFloat(old_price);
+        logger.info(`💰 Preço antigo atualizado: R$ ${old_price}`);
+
+        if (updateData.current_price && updateData.old_price > updateData.current_price) {
+          const discountPercent = Math.round(((updateData.old_price - updateData.current_price) / updateData.old_price) * 100);
+          updateData.discount_percentage = discountPercent;
+          logger.info(`📊 Desconto recalculado: ${discountPercent}%`);
+        }
+      }
+
+      // Processar cupom se fornecido
+      let finalPrice = product.current_price;
+      if (coupon_id) {
+        const Coupon = (await import('../models/Coupon.js')).default;
+        const coupon = await Coupon.findById(coupon_id);
+
+        if (coupon && coupon.is_active) {
+          const now = new Date();
+          const validFrom = new Date(coupon.valid_from);
+          const validUntil = new Date(coupon.valid_until);
+
+          if (now >= validFrom && now <= validUntil) {
+            const currentPrice = updateData.current_price || product.current_price || 0;
+
+            if (coupon.discount_type === 'percentage') {
+              finalPrice = currentPrice - (currentPrice * (coupon.discount_value / 100));
+            } else {
+              finalPrice = Math.max(0, currentPrice - coupon.discount_value);
+            }
+
+            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+              const discountAmount = currentPrice - finalPrice;
+              if (discountAmount > coupon.max_discount_value) {
+                finalPrice = currentPrice - coupon.max_discount_value;
+              }
+            }
+
+            updateData.coupon_id = coupon_id;
+            logger.info(`💰 Preço com cupom: R$ ${finalPrice.toFixed(2)}`);
+          } else {
+            logger.warn(`⚠️ Cupom ${coupon_id} não está válido no momento`);
+          }
+        } else {
+          logger.warn(`⚠️ Cupom ${coupon_id} não encontrado ou inativo`);
+        }
+      }
+
+      // Aprovar produto SEM publicar
+      const approvedProduct = await Product.approve(id, finalAffiliateLink, updateData);
+      logger.info(`✅ Produto aprovado (não publicado): ${approvedProduct.name}`);
+      logger.info(`   Status: approved (aparecerá no app mas não foi publicado nos canais)`);
+
+      res.json(successResponse({
+        product: approvedProduct,
+        final_price: coupon_id ? finalPrice : null
+      }, 'Produto aprovado! Ele aparecerá no app mas não foi publicado nos canais.'));
+    } catch (error) {
+      logger.error(`❌ Erro ao aprovar produto: ${error.message}`);
       next(error);
     }
   }

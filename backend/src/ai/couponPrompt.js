@@ -24,7 +24,7 @@ class CouponPrompt {
     if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
       const validExamples = exampleMessages
         .filter(msg => msg && typeof msg === 'string' && msg.trim().length > 0)
-        .slice(0, 5); // Aumentado para 5 exemplos
+        .slice(0, 10); // ✅ AUMENTADO: 10 exemplos para melhor aprendizado da IA
 
       if (validExamples.length > 0) {
         examplesSection = `

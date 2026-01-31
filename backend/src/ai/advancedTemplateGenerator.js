@@ -243,10 +243,6 @@ class AdvancedTemplateGenerator {
         instruction: "Compare com o preço normal. 'Geralmente custa X, mas hoje tá Y'. Mostre a vantagem clara."
       },
       {
-        role: "O Amigo Íntimo",
-        instruction: "Tom de conversa privada. 'Só tô mandando pra você que é VIP...', 'Não espalha muito'. Use emojis de 🤫."
-      },
-      {
         role: "O Minimalista Premium",
         instruction: "Poucas palavras, foco na elegância e qualidade. 'Simplesmente o melhor.', 'Qualidade indiscutível.'. Estilo clean."
       },
@@ -273,10 +269,6 @@ class AdvancedTemplateGenerator {
       {
         role: "O Desconfiado Convertido",
         instruction: "Diga que duvidava mas se surpreendeu. 'Eu não acreditava que era tão bom...', 'Me surpreendeu'."
-      },
-      {
-        role: "O VIP 'Backstage'",
-        instruction: "Fale como se tivesse acesso privilegiado. 'Consegui esse lote exclusivo', 'Direto da fábrica pra vocês'."
       },
       {
         role: "O Presenteador",
@@ -364,10 +356,6 @@ Agora crie SUA mensagem de venda única (texto puro com quebras de linha):`;
       {
         role: "O Questionador",
         instruction: "Comece com uma pergunta que engaje. 'Quem aí quer economizar?', 'Cansado de pagar caro?'. Faça o leitor responder mentalmente sim."
-      },
-      {
-        role: "O VIP Exclusivo",
-        instruction: "Faça o leitor se sentir especial. 'Só para quem está no grupo...', 'Oferta vip liberada...'. Use emojis de troféu ou medalha."
       },
       {
         role: "O Irônico Divertido",

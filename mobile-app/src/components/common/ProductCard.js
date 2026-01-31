@@ -1,8 +1,32 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Linking } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, Animated, Platform } from 'react-native';
+import { useThemeStore } from '../../theme/theme';
 import PlatformBadge from './PlatformBadge';
 
-export default function ProductCard({ product, onPress }) {
+export default function ProductCard({ product, onPress, index = 0 }) {
+  const { colors } = useThemeStore();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    // Stagger animation based on index
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 50, // 50ms delay per item
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        delay: index * 50,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index]);
+
   const formatPrice = (price) => {
     return `R$ ${parseFloat(price).toFixed(2).replace('.', ',')}`;
   };
@@ -15,75 +39,110 @@ export default function ProductCard({ product, onPress }) {
     }
   };
 
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const dynamicStyles = createStyles(colors);
+
   return (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={handlePress}
-      activeOpacity={0.7}
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [
+          { scale: scaleAnim },
+          { translateY: slideAnim },
+        ],
+      }}
     >
-      {/* Badge de Plataforma */}
-      <View style={styles.badgeContainer}>
-        <PlatformBadge platform={product.platform} size="small" />
-      </View>
-
-      {/* Imagem do Produto */}
-      <Image
-        source={{ uri: product.image_url }}
-        style={styles.image}
-        resizeMode="cover"
-      />
-
-      {/* Informações do Produto */}
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>
-          {product.name}
-        </Text>
-
-        {/* Preços */}
-        <View style={styles.priceContainer}>
-          {product.old_price && product.old_price > product.current_price && (
-            <Text style={styles.oldPrice}>
-              {formatPrice(product.old_price)}
-            </Text>
-          )}
-          <Text style={styles.currentPrice}>
-            {formatPrice(product.current_price)}
-          </Text>
+      <TouchableOpacity
+        style={dynamicStyles.card}
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+      >
+        {/* Badge de Plataforma */}
+        <View style={dynamicStyles.badgeContainer}>
+          <PlatformBadge platform={product.platform} size="small" />
         </View>
 
-        {/* Badge de Desconto */}
-        {product.discount_percentage > 0 && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>
-              {product.discount_percentage}% OFF
+        {/* Imagem do Produto */}
+        <Image
+          source={{ uri: product.image_url }}
+          style={dynamicStyles.image}
+          resizeMode="cover"
+        />
+
+        {/* Informações do Produto */}
+        <View style={dynamicStyles.info}>
+          <Text style={dynamicStyles.title} numberOfLines={2}>
+            {product.name}
+          </Text>
+
+          {/* Preços */}
+          <View style={dynamicStyles.priceContainer}>
+            {product.old_price && product.old_price > product.current_price && (
+              <Text style={dynamicStyles.oldPrice}>
+                {formatPrice(product.old_price)}
+              </Text>
+            )}
+            <Text style={dynamicStyles.currentPrice}>
+              {formatPrice(product.current_price)}
             </Text>
           </View>
-        )}
 
-        {/* Cupom (se houver) */}
-        {product.coupon_code && (
-          <View style={styles.couponContainer}>
-            <Text style={styles.couponIcon}>🎟️</Text>
-            <Text style={styles.couponCode}>{product.coupon_code}</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+          {/* Badge de Desconto */}
+          {product.discount_percentage > 0 && (
+            <View style={dynamicStyles.discountBadge}>
+              <Text style={dynamicStyles.discountText}>
+                {product.discount_percentage}% OFF
+              </Text>
+            </View>
+          )}
+
+          {/* Cupom (se houver) */}
+          {product.coupon_code && (
+            <View style={dynamicStyles.couponContainer}>
+              <Text style={dynamicStyles.couponIcon}>🎟️</Text>
+              <Text style={dynamicStyles.couponCode}>{product.coupon_code}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
     marginHorizontal: 16,
     marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    } : {
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    }),
   },
   badgeContainer: {
     position: 'absolute',
@@ -94,15 +153,15 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: 200,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.border,
   },
   info: {
-    padding: 12,
+    padding: 16,
   },
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: colors.text,
     marginBottom: 8,
     lineHeight: 22,
   },
@@ -113,35 +172,35 @@ const styles = StyleSheet.create({
   },
   oldPrice: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textMuted,
     textDecorationLine: 'line-through',
     marginRight: 8,
   },
   currentPrice: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#10B981',
+    fontWeight: '700',
+    color: colors.success,
   },
   discountBadge: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: colors.error,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     alignSelf: 'flex-start',
     marginBottom: 8,
   },
   discountText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   couponContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: colors.warningLight,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     alignSelf: 'flex-start',
   },
   couponIcon: {
@@ -151,6 +210,6 @@ const styles = StyleSheet.create({
   couponCode: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#92400E',
+    color: colors.text,
   },
 });

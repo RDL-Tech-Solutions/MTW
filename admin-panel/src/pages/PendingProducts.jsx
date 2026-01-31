@@ -27,6 +27,7 @@ export default function PendingProducts() {
   const [approving, setApproving] = useState(false);
   const [shortening, setShortening] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [approvingOnly, setApprovingOnly] = useState(false); // NOVO: aprovar sem publicar
   const [rejecting, setRejecting] = useState(false);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -505,6 +506,81 @@ export default function PendingProducts() {
       });
     } finally {
       setScheduling(false);
+    }
+  };
+
+  // NOVO: Aprovar SEM publicar (apenas aprovar e aparecer no app)
+  const handleApproveOnly = async () => {
+    if (!affiliateLink || !affiliateLink.trim()) {
+      toast({
+        title: "Erro",
+        description: "Link de afiliado é obrigatório",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validar URL
+    try {
+      new URL(affiliateLink.trim());
+    } catch {
+      toast({
+        title: "Erro",
+        description: "Link de afiliado inválido",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setApprovingOnly(true);
+    try {
+      const payload = {
+        affiliate_link: affiliateLink.trim(),
+        shorten_link: false
+      };
+
+      // Adicionar cupom se selecionado
+      if (selectedCouponId) {
+        payload.coupon_id = selectedCouponId;
+      }
+
+      // Adicionar categoria se selecionada
+      if (selectedCategoryId) {
+        payload.category_id = selectedCategoryId;
+      }
+
+      // Adicionar preços editados
+      if (editableCurrentPrice && !isNaN(parseFloat(editableCurrentPrice))) {
+        payload.current_price = parseFloat(editableCurrentPrice);
+      }
+      if (editableOldPrice && !isNaN(parseFloat(editableOldPrice))) {
+        payload.old_price = parseFloat(editableOldPrice);
+      }
+
+      console.log('📤 Aprovando sem publicar:', selectedProduct?.id);
+
+      const response = await api.post(`/products/pending/${selectedProduct.id}/approve-only`, payload);
+
+      console.log('✅ Produto aprovado (não publicado):', response.data);
+
+      toast({
+        title: "Produto Aprovado! ✅",
+        description: "Produto aprovado! Ele aparecerá no app mas não foi publicado nos canais.",
+        variant: "success"
+      });
+
+      // Recarregar lista
+      fetchPendingProducts(pagination.page);
+      handleCloseApprovalDialog();
+    } catch (error) {
+      console.error('❌ Erro ao aprovar produto:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Falha ao aprovar produto",
+        variant: "destructive"
+      });
+    } finally {
+      setApprovingOnly(false);
     }
   };
 
@@ -1121,17 +1197,20 @@ export default function PendingProducts() {
           )}
 
           <DialogFooter className="flex-wrap gap-2">
+            {/* Botão Cancelar */}
             <Button
               variant="outline"
               onClick={handleCloseApprovalDialog}
-              disabled={approving || shortening || scheduling}
+              disabled={approving || shortening || scheduling || approvingOnly}
             >
               Cancelar
             </Button>
+
+            {/* Botão Encurtar Link */}
             <Button
               variant="outline"
               onClick={() => handleApprove(true)}
-              disabled={approving || shortening || scheduling || !affiliateLink.trim()}
+              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
             >
               {shortening ? (
                 <>
@@ -1145,24 +1224,52 @@ export default function PendingProducts() {
                 </>
               )}
             </Button>
+
+            {/* Botão Aprovar (SEM publicar) - Verde */}
             <Button
-              onClick={() => handleApprove(false)}
-              disabled={approving || shortening || scheduling || !affiliateLink.trim()}
+              variant="outline"
+              className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
+              onClick={handleApproveOnly}
+              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
             >
-              {approving ? (
+              {approvingOnly ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Aprovando...
                 </>
               ) : (
-                'Aprovar e Publicar'
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Aprovar
+                </>
               )}
             </Button>
+
+            {/* Botão Principal: Aprovar e Publicar */}
+            <Button
+              variant="default"
+              onClick={() => handleApprove(false)}
+              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
+            >
+              {approving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Publicando...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Aprovar e Publicar
+                </>
+              )}
+            </Button>
+
+            {/* Botão IA Agendar - Roxo */}
             <Button
               variant="default"
               className="bg-purple-600 hover:bg-purple-700"
               onClick={handleApproveAndSchedule}
-              disabled={approving || shortening || scheduling || !affiliateLink.trim()}
+              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
             >
               {scheduling ? (
                 <>

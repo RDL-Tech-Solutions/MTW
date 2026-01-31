@@ -50,8 +50,8 @@ export const PRODUCT_STATUS = {
 // Roles de usuário
 export const USER_ROLES = {
   USER: 'user',
-  ADMIN: 'admin',
-  VIP: 'vip'
+  ADMIN: 'admin'
+  // VIP role removed - all users have full access
 };
 
 // Limites de paginação

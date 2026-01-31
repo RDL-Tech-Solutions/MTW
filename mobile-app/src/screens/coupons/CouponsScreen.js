@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,23 +8,32 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Platform,
+  ScrollView,
+  Animated,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import CouponCard from '../../components/coupons/CouponCard';
 import EmptyState from '../../components/common/EmptyState';
+import GradientHeader from '../../components/common/GradientHeader';
+import SlideInView from '../../components/common/SlideInView';
+import ScaleInView from '../../components/common/ScaleInView';
 import { useThemeStore } from '../../theme/theme';
 import api from '../../services/api';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
+
+const HEADER_HEIGHT = 180; // Adjust as needed for your header height
 
 export default function CouponsScreen({ navigation }) {
   const { colors } = useThemeStore();
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, mercadolivre, shopee, amazon, aliexpress
+  const [selectedPlatform, setSelectedPlatform] = useState('all'); // Renamed filter to selectedPlatform
+  const scrollY = useRef(new Animated.Value(0)).current; // Added for parallax
 
   useEffect(() => {
     loadCoupons();
-  }, [filter]);
+  }, [selectedPlatform]); // Use selectedPlatform here
 
   const loadCoupons = async () => {
     try {
@@ -49,11 +58,10 @@ export default function CouponsScreen({ navigation }) {
         couponsList = data.coupons;
       }
 
-      // Ordenar: cupons exclusivos primeiro, depois os demais
+      // Ordenar: cupons exclusivos primeiro
       couponsList.sort((a, b) => {
         if (a.is_exclusive && !b.is_exclusive) return -1;
         if (!a.is_exclusive && b.is_exclusive) return 1;
-        // Se ambos são exclusivos ou ambos não são, manter ordem original
         return 0;
       });
 
@@ -85,68 +93,142 @@ export default function CouponsScreen({ navigation }) {
       icon="ticket-outline"
       title="Nenhum cupom disponível"
       message="Novos cupons serão exibidos aqui quando disponíveis"
-      iconColor={colors.primary}
+      iconColor={colors.success}
     />
   );
 
-  const renderHeader = () => (
-    <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Cupons Ativos</Text>
-      <View style={styles.filterContainer}>
-        {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => (
-          <TouchableOpacity
-            key={platform}
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: filter === platform ? colors.primary : colors.card,
-                borderColor: filter === platform ? colors.primary : colors.border,
-              },
-              filter === platform && styles.filterButtonActive,
-            ]}
-            onPress={() => setFilter(platform)}
-          >
-            <Text
+  const renderListHeader = () => (
+    <View style={styles.listHeaderContent}>
+      {/* Platform Filters */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterScroll}
+      >
+        {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => {
+          const isActive = filter === platform;
+          let chipColor = colors.primary;
+
+          // Cores específicas por plataforma
+          if (platform === PLATFORMS.MERCADOLIVRE) chipColor = '#FFE600';
+          else if (platform === PLATFORMS.SHOPEE) chipColor = '#EE4D2D';
+          else if (platform === PLATFORMS.AMAZON) chipColor = '#FF9900';
+          else if (platform === PLATFORMS.ALIEXPRESS) chipColor = '#E62E04';
+
+          return (
+            <TouchableOpacity
+              key={platform}
               style={[
-                styles.filterText,
-                { color: filter === platform ? colors.white : colors.textMuted },
-                filter === platform && styles.filterTextActive,
+                styles.filterChip,
+                {
+                  backgroundColor: isActive ? chipColor : colors.card,
+                  borderColor: isActive ? chipColor : colors.border,
+                },
               ]}
+              onPress={() => setFilter(platform)}
+              activeOpacity={0.7}
             >
-              {platform === 'all' ? 'Todos' : PLATFORM_LABELS[platform] || platform}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.filterText,
+                  { color: isActive ? '#fff' : colors.text },
+                ]}
+              >
+                {platform === 'all' ? 'Todos' : PLATFORM_LABELS[platform] || platform}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Stats Info */}
+      <View style={[styles.statsInfo, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.statItem}>
+          <Ionicons name="ticket" size={24} color={colors.success} />
+          <Text style={[styles.statNumber, { color: colors.text }]}>{coupons.length}</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Ativos</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Ionicons name="star" size={24} color={colors.warning} />
+          <Text style={[styles.statNumber, { color: colors.text }]}>
+            {coupons.filter(c => c.is_exclusive).length}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Exclusivos</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Ionicons name="flash" size={24} color={colors.error} />
+          <Text style={[styles.statNumber, { color: colors.text }]}>
+            {coupons.filter(c => {
+              const validUntil = new Date(c.valid_until);
+              const daysLeft = Math.ceil((validUntil - new Date()) / (1000 * 60 * 60 * 24));
+              return daysLeft <= 3;
+            }).length}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Expirando</Text>
+        </View>
       </View>
     </View>
   );
 
   if (loading && !refreshing) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textMuted }]}>Carregando cupons...</Text>
+      <View style={styles.container}>
+        <GradientHeader
+          title="Cupons"
+          subtitle="Economize mais com nossos cupons exclusivos"
+          gradientColors={[colors.success, colors.iconColors.products]}
+          rightComponent={
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          }
+        />
+        <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+          <ActivityIndicator size="large" color={colors.success} />
+          <Text style={[styles.loadingText, { color: colors.textMuted }]}>Carregando cupons...</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Gradient Header */}
+      <GradientHeader
+        title="Cupons"
+        subtitle="Economize mais com nossos cupons exclusivos"
+        gradientColors={[colors.success, colors.iconColors.products]}
+        rightComponent={
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => navigation.goBack && navigation.goBack()}
+          >
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        }
+      />
+
       <FlatList
         data={coupons}
         renderItem={renderCoupon}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={renderListHeader}
         ListEmptyComponent={renderEmpty}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
+            colors={[colors.success]}
+            tintColor={colors.success}
           />
         }
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
       />
     </View>
   );
@@ -164,43 +246,76 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
+    fontWeight: '500',
   },
   listContent: {
-    paddingVertical: 8,
-  },
-  header: {
     padding: 16,
-    borderBottomWidth: 1,
+    paddingBottom: 24,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 16,
+  listHeaderContent: {
+    marginBottom: 20,
   },
-  filterContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
+  filterScroll: {
+    paddingVertical: 4,
+    gap: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    borderWidth: 1.5,
+    marginRight: 10,
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
     } : {
-      elevation: 1,
+      elevation: 2,
     }),
-  },
-  filterButtonActive: {
-    // Estilos adicionais se necessário
   },
   filterText: {
     fontSize: 14,
-    fontWeight: '500',
-  },
-  filterTextActive: {
     fontWeight: '600',
+  },
+  statsInfo: {
+    flexDirection: 'row',
+    marginTop: 20,
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    } : {
+      elevation: 3,
+    }),
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#E5E7EB',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

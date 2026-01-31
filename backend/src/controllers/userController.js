@@ -9,14 +9,14 @@ class UserController {
   static async list(req, res, next) {
     try {
       const { page = 1, limit = 20, search = '' } = req.query;
-      
+
       const result = await User.findAll(parseInt(page), parseInt(limit));
-      
+
       // Filtrar por busca se necessário
       let users = result.users;
       if (search) {
         const searchLower = search.toLowerCase();
-        users = users.filter(u => 
+        users = users.filter(u =>
           u.email?.toLowerCase().includes(searchLower) ||
           u.name?.toLowerCase().includes(searchLower)
         );
@@ -109,7 +109,7 @@ class UserController {
   static async delete(req, res, next) {
     try {
       const { id } = req.params;
-      
+
       // Não permitir deletar a si mesmo
       if (id === req.user.id) {
         return res.status(400).json(
@@ -125,15 +125,14 @@ class UserController {
     }
   }
 
-  // Atualizar status VIP
+  // DEPRECATED: VIP feature removed - all users have full access
   static async updateVIP(req, res, next) {
     try {
-      const { id } = req.params;
-      const { is_vip } = req.body;
-
-      const user = await User.update(id, { is_vip: !!is_vip });
-      logger.info(`Status VIP atualizado para usuário ${id}: ${is_vip}`);
-      res.json(successResponse(user, `Usuário ${is_vip ? 'promovido a' : 'removido de'} VIP`));
+      logger.info(`Tentativa de atualizar VIP (FEATURE DEPRECATED)`);
+      res.json(successResponse(
+        { message: 'VIP feature has been removed - all users have full access' },
+        'VIP feature deprecated: all users now have full access to all features'
+      ));
     } catch (error) {
       next(error);
     }
@@ -175,8 +174,7 @@ class UserController {
       const stats = {
         total: users.length,
         admins: users.filter(u => u.role === 'admin').length,
-        vips: users.filter(u => u.is_vip).length,
-        regular: users.filter(u => u.role === 'user' && !u.is_vip).length,
+        users: users.filter(u => u.role === 'user').length, // All regular users (VIP removed)
         new_today: users.filter(u => {
           const today = new Date();
           const created = new Date(u.created_at);

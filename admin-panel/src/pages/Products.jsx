@@ -540,6 +540,62 @@ export default function Products() {
     }
   };
 
+  // Novo método: Salvar SEM publicar
+  const handleSaveOnly = async () => {
+    setProcessingActions(prev => ({ ...prev, saving: true }));
+    try {
+      const parsePrice = (priceStr) => {
+        if (!priceStr && priceStr !== 0) return null;
+        if (typeof priceStr === 'number') return priceStr;
+        const normalized = String(priceStr).replace(',', '.');
+        const cleaned = normalized.replace(/[^\d.]/g, '');
+        const number = parseFloat(cleaned);
+        return isNaN(number) ? null : number;
+      };
+
+      const productData = {
+        name: formData.name,
+        image_url: formData.image_url,
+        platform: formData.platform,
+        current_price: parsePrice(formData.discount_price) || parsePrice(formData.price),
+        old_price: formData.discount_price ? parsePrice(formData.price) : null,
+        category_id: formData.category_id && formData.category_id.trim() !== '' ? formData.category_id : null,
+        coupon_id: formData.coupon_id && formData.coupon_id.trim() !== '' ? formData.coupon_id : null,
+        affiliate_link: formData.affiliate_url,
+        stock_available: true,
+        external_id: `${formData.platform}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      };
+
+      await api.post('/products/save', productData);
+      await fetchProducts(1);
+      toast({
+        title: "Produto Salvo! 💾",
+        description: "Produto salvo com sucesso! Ele aparecerá no app mas não foi publicado nos canais.",
+        variant: "success",
+      });
+      setIsDialogOpen(false);
+      setFormData({
+        name: '',
+        description: '',
+        price: '',
+        discount_price: '',
+        affiliate_url: '',
+        image_url: '',
+        category_id: '',
+        coupon_id: '',
+        platform: 'shopee'
+      });
+    } catch (error) {
+      toast({
+        title: "Erro!",
+        description: "Erro ao salvar produto.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingActions(prev => ({ ...prev, saving: false }));
+    }
+  };
+
   // Toggle selection
   const toggleSelection = (id) => {
     setSelectedIds(prev =>
@@ -839,61 +895,76 @@ export default function Products() {
                 )}
 
                 <DialogFooter className="flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting || processingActions.scheduling}>Cancelar</Button>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={processingActions.submitting || processingActions.scheduling || processingActions.saving}>Cancelar</Button>
                   {!editingProduct && (
-                    <Button
-                      type="button"
-                      variant="default"
-                      className="bg-purple-600 hover:bg-purple-700"
-                      disabled={processingActions.submitting || processingActions.scheduling || !formData.name || !formData.price}
-                      onClick={async () => {
-                        setProcessingActions(prev => ({ ...prev, scheduling: true }));
-                        try {
-                          const parsePrice = (priceStr) => {
-                            if (!priceStr && priceStr !== 0) return null;
-                            if (typeof priceStr === 'number') return priceStr;
-                            const normalized = String(priceStr).replace(',', '.');
-                            const cleaned = normalized.replace(/[^\d.]/g, '');
-                            return parseFloat(cleaned) || null;
-                          };
-                          const productData = {
-                            name: formData.name,
-                            image_url: formData.image_url,
-                            platform: formData.platform,
-                            current_price: parsePrice(formData.discount_price) || parsePrice(formData.price),
-                            old_price: formData.discount_price ? parsePrice(formData.price) : null,
-                            category_id: formData.category_id?.trim() || null,
-                            coupon_id: formData.coupon_id?.trim() || null,
-                            affiliate_link: formData.affiliate_url,
-                            stock_available: true,
-                            external_id: `${formData.platform}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                            schedule_mode: true // Ativa modo agendamento com IA
-                          };
-                          const response = await api.post('/products', productData);
-                          await fetchProducts(1);
-                          toast({
-                            title: "Produto Agendado! 📅",
-                            description: response.data?.message || "A IA definiu o melhor horário. Verifique em Agendamentos.",
-                          });
-                          setIsDialogOpen(false);
-                          setFormData({ name: '', description: '', price: '', discount_price: '', affiliate_url: '', image_url: '', category_id: '', coupon_id: '', platform: 'shopee' });
-                        } catch (error) {
-                          toast({ title: "Erro!", description: "Erro ao agendar produto.", variant: "destructive" });
-                        } finally {
-                          setProcessingActions(prev => ({ ...prev, scheduling: false }));
-                        }
-                      }}
-                    >
-                      {processingActions.scheduling ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Agendando...</>
-                      ) : (
-                        <><Calendar className="mr-2 h-4 w-4" />Criar + IA Agendar</>
-                      )}
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-700"
+                        disabled={processingActions.submitting || processingActions.scheduling || processingActions.saving || !formData.name || !formData.price}
+                        onClick={handleSaveOnly}
+                      >
+                        {processingActions.saving ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</>
+                        ) : (
+                          <>💾 Salvar</>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="bg-purple-600 hover:bg-purple-700"
+                        disabled={processingActions.submitting || processingActions.scheduling || processingActions.saving || !formData.name || !formData.price}
+                        onClick={async () => {
+                          setProcessingActions(prev => ({ ...prev, scheduling: true }));
+                          try {
+                            const parsePrice = (priceStr) => {
+                              if (!priceStr && priceStr !== 0) return null;
+                              if (typeof priceStr === 'number') return priceStr;
+                              const normalized = String(priceStr).replace(',', '.');
+                              const cleaned = normalized.replace(/[^\d.]/g, '');
+                              return parseFloat(cleaned) || null;
+                            };
+                            const productData = {
+                              name: formData.name,
+                              image_url: formData.image_url,
+                              platform: formData.platform,
+                              current_price: parsePrice(formData.discount_price) || parsePrice(formData.price),
+                              old_price: formData.discount_price ? parsePrice(formData.price) : null,
+                              category_id: formData.category_id?.trim() || null,
+                              coupon_id: formData.coupon_id?.trim() || null,
+                              affiliate_link: formData.affiliate_url,
+                              stock_available: true,
+                              external_id: `${formData.platform}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                              schedule_mode: true // Ativa modo agendamento com IA
+                            };
+                            const response = await api.post('/products', productData);
+                            await fetchProducts(1);
+                            toast({
+                              title: "Produto Agendado! 📅",
+                              description: response.data?.message || "A IA definiu o melhor horário. Verifique em Agendamentos.",
+                            });
+                            setIsDialogOpen(false);
+                            setFormData({ name: '', description: '', price: '', discount_price: '', affiliate_url: '', image_url: '', category_id: '', coupon_id: '', platform: 'shopee' });
+                          } catch (error) {
+                            toast({ title: "Erro!", description: "Erro ao agendar produto.", variant: "destructive" });
+                          } finally {
+                            setProcessingActions(prev => ({ ...prev, scheduling: false }));
+                          }
+                        }}
+                      >
+                        {processingActions.scheduling ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Agendando...</>
+                        ) : (
+                          <><Calendar className="mr-2 h-4 w-4" />Criar + IA Agendar</>
+                        )}
+                      </Button>
+                    </>
                   )}
                   <Button
                     type="submit"
-                    disabled={processingActions.submitting || processingActions.scheduling}
+                    disabled={processingActions.submitting || processingActions.scheduling || processingActions.saving}
                     className="disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {processingActions.submitting ? (

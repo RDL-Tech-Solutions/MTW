@@ -11,9 +11,19 @@ class ConfidenceValidator {
    */
   validate(extraction) {
     try {
+      // ✅ LOG DETALHADO: Estado da validação
+      logger.info(`🔍 [VALIDAÇÃO IA] Iniciando validação de cupom`);
+      logger.info(`   Código: ${extraction.coupon_code || 'N/A'}`);
+      logger.info(`   Plataforma: ${extraction.platform || 'N/A'}`);
+      logger.info(`   is_valid_coupon: ${extraction.is_valid_coupon}`);
+      logger.info(`   confidence: ${extraction.confidence?.toFixed(2) || 'N/A'}`);
+      logger.info(`   discount: ${extraction.discount || 'N/A'}`);
+
       // Verificar se is_valid_coupon é false
       if (extraction.is_valid_coupon === false) {
-        logger.debug(`❌ Cupom marcado como inválido pela IA`);
+        logger.warn(`❌ [VALIDAÇÃO IA] Cupom marcado como INVÁLIDO pela IA`);
+        logger.warn(`   Código: ${extraction.coupon_code || 'N/A'}`);
+        logger.warn(`   Será REJEITADO e NÃO será salvo`);
         return {
           valid: false,
           reason: 'IA identificou que não é um cupom válido'
@@ -48,7 +58,7 @@ class ConfidenceValidator {
 
       // Validações adicionais
       const code = extraction.coupon_code.trim();
-      
+
       // Código muito curto (menos de 3 caracteres)
       if (code.length < 3) {
         logger.debug(`❌ Código muito curto: ${code}`);
@@ -67,8 +77,12 @@ class ConfidenceValidator {
         };
       }
 
-      logger.debug(`✅ Validação de confiança passou (confidence: ${extraction.confidence.toFixed(2)})`);
-      
+      logger.info(`✅ [VALIDAÇÃO IA] Cupom APROVADO pela validação`);
+      logger.info(`   Código: ${code}`);
+      logger.info(`   Confiança: ${extraction.confidence.toFixed(2)}`);
+      logger.info(`   Plataforma: ${extraction.platform || 'N/A'}`);
+      logger.info(`   Desconto: ${extraction.discount || 'Não especificado'}`);
+
       return {
         valid: true,
         reason: 'Extração validada com sucesso',
@@ -96,7 +110,7 @@ class ConfidenceValidator {
     logger.warn(`   Código extraído: ${extraction.coupon_code || 'N/A'}`);
     logger.warn(`   Confiança: ${extraction.confidence?.toFixed(2) || 'N/A'}`);
     logger.warn(`   Motivo: ${reason}`);
-    
+
     // Aqui poderia salvar em uma tabela de logs para análise futura
     // Por enquanto, apenas logar
   }

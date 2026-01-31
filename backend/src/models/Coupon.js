@@ -89,7 +89,7 @@ class Coupon {
       restrictions: restrictions || '',
       max_uses,
       current_uses: current_uses || 0,
-      is_vip,
+      is_vip: false, // DEPRECATED: VIP feature removed, always false
       is_exclusive: is_exclusive || false,
       is_pending_approval: is_pending_approval !== undefined ? is_pending_approval : false,
       is_out_of_stock: is_out_of_stock !== undefined ? is_out_of_stock : false,
@@ -290,13 +290,15 @@ class Coupon {
       .from('coupons')
       .select('*', { count: 'exact' })
       .eq('is_active', true)
+      .eq('is_pending_approval', false) // NOVO: Excluir cupons pendentes de aprovação
       .eq('is_out_of_stock', false) // Excluir cupons esgotados
       .lte('valid_from', now)
       .or(`valid_until.is.null,valid_until.gte.${now}`); // Permitir NULL ou data futura
 
     // Aplicar filtros
     if (platform) query = query.eq('platform', platform);
-    if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
+    // DEPRECATED: is_vip filter removed - all coupons available to everyone
+    // if (is_vip !== undefined) query = query.eq('is_vip', is_vip);
     if (search) {
       query = query.or(`code.ilike.%${search}%,description.ilike.%${search}%`);
     }
@@ -597,9 +599,10 @@ class Coupon {
     return await this.findActive({ platform, page, limit });
   }
 
-  // Buscar cupons VIP
+  // DEPRECATED: VIP feature removed - returns all active coupons
   static async findVIP(page = 1, limit = 20) {
-    return await this.findActive({ is_vip: true, page, limit });
+    // Returns all coupons (VIP distinction removed)
+    return await this.findActive({ page, limit });
   }
 
   // Buscar cupons aplicáveis a um produto

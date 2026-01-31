@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
+import {
+  View,
   Text,
-  FlatList, 
-  StyleSheet, 
+  FlatList,
+  StyleSheet,
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
@@ -13,15 +13,19 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../stores/productStore';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../theme/theme';
 import ProductCard from '../../components/common/ProductCard';
 import SearchBar from '../../components/common/SearchBar';
 import EmptyState from '../../components/common/EmptyState';
+import GradientHeader from '../../components/common/GradientHeader';
+import StatCard from '../../components/common/StatCard';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
 
 export default function HomeScreen({ navigation }) {
   const { products, fetchProducts, addFavorite, removeFavorite, isFavorite, registerClick } = useProductStore();
   const { preferences } = useNotificationStore();
+  const { user } = useAuthStore();
   const { colors } = useThemeStore();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,7 +45,6 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    // Resetar paginação quando filtros mudarem
     const timer = setTimeout(() => {
       loadProducts(true);
     }, 500);
@@ -71,7 +74,7 @@ export default function HomeScreen({ navigation }) {
       }
 
       const result = await fetchProducts(filters);
-      
+
       if (result.success) {
         if (reset) {
           setPagination({
@@ -123,51 +126,49 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate(SCREEN_NAMES.PRODUCT_DETAILS, { product });
   };
 
-  // Aplicar apenas filtros locais (preferências do usuário)
-  // Os filtros de busca e plataforma já são aplicados no backend via loadProducts
+  // Aplicar filtros locais (preferências do usuário)
   const filteredProducts = products.filter(p => {
-    // Filtros das preferências do usuário (aplicados localmente)
     const homeFilters = preferences?.home_filters || {};
-    
-    // Filtro de plataformas (preferências)
-    const matchesPlatformFilter = !homeFilters.platforms || homeFilters.platforms.length === 0 || 
+
+    const matchesPlatformFilter = !homeFilters.platforms || homeFilters.platforms.length === 0 ||
       homeFilters.platforms.includes(p.platform);
-    
-    // Filtro de categorias
-    const matchesCategory = !homeFilters.categories || homeFilters.categories.length === 0 || 
+
+    const matchesCategory = !homeFilters.categories || homeFilters.categories.length === 0 ||
       (p.category_id && homeFilters.categories.includes(p.category_id));
-    
-    // Filtro de desconto mínimo
-    const discount = p.discount_percentage || 
+
+    const discount = p.discount_percentage ||
       (p.old_price ? Math.round(((p.old_price - p.current_price) / p.old_price) * 100) : 0);
     const matchesMinDiscount = !homeFilters.min_discount || discount >= homeFilters.min_discount;
-    
-    // Filtro de preço máximo
+
     const matchesMaxPrice = !homeFilters.max_price || p.current_price <= homeFilters.max_price;
-    
-    // Filtro de apenas com cupom
+
     const matchesCoupon = !homeFilters.only_with_coupon || !!p.coupon_id;
-    
+
     return matchesPlatformFilter && matchesCategory && matchesMinDiscount && matchesMaxPrice && matchesCoupon;
   });
 
+  // Calcular estatísticas
+  const totalProducts = filteredProducts.length;
+  const productsWithCoupons = filteredProducts.filter(p => p.coupon_id).length;
+  const highDiscountProducts = filteredProducts.filter(p => {
+    const discount = p.discount_percentage ||
+      (p.old_price ? Math.round(((p.old_price - p.current_price) / p.old_price) * 100) : 0);
+    return discount >= 30;
+  }).length;
+
   const styles = dynamicStyles(colors);
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerTop}>
-        <View style={styles.greetingContainer}>
-          <Text style={styles.greeting}>Olá! 👋</Text>
-          <Text style={styles.subtitle}>Encontre as melhores ofertas</Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.notificationButton}
-          onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
-        >
-          <Ionicons name="notifications-outline" size={24} color={colors.text} />
-        </TouchableOpacity>
-      </View>
+  // Função para obter saudação baseada na hora
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+  };
 
+  const renderListHeader = () => (
+    <View style={styles.listHeaderContent}>
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <SearchBar
           value={searchQuery}
@@ -176,7 +177,7 @@ export default function HomeScreen({ navigation }) {
         />
       </View>
 
-      {/* Filtro por Plataforma */}
+      {/* Platform Filters */}
       <View style={styles.platformFilterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.platformFilterScroll}>
           <TouchableOpacity
@@ -201,28 +202,37 @@ export default function HomeScreen({ navigation }) {
         </ScrollView>
       </View>
 
+      {/* Stats Cards */}
       <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="cube-outline" size={24} color={colors.primary} />
+        <StatCard
+          icon="cube-outline"
+          iconColor={colors.iconColors.products}
+          value={totalProducts}
+          label="Produtos"
+        />
+        <StatCard
+          icon="flame"
+          iconColor={colors.error}
+          value={highDiscountProducts}
+          label="Descontos"
+        />
+        <StatCard
+          icon="ticket-outline"
+          iconColor={colors.success}
+          value={productsWithCoupons}
+          label="Cupons"
+        />
+      </View>
+
+      {/* Section Title */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Ofertas Disponíveis</Text>
+        <TouchableOpacity onPress={() => navigation.navigate(SCREEN_NAMES.HOME_FILTERS)}>
+          <View style={styles.filterButton}>
+            <Ionicons name="options-outline" size={18} color={colors.primary} />
+            <Text style={styles.filterButtonText}>Filtros</Text>
           </View>
-          <Text style={styles.statNumber}>{products.length}</Text>
-          <Text style={styles.statLabel}>Produtos</Text>
-        </View>
-        <View style={styles.statCard}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="flame" size={24} color={colors.error} />
-          </View>
-          <Text style={styles.statNumber}>🔥</Text>
-          <Text style={styles.statLabel}>Em Destaque</Text>
-        </View>
-        <View style={styles.statCard}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="ticket-outline" size={24} color={colors.success} />
-          </View>
-          <Text style={styles.statNumber}>+50</Text>
-          <Text style={styles.statLabel}>Cupons</Text>
-        </View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -237,9 +247,32 @@ export default function HomeScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Carregando produtos...</Text>
+      <View style={styles.container}>
+        {/* Header mesmo durante loading */}
+        <GradientHeader
+          title={`${getGreeting()}!`}
+          subtitle="Encontre as melhores ofertas"
+          gradientColors={colors.gradients.primary}
+          leftComponent={
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            </View>
+          }
+          rightComponent={
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          }
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Carregando produtos...</Text>
+        </View>
       </View>
     );
   }
@@ -256,25 +289,50 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Fixed Gradient Header */}
+      <GradientHeader
+        title={`${getGreeting()}!`}
+        subtitle="Encontre as melhores ofertas"
+        gradientColors={colors.gradients.primary}
+        leftComponent={
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
+            </Text>
+          </View>
+        }
+        rightComponent={
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => navigation.navigate(SCREEN_NAMES.SETTINGS)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Products List */}
       <FlatList
         data={filteredProducts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <ProductCard
             product={item}
             onPress={() => handleProductPress(item)}
             onFavoritePress={() => handleFavorite(item.id)}
             isFavorite={isFavorite(item.id)}
+            index={index}
           />
         )}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={renderListHeader}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
           />
@@ -297,39 +355,48 @@ const dynamicStyles = (colors) => StyleSheet.create({
     padding: 16,
     paddingBottom: 24,
   },
-  header: {
+  listHeaderContent: {
     marginBottom: 20,
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  greetingContainer: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: colors.textMuted,
-  },
-  notificationButton: {
+  avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+    } : {
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+    }),
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
     } : {
       elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
     }),
   },
   searchContainer: {
@@ -350,9 +417,9 @@ const dynamicStyles = (colors) => StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)',
     } : {
-      elevation: 1,
+      elevation: 2,
     }),
   },
   platformFilterActive: {
@@ -371,34 +438,32 @@ const dynamicStyles = (colors) => StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 24,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-    } : {
-      elevation: 2,
-    }),
+    marginBottom: 16,
   },
-  statIconContainer: {
-    marginBottom: 8,
-  },
-  statNumber: {
-    fontSize: 22,
+  sectionTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    color: colors.primary,
-    marginBottom: 4,
+    color: colors.text,
   },
-  statLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontWeight: '500',
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.primary + '15',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   loadingContainer: {
     flex: 1,

@@ -160,9 +160,10 @@ class TelegramListenerService {
       if (couponData.code && couponData.channel_origin) {
         try {
           // Buscar cupons com o mesmo código em outros canais do Telegram
+          // ✅ CORREÇÃO: Buscar TODOS os cupons (não apenas pendentes) para contar canais corretamente
           const existingCoupons = await Coupon.findAllByCode(couponData.code, {
             onlyFromTelegram: true,
-            onlyPending: true // Apenas cupons pendentes (ainda não aprovados)
+            onlyPending: false // ✅ FIXADO: Incluir cupons aprovados para contagem precisa de canais
           });
 
           // Contar canais únicos
@@ -203,11 +204,42 @@ class TelegramListenerService {
       // Atualizar confidence_score com o boost
       couponData.confidence_score = confidenceScore;
 
+      // ✅ VALIDAÇÃO EXTRA: Verificar se cupom tem dados mínimos válidos
+      if (!couponData.code || couponData.code.length < 3) {
+        logger.warn(`❌ [VALIDAÇÃO] Cupom inválido: código muito curto ou vazio ("${couponData.code}")`);
+        return null;
+      }
+
+      if (!couponData.platform || couponData.platform === 'unknown' || couponData.platform.trim() === '') {
+        logger.warn(`⚠️ [VALIDAÇÃO] Cupom com plataforma desconhecida: ${couponData.platform}`);
+        logger.warn(`   Código: ${couponData.code}`);
+        logger.warn(`   Forçando revisão manual (is_pending_approval = true)`);
+        couponData.is_pending_approval = true; // Forçar revisão manual se plataforma não identificada
+        couponData.ai_decision_reason = `Plataforma desconhecida. Requer revisão manual.`;
+      }
+
+      // Verificar se discount_value é válido
+      if (couponData.discount_value && (isNaN(couponData.discount_value) || couponData.discount_value <= 0)) {
+        logger.warn(`⚠️ [VALIDAÇÃO] Cupom com desconto inválido: ${couponData.discount_value}`);
+        logger.warn(`   Código: ${couponData.code} - Desconto será definido como null`);
+        couponData.discount_value = null;
+      }
+
+      // Verificar validade do cupom (se is_valid_coupon for explicitamente false, rejeitar)
+      if (couponData.is_valid_coupon === false) {
+        logger.warn(`❌ [VALIDAÇÃO] Cupom marcado como INVÁLIDO pela IA`);
+        logger.warn(`   Código: ${couponData.code}`);
+        logger.warn(`   Motivo: ${couponData.ai_decision_reason || 'Não especificado'}`);
+        logger.warn(`   Cupom será REJEITADO (não salvo)`);
+        return null;
+      }
+
+
       // Obter configurações de IA para determinar threshold de publicação automática
       const AppSettings = (await import('../../models/AppSettings.js')).default;
       const settings = await AppSettings.get();
-      const confidenceThreshold = settings.ai_auto_publish_confidence_threshold || 0.90;
-      const aiAutoPublishEnabled = settings.ai_enable_auto_publish !== false; // Default true
+      const confidenceThreshold = settings.ai_auto_publish_confidence_threshold ?? 0.90;
+      const aiAutoPublishEnabled = settings.ai_enable_auto_publish ?? true; // Default true explícito
 
       // CORREÇÃO: Determinar se deve publicar automaticamente baseado em:
       // 1. confidence_score >= threshold OU
@@ -247,7 +279,6 @@ class TelegramListenerService {
       logger.info(`   Status: ${shouldAutoPublish ? 'Aprovado automaticamente' : 'Pendente de revisão'}`);
       logger.debug(`   Motivo: ${couponData.ai_decision_reason}`);
 
-      logger.info(`💾 Salvando cupom capturado: ${couponData.code} (${couponData.platform})`);
       logger.debug(`   Dados: ${JSON.stringify({
         code: couponData.code,
         platform: couponData.platform,

@@ -211,7 +211,8 @@ class Product {
     let query = supabase
       .from('products_full')
       .select('*', { count: 'exact' })
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .in('status', ['approved', 'created', 'published']); // Filtrar apenas produtos que devem aparecer no app
 
     // Aplicar filtros
     if (category) query = query.eq('category_id', category);
@@ -398,6 +399,7 @@ class Product {
       .from('products_full')
       .select('*')
       .eq('is_active', true)
+      .in('status', ['approved', 'created', 'published']) // Apenas produtos que devem aparecer
       .eq('stock_available', true)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -414,6 +416,7 @@ class Product {
       .from('products_full')
       .select('*', { count: 'exact' })
       .eq('is_active', true)
+      .in('status', ['approved', 'created', 'published']) // Apenas produtos que devem aparecer
       .eq('stock_available', true)
       .not('coupon_id', 'is', null)
       .order('created_at', { ascending: false })
@@ -439,6 +442,7 @@ class Product {
       .select('*')
       .eq('category_id', product.category_id)
       .eq('is_active', true)
+      .in('status', ['approved', 'created', 'published']) // Apenas produtos que devem aparecer
       .eq('stock_available', true)
       .neq('id', productId)
       .limit(limit);

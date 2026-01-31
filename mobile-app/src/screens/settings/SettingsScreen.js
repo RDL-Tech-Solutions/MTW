@@ -1,251 +1,257 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Switch,
-  TouchableOpacity,
-  Alert,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore } from '../../stores/notificationStore';
 import { useThemeStore } from '../../theme/theme';
+import GradientHeader from '../../components/common/GradientHeader';
+import MenuCard from '../../components/common/MenuCard';
 import { SCREEN_NAMES } from '../../utils/constants';
 
 export default function SettingsScreen({ navigation }) {
-  const { user, logout } = useAuthStore();
-  const { isDark, toggleTheme, colors } = useThemeStore();
+  const { preferences, updatePreferences } = useNotificationStore();
+  const { colors, isDark, toggleTheme } = useThemeStore();
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Sair',
-      'Tem certeza que deseja sair?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ]
-    );
+  const handleToggle = async (key) => {
+    try {
+      await updatePreferences({ [key]: !preferences[key] });
+    } catch (error) {
+      console.error('Erro ao atualizar preferência:', error);
+      Alert.alert('Erro', 'Não foi possível atualizar a preferência');
+    }
   };
 
-  const MenuItem = ({ icon, title, subtitle, onPress, rightComponent, showArrow = true }) => (
-    <TouchableOpacity
-      style={[styles.menuItem, { backgroundColor: colors.card }]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.menuItemLeft}>
-        <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-          <Ionicons name={icon} size={24} color={colors.primary} />
-        </View>
-        <View style={styles.menuItemText}>
-          <Text style={[styles.menuItemTitle, { color: colors.text }]}>{title}</Text>
-          {subtitle && <Text style={[styles.menuItemSubtitle, { color: colors.textMuted }]}>{subtitle}</Text>}
-        </View>
-      </View>
-      {rightComponent || (showArrow && <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />)}
-    </TouchableOpacity>
+  const dynamicStyles = createStyles(colors);
+
+  const SettingToggle = ({ icon, iconColor, title, subtitle, value, onToggle }) => (
+    <MenuCard
+      icon={icon}
+      iconColor={iconColor}
+      title={title}
+      subtitle={subtitle}
+      rightComponent={
+        <Switch
+          value={value}
+          onValueChange={onToggle}
+          trackColor={{ false: colors.border, true: colors.primary + '60' }}
+          thumbColor={value ? colors.primary : colors.textMuted}
+          ios_backgroundColor={colors.border}
+        />
+      }
+      showArrow={false}
+      onPress={onToggle}
+    />
   );
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
-      {/* Notificações */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificações</Text>
-        <MenuItem
-          icon="notifications-outline"
-          title="Configurar Notificações"
-          subtitle="Categorias, palavras-chave e produtos"
-          onPress={() => navigation.navigate(SCREEN_NAMES.NOTIFICATION_SETTINGS)}
-        />
-      </View>
+    <View style={dynamicStyles.container}>
+      {/* Gradient Header */}
+      <GradientHeader
+        title="Configurações"
+        subtitle="Personalize sua experiência"
+        gradientColors={colors.gradients.purple}
+        showBackButton
+        onBackPress={() => navigation.goBack()}
+      />
 
-      {/* Aparência */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Aparência</Text>
-        <View style={[styles.menuItem, { backgroundColor: colors.card }]}>
-          <View style={styles.menuItemLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-              <Ionicons name={isDark ? "moon" : "moon-outline"} size={24} color={colors.primary} />
-            </View>
-            <View style={styles.menuItemText}>
-              <Text style={[styles.menuItemTitle, { color: colors.text }]}>Modo Escuro</Text>
-              <Text style={[styles.menuItemSubtitle, { color: colors.textMuted }]}>
-                {isDark ? 'Ativado' : 'Desativado'}
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={isDark}
-            onValueChange={toggleTheme}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.white}
+      <ScrollView
+        style={dynamicStyles.content}
+        contentContainerStyle={dynamicStyles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Notificações Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>NOTIFICAÇÕES</Text>
+
+          <SettingToggle
+            icon="notifications"
+            iconColor={colors.iconColors.notifications}
+            title="Notificações Push"
+            subtitle="Receber alertas de novas ofertas"
+            value={preferences?.enable_push || false}
+            onToggle={() => handleToggle('enable_push')}
+          />
+
+          <SettingToggle
+            icon="mail"
+            iconColor={colors.info}
+            title="E-mail"
+            subtitle="Receber ofertas por e-mail"
+            value={preferences?.enable_email || false}
+            onToggle={() => handleToggle('enable_email')}
+          />
+
+          <MenuCard
+            icon="filter"
+            iconColor={colors.iconColors.notifications}
+            title="Configurações de Notificação"
+            subtitle="Filtros e preferências detalhadas"
+            onPress={() => navigation.navigate(SCREEN_NAMES.NOTIFICATION_SETTINGS)}
           />
         </View>
-      </View>
 
-      {/* Produtos */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Produtos</Text>
-        <MenuItem
-          icon="filter-outline"
-          title="Filtros da Tela Inicial"
-          subtitle="Escolha quais produtos aparecer"
-          onPress={() => navigation.navigate(SCREEN_NAMES.HOME_FILTERS)}
-        />
-      </View>
+        {/* Aparência Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>APARÊNCIA</Text>
 
-      {/* Conta */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Conta</Text>
-        <MenuItem
-          icon="person-outline"
-          title="Editar Perfil"
-          subtitle="Nome, email e senha"
-          onPress={() => navigation.navigate(SCREEN_NAMES.EDIT_PROFILE)}
-        />
-        {!user?.is_vip && (
-          <MenuItem
-            icon="star-outline"
-            title="Tornar-se VIP"
-            subtitle="Acesso a ofertas exclusivas"
-            onPress={() => navigation.navigate(SCREEN_NAMES.VIP_UPGRADE)}
+          <SettingToggle
+            icon="moon"
+            iconColor={colors.iconColors.appearance}
+            title="Modo Escuro"
+            subtitle="Alterar tema do aplicativo"
+            value={isDark}
+            onToggle={toggleTheme}
           />
-        )}
-        {user?.is_vip && (
-          <View style={[styles.vipBadge, { backgroundColor: '#FFD70015' }]}>
-            <Ionicons name="star" size={20} color="#FFD700" />
-            <Text style={styles.vipText}>Você é VIP!</Text>
+        </View>
+
+        {/* Produtos Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>PRODUTOS</Text>
+
+          <MenuCard
+            icon="filter-outline"
+            iconColor={colors.iconColors.products}
+            title="Filtros da Home"
+            subtitle="Personalizar produtos exibidos"
+            onPress={() => navigation.navigate(SCREEN_NAMES.HOME_FILTERS)}
+          />
+
+          <SettingToggle
+            icon="pricetag"
+            iconColor={colors.warning}
+            title="Apenas com Desconto"
+            subtitle="Mostrar só produtos em promoção"
+            value={preferences?.home_filters?.min_discount > 0 || false}
+            onToggle={() => {
+              const currentMin = preferences?.home_filters?.min_discount || 0;
+              updatePreferences({
+                home_filters: {
+                  ...preferences?.home_filters,
+                  min_discount: currentMin > 0 ? 0 : 10
+                }
+              });
+            }}
+          />
+        </View>
+
+        {/* Conta Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>CONTA</Text>
+
+          <MenuCard
+            icon="person-circle"
+            iconColor={colors.iconColors.account}
+            title="Perfil"
+            subtitle="Ver e editar perfil"
+            onPress={() => navigation.navigate(SCREEN_NAMES.PROFILE)}
+          />
+
+          <MenuCard
+            icon="shield-checkmark"
+            iconColor={colors.success}
+            title="Privacidade"
+            subtitle="Configurações de privacidade"
+            onPress={() => {
+              Alert.alert('Em Breve', 'Configurações de privacidade em desenvolvimento');
+            }}
+          />
+        </View>
+
+        {/* Sobre Section */}
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>SOBRE</Text>
+
+          <MenuCard
+            icon="information-circle"
+            iconColor={colors.iconColors.about}
+            title="Sobre o App"
+            subtitle="Versão e informações"
+            onPress={() => navigation.navigate(SCREEN_NAMES.ABOUT)}
+          />
+
+          <MenuCard
+            icon="document-text"
+            iconColor={colors.textMuted}
+            title="Termos de Uso"
+            subtitle="Política de privacidade"
+            onPress={() => {
+              Alert.alert('Em Breve', 'Termos de uso em desenvolvimento');
+            }}
+          />
+        </View>
+
+        {/* Footer Info */}
+        <View style={dynamicStyles.footer}>
+          <View style={[dynamicStyles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="shield-checkmark" size={32} color={colors.success} />
+            <Text style={[dynamicStyles.infoTitle, { color: colors.text }]}>
+              Seus dados estão seguros
+            </Text>
+            <Text style={[dynamicStyles.infoText, { color: colors.textMuted }]}>
+              Utilizamos criptografia de ponta a ponta para proteger suas informações
+            </Text>
           </View>
-        )}
-      </View>
-
-      {/* Sobre */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Sobre</Text>
-        <MenuItem
-          icon="information-circle-outline"
-          title="Sobre o App"
-          subtitle="Versão, termos e privacidade"
-          onPress={() => navigation.navigate(SCREEN_NAMES.ABOUT)}
-        />
-        <MenuItem
-          icon="help-circle-outline"
-          title="Ajuda e Suporte"
-          subtitle="FAQ e contato"
-          onPress={() => Alert.alert('Suporte', 'Entre em contato: suporte@mtwpromo.com')}
-        />
-      </View>
-
-      {/* Sair */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={[styles.logoutButton, { backgroundColor: colors.card, borderColor: colors.error + '30' }]}
-          onPress={handleLogout}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="log-out-outline" size={24} color={colors.error} />
-          <Text style={[styles.logoutText, { color: colors.error }]}>Sair da Conta</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Versão */}
-      <Text style={[styles.version, { color: colors.textMuted }]}>Versão 1.0.0</Text>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   content: {
+    flex: 1,
+  },
+  contentContainer: {
     padding: 16,
+    paddingBottom: 32,
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 1,
     marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    marginLeft: 4,
   },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-    } : {
-      elevation: 2,
-    }),
+  footer: {
+    marginTop: 24,
+    paddingVertical: 20,
   },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
+  infoCard: {
+    padding: 24,
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  menuItemText: {
-    flex: 1,
-  },
-  menuItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  menuItemSubtitle: {
-    fontSize: 14,
-  },
-  vipBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  vipText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFD700',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
     borderWidth: 1,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    } : {
+      elevation: 3,
+    }),
   },
-  logoutText: {
-    marginLeft: 12,
+  infoTitle: {
     fontSize: 16,
-    fontWeight: '600',
-  },
-  version: {
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 8,
     textAlign: 'center',
-    fontSize: 12,
-    marginTop: 24,
-    marginBottom: 16,
+  },
+  infoText: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
