@@ -120,8 +120,30 @@ class NotificationDispatcher {
         return { success: false, message: 'Nenhum canal ativo' };
       }
 
+      // Buscar configuração global para respeitar flags master de ativação
+      const BotConfig = (await import('../../models/BotConfig.js')).default;
+      const botConfig = await BotConfig.get();
+
+      // Filtrar canais de plataformas desabilitadas globalmente
+      const activeChannels = allChannels.filter(channel => {
+        if (channel.platform === 'telegram' && botConfig.telegram_enabled === false) {
+          logger.debug(`   🚫 Canal Telegram ${channel.id} ignorado (Telegram desabilitado globalmente)`);
+          return false;
+        }
+        if (channel.platform === 'whatsapp' && botConfig.whatsapp_enabled === false) {
+          logger.debug(`   🚫 Canal WhatsApp ${channel.id} ignorado (WhatsApp desabilitado globalmente)`);
+          return false;
+        }
+        return true;
+      });
+
+      if (activeChannels.length === 0) {
+        logger.warn('⚠️ Todos os canais ativos pertencem a plataformas desabilitadas globalmente');
+        return { success: false, message: 'Plataformas desabilitadas' };
+      }
+
       // Filtrar canais usando segmentação inteligente
-      const channels = await this.filterChannelsBySegmentation(allChannels, eventType, data);
+      const channels = await this.filterChannelsBySegmentation(activeChannels, eventType, data);
 
       if (channels.length === 0) {
         logger.info(`⏸️ Nenhum canal passou nos filtros de segmentação`);
@@ -397,25 +419,52 @@ class NotificationDispatcher {
       let result;
 
       // VERIFICAR SE TEM IMAGEM PARA ENVIAR
-      // Aceitar URL (http) ou caminho local verificando apenas se existe valor
-      const hasValidImage = !!data.image_url;
+      // Meta API SÓ ACEITA LINKS PÚBLICOS (http/https)
+      let imageUrl = data.image_url;
+
+      // Normalizar URL protocol-relative (//exemplo.com -> https://exemplo.com)
+      if (typeof imageUrl === 'string' && imageUrl.startsWith('//')) {
+        imageUrl = 'https:' + imageUrl;
+      }
+
+      const isPublicUrl = imageUrl &&
+        typeof imageUrl === 'string' &&
+        (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
+
+      const hasValidImage = !!imageUrl && isPublicUrl;
+
+      if (!isPublicUrl && imageUrl) {
+        logger.warn(`⚠️ [Dispatcher] Imagem ignorada por não ser uma URL pública ou válida: ${imageUrl}`);
+      } else if (hasValidImage) {
+        logger.info(`🖼️ [Dispatcher] Usando imagem: ${imageUrl}`);
+      }
 
       if (channel.platform === 'whatsapp') {
-        if (hasValidImage) {
-          result = await whatsappService.sendImage(channel.identifier, data.image_url, message);
-        } else {
+        try {
+          if (hasValidImage) {
+            result = await whatsappService.sendImage(channel.identifier, imageUrl, message);
+          } else {
+            result = await whatsappService.sendMessage(channel.identifier, message);
+          }
+        } catch (error) {
+          logger.warn(`⚠️ [Dispatcher] Falha ao enviar imagem WhatsApp para ${channel.id}. Tentando fallback para TEXTO... Motivo: ${error.message}`);
+          // FALLBACK DEFINITIVO
           result = await whatsappService.sendMessage(channel.identifier, message);
         }
       } else if (channel.platform === 'telegram') {
         const parseMode = await this.getTelegramParseMode();
-
-        if (hasValidImage) {
-          // Usar sendPhoto do Telegram Service se tiver imagem
-          // Assinatura correta: sendPhoto(chatId, photo, caption, options)
-          result = await telegramService.sendPhoto(channel.identifier, data.image_url, message, {
-            parse_mode: parseMode
-          });
-        } else {
+        try {
+          if (hasValidImage) {
+            result = await telegramService.sendPhoto(channel.identifier, imageUrl, message, {
+              parse_mode: parseMode
+            });
+          } else {
+            result = await telegramService.sendMessage(channel.identifier, message, {
+              parse_mode: parseMode
+            });
+          }
+        } catch (error) {
+          logger.warn(`⚠️ [Dispatcher] Falha ao enviar imagem Telegram para ${channel.id}. Tentando fallback para TEXTO... Motivo: ${error.message}`);
           result = await telegramService.sendMessage(channel.identifier, message, {
             parse_mode: parseMode
           });
@@ -550,8 +599,22 @@ class NotificationDispatcher {
    */
   async sendToTelegramWithImage(message, imagePath, eventType = 'general', data = null, options = {}) {
     try {
+      // Normalizar URL protocol-relative (//exemplo.com -> https://exemplo.com)
+      if (typeof imagePath === 'string' && imagePath.startsWith('//')) {
+        imagePath = 'https:' + imagePath;
+      }
+
       const isBuffer = Buffer.isBuffer(imagePath);
       logger.info(`📤 [NotificationDispatcher] Enviando imagem para Telegram`);
+
+      // Verificar flag global
+      const BotConfig = (await import('../../models/BotConfig.js')).default;
+      const botConfig = await BotConfig.get();
+
+      if (botConfig.telegram_enabled === false) {
+        logger.warn('⚠️ Telegram desabilitado globalmente. Abortando envio de imagem.');
+        return { success: false, reason: 'Telegram desabilitado globalmente' };
+      }
 
       const allChannels = await BotChannel.findActive('telegram');
 
@@ -616,6 +679,19 @@ class NotificationDispatcher {
 
   async sendToWhatsAppWithImage(message, imageUrl, eventType = 'general', data = null, options = {}) {
     try {
+      // Normalizar URL protocol-relative (//exemplo.com -> https://exemplo.com)
+      if (typeof imageUrl === 'string' && imageUrl.startsWith('//')) {
+        imageUrl = 'https:' + imageUrl;
+      }
+      // Verificar flag global
+      const BotConfig = (await import('../../models/BotConfig.js')).default;
+      const botConfig = await BotConfig.get();
+
+      if (botConfig.whatsapp_enabled === false) {
+        logger.warn('⚠️ WhatsApp desabilitado globalmente. Abortando envio de imagem.');
+        return { success: false, reason: 'WhatsApp desabilitado globalmente' };
+      }
+
       const allChannels = await BotChannel.findActive('whatsapp');
       if (!allChannels || allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo' };
 
@@ -633,12 +709,24 @@ class NotificationDispatcher {
         if (isDuplicate) continue;
 
         try {
-          const result = await whatsappService.sendImage(channel.identifier, imageUrl, message);
-          if (result) {
+          // Usar sendMessageWithImage que envia imagem SEM caption + mensagem separada
+          const result = await whatsappService.sendMessageWithImage(channel.identifier, imageUrl, message);
+          if (result && result.success) {
             sent++;
             await this.logSend(channel.id, eventType, data);
+
+            // Registrar sucesso no log de notificação
+            await NotificationLog.create({
+              event_type: eventType,
+              platform: 'whatsapp',
+              channel_id: channel.id,
+              channel_name: channel.name,
+              success: true,
+              message_id: result.messageId,
+              payload: data
+            });
           }
-          results.push({ channelId: channel.id, success: !!result });
+          results.push({ channelId: channel.id, success: !!(result && result.success) });
         } catch (error) {
           results.push({ channelId: channel.id, success: false, error: error.message });
         }
@@ -651,7 +739,61 @@ class NotificationDispatcher {
   }
 
   async sendToWhatsApp(message, data = {}, options = {}) {
-    return { success: false, message: "Use dispatch()" };
+    try {
+      // Verificar flag global
+      const BotConfig = (await import('../../models/BotConfig.js')).default;
+      const botConfig = await BotConfig.get();
+
+      if (botConfig.whatsapp_enabled === false) {
+        logger.warn('⚠️ WhatsApp desabilitado globalmente. Abortando envio de texto.');
+        return { success: false, reason: 'WhatsApp desabilitado globalmente' };
+      }
+
+      const eventType = data.eventType || 'promotion_new';
+      const allChannels = await BotChannel.findActive('whatsapp');
+      if (!allChannels || allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo' };
+
+      const channels = await this.filterChannelsBySegmentation(allChannels, eventType, data);
+      if (channels.length === 0) return { success: false, sent: 0, total: allChannels.length, reason: "Segmentação." };
+
+      let sent = 0;
+      const results = [];
+
+      for (const channel of channels) {
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data, options.bypassDuplicates);
+        if (isDuplicate) {
+          results.push({ channelId: channel.id, success: false, skipped: true, reason: 'Duplicado' });
+          continue;
+        }
+
+        try {
+          const result = await whatsappService.sendMessage(channel.identifier, message);
+          if (result && result.success) {
+            sent++;
+            await this.logSend(channel.id, eventType, data);
+
+            // Registrar no log
+            await NotificationLog.create({
+              event_type: eventType,
+              platform: 'whatsapp',
+              channel_id: channel.id,
+              channel_name: channel.name,
+              success: true,
+              message_id: result.messageId,
+              payload: data
+            });
+          }
+          results.push({ channelId: channel.id, success: !!(result && result.success) });
+        } catch (error) {
+          results.push({ channelId: channel.id, success: false, error: error.message });
+        }
+      }
+
+      return { success: sent > 0, sent, total: channels.length, results };
+    } catch (error) {
+      logger.error(`❌ Erro em sendToWhatsApp: ${error.message}`);
+      return { success: false, error: error.message };
+    }
   }
 }
 

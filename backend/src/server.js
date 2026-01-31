@@ -10,6 +10,7 @@ import { testConnection } from './config/database.js';
 
 import logger from './config/logger.js';
 import routes from './routes/index.js';
+import debugRoutes from './routes/debugRoutes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import { startCronJobs } from './services/cron/index.js';
@@ -146,6 +147,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api', routes);
+app.use('/api/debug', debugRoutes); // Debug endpoints
 
 // Handlers de erro
 app.use(notFoundHandler);

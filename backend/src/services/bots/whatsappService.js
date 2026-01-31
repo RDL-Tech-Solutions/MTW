@@ -2,6 +2,7 @@ import axios from 'axios';
 import logger from '../../config/logger.js';
 import Category from '../../models/Category.js';
 import BotConfig from '../../models/BotConfig.js';
+import imageConverterService from './imageConverterService.js';
 
 class WhatsAppService {
   constructor() {
@@ -21,11 +22,11 @@ class WhatsAppService {
       this.apiUrl = config.whatsapp_api_url;
       this.apiToken = config.whatsapp_api_token;
       this.phoneNumberId = config.whatsapp_phone_number_id;
-      
+
       if (!this.apiUrl || !this.apiToken) {
         throw new Error('WhatsApp API não configurada no banco de dados. Configure no painel admin.');
       }
-      
+
       logger.info(`✅ Configurações do WhatsApp carregadas do banco de dados`);
       return {
         apiUrl: this.apiUrl,
@@ -52,33 +53,142 @@ class WhatsAppService {
    * Enviar imagem para um grupo do WhatsApp
    * @param {string} groupId - ID do grupo
    * @param {string} imageUrl - URL da imagem
-   * @param {string} caption - Legenda da imagem
+   * @param {string} caption - Legenda da imagem (opcional)
    * @returns {Promise<Object>}
    */
   async sendImage(groupId, imageUrl, caption = '') {
-    try {
-      // Carregar configurações do banco de dados se não estiverem carregadas
-      if (!this.apiUrl || !this.apiToken) {
-        await this.loadConfig();
+    // Normalizar URL protocol-relative (//exemplo.com -> https://exemplo.com)
+    let finalImageUrl = imageUrl;
+    if (typeof finalImageUrl === 'string' && finalImageUrl.startsWith('//')) {
+      finalImageUrl = 'https:' + finalImageUrl;
+    }
+
+    // Preparar payload da imagem
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: groupId,
+      type: 'image',
+      image: {
+        link: finalImageUrl
       }
-      
-      if (!this.apiUrl || !this.apiToken) {
-        throw new Error('WhatsApp API não configurada. Configure no painel admin.');
+    };
+
+    // IMPORTANTE: Só adicionar caption se não estiver vazio
+    // Caption vazio pode causar problemas com a API
+    if (caption && caption.trim().length > 0) {
+      payload.image.caption = caption.substring(0, 1024); // WhatsApp limita caption a 1024 caracteres
+    }
+
+    return await this._sendApiRequest(groupId, payload, 'imagem');
+  }
+
+
+  /**
+   * Enviar mensagem com imagem (imagem primeiro, depois mensagem)
+   * @param {string} groupId - ID do grupo
+   * @param {string} imageUrl - URL da imagem
+   * @param {string} message - Mensagem formatada
+   * @returns {Promise<Object>}
+   */
+  async sendMessageWithImage(groupId, imageUrl, message) {
+    try {
+      // ESTRATÉGIA: Converter imagem WebP para JPEG via proxy
+      logger.info(`📸 Preparando envio de imagem para WhatsApp`);
+      logger.info(`   URL original: ${imageUrl.substring(0, 80)}...`);
+
+      // Verificar se precisa converter a imagem
+      let finalImageUrl = imageUrl;
+
+      if (imageConverterService.needsConversion(imageUrl)) {
+        logger.info(`🔄 Imagem precisa de conversão (WebP ou formato não suportado)`);
+
+        try {
+          // Gerar URL do proxy de conversão
+          const baseUrl = process.env.API_URL || 'http://localhost:3000';
+          const proxyUrl = `${baseUrl}/api/images/convert?url=${encodeURIComponent(imageUrl)}`;
+
+          logger.info(`✅ URL do proxy gerada: ${proxyUrl.substring(0, 80)}...`);
+          logger.info(`   A imagem será convertida para JPEG otimizado em tempo real`);
+
+          finalImageUrl = proxyUrl;
+
+        } catch (conversionError) {
+          logger.error(`❌ Erro ao gerar URL do proxy: ${conversionError.message}`);
+          logger.warn(`⚠️  Continuando com URL original...`);
+        }
+      } else {
+        logger.info(`✅ Imagem em formato compatível, sem necessidade de conversão`);
       }
 
-      // Preparar payload da imagem
-      const payload = {
-        messaging_product: 'whatsapp',
-        to: groupId,
-        type: 'image',
-        image: {
-          link: imageUrl
+      // 1. Enviar apenas a imagem (sem caption)
+      logger.info(`📸 Enviando imagem SEM caption para grupo ${groupId}`);
+      const imageResult = await this.sendImage(groupId, finalImageUrl, '');
+
+      logger.info(`✅ Imagem enviada. Aguardando 500ms antes de enviar mensagem...`);
+
+      // 2. Aguardar um pouco para garantir que a imagem seja processada
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. Enviar a mensagem separadamente
+      logger.info(`📤 Enviando mensagem de texto separada...`);
+      const messageResult = await this.sendMessage(groupId, message);
+
+      logger.info(`✅ Imagem + Mensagem enviadas com sucesso para grupo ${groupId}`);
+
+      return {
+        success: true,
+        imageMessageId: imageResult.messageId,
+        textMessageId: messageResult.messageId,
+        data: {
+          image: imageResult.data,
+          text: messageResult.data
         }
       };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar mensagem com imagem: ${error.message}`);
+      // Fallback: tentar enviar apenas mensagem
+      try {
+        logger.warn(`⚠️ Tentando fallback: enviar apenas mensagem sem imagem`);
+        return await this.sendMessage(groupId, message);
+      } catch (fallbackError) {
+        logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
+        throw error;
+      }
+    }
+  }
 
-      // Adicionar caption apenas se não estiver vazio
-      if (caption && caption.trim().length > 0) {
-        payload.caption = caption.substring(0, 1024); // WhatsApp limita caption a 1024 caracteres
+
+  /**
+   * Enviar mensagem para um grupo do WhatsApp
+   * @param {string} groupId - ID do grupo
+   * @param {string} message - Mensagem formatada
+   * @returns {Promise<Object>}
+   */
+  async sendMessage(groupId, message) {
+    // Log para debug: verificar quebras de linha
+    const lineBreaks = (message.match(/\n/g) || []).length;
+    logger.debug(`📤 Preparando envio WhatsApp com ${lineBreaks} quebras de linha`);
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: groupId,
+      type: 'text',
+      text: {
+        body: message
+      }
+    };
+
+    return await this._sendApiRequest(groupId, payload, 'texto');
+  }
+
+  /**
+   * Método interno centralizado para chamadas à API da Meta com Lógica de Fallback
+   * @private
+   */
+  async _sendApiRequest(groupId, payload, typeLabel = 'mensagem') {
+    try {
+      if (!this.apiUrl || !this.apiToken) {
+        await this.loadConfig();
       }
 
       const response = await axios.post(
@@ -93,105 +203,82 @@ class WhatsAppService {
         }
       );
 
-      logger.info(`✅ Imagem WhatsApp enviada para grupo ${groupId}`);
+      logger.info(`✅ WhatsApp (${typeLabel}) enviado para ${groupId}`);
+      logger.info(`   📋 Payload enviado: ${JSON.stringify(payload, null, 2)}`);
+      logger.info(`   📨 Resposta da API: ${JSON.stringify(response.data, null, 2)}`);
+      logger.info(`   📬 Message ID: ${response.data.messages?.[0]?.id || 'N/A'}`);
+
       return {
         success: true,
         messageId: response.data.messages?.[0]?.id,
         data: response.data
       };
     } catch (error) {
-      logger.error(`❌ Erro ao enviar imagem WhatsApp: ${error.message}`);
-      throw error;
-    }
-  }
+      const fbError = error.response?.data?.error;
+      const errorCode = fbError?.code;
+      const errorMessage = fbError?.message || error.message;
 
-  /**
-   * Enviar mensagem com imagem (imagem primeiro, depois mensagem)
-   * @param {string} groupId - ID do grupo
-   * @param {string} imageUrl - URL da imagem
-   * @param {string} message - Mensagem formatada
-   * @returns {Promise<Object>}
-   */
-  async sendMessageWithImage(groupId, imageUrl, message) {
-    try {
-      // Remover links da mensagem para evitar preview automático
-      const messageWithoutPreview = message.replace(
-        /(https?:\/\/[^\s]+)/g, 
-        () => '🔗 [Link disponível - consulte a descrição]'
-      );
-      
-      // Enviar imagem COM a mensagem como caption (juntos)
-      logger.info(`📸 Enviando imagem com mensagem como caption para grupo ${groupId}`);
-      logger.info(`   Caption length: ${messageWithoutPreview.length}`);
-      const imageResult = await this.sendImage(groupId, imageUrl, messageWithoutPreview);
+      // ERRO 131055: Janela de 24h fechada
+      if (errorCode === 131055 || errorMessage.includes('outside the allowed window')) {
+        logger.warn(`⚠️ Janela de 24h fechada para ${groupId}. Tentando FALLBACK para Template...`);
 
-      logger.info(`✅ Imagem com mensagem enviada com sucesso para grupo ${groupId}`);
-      return {
-        success: true,
-        imageMessageId: imageResult.messageId,
-        data: imageResult.data
-      };
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagem com imagem: ${error.message}`);
-      // Fallback: tentar enviar apenas mensagem
-      try {
-        return await this.sendMessage(groupId, message);
-      } catch (fallbackError) {
-        logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
-        throw error;
-      }
-    }
-  }
+        try {
+          const fallbackResponse = await axios.post(
+            `${this.apiUrl}/${this.phoneNumberId}/messages`,
+            {
+              messaging_product: 'whatsapp',
+              to: groupId,
+              type: 'template',
+              template: {
+                name: 'hello_world',
+                language: { code: 'en_US' }
+              }
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${this.apiToken}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000
+            }
+          );
 
-  /**
-   * Enviar mensagem para um grupo do WhatsApp
-   * @param {string} groupId - ID do grupo
-   * @param {string} message - Mensagem formatada
-   * @returns {Promise<Object>}
-   */
-  async sendMessage(groupId, message) {
-    try {
-      // Carregar configurações do banco de dados se não estiverem carregadas
-      if (!this.apiUrl || !this.apiToken) {
-        await this.loadConfig();
-      }
-      
-      if (!this.apiUrl || !this.apiToken) {
-        throw new Error('WhatsApp API não configurada. Configure no painel admin.');
-      }
-      
-      // Log para debug: verificar quebras de linha
-      const lineBreaks = (message.match(/\n/g) || []).length;
-      logger.debug(`📤 Enviando mensagem WhatsApp com ${lineBreaks} quebras de linha`);
-      logger.debug(`📤 Primeiros 300 chars da mensagem:\n${message.substring(0, 300).replace(/\n/g, '\\n')}`);
+          logger.info(`✅ FALLBACK SUCESSO: Template enviado para ${groupId} para abrir janela.`);
 
-      const response = await axios.post(
-        `${this.apiUrl}/${this.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: groupId,
-          type: 'text',
-          text: {
-            body: message
-          }
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiToken}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
+          // AGORA: Tentar reenviar a mensagem original (o payload inicial)
+          // AGUARDAR 1.5s para Meta sincronizar o estado da conversa
+          logger.info(`⏳ Aguardando 1.5s antes de re-tentar envio original...`);
+          await new Promise(resolve => setTimeout(resolve, 1500));
+
+          logger.info(`🔄 Re-tentando envio original (${payload.type})...`);
+          const retryResponse = await axios.post(
+            `${this.apiUrl}/${this.phoneNumberId}/messages`,
+            payload,
+            {
+              headers: {
+                'Authorization': `Bearer ${this.apiToken}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 15000
+            }
+          );
+
+          logger.info(`✅ SUCESSO APÓS FALLBACK: Mensagem original (${payload.type}) entregue.`);
+          return {
+            success: true,
+            fallback: true,
+            retried: true,
+            messageId: retryResponse.data.messages?.[0]?.id,
+            data: retryResponse.data
+          };
+        } catch (fallbackError) {
+          const detail = fallbackError.response?.data?.error?.message || fallbackError.message;
+          logger.error(`❌ FALHA NO FALLBACK/RETRY: ${detail}`);
+          throw new Error(`Erro no fluxo de recuperação de janela: ${detail}`);
         }
-      );
+      }
 
-      logger.info(`✅ Mensagem WhatsApp enviada para grupo ${groupId}`);
-      return {
-        success: true,
-        messageId: response.data.messages?.[0]?.id,
-        data: response.data
-      };
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagem WhatsApp: ${error.message}`);
+      logger.error(`❌ Erro API WhatsApp (${typeLabel}): ${errorMessage}`);
       throw error;
     }
   }
@@ -202,12 +289,12 @@ class WhatsAppService {
    * @returns {Promise<string>}
    */
   async formatPromotionMessage(promotion) {
-    const discount = promotion.discount_percentage 
-      ? `${promotion.discount_percentage}% OFF` 
+    const discount = promotion.discount_percentage
+      ? `${promotion.discount_percentage}% OFF`
       : '';
-    
-    const oldPrice = promotion.old_price 
-      ? `De: R$ ${promotion.old_price.toFixed(2)}\n` 
+
+    const oldPrice = promotion.old_price
+      ? `De: R$ ${promotion.old_price.toFixed(2)}\n`
       : '';
 
     // Buscar categoria se não estiver no objeto

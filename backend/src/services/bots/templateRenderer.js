@@ -113,23 +113,25 @@ class TemplateRenderer {
       try {
         const coupon = await Coupon.findById(product.coupon_id);
         if (coupon && coupon.is_active) {
+          const discountVal = Number(coupon.discount_value) || 0;
           if (coupon.discount_type === 'percentage') {
             // Desconto percentual
-            priceWithCoupon = productCurrentPrice - (productCurrentPrice * (coupon.discount_value / 100));
+            priceWithCoupon = productCurrentPrice - (productCurrentPrice * (discountVal / 100));
           } else {
             // Desconto fixo
-            priceWithCoupon = Math.max(0, productCurrentPrice - coupon.discount_value);
+            priceWithCoupon = Math.max(0, productCurrentPrice - discountVal);
           }
 
           // Aplicar limite máximo de desconto se existir
-          if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+          const maxDiscount = Number(coupon.max_discount_value) || 0;
+          if (maxDiscount > 0) {
             const discountAmount = productCurrentPrice - priceWithCoupon;
-            if (discountAmount > coupon.max_discount_value) {
-              priceWithCoupon = productCurrentPrice - coupon.max_discount_value;
+            if (discountAmount > maxDiscount) {
+              priceWithCoupon = productCurrentPrice - maxDiscount;
             }
           }
 
-          logger.debug(`💰 Preço atual: R$ ${productCurrentPrice} → Preço com cupom: R$ ${priceWithCoupon.toFixed(2)}`);
+          logger.debug(`💰 Preço atual: R$ ${productCurrentPrice} → Preço com cupom: R$ ${priceWithCoupon?.toFixed?.(2) || 'N/A'}`);
         }
       } catch (error) {
         logger.warn(`Erro ao calcular preço com cupom: ${error.message}`);
@@ -228,10 +230,10 @@ class TemplateRenderer {
       try {
         coupon = await Coupon.findById(product.coupon_id);
         if (coupon && coupon.is_active) {
-          couponCode = coupon.code || '';
+          const discountVal = Number(coupon.discount_value) || 0;
           const discountText = coupon.discount_type === 'percentage'
-            ? `${coupon.discount_value}% OFF`
-            : `R$ ${coupon.discount_value.toFixed(2)} OFF`;
+            ? `${discountVal}% OFF`
+            : `R$ ${discountVal.toFixed(2)} OFF`;
           couponDiscount = discountText;
         }
       } catch (error) {
@@ -276,9 +278,10 @@ class TemplateRenderer {
    * @returns {Object}
    */
   prepareCouponVariables(coupon) {
+    const discountVal = Number(coupon.discount_value) || 0;
     const discountText = coupon.discount_type === 'percentage'
-      ? `${coupon.discount_value}%`
-      : `R$ ${coupon.discount_value.toFixed(2)}`;
+      ? `${discountVal}%`
+      : `R$ ${discountVal.toFixed(2)}`;
 
     const platformName = this.getPlatformName(coupon.platform);
 
@@ -287,13 +290,15 @@ class TemplateRenderer {
 
     // Compra mínima - IMPORTANTE: retornar apenas o valor formatado, sem emoji e texto
     // A IA vai adicionar o emoji e texto "Compra mínima:" no template
-    const minPurchase = coupon.min_purchase > 0
-      ? `R$ ${coupon.min_purchase.toFixed(2)}`
+    const minPurchaseVal = Number(coupon.min_purchase) || 0;
+    const minPurchase = minPurchaseVal > 0
+      ? `R$ ${minPurchaseVal.toFixed(2)}`
       : '';
 
     // Limite máximo de desconto
-    const maxDiscount = coupon.max_discount_value > 0
-      ? `💰 **Limite de desconto:** R$ ${coupon.max_discount_value.toFixed(2)}\n`
+    const maxDiscVal = Number(coupon.max_discount_value) || 0;
+    const maxDiscount = maxDiscVal > 0
+      ? `💰 **Limite de desconto:** R$ ${maxDiscVal.toFixed(2)}\n`
       : '';
 
     // Limite de usos (não incluir para cupons do Telegram)
@@ -391,12 +396,12 @@ class TemplateRenderer {
   }
 
   /**
-* Garantir que HTML está válido para Telegram
-* Escapa apenas caracteres especiais no conteúdo, mantendo tags HTML intactas
-* IMPORTANTE: Preservar o template exatamente como configurado, apenas fazer escape mínimo necessário
-* @param {string} message - Mensagem com HTML
-* @returns {string}
-*/
+  * Garantir que HTML está válido para Telegram
+  * Escapa apenas caracteres especiais no conteúdo, mantendo tags HTML intactas
+  * IMPORTANTE: Preservar o template exatamente como configurado, apenas fazer escape mínimo necessário
+  * @param {string} message - Mensagem com HTML
+  * @returns {string}
+  */
   ensureValidHtml(message) {
     if (!message) return '';
 

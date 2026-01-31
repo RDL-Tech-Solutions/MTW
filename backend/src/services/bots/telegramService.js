@@ -123,6 +123,10 @@ class TelegramService {
    */
   async sendPhoto(chatId, photo, caption = '', options = {}) {
     try {
+      // Normalizar URL protocol-relative
+      if (typeof photo === 'string' && photo.startsWith('//')) {
+        photo = 'https:' + photo;
+      }
       logger.info(`📷 [sendPhoto] Iniciando envio de foto`);
       logger.info(`   chatId: ${chatId}`);
       logger.info(`   photo type: ${typeof photo}`);

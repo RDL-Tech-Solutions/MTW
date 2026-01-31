@@ -39,24 +39,36 @@ class SchedulerService {
                 logger.info(`📂 Agendamento com categoria manual protegida: ${options.manualCategoryId}`);
             }
 
-            // Criar agendamento para Telegram
-            await ScheduledPost.create({
-                product_id: product.id,
-                platform: 'telegram',
-                scheduled_at: scheduledTime.toISOString(),
-                metadata: Object.keys(metadata).length > 0 ? metadata : null
-            });
+            // Buscar configuração global para respeitar flags master de ativação
+            const BotConfig = (await import('../../models/BotConfig.js')).default;
+            const botConfig = await BotConfig.get();
 
-            // Criar agendamento para WhatsApp (+2~5 min de diferença para parecer natural)
-            const whatsappTime = new Date(scheduledTime);
-            whatsappTime.setMinutes(whatsappTime.getMinutes() + Math.floor(Math.random() * 4) + 2);
+            // Criar agendamento para Telegram (apenas se habilitado globalmente)
+            if (botConfig.telegram_enabled !== false) {
+                await ScheduledPost.create({
+                    product_id: product.id,
+                    platform: 'telegram',
+                    scheduled_at: scheduledTime.toISOString(),
+                    metadata: Object.keys(metadata).length > 0 ? metadata : null
+                });
+            } else {
+                logger.info(`   🚫 Agendamento Telegram pulado (desabilitado globalmente)`);
+            }
 
-            await ScheduledPost.create({
-                product_id: product.id,
-                platform: 'whatsapp',
-                scheduled_at: whatsappTime.toISOString(),
-                metadata: Object.keys(metadata).length > 0 ? metadata : null
-            });
+            // Criar agendamento para WhatsApp (apenas se habilitado globalmente)
+            if (botConfig.whatsapp_enabled !== false) {
+                const whatsappTime = new Date(scheduledTime);
+                whatsappTime.setMinutes(whatsappTime.getMinutes() + Math.floor(Math.random() * 4) + 2);
+
+                await ScheduledPost.create({
+                    product_id: product.id,
+                    platform: 'whatsapp',
+                    scheduled_at: whatsappTime.toISOString(),
+                    metadata: Object.keys(metadata).length > 0 ? metadata : null
+                });
+            } else {
+                logger.info(`   🚫 Agendamento WhatsApp pulado (desabilitado globalmente)`);
+            }
 
             logger.info(`📅 Agendamento [${product.platform}]: ${product.name.substring(0, 30)}...`);
             logger.info(`   ⏰ Horário: ${scheduledTime.toLocaleTimeString()} (${reason})`);
@@ -266,7 +278,7 @@ class SchedulerService {
             const duration = endTime - startTime;
 
             // Atualizar status baseado no resultado
-            if (result) {
+            if (result && result.success) {
                 await ScheduledPost.update(post.id, {
                     status: 'published',
                     attempts: currentAttempt,

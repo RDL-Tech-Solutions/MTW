@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "PreçoCerto",
+    "slug": "precocerto",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#DC2626"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.precocerto.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#DC2626"
+      },
+      "package": "com.precocerto.app",
+      "permissions": [
+        "NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#DC2626"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "apiUrl": "http://192.168.7.9:3000/api",
+      "eas": {
+        "projectId": "967ccc1a-3521-4c83-91a4-851bed949c45"
+      }
+    },
+    "scheme": "precocerto",
+    "owner": "rdltech"
+  }
+}
