@@ -119,17 +119,15 @@ class PublishService {
   }
 
   /**
-   * Enviar para Telegram Bot (com imagem se disponível)
+   * Enviar para Telegram Bot (com imagem se disponível, ou fallback para texto)
    */
   async notifyTelegramBot(product, options = {}) {
     try {
       const message = await this.formatBotMessage(product, 'telegram');
 
       // Log detalhado sobre a imagem
-      logger.info(`📸 Verificando imagem do produto: ${product.name}`);
+      logger.info(`📸 Verificando imagem do produto (Telegram): ${product.name}`);
       logger.info(`   image_url: ${product.image_url || 'NÃO DEFINIDA'}`);
-      logger.info(`   image_url type: ${typeof product.image_url}`);
-      logger.info(`   image_url length: ${product.image_url?.length || 0}`);
 
       // Se tiver imagem válida, enviar com foto
       const hasValidImage = product.image_url &&
@@ -140,51 +138,99 @@ class PublishService {
         !product.image_url.includes('data:image');
 
       logger.info(`   Imagem válida: ${hasValidImage ? 'SIM' : 'NÃO'}`);
-      if (!hasValidImage) {
-        logger.warn(`   Motivo: ${!product.image_url ? 'image_url não existe' :
-          !product.image_url.startsWith('http') ? 'não começa com http' :
-            product.image_url.includes('placeholder') ? 'contém placeholder' :
-              product.image_url.includes('data:image') ? 'é data URI' : 'desconhecido'}`);
-      }
+
+      let sentWithImage = false;
+      let imageReason = null;
 
       if (hasValidImage) {
         try {
-          // IMPORTANTE: Usar imagem do produto diretamente (como estava antes)
-          // A combinação com logo da plataforma pode ser feita opcionalmente no futuro
-          logger.info(`📤 Enviando imagem do produto para Telegram: ${product.image_url.substring(0, 100)}...`);
+          logger.info(`📥 Baixando imagem para processamento: ${product.image_url.substring(0, 100)}...`);
+
+          const axios = (await import('axios')).default;
+          const imageResponse = await axios.get(product.image_url, {
+            responseType: 'arraybuffer',
+            timeout: 20000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
+          });
+
+          let imageBuffer = Buffer.from(imageResponse.data);
+          logger.info(`   ✅ Imagem baixada. Tamanho: ${imageBuffer.length} bytes`);
+
+          // Tentar converter para JPEG usando Sharp para garantir compatibilidade
+          try {
+            // Importação dinâmica segura
+            const sharpModule = await import('sharp');
+            const sharp = sharpModule.default || sharpModule; // Lidar com ESM/CJS
+
+            imageBuffer = await sharp(imageBuffer)
+              .toFormat('jpeg', { quality: 90 })
+              .toBuffer();
+
+            logger.info(`   ✅ Imagem convertida para JPEG com Sharp. Novo tamanho: ${imageBuffer.length}`);
+          } catch (sharpError) {
+            logger.warn(`   ⚠️ Sharp indisponível ou erro na conversão. Usando buffer original. Erro: ${sharpError.message}`);
+            // Segue com buffer original (pode ser WebP, que o Telegram aceita via InputFile na maioria das vezes, ou não)
+          }
+
+          logger.info(`📤 Enviando buffer de imagem para Telegram...`);
           logger.info(`   Publicação manual: ${!!options.manual} (bypassDuplicates: ${!!options.manual})`);
+
+          // Passar BUFFER no lugar da URL
           const result = await notificationDispatcher.sendToTelegramWithImage(
             message,
-            product.image_url,
+            imageBuffer, // <--- BUFFER AQUI
             'promotion_new',
             product, // Passar dados do produto para segmentação
             { bypassDuplicates: !!options.manual }
           );
 
-          logger.info(`   Resultado: ${JSON.stringify({ success: result?.success, sent: result?.sent, total: result?.total, reason: result?.reason })}`);
-
           if (result && result.success && result.sent > 0) {
             logger.info(`✅ Notificação Telegram com imagem enviada para produto: ${product.name} (${result.sent} canal(is))`);
             return { success: true, sent: result.sent };
           } else {
-            logger.error(`❌ Telegram com imagem: falha no envio. Result: ${JSON.stringify(result)}`);
-            // NÃO fazer fallback - se a imagem falhou, não enviar apenas mensagem
-            return { success: false, reason: result?.reason || 'Falha ao enviar para Telegram' };
+            logger.warn(`⚠️ Telegram com imagem: falha no envio ou nenhum canal aceitou. Reason: ${result?.reason}`);
+            imageReason = result?.reason;
+
+            // Se o motivo for falta de canal, NÃO fazer fallback para texto sem imagem, pois vai falhar igual (filtros de categoria).
+            if (imageReason && imageReason.includes('Nenhum canal Telegram passou nos filtros')) {
+              return { success: false, reason: imageReason };
+            }
+            // Se o motivo for erro de imagem, aí sim fallback.
           }
         } catch (imageError) {
-          logger.error(`❌ Erro ao enviar imagem Telegram: ${imageError.message}`);
-          logger.error(`   Stack: ${imageError.stack}`);
-          // NÃO fazer fallback - se a imagem falhou, não enviar apenas mensagem
-          return { success: false, reason: `Erro ao enviar imagem Telegram: ${imageError.message}` };
+          logger.error(`❌ Erro ao enviar imagem Telegram (Download/Envio): ${imageError.message}`);
+          imageReason = `Erro interno imagem: ${imageError.message}`;
         }
       } else {
-        logger.error(`❌ Produto sem imagem válida. Produto: ${product.name}`);
-        logger.error(`   image_url recebida: ${JSON.stringify(product.image_url)}`);
-        logger.error(`   Tipo: ${typeof product.image_url}`);
-        logger.error(`   Produto completo: ${JSON.stringify({ id: product.id, name: product.name, image_url: product.image_url })}`);
-        // NÃO enviar mensagem sem imagem - a imagem é obrigatória
-        return { success: false, reason: 'Produto sem imagem válida para publicação no Telegram' };
+        logger.warn(`⚠️ Telegram: Produto sem imagem válida ou placeholder. Tentando envio apenas de texto...`);
+        imageReason = 'Imagem inválida ou placeholder';
       }
+
+      // Fallback: Enviar apenas mensagem de texto (se imagem falhou DE FORMA TÉCNICA)
+      // Se falhou por filtros de canal, nem adianta tentar texto.
+
+      logger.info(`📤 Tentando enviar apenas mensagem de texto para Telegram (Fallback)...`);
+
+      const productNoImage = { ...product, image_url: null };
+      const dispatchResult = await notificationDispatcher.dispatch(
+        'promotion_new',
+        productNoImage
+      );
+
+      // O dispatch retorna um objeto complexo { sent: N, ... }
+      if (dispatchResult && dispatchResult.sent > 0) {
+        logger.info(`✅ Fallback Telegram (Texto): Enviado para ${dispatchResult.sent} canais.`);
+        return { success: true, sent: dispatchResult.sent };
+      }
+
+      return {
+        success: false,
+        reason: `Imagem inválida e fallback de texto falhou. Imagem: ${imageReason || 'N/A'}. Texto: ${dispatchResult?.message || dispatchResult?.reason || 'Sem canais disponíveis'}`
+      };
+
     } catch (error) {
       logger.error(`❌ Erro ao notificar Telegram: ${error.message}`);
       logger.error(`   Stack: ${error.stack}`);

@@ -2691,10 +2691,18 @@ class LinkAnalyzer {
         ? (((finalOldPrice - finalCurrentPrice) / finalOldPrice) * 100).toFixed(2) + '%'
         : '0%');
 
+      // Priorizar imagem de alta resolução (pictures) sobre thumbnail
+      const finalImageUrl = product.pictures?.[0]?.url || product.thumbnail || '';
+      console.log('   🖼️ Imagem selecionada:', finalImageUrl ? 'Sim' : 'Não');
+      if (finalImageUrl) {
+        console.log('      URL:', finalImageUrl);
+        console.log('      Fonte:', product.pictures?.[0]?.url ? 'API (pictures - alta resolução)' : 'API (thumbnail)');
+      }
+
       return {
         name: cleanTitle,
         description: product.subtitle || cleanTitle,
-        imageUrl: product.thumbnail || product.pictures?.[0]?.url || '',
+        imageUrl: finalImageUrl,
         currentPrice: finalCurrentPrice,
         oldPrice: finalOldPrice,
         coupon: coupon,
@@ -2831,10 +2839,54 @@ class LinkAnalyzer {
         $('meta[name="description"]').attr('content');
 
       // Tentar múltiplos seletores para imagem
-      const imageUrl = $('meta[property="og:image"]').attr('content') ||
-        $('.ui-pdp-image').first().attr('src') ||
-        $('img.ui-pdp-image').first().attr('src') ||
-        $('figure img').first().attr('src');
+      let imageUrl = '';
+
+      // 1. JSON-LD (WebSite ou Product) - Geralmente tem a melhor imagem
+      const jsonLdScripts = $('script[type="application/ld+json"]');
+      jsonLdScripts.each((i, script) => {
+        try {
+          const json = JSON.parse($(script).html());
+          if (json.image) {
+            if (Array.isArray(json.image)) {
+              imageUrl = json.image[0];
+            } else if (typeof json.image === 'string') {
+              imageUrl = json.image;
+            } else if (json.image.url) {
+              imageUrl = json.image.url;
+            }
+          }
+          if (imageUrl) return false;
+        } catch (e) { /* ignore */ }
+      });
+
+      // 2. Open Graph e Meta Tags
+      if (!imageUrl) {
+        imageUrl = $('meta[property="og:image"]').attr('content') ||
+          $('meta[name="twitter:image"]').attr('content');
+      }
+
+      // 3. Seletores CSS Específicos do Mercado Livre
+      if (!imageUrl) {
+        const imageSelectors = [
+          'img.ui-pdp-image',
+          '.ui-pdp-gallery__figure__image',
+          'figure.ui-pdp-gallery__figure img',
+          '.ui-pdp-s-gallery__figure__image',
+          'img[data-testid="gallery-image"]',
+          '.ui-pdp-image.ui-pdp-gallery__figure__image',
+          'label[data-testid="gallery-label"] img'
+        ];
+
+        for (const selector of imageSelectors) {
+          imageUrl = $(selector).first().attr('src') || $(selector).first().attr('data-src');
+          if (imageUrl) break;
+        }
+      }
+
+      // 4. Fallback genérico
+      if (!imageUrl) {
+        imageUrl = $('img').first().attr('src');
+      }
 
       // Extrair preços - múltiplos seletores
       let currentPrice = 0;

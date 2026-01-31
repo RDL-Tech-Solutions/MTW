@@ -245,8 +245,12 @@ class TelegramService {
           };
         } catch (downloadError) {
           logger.error(`❌ Erro ao baixar e enviar foto: ${downloadError.message}`);
-          logger.error(`   Status: ${downloadError.response?.status}`);
-          logger.error(`   Response: ${JSON.stringify(downloadError.response?.data)}`);
+          if (downloadError.response) {
+            logger.error(`   Status: ${downloadError.response.status}`);
+            // Evitar JSON.stringify em response.data se for stream ou circular
+            logger.error(`   Response Status Text: ${downloadError.response.statusText}`);
+          }
+
 
           // Tentar fallback com URL direta
           logger.warn(`⚠️ Tentando enviar foto por URL direta como fallback...`);
@@ -340,33 +344,54 @@ class TelegramService {
    */
   async sendMessageWithPhoto(chatId, imageUrl, message, options = {}) {
     try {
+      const isBuffer = Buffer.isBuffer(imageUrl);
+
       logger.info(`📸 [TelegramService] sendMessageWithPhoto chamado`);
       logger.info(`   chatId: ${chatId}`);
-      logger.info(`   imageUrl: ${imageUrl || 'NÃO FORNECIDA'}`);
+      logger.info(`   imageType: ${isBuffer ? 'Buffer' : typeof imageUrl}`);
       logger.info(`   message length: ${message?.length || 0}`);
 
-      // Validar se imageUrl foi fornecida
-      if (!imageUrl || !imageUrl.trim()) {
-        throw new Error('URL da imagem não fornecida');
+      if (!imageUrl) {
+        throw new Error('Imagem (URL ou Buffer) não fornecida');
       }
 
-      // Verificar se é URL HTTP ou arquivo local
-      const isHttpUrl = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
-      const isLocalFile = !isHttpUrl && (imageUrl.includes('\\') || imageUrl.includes('/'));
+      let isHttpUrl = false;
+      let isLocalFile = false;
 
-      if (!isHttpUrl && !isLocalFile) {
-        throw new Error(`URL da imagem inválida: ${imageUrl}`);
-      }
+      if (!isBuffer) {
+        // Validar string apenas se não for buffer
+        if (typeof imageUrl === 'string') {
+          if (!imageUrl.trim()) {
+            throw new Error('URL da imagem vazia');
+          }
+          isHttpUrl = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+          isLocalFile = !isHttpUrl && (imageUrl.includes('\\') || imageUrl.includes('/'));
 
-      // Se for arquivo local, verificar se existe e usar diretamente no sendPhoto
-      if (isLocalFile) {
-        const fs = await import('fs');
-        if (!fs.default.existsSync(imageUrl)) {
-          throw new Error(`Arquivo de imagem não encontrado: ${imageUrl}`);
+          if (!isHttpUrl && !isLocalFile) {
+            throw new Error(`URL da imagem inválida: ${imageUrl}`);
+          }
+
+          // Se for arquivo local, verificar se existe
+          if (isLocalFile) {
+            const fs = await import('fs');
+            if (!fs.default.existsSync(imageUrl)) {
+              throw new Error(`Arquivo de imagem não encontrado: ${imageUrl}`);
+            }
+            logger.info(`📁 Arquivo local detectado: ${imageUrl}`);
+          }
+
+          const securePath = imageUrl.startsWith('http') ? imageUrl : 'local_file';
+          logger.info(`   URL/Path: ${securePath}`);
+        } else {
+          throw new Error('Formato de imagem inválido (esperado string ou Buffer)');
         }
-        // Usar o caminho do arquivo diretamente - sendPhoto já suporta arquivos locais
-        logger.info(`📁 Arquivo local detectado: ${imageUrl}`);
+      } else {
+        logger.info(`   Imagem é um Buffer de ${imageUrl.length} bytes`);
       }
+
+      // Manter o link de afiliado na mensagem, mas desabilitar preview automático
+      // O Telegram permite links na caption, mas podemos desabilitar o preview
+      logger.info(`📸 Enviando imagem com mensagem como caption para chat ${chatId}`);
 
       // Manter o link de afiliado na mensagem, mas desabilitar preview automático
       // O Telegram permite links na caption, mas podemos desabilitar o preview

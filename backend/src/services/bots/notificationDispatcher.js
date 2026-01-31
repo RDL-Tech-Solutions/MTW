@@ -1,3 +1,13 @@
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '../../..'); // Ajustar conforme profundidade: services/bots/notificationDispatcher.js -> src/services/bots -> src/services -> src -> root (backend) 
+// Caminho correto para src/assets/logos
+const LOGOS_DIR = path.join(PROJECT_ROOT, 'src', 'assets', 'logos');
+
 import BotChannel from '../../models/BotChannel.js';
 import NotificationLog from '../../models/NotificationLog.js';
 import BotSendLog from '../../models/BotSendLog.js';
@@ -7,6 +17,40 @@ import templateRenderer from './templateRenderer.js';
 import logger from '../../config/logger.js';
 
 class NotificationDispatcher {
+
+  // Nomes de arquivos dos logos locais
+  static PLATFORM_LOGOS = {
+    shopee: 'shopee.png',
+    mercadolivre: 'mercadolivre.png',
+    amazon: 'amazon.png',
+    magazineluiza: 'magazineluiza.png',
+    aliexpress: 'aliexpress.png',
+    kabum: 'kabum.png',
+    pichau: 'pichau.png',
+    terabyte: 'terabyte.png',
+    general: 'general.png'
+  };
+
+  /**
+   * Obter caminho absoluto do logo da plataforma
+   */
+  getPlatformLogoPath(platform) {
+    const filename = NotificationDispatcher.PLATFORM_LOGOS[platform] || NotificationDispatcher.PLATFORM_LOGOS.general;
+    const filePath = path.join(LOGOS_DIR, filename);
+    const generalPath = path.join(LOGOS_DIR, 'general.png');
+
+    if (fs.existsSync(filePath)) {
+      return filePath;
+    }
+
+    // Tentar general se específico falhar
+    if (fs.existsSync(generalPath)) {
+      return generalPath;
+    }
+
+    return null;
+  }
+
   /**
    * Obter parse_mode do Telegram da configuração
    * @returns {Promise<string>}
@@ -36,11 +80,33 @@ class NotificationDispatcher {
    * Agora com segmentação inteligente (categoria, horários, duplicação)
    * @param {string} eventType - Tipo do evento (promotion_new, coupon_new, coupon_expired)
    * @param {Object} data - Dados do evento
+   * @param {Object} options - Opções extras (bypassDuplicates, etc)
    * @returns {Promise<Object>}
    */
-  async dispatch(eventType, data) {
+  async dispatch(eventType, data, options = {}) {
     try {
+      // Garantir que data é um objeto mutável e plano (POJO)
+      if (data && typeof data.toObject === 'function') {
+        data = data.toObject();
+      } else {
+        // Clone raso para não alterar objeto original se for passado por referência
+        data = { ...data };
+      }
+
       logger.info(`📤 Disparando notificação: ${eventType}`);
+
+      // INJEÇÃO DE IMAGEM PARA CUPONS (USANDO ARQUIVO LOCAL)
+      if (eventType === 'coupon_new' && !data.image_url) {
+        const platform = data.platform ? data.platform.toLowerCase() : 'general';
+        const logoPath = this.getPlatformLogoPath(platform);
+
+        if (logoPath) {
+          data.image_url = logoPath;
+          logger.info(`🖼️ Imagem de plataforma (LOCAL) injetada para cupom (${platform}): ${data.image_url}`);
+        } else {
+          logger.warn(`⚠️ Não foi possível encontrar logo local para ${platform} nem fallback.`);
+        }
+      }
 
       // Buscar todos os canais ativos
       const allChannels = await BotChannel.findActive();
@@ -71,8 +137,8 @@ class NotificationDispatcher {
       // Enviar para cada canal filtrado
       for (const channel of channels) {
         try {
-          // Verificar duplicação antes de enviar
-          const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data);
+          // Verificar duplicação antes de enviar. options.manual bypasses duplicates.
+          const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data, options.manual);
           if (isDuplicate) {
             logger.debug(`⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
             results.details.push({
@@ -166,17 +232,12 @@ class NotificationDispatcher {
           logger.debug(`   🚫 Canal ${channel.id} não aceita cupons standalone (no_coupons = true), ignorando cupom`);
           continue;
         }
-
-        // IMPORTANTE: Produtos com cupons vinculados SÃO PERMITIDOS
-        // O filtro no_coupons bloqueia apenas cupons standalone, não produtos+cupom
       }
 
 
       // 1. Filtro de categoria (produtos E cupons)
-      // IMPORTANTE: Cupons também podem ter categoria!
       if (data.category_id) {
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
-          // Converter category_id para string para comparação (pode ser UUID)
           const itemCategoryId = String(data.category_id);
           const allowedCategories = channel.category_filter.map(cat => String(cat));
 
@@ -189,19 +250,13 @@ class NotificationDispatcher {
             logger.debug(`   ✅ Canal ${channel.id} aceita categoria ${data.category_id} para ${itemType}`);
           }
         } else {
-          // Canal não tem filtro de categoria, aceita todas
           logger.debug(`   ℹ️ Canal ${channel.id} não tem filtro de categoria, aceitando item com categoria ${data.category_id}`);
         }
       } else {
-        // Item não tem categoria definida
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
-          // Canal tem filtro de categoria, mas item não tem categoria - BLOQUEAR
           const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
           logger.debug(`   🚫 Canal ${channel.id} tem filtro de categoria (${channel.category_filter.join(', ')}), mas ${itemType} não tem categoria definida`);
           continue;
-        } else {
-          // Canal não tem filtro de categoria e item não tem categoria - OK
-          logger.debug(`   ℹ️ Canal ${channel.id} não tem filtro de categoria e item não tem categoria - permitindo`);
         }
       }
 
@@ -222,7 +277,6 @@ class NotificationDispatcher {
 
         let isWithinSchedule = false;
         if (endTime < startTime) {
-          // Cruza meia-noite
           isWithinSchedule = currentTime >= startTime || currentTime <= endTime;
         } else {
           isWithinSchedule = currentTime >= startTime && currentTime <= endTime;
@@ -234,24 +288,12 @@ class NotificationDispatcher {
         }
       }
 
-      // 4. Filtro de score mínimo (se produto)
-      if (eventType === 'promotion_new' && data.offer_score !== undefined) {
+      // 4. Filtro de score mínimo
+      if (data.offer_score !== undefined) {
         const minScore = channel.min_offer_score || 0;
         if (data.offer_score < minScore) {
-          logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, produto tem ${data.offer_score}`);
+          logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, item tem ${data.offer_score}`);
           continue;
-        }
-      }
-
-      // 4.5. Filtro de score mínimo (se cupom com score)
-      // NOVO: Cupons também podem ter score de qualidade
-      if ((eventType === 'coupon_new' || eventType === 'coupon_expired') && data.offer_score !== undefined) {
-        const minScore = channel.min_offer_score || 0;
-        if (data.offer_score < minScore) {
-          logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, cupom tem ${data.offer_score}`);
-          continue;
-        } else {
-          logger.debug(`   ✅ Canal ${channel.id} aceita cupom com score ${data.offer_score} (mínimo: ${minScore})`);
         }
       }
 
@@ -274,8 +316,7 @@ class NotificationDispatcher {
       const entityId = data.id || data.product_id || data.coupon_id;
       if (!entityId) return false;
 
-      // NOVO: Para cupons, verificar também por código (defesa em profundidade)
-      // Isso evita que cupons com o mesmo código sejam enviados múltiplas vezes
+      // NOVO: Para cupons, verificar também por código
       if (eventType === 'coupon_new' && data.code) {
         const Coupon = (await import('../../models/Coupon.js')).default;
         const hasPublished = await Coupon.hasPublishedCouponWithCode(data.code, entityId);
@@ -323,7 +364,6 @@ class NotificationDispatcher {
       });
     } catch (error) {
       logger.warn(`⚠️ Erro ao registrar envio: ${error.message}`);
-      // Não falhar o envio por causa de erro no log
     }
   }
 
@@ -350,19 +390,32 @@ class NotificationDispatcher {
       // Formatar mensagem baseado no tipo de evento
       const message = await this.formatMessage(channel.platform, eventType, data);
 
-      // Enviar mensagem
-      // IMPORTANTE: A mensagem já vem formatada corretamente do templateRenderer
-      // Não converter novamente para preservar o template configurado no painel admin
       let result;
+
+      // VERIFICAR SE TEM IMAGEM PARA ENVIAR
+      // Aceitar URL (http) ou caminho local verificando apenas se existe valor
+      const hasValidImage = !!data.image_url;
+
       if (channel.platform === 'whatsapp') {
-        // Mensagem já está formatada para WhatsApp pelo templateRenderer
-        result = await whatsappService.sendMessage(channel.identifier, message);
+        if (hasValidImage) {
+          result = await whatsappService.sendImage(channel.identifier, data.image_url, message);
+        } else {
+          result = await whatsappService.sendMessage(channel.identifier, message);
+        }
       } else if (channel.platform === 'telegram') {
         const parseMode = await this.getTelegramParseMode();
-        // Mensagem já está formatada para Telegram pelo templateRenderer
-        result = await telegramService.sendMessage(channel.identifier, message, {
-          parse_mode: parseMode
-        });
+
+        if (hasValidImage) {
+          // Usar sendPhoto do Telegram Service se tiver imagem
+          // Assinatura correta: sendPhoto(chatId, photo, caption, options)
+          result = await telegramService.sendPhoto(channel.identifier, data.image_url, message, {
+            parse_mode: parseMode
+          });
+        } else {
+          result = await telegramService.sendMessage(channel.identifier, message, {
+            parse_mode: parseMode
+          });
+        }
       } else {
         throw new Error(`Plataforma não suportada: ${channel.platform}`);
       }
@@ -418,9 +471,6 @@ class NotificationDispatcher {
 
       switch (eventType) {
         case 'promotion_new':
-          // IMPORTANTE: Escolher template baseado se tem cupom ou não
-          // Se produto tem cupom vinculado, usar template 'promotion_with_coupon'
-          // Se não tem cupom, usar template 'new_promotion' (sem cupom)
           if (data.coupon_id) {
             templateType = 'promotion_with_coupon';
             logger.info(`📋 Produto tem cupom vinculado (${data.coupon_id}), usando template 'promotion_with_coupon'`);
@@ -428,19 +478,16 @@ class NotificationDispatcher {
             templateType = 'new_promotion';
             logger.info(`📋 Produto sem cupom, usando template 'new_promotion'`);
           }
-          // Preparar variáveis para template de promoção
           variables = await templateRenderer.preparePromotionVariables(data);
           break;
 
         case 'coupon_new':
           templateType = 'new_coupon';
-          // Preparar variáveis para template de cupom
           variables = templateRenderer.prepareCouponVariables(data);
           break;
 
         case 'coupon_expired':
           templateType = 'expired_coupon';
-          // Preparar variáveis para template de cupom expirado
           variables = templateRenderer.prepareExpiredCouponVariables(data);
           break;
 
@@ -448,7 +495,6 @@ class NotificationDispatcher {
           throw new Error(`Tipo de evento não suportado: ${eventType}`);
       }
 
-      // Preparar contextData para IA ADVANCED (se necessário)
       const contextData = {};
       if (eventType === 'promotion_new') {
         contextData.product = data;
@@ -456,7 +502,6 @@ class NotificationDispatcher {
         contextData.coupon = data;
       }
 
-      // Renderizar template usando templates ativos do painel admin ou IA ADVANCED
       const message = await templateRenderer.render(templateType, platform, variables, contextData);
 
       if (!message || message.trim().length === 0) {
@@ -467,21 +512,14 @@ class NotificationDispatcher {
       return message;
     } catch (error) {
       logger.error(`❌ ERRO CRÍTICO ao formatar mensagem com template: ${error.message}`);
-      logger.error(`   Tipo: ${eventType}, Plataforma: ${platform}`);
-      logger.error(`   Stack: ${error.stack}`);
-
-      // NÃO usar fallback - template do painel admin é obrigatório
       throw new Error(`Falha ao renderizar template do painel admin para ${eventType} (${platform}): ${error.message}. Configure um template ativo no painel admin.`);
     }
   }
 
   /**
    * Enviar notificação de nova promoção
-   * @param {Object} promotion - Dados da promoção
-   * @returns {Promise<Object>}
    */
   async notifyNewPromotion(promotion) {
-    // Usar publishService para enviar com imagem e suporte a cupom vinculado
     try {
       const publishService = (await import('../autoSync/publishService.js')).default;
       const result = await publishService.publishAll(promotion);
@@ -491,25 +529,14 @@ class NotificationDispatcher {
       };
     } catch (error) {
       logger.error(`Erro ao notificar nova promoção via publishService: ${error.message}`);
-      // Fallback para método antigo
       return await this.dispatch('promotion_new', promotion);
     }
   }
 
-  /**
-   * Enviar notificação de novo cupom
-   * @param {Object} coupon - Dados do cupom
-   * @returns {Promise<Object>}
-   */
   async notifyNewCoupon(coupon) {
     return await this.dispatch('coupon_new', coupon);
   }
 
-  /**
-   * Enviar notificação de cupom expirado
-   * @param {Object} coupon - Dados do cupom
-   * @returns {Promise<Object>}
-   */
   async notifyCouponExpired(coupon) {
     return await this.dispatch('coupon_expired', coupon);
   }
@@ -519,10 +546,8 @@ class NotificationDispatcher {
    */
   async sendToTelegramWithImage(message, imagePath, eventType = 'general', data = null, options = {}) {
     try {
+      const isBuffer = Buffer.isBuffer(imagePath);
       logger.info(`📤 [NotificationDispatcher] Enviando imagem para Telegram`);
-      logger.info(`   imagePath: ${imagePath}`);
-      logger.info(`   message length: ${message?.length || 0}`);
-      logger.info(`   eventType: ${eventType}`);
 
       const allChannels = await BotChannel.findActive('telegram');
 
@@ -532,742 +557,97 @@ class NotificationDispatcher {
           success: false,
           sent: 0,
           total: 0,
-          reason: 'Nenhum canal Telegram ativo encontrado. Configure canais ativos no painel admin.'
+          reason: 'Nenhum canal Telegram ativo encontrado.'
         };
       }
 
-      // Filtrar canais usando segmentação inteligente (se data for fornecido)
-      // IMPORTANTE: Garantir que category_id está presente nos dados para filtro
       const channels = data
         ? await this.filterChannelsBySegmentation(allChannels, eventType, {
           ...data,
           id: data.product_id || data.coupon_id || data.id,
-          category_id: data.category_id || null // Garantir que category_id está presente
+          category_id: data.category_id || null
         })
         : allChannels;
 
       if (channels.length === 0) {
         logger.info(`⏸️ Nenhum canal Telegram passou nos filtros de segmentação`);
-
-        // Build detailed reason explaining why channels were filtered
-        let reason = `Nenhum canal Telegram passou nos filtros de segmentação (${allChannels.length} canal(is) filtrado(s)). `;
-
-        if (data.category_id) {
-          reason += `Categoria: ${data.category_id}. `;
-        } else {
-          reason += `Produto sem categoria definida. `;
-        }
-
-
-
-        if (data.offer_score !== undefined) {
-          reason += `Score: ${data.offer_score}. `;
-        }
-
-        reason += `Verifique os filtros dos canais (categoria, plataforma, horário, score mínimo, cupons).`;
-
-        return { success: false, sent: 0, total: 0, filtered: allChannels.length, reason };
+        return { success: false, sent: 0, total: 0, filtered: allChannels.length, reason: "Filtros de segmentação." };
       }
-
-      logger.info(`   Canais encontrados: ${channels.length}/${allChannels.length} (${allChannels.length - channels.length} filtrados)`);
 
       let sent = 0;
       const results = [];
 
       for (const channel of channels) {
-        // Verificar duplicação antes de enviar
-        logger.debug(`   🔍 Verificando duplicação para canal ${channel.id} (bypassDuplicates: ${options.bypassDuplicates || false})`);
+        logger.debug(`   🔍 Verificando duplicação para canal ${channel.id}`);
         const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
         if (isDuplicate) {
-          logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
-          results.push({
-            channelId: channel.id,
-            chatId: channel.identifier,
-            success: false,
-            skipped: true,
-            reason: 'Duplicado (enviado recentemente)'
-          });
+          results.push({ channelId: channel.id, success: false, skipped: true, reason: 'Duplicado' });
           continue;
         }
         try {
-          logger.info(`   Enviando para canal ${channel.id} (chat: ${channel.identifier})`);
           const parseMode = await this.getTelegramParseMode();
 
-          // A mensagem já vem formatada corretamente do templateRenderer
-          // Não converter novamente para manter a formatação do template configurado
-          // Apenas garantir que o parse_mode seja passado corretamente
-          logger.debug(`📝 Usando mensagem do template (${message.length} caracteres) com parse_mode: ${parseMode}`);
-
-          const result = await telegramService.sendMessageWithPhoto(
-            channel.identifier,
-            imagePath,
-            message, // Usar mensagem original do template
-            { parse_mode: parseMode }
-          );
-
-          logger.info(`   Resultado do telegramService: ${JSON.stringify({
-            success: result?.success,
-            photoMessageId: result?.photoMessageId
-          })}`);
-
-          // Criar log
-          const log = await NotificationLog.create({
-            event_type: eventType,
-            platform: 'telegram',
-            channel_id: channel.id,
-            payload: { message, imagePath },
-            status: 'sent'
-          });
-
-          if (log && log.id) {
-            await NotificationLog.markAsSent(log.id);
-          }
-
-          sent++;
-          results.push({
-            channelId: channel.id,
-            chatId: channel.identifier,
-            success: true,
-            logId: log?.id || null
-          });
-
-          // Registrar envio para controle de duplicação (se data for fornecido)
-          if (data) {
-            await this.logSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id });
-          }
-
-          logger.info(`✅ Mensagem com imagem Telegram enviada para canal ${channel.id} (chat: ${channel.identifier})`);
-
-          // Delay entre envios
-          await new Promise(resolve => setTimeout(resolve, 200));
-        } catch (error) {
-          logger.error(`❌ Erro ao enviar para Telegram canal ${channel.id} (chat: ${channel.identifier}): ${error.message}`);
-
-          // Criar log de erro
-          const log = await NotificationLog.create({
-            event_type: eventType,
-            platform: 'telegram',
-            channel_id: channel.id,
-            payload: { message, imagePath, error: error.message },
-            status: 'failed'
-          });
-
-          if (log && log.id) {
-            await NotificationLog.markAsFailed(log.id, error.message);
-          }
-
-          results.push({
-            channelId: channel.id,
-            chatId: channel.identifier,
-            success: false,
-            error: error.message,
-            logId: log?.id || null
-          });
-        }
-      }
-
-      // Build reason if no messages were sent
-      let reason = undefined;
-      if (sent === 0) {
-        const skippedDuplicates = results.filter(r => r.skipped && r.reason?.includes('Duplicado')).length;
-        const failedSending = results.filter(r => !r.success && !r.skipped).length;
-
-        if (skippedDuplicates > 0 && skippedDuplicates === channels.length) {
-          reason = `Todos os ${channels.length} canal(is) Telegram ignoraram o produto (já enviado recentemente). Aguarde ou desative o controle de duplicados.`;
-        } else if (failedSending > 0) {
-          const errorMessages = results.filter(r => r.error).map(r => r.error).join(', ');
-          reason = `Falha ao enviar para ${failedSending} canal(is) Telegram: ${errorMessages}`;
-        } else {
-          reason = `Nenhuma mensagem Telegram enviada (${channels.length} canal(is) tentado(s))`;
-        }
-      }
-
-      return {
-        success: sent > 0,
-        sent,
-        total: channels.length,
-        results,
-        reason
-      };
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagem com imagem para Telegram: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Enviar mensagem com imagem para WhatsApp
-   */
-  async sendToWhatsAppWithImage(message, imagePath, eventType = 'general', data = null, options = {}) {
-    try {
-      logger.info(`📤 [NotificationDispatcher] Enviando imagem para WhatsApp`);
-      logger.info(`   imagePath: ${imagePath}`);
-      logger.info(`   message length: ${message?.length || 0}`);
-      logger.info(`   eventType: ${eventType}`);
-
-      const allChannels = await BotChannel.findActive('whatsapp');
-
-      if (!allChannels || allChannels.length === 0) {
-        logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
-        return {
-          success: false,
-          sent: 0,
-          total: 0,
-          reason: 'Nenhum canal WhatsApp ativo encontrado. Configure canais ativos no painel admin.'
-        };
-      }
-
-      // Filtrar canais usando segmentação inteligente (se data for fornecido)
-      // IMPORTANTE: Garantir que category_id está presente nos dados para filtro
-      const channels = data
-        ? await this.filterChannelsBySegmentation(allChannels, eventType, {
-          ...data,
-          id: data.product_id || data.coupon_id || data.id,
-          category_id: data.category_id || null // Garantir que category_id está presente
-        })
-        : allChannels;
-
-      if (channels.length === 0) {
-        logger.info(`⏸️ Nenhum canal WhatsApp passou nos filtros de segmentação`);
-
-        // Build detailed reason explaining why channels were filtered
-        let reason = `Nenhum canal WhatsApp passou nos filtros de segmentação (${allChannels.length} canal(is) filtrado(s)). `;
-
-        if (data.category_id) {
-          reason += `Categoria: ${data.category_id}. `;
-        } else {
-          reason += `Produto sem categoria definida. `;
-        }
-
-        if (data.offer_score !== undefined) {
-          reason += `Score: ${data.offer_score}. `;
-        }
-
-        reason += `Verifique os filtros dos canais (categoria, plataforma, horário, score mínimo, cupons).`;
-
-        return { success: false, sent: 0, total: 0, filtered: allChannels.length, reason };
-      }
-
-      logger.info(`   Canais encontrados: ${channels.length}/${allChannels.length} (${allChannels.length - channels.length} filtrados)`);
-
-      let sent = 0;
-      const results = [];
-
-      for (const channel of channels) {
-        // Verificar duplicação antes de enviar
-        logger.debug(`   🔍 Verificando duplicação para canal ${channel.id} (bypassDuplicates: ${options.bypassDuplicates || false})`);
-        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id }, options.bypassDuplicates);
-        if (isDuplicate) {
-          logger.debug(`   ⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
-          results.push({
-            channelId: channel.id,
-            groupId: channel.identifier,
-            success: false,
-            skipped: true,
-            reason: 'Duplicado (enviado recentemente)'
-          });
-          continue;
-        }
-        try {
-          // Para WhatsApp, precisamos fazer upload da imagem primeiro ou usar URL
-          // Por enquanto, vamos tentar enviar como URL se for um caminho local
-          let imageUrl = imagePath;
-
-          // Se for caminho local, precisaríamos fazer upload para um serviço de hospedagem
-          // Por enquanto, vamos tentar enviar a mensagem sem imagem se for arquivo local
-          if (!imagePath.startsWith('http://') && !imagePath.startsWith('https://')) {
-            logger.warn(`Imagem local não suportada diretamente no WhatsApp: ${imagePath}`);
-            // Fallback: enviar apenas mensagem
-            const result = await whatsappService.sendMessage(channel.identifier, message);
-
-            const log = await NotificationLog.create({
-              event_type: eventType,
-              platform: 'whatsapp',
-              channel_id: channel.id,
-              payload: { message },
-              status: 'sent'
-            });
-
-            if (log && log.id) {
-              await NotificationLog.markAsSent(log.id);
-            }
-
-            sent++;
-            results.push({
-              channelId: channel.id,
-              groupId: channel.identifier,
-              success: true,
-              logId: log?.id || null,
-              note: 'Imagem não enviada (arquivo local)'
-            });
-            continue;
-          }
-
-          const result = await whatsappService.sendMessageWithImage(
-            channel.identifier,
-            imageUrl,
-            message
-          );
-
-          // Criar log
-          const log = await NotificationLog.create({
-            event_type: eventType,
-            platform: 'whatsapp',
-            channel_id: channel.id,
-            payload: { message, imageUrl },
-            status: 'sent'
-          });
-
-          if (log && log.id) {
-            await NotificationLog.markAsSent(log.id);
-          }
-
-          sent++;
-          results.push({
-            channelId: channel.id,
-            groupId: channel.identifier,
-            success: true,
-            logId: log?.id || null
-          });
-
-          logger.info(`✅ Mensagem com imagem WhatsApp enviada para canal ${channel.id} (grupo: ${channel.identifier})`);
-
-          // Registrar envio para controle de duplicação (se data for fornecido)
-          if (data) {
-            await this.logSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id || data.id });
-          }
-
-          // Delay entre envios
-          await new Promise(resolve => setTimeout(resolve, 200));
-        } catch (error) {
-          logger.error(`❌ Erro ao enviar para WhatsApp canal ${channel.id} (grupo: ${channel.identifier}): ${error.message}`);
-
-          // Criar log de erro
-          const log = await NotificationLog.create({
-            event_type: eventType,
-            platform: 'whatsapp',
-            channel_id: channel.id,
-            payload: { message, imagePath, error: error.message },
-            status: 'failed'
-          });
-
-          if (log && log.id) {
-            await NotificationLog.markAsFailed(log.id, error.message);
-          }
-
-          results.push({
-            channelId: channel.id,
-            groupId: channel.identifier,
-            success: false,
-            error: error.message,
-            logId: log?.id || null
-          });
-        }
-      }
-
-      // Build reason if no messages were sent
-      let reason = undefined;
-      if (sent === 0) {
-        const skippedDuplicates = results.filter(r => r.skipped && r.reason?.includes('Duplicado')).length;
-        const failedSending = results.filter(r => !r.success && !r.skipped).length;
-
-        if (skippedDuplicates > 0 && skippedDuplicates === channels.length) {
-          reason = `Todos os ${channels.length} canal(is) WhatsApp ignoraram o produto (já enviado recentemente). Aguarde ou desative o controle de duplicados.`;
-        } else if (failedSending > 0) {
-          const errorMessages = results.filter(r => r.error).map(r => r.error).join(', ');
-          reason = `Falha ao enviar para ${failedSending} canal(is) WhatsApp: ${errorMessages}`;
-        } else {
-          reason = `Nenhuma mensagem WhatsApp enviada (${channels.length} canal(is) tentado(s))`;
-        }
-      }
-
-      return {
-        success: sent > 0,
-        sent,
-        total: channels.length,
-        filtered: allChannels.length - channels.length,
-        results,
-        reason
-      };
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagem com imagem para WhatsApp: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Enviar mensagem para todos os canais Telegram ativos
-   * @param {string} message - Mensagem formatada
-   * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento
-   * @returns {Promise<Object>}
-   */
-  async sendToTelegram(message, eventTypeOrData, options = {}) {
-    try {
-      logger.info('📤 Enviando mensagem para canais Telegram');
-
-      // Buscar canais Telegram ativos
-      const allChannels = await BotChannel.findActive();
-      logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
-
-      const telegramChannels = allChannels?.filter(ch => ch.platform === 'telegram') || [];
-      logger.info(`📋 Canais Telegram encontrados: ${telegramChannels.length}`);
-
-      if (!telegramChannels || telegramChannels.length === 0) {
-        logger.warn('⚠️ Nenhum canal Telegram ativo encontrado');
-        return { success: false, message: 'Nenhum canal Telegram ativo', total: 0, sent: 0, failed: 0, details: [] };
-      }
-
-      const results = {
-        total: telegramChannels.length,
-        sent: 0,
-        failed: 0,
-        details: []
-      };
-
-      // Determinar eventType
-      const eventType = typeof eventTypeOrData === 'string' ? eventTypeOrData : 'custom_message';
-
-      // Enviar para cada canal Telegram
-      for (const channel of telegramChannels) {
-        let log = null;
-        try {
-          const logData = {
-            event_type: eventType,
-            platform: 'telegram',
-            channel_id: channel.id,
-            payload: typeof eventTypeOrData === 'object' ? eventTypeOrData : { message },
-            status: 'pending'
-          };
-
-          log = await NotificationLog.create(logData);
-
-          // Obter parse_mode configurado
-          let parseMode = await this.getTelegramParseMode();
-
-          // IMPORTANTE: A mensagem já vem formatada corretamente do templateRenderer
-          // Não converter novamente para preservar o template configurado no painel admin
-          // Apenas garantir que o parse_mode seja passado corretamente
-          logger.debug(`📝 Usando mensagem do template (${message.length} caracteres) com parse_mode: ${parseMode}`);
-
-          const result = await telegramService.sendMessage(channel.identifier, message, {
+          // Assinatura correta: sendPhoto(chatId, photo, caption, options)
+          const result = await telegramService.sendPhoto(channel.identifier, imagePath, message, {
             parse_mode: parseMode
           });
 
-          // Atualizar log apenas se foi criado com sucesso
-          if (log && log.id) {
-            try {
-              await NotificationLog.markAsSent(log.id);
-            } catch (logError) {
-              logger.warn(`Erro ao marcar log como enviado: ${logError.message}`);
-            }
+          if (result && result.message_id) {
+            sent++;
+            await this.logSend(channel.id, eventType, data);
+            results.push({ channelId: channel.id, chatId: channel.identifier, success: true, messageId: result.message_id });
           }
-
-          results.sent++;
-          results.details.push({
-            channelId: channel.id,
-            platform: 'telegram',
-            success: true,
-            logId: log?.id || null,
-            result
-          });
-
-          logger.info(`✅ Mensagem enviada para Telegram canal ${channel.id} (chat: ${channel.identifier})`);
         } catch (error) {
-          // Capturar detalhes do erro
-          const errorDetails = {
-            message: error.message,
-            chatId: channel.identifier,
-            channelId: channel.id
-          };
-
-          // Adicionar detalhes da API do Telegram se disponível
-          if (error.response) {
-            errorDetails.status = error.response.status;
-            errorDetails.apiError = error.response.data?.description || error.response.data?.error_code || 'Unknown error';
-            errorDetails.apiResponse = error.response.data;
-          }
-
-          // Atualizar log como falho se foi criado com sucesso
-          if (log && log.id) {
-            try {
-              await NotificationLog.markAsFailed(log.id, JSON.stringify(errorDetails));
-            } catch (logError) {
-              logger.error(`Erro ao atualizar log: ${logError.message}`);
-            }
-          }
-
-          logger.error(`❌ Erro ao enviar para Telegram canal ${channel.id} (chat: ${channel.identifier}): ${JSON.stringify(errorDetails, null, 2)}`);
-          results.failed++;
-          results.details.push({
-            channelId: channel.id,
-            platform: 'telegram',
-            success: false,
-            error: errorDetails.apiError || error.message,
-            details: errorDetails
-          });
+          logger.error(`❌ Erro ao enviar imagem Telegram para canal ${channel.id}: ${error.message}`);
+          results.push({ channelId: channel.id, success: false, error: error.message });
         }
       }
 
-      logger.info(`✅ Telegram: ${results.sent} sucesso, ${results.failed} falhas`);
-
-      // Retornar com success baseado em se pelo menos uma mensagem foi enviada
-      return {
-        ...results,
-        success: results.sent > 0
-      };
+      return { success: sent > 0, sent, total: channels.length, results };
     } catch (error) {
-      logger.error(`❌ Erro ao enviar para Telegram: ${error.message}`);
-      throw error;
+      logger.error(`❌ Erro geral ao enviar imagem Telegram: ${error.message}`);
+      return { success: false, reason: error.message };
     }
   }
 
-  /**
-   * Enviar mensagem para todos os canais WhatsApp ativos
-   * @param {string} message - Mensagem formatada
-   * @param {string|Object} eventTypeOrData - Tipo do evento ou dados do evento
-   * @returns {Promise<Object>}
-   */
-  async sendToWhatsApp(message, eventTypeOrData, options = {}) {
+  async sendToWhatsAppWithImage(message, imageUrl, eventType = 'general', data = null, options = {}) {
     try {
-      logger.info('📤 Enviando mensagem para canais WhatsApp');
+      const allChannels = await BotChannel.findActive('whatsapp');
+      if (!allChannels || allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo' };
 
-      // Buscar canais WhatsApp ativos
-      const allChannels = await BotChannel.findActive();
-      logger.info(`📋 Total de canais ativos encontrados: ${allChannels?.length || 0}`);
+      const channels = data
+        ? await this.filterChannelsBySegmentation(allChannels, eventType, { ...data, id: data.product_id || data.coupon_id || data.id })
+        : allChannels;
 
-      const allWhatsappChannels = allChannels?.filter(ch => ch.platform === 'whatsapp') || [];
-      logger.info(`📋 Canais WhatsApp encontrados: ${allWhatsappChannels.length}`);
+      if (channels.length === 0) return { success: false, sent: 0, total: 0, reason: "Segmentação." };
 
-      if (!allWhatsappChannels || allWhatsappChannels.length === 0) {
-        logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
-        return { success: false, message: 'Nenhum canal WhatsApp ativo', total: 0, sent: 0, failed: 0, details: [] };
-      }
-
-      // Determinar eventType e dados
-      const eventType = typeof eventTypeOrData === 'string' ? eventTypeOrData : (eventTypeOrData?.eventType || 'custom_message');
-      const data = typeof eventTypeOrData === 'object' && eventTypeOrData !== null ? eventTypeOrData : null;
-
-      // Filtrar canais usando segmentação inteligente (se data for fornecido)
-      const whatsappChannels = data && data.category_id
-        ? await this.filterChannelsBySegmentation(allWhatsappChannels, eventType, {
-          ...data,
-          id: data.product_id || data.coupon_id || data.id,
-          category_id: data.category_id || null
-        })
-        : allWhatsappChannels;
-
-      if (whatsappChannels.length === 0) {
-        logger.info(`⏸️ Nenhum canal WhatsApp passou nos filtros de segmentação`);
-        return { success: false, message: 'Nenhum canal passou nos filtros', total: 0, sent: 0, failed: 0, filtered: allWhatsappChannels.length, details: [] };
-      }
-
-      logger.info(`📊 Canais WhatsApp filtrados: ${whatsappChannels.length}/${allWhatsappChannels.length} passaram na segmentação`);
-
-      const results = {
-        total: whatsappChannels.length,
-        sent: 0,
-        failed: 0,
-        filtered: allWhatsappChannels.length - whatsappChannels.length,
-        details: []
-      };
-
-      // Enviar para cada canal WhatsApp filtrado
-      for (const channel of whatsappChannels) {
-        let log = null;
-        try {
-          const logData = {
-            event_type: eventType,
-            platform: 'whatsapp',
-            channel_id: channel.id,
-            payload: typeof eventTypeOrData === 'object' ? eventTypeOrData : { message },
-            status: 'pending'
-          };
-
-          log = await NotificationLog.create(logData);
-
-          const result = await whatsappService.sendMessage(channel.identifier, message);
-
-          // Atualizar log apenas se foi criado com sucesso
-          if (log && log.id) {
-            try {
-              await NotificationLog.markAsSent(log.id);
-            } catch (logError) {
-              logger.warn(`Erro ao marcar log como enviado: ${logError.message}`);
-            }
-          }
-
-          results.sent++;
-          results.details.push({
-            channelId: channel.id,
-            platform: 'whatsapp',
-            success: true,
-            logId: log?.id || null,
-            result
-          });
-
-          logger.info(`✅ Mensagem enviada para WhatsApp canal ${channel.id} (grupo: ${channel.identifier})`);
-        } catch (error) {
-          // Capturar detalhes do erro
-          const errorDetails = {
-            message: error.message,
-            groupId: channel.identifier,
-            channelId: channel.id
-          };
-
-          // Adicionar detalhes da API do WhatsApp se disponível
-          if (error.response) {
-            errorDetails.status = error.response.status;
-            errorDetails.apiError = error.response.data?.error?.message || error.response.data?.error || 'Unknown error';
-            errorDetails.apiResponse = error.response.data;
-          }
-
-          // Atualizar log como falho se foi criado com sucesso
-          if (log && log.id) {
-            try {
-              await NotificationLog.markAsFailed(log.id, JSON.stringify(errorDetails));
-            } catch (logError) {
-              logger.error(`Erro ao atualizar log: ${logError.message}`);
-            }
-          }
-
-          logger.error(`❌ Erro ao enviar para WhatsApp canal ${channel.id} (grupo: ${channel.identifier}): ${JSON.stringify(errorDetails, null, 2)}`);
-          results.failed++;
-          results.details.push({
-            channelId: channel.id,
-            platform: 'whatsapp',
-            success: false,
-            error: errorDetails.apiError || error.message,
-            details: errorDetails
-          });
-        }
-      }
-
-      logger.info(`✅ WhatsApp: ${results.sent} sucesso, ${results.failed} falhas`);
-
-      // Retornar com success baseado em se pelo menos uma mensagem foi enviada
-      return {
-        ...results,
-        success: results.sent > 0
-      };
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar para WhatsApp: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Enviar mensagem de teste para todos os canais ativos
-   * @returns {Promise<Object>}
-   */
-  async sendTestToAllChannels() {
-    try {
-      const channels = await BotChannel.findActive();
-
-      if (!channels || channels.length === 0) {
-        return { success: false, message: 'Nenhum canal ativo encontrado' };
-      }
-
+      let sent = 0;
       const results = [];
 
       for (const channel of channels) {
-        try {
-          let result;
-          if (channel.platform === 'whatsapp') {
-            result = await whatsappService.sendTestMessage(channel.identifier);
-          } else if (channel.platform === 'telegram') {
-            result = await telegramService.sendTestMessage(channel.identifier);
-          }
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
+        if (isDuplicate) continue;
 
-          results.push({
-            channelId: channel.id,
-            platform: channel.platform,
-            name: channel.name,
-            success: true,
-            result
-          });
+        try {
+          const result = await whatsappService.sendImage(channel.identifier, imageUrl, message);
+          if (result) {
+            sent++;
+            await this.logSend(channel.id, eventType, data);
+          }
+          results.push({ channelId: channel.id, success: !!result });
         } catch (error) {
-          results.push({
-            channelId: channel.id,
-            platform: channel.platform,
-            name: channel.name,
-            success: false,
-            error: error.message
-          });
+          results.push({ channelId: channel.id, success: false, error: error.message });
         }
       }
 
-      return {
-        success: true,
-        total: channels.length,
-        results
-      };
+      return { success: sent > 0, sent, total: channels.length, results };
     } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagens de teste: ${error.message}`);
-      throw error;
+      return { success: false, reason: error.message };
     }
   }
 
-  /**
-   * Enviar mensagem customizada para todos os canais ativos
-   * @param {string} message - Mensagem customizada
-   * @returns {Promise<Object>}
-   */
-  async sendCustomMessageToAllChannels(message) {
-    try {
-      const channels = await BotChannel.findActive();
-
-      if (!channels || channels.length === 0) {
-        return { success: false, message: 'Nenhum canal ativo encontrado', total: 0, sent: 0, failed: 0 };
-      }
-
-      const results = {
-        total: channels.length,
-        sent: 0,
-        failed: 0,
-        details: []
-      };
-
-      for (const channel of channels) {
-        try {
-          let result;
-          if (channel.platform === 'whatsapp') {
-            // Mensagem já está formatada para WhatsApp pelo templateRenderer
-            result = await whatsappService.sendMessage(channel.identifier, message);
-          } else if (channel.platform === 'telegram') {
-            const parseMode = await this.getTelegramParseMode();
-            // Mensagem já está formatada para Telegram pelo templateRenderer
-            result = await telegramService.sendMessage(channel.identifier, message, {
-              parse_mode: parseMode
-            });
-          } else {
-            throw new Error(`Plataforma não suportada: ${channel.platform}`);
-          }
-
-          results.sent++;
-          results.details.push({
-            channelId: channel.id,
-            platform: channel.platform,
-            name: channel.name,
-            success: true,
-            result
-          });
-        } catch (error) {
-          results.failed++;
-          results.details.push({
-            channelId: channel.id,
-            platform: channel.platform,
-            name: channel.name,
-            success: false,
-            error: error.message
-          });
-        }
-      }
-
-      return results;
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagem customizada: ${error.message}`);
-      throw error;
-    }
+  async sendToWhatsApp(message, data = {}, options = {}) {
+    return { success: false, message: "Use dispatch()" };
   }
 }
 

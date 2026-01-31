@@ -261,6 +261,26 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Iniciar
 // Iniciar
 if (!process.env.VERCEL) {
+  console.log('🚀 Iniciando servidor...');
+
+  // Iniciar Admin Bot
+  const botToken = process.env.ADMIN_BOT_TOKEN;
+  if (botToken) {
+    console.log(`🤖 Tentando iniciar Admin Bot com token: ${botToken.substring(0, 10)}...`);
+    import('./services/adminBot/index.js').then(({ initAdminBot }) => {
+      initAdminBot()
+        .then(() => console.log('✅ Admin Bot iniciado com sucesso!'))
+        .catch(err => {
+          console.error('❌ Erro FATAL ao iniciar Admin Bot:', err);
+          if (err.message && err.message.includes('Cannot find module')) {
+            console.error('🔍 Verifique as importações no index.js do bot.');
+          }
+        });
+    }).catch(err => console.error('❌ Erro ao importar Admin Bot:', err));
+  } else {
+    console.log('⚠️ ADMIN_BOT_TOKEN não encontrado. Bot não será iniciado.');
+  }
+
   startServer();
 }
 
