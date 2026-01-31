@@ -84,76 +84,41 @@ class WhatsAppService {
 
 
   /**
-   * Enviar mensagem com imagem (imagem primeiro, depois mensagem)
+   * Enviar mensagem com imagem (imagem com caption)
    * @param {string} groupId - ID do grupo
    * @param {string} imageUrl - URL da imagem
-   * @param {string} message - Mensagem formatada
+   * @param {string} message - Mensagem formatada (será usada como caption)
    * @returns {Promise<Object>}
    */
   async sendMessageWithImage(groupId, imageUrl, message) {
     try {
-      // ESTRATÉGIA: Converter imagem WebP para JPEG via proxy
-      logger.info(`📸 Preparando envio de imagem para WhatsApp`);
-      logger.info(`   URL original: ${imageUrl.substring(0, 80)}...`);
+      logger.info(`📸 Enviando imagem COM caption para grupo ${groupId}`);
+      logger.info(`   URL da imagem: ${imageUrl.substring(0, 80)}...`);
 
-      // Verificar se precisa converter a imagem
+      // Normalizar URL protocol-relative
       let finalImageUrl = imageUrl;
-
-      if (imageConverterService.needsConversion(imageUrl)) {
-        logger.info(`🔄 Imagem precisa de conversão (WebP ou formato não suportado)`);
-
-        try {
-          // Gerar URL do proxy de conversão
-          const baseUrl = process.env.API_URL || 'http://localhost:3000';
-          const proxyUrl = `${baseUrl}/api/images/convert?url=${encodeURIComponent(imageUrl)}`;
-
-          logger.info(`✅ URL do proxy gerada: ${proxyUrl.substring(0, 80)}...`);
-          logger.info(`   A imagem será convertida para JPEG otimizado em tempo real`);
-
-          finalImageUrl = proxyUrl;
-
-        } catch (conversionError) {
-          logger.error(`❌ Erro ao gerar URL do proxy: ${conversionError.message}`);
-          logger.warn(`⚠️  Continuando com URL original...`);
-        }
-      } else {
-        logger.info(`✅ Imagem em formato compatível, sem necessidade de conversão`);
+      if (typeof finalImageUrl === 'string' && finalImageUrl.startsWith('//')) {
+        finalImageUrl = 'https:' + finalImageUrl;
       }
 
-      // 1. Enviar apenas a imagem (sem caption)
-      logger.info(`📸 Enviando imagem SEM caption para grupo ${groupId}`);
-      const imageResult = await this.sendImage(groupId, finalImageUrl, '');
+      // Enviar imagem com caption (tudo junto)
+      // WhatsApp limita caption a 1024 caracteres
+      const caption = message.substring(0, 1024);
 
-      logger.info(`✅ Imagem enviada. Aguardando 500ms antes de enviar mensagem...`);
+      const result = await this.sendImage(groupId, finalImageUrl, caption);
 
-      // 2. Aguardar um pouco para garantir que a imagem seja processada
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // 3. Enviar a mensagem separadamente
-      logger.info(`📤 Enviando mensagem de texto separada...`);
-      const messageResult = await this.sendMessage(groupId, message);
-
-      logger.info(`✅ Imagem + Mensagem enviadas com sucesso para grupo ${groupId}`);
+      logger.info(`✅ Imagem com caption enviada para grupo ${groupId}`);
 
       return {
         success: true,
-        imageMessageId: imageResult.messageId,
-        textMessageId: messageResult.messageId,
-        data: {
-          image: imageResult.data,
-          text: messageResult.data
-        }
+        messageId: result.messageId
       };
     } catch (error) {
-      logger.error(`❌ Erro ao enviar mensagem com imagem: ${error.message}`);
-      // Fallback: tentar enviar apenas mensagem
-      try {
-        logger.warn(`⚠️ Tentando fallback: enviar apenas mensagem sem imagem`);
-        return await this.sendMessage(groupId, message);
-      } catch (fallbackError) {
-        logger.error(`❌ Erro no fallback: ${fallbackError.message}`);
-        throw error;
-      }
+      logger.error(`❌ Erro ao enviar imagem com caption: ${error.message}`);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
