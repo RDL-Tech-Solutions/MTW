@@ -50,12 +50,7 @@ export const captureLinkHandler = async (ctx, url) => {
             }
         }
 
-        // 2. Salvar no Banco (Product.create)
-        // Adaptar campos do LinkAnalyzer para o Model Product
-        // 2. Salvar no Banco (Product.create)
-        // Adaptar campos do LinkAnalyzer para o Model Product
         // Lógica de Preservação de Link Original (Short Links)
-        // Se o usuário enviou um link curto (ex: /sec/ do ML), manter esse link
         let finalAffiliateLink = productData.affiliateLink || url;
 
         const isShortLink =
@@ -70,27 +65,37 @@ export const captureLinkHandler = async (ctx, url) => {
             logger.info(`[AdminBot] Mantendo link curto original: ${finalAffiliateLink}`);
         }
 
-        const newProductData = {
-            name: productData.name,
-            image_url: productData.imageUrl || 'https://via.placeholder.com/800x800.png?text=Sem+Imagem',
-            platform: productData.platform || 'unknown',
-            current_price: productData.currentPrice || 0,
-            old_price: productData.oldPrice || 0,
-            original_link: productData.url || productData.originalLink || url, // Link resolvido
-            affiliate_link: finalAffiliateLink, // Link curto preservado
-            status: 'pending',
-            external_id: productData.externalId || generateUniqueId(),
-            capture_source: 'admin_bot',
-            is_active: true
-        };
-
-        const product = await Product.create(newProductData);
-
-        if (!product) {
-            throw new Error('Falha ao salvar produto no banco.');
+        // 2. Verificar se já existe (Duplicidade)
+        let product = null;
+        if (productData.externalId) {
+            product = await Product.findByExternalId(productData.externalId, productData.platform);
+            if (product) {
+                logger.info(`[AdminBot] Produto já existe no banco: ${product.id}`);
+            }
         }
 
-        logger.info(`[AdminBot] Produto capturado: ${product.id} - ${product.name} `);
+        if (!product) {
+            const newProductData = {
+                name: productData.name,
+                image_url: productData.imageUrl || 'https://via.placeholder.com/800x800.png?text=Sem+Imagem',
+                platform: productData.platform || 'unknown',
+                current_price: productData.currentPrice || 0,
+                old_price: productData.oldPrice || 0,
+                original_link: productData.url || productData.originalLink || url, // Link resolvido
+                affiliate_link: finalAffiliateLink, // Link curto preservado
+                status: 'pending',
+                external_id: productData.externalId || generateUniqueId(),
+                capture_source: 'admin_bot',
+                is_active: true
+            };
+
+            product = await Product.create(newProductData);
+
+            if (!product) {
+                throw new Error('Falha ao salvar produto no banco.');
+            }
+            logger.info(`[AdminBot] Novo produto capturado: ${product.id} - ${product.name} `);
+        }
 
         // Formatar valores
         const price = (product.current_price !== undefined && product.current_price !== null && product.current_price > 0)

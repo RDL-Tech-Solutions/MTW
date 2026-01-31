@@ -172,15 +172,21 @@ class Product {
   }
 
   // Buscar produto por external_id
-  static async findByExternalId(externalId, platform) {
-    const { data, error } = await supabase
+  static async findByExternalId(externalId, platform = null) {
+    let query = supabase
       .from('products')
       .select('*')
-      .eq('external_id', externalId)
-      .eq('platform', platform)
-      .single();
+      .eq('external_id', externalId);
 
-    if (error && error.code !== 'PGRST116') throw error;
+    if (platform) {
+      query = query.eq('platform', platform);
+    }
+
+    const { data, error } = await query
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) throw error;
     return data;
   }
 
@@ -310,19 +316,6 @@ class Product {
       .single();
 
     if (error) throw error;
-    return data;
-  }
-
-  // Buscar produto por external_id
-  static async findByExternalId(externalId) {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('external_id', externalId)
-      .eq('is_active', true)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error; // Ignora erro de "não encontrado"
     return data;
   }
 
