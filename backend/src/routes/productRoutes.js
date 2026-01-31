@@ -29,5 +29,6 @@ router.post('/', authenticateToken, requireAdmin, createLimiterDefault, validate
 router.put('/:id', authenticateToken, requireAdmin, validate(updateProductSchema), ProductController.update);
 router.delete('/:id', authenticateToken, requireAdmin, ProductController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, ProductController.batchDelete);
+router.post('/:id/republish', authenticateToken, requireAdmin, ProductController.republish);
 
 export default router;

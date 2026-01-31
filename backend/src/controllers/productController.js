@@ -658,6 +658,110 @@ class ProductController {
     }
   }
 
+  // Republicar produto (admin)
+  static async republish(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { coupon_id } = req.body;
+
+      logger.info(`🔄 Republicando produto ${id}...`);
+
+      // Buscar produto completo (com dados de categoria)
+      const product = await Product.findById(id);
+      if (!product) {
+        return res.status(404).json(
+          errorResponse(ERROR_MESSAGES.NOT_FOUND, ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      // Verificar status (permitir apenas aprovados ou já publicados)
+      if (product.status !== 'approved' && product.status !== 'published') {
+        return res.status(400).json(
+          errorResponse('Apenas produtos aprovados ou já publicados podem ser republicados', 'INVALID_STATUS')
+        );
+      }
+
+      let updateData = {};
+      let finalPrice = product.final_price || product.current_price;
+
+      // Se um cupom foi fornecido ou explicitamente removido (null)
+      if (coupon_id !== undefined) {
+        if (coupon_id) {
+          // Buscar cupom
+          const Coupon = (await import('../models/Coupon.js')).default;
+          const coupon = await Coupon.findById(coupon_id);
+
+          if (coupon && coupon.is_active) {
+            // Calcular preço final com cupom
+            const currentBasePrice = product.current_price || 0;
+
+            if (coupon.discount_type === 'percentage') {
+              finalPrice = currentBasePrice - (currentBasePrice * (coupon.discount_value / 100));
+            } else {
+              finalPrice = Math.max(0, currentBasePrice - coupon.discount_value);
+            }
+
+            // Aplicar limite máximo de desconto se existir
+            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+              const discountAmount = currentBasePrice - finalPrice;
+              if (discountAmount > coupon.max_discount_value) {
+                finalPrice = currentBasePrice - coupon.max_discount_value;
+              }
+            }
+
+            updateData.coupon_id = coupon_id;
+
+            logger.info(`🎟️ Cupom vinculado na republicação: ${coupon.code}. Novo preço final: R$ ${finalPrice.toFixed(2)}`);
+          } else {
+            return res.status(400).json(errorResponse('Cupom inválido ou inativo', 'INVALID_COUPON'));
+          }
+        } else {
+          // Remover cupom
+          updateData.coupon_id = null;
+          finalPrice = product.current_price;
+          logger.info(`🎟️ Cupom removido na republicação`);
+        }
+      }
+
+      // Atualizar no banco se houver mudanças
+      if (Object.keys(updateData).length > 0) {
+        await Product.update(id, updateData);
+        // Atualizar objeto em memória para publicação
+        Object.assign(product, updateData);
+      }
+
+      // Garantir que os campos virtuais de preço estejam corretos no objeto de publicação
+      product.final_price = finalPrice;
+      product.price_with_coupon = product.coupon_id ? finalPrice : null;
+
+      // Publicar imediato (ignore o scheduler da IA para republicação manual)
+      logger.info(`📤 Disparando republicação imediata para ${product.name}`);
+      const publishResult = await publishService.publishAll(product, {
+        manual: true,
+        // Ao republicar, garantimos que mantemos a categoria atual
+        manualCategoryId: product.category_id,
+        skipAiCategory: true
+      });
+
+      if (publishResult.success) {
+        // Garantir status 'published'
+        await Product.update(id, { status: 'published' });
+        logger.info(`✅ Produto republicado com sucesso.`);
+      } else {
+        logger.warn(`⚠️ Falha ao republicar: ${publishResult.reason || 'Erro desconhecido'}`);
+      }
+
+      res.json(successResponse({
+        publishResult,
+        product
+      }, publishResult.success ? 'Produto republicado com sucesso' : `Produto republicado, mas houve falha no envio: ${publishResult.reason || 'Verifique os logs'}`));
+
+    } catch (error) {
+      logger.error(`❌ Erro ao republicar produto: ${error.message}`);
+      next(error);
+    }
+  }
+
   // Estatísticas de produtos
   static async getStats(req, res, next) {
     try {

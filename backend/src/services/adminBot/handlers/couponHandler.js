@@ -2,6 +2,9 @@ import Coupon from '../../../models/Coupon.js';
 import notificationDispatcher from '../../bots/notificationDispatcher.js';
 import logger from '../../../config/logger.js';
 import { InlineKeyboard } from 'grammy';
+import advancedTemplateGenerator from '../../../ai/advancedTemplateGenerator.js';
+import openrouterClient from '../../../ai/openrouterClient.js';
+import path from 'path';
 
 /**
  * Iniciar criação de cupom (Menu Inicial)
@@ -83,17 +86,81 @@ export const handleCouponSteps = async (ctx, text) => {
 
     // --- MODO CLONE ---
     if (step === 'COUPON_CLONE_WAITING_MSG') {
-        // Se a mensagem for texto
-        if (text) {
-            await ctx.reply('🤖 Analisando mensagem...', { reply_to_message_id: ctx.message.message_id });
-            const extractedData = parseMessageWithAI(text);
+        const msgText = text || (ctx.message && ctx.message.caption);
+
+        if (msgText) {
+            await ctx.reply('🤖 Analisando mensagem com IA...', { reply_to_message_id: ctx.message.message_id });
+
+            // 1. Tentar Extração via IA (Análise Completa)
+            let extractedData = {};
+            try {
+                const aiPrompt = `Extraia os detalhes do cupom desta mensagem de oferta. 
+                Seja preciso com o código, valor e plataforma.
+                Procure especialmente por códigos entre aspas simples como 'CUPOM10'.
+                
+                Mensagem: "${msgText}"
+                
+                Retorne APENAS um JSON:
+                {
+                  "code": "CÓDIGO",
+                  "discount_value": 10,
+                  "discount_type": "percentage|fixed",
+                  "platform": "shopee|mercadolivre|amazon|aliexpress|magazineluiza|kabum|pichau|general",
+                  "min_purchase": 0,
+                  "max_discount_value": null,
+                  "is_general": true
+                }`;
+
+                const aiResponse = await openrouterClient.makeRequest(aiPrompt);
+                extractedData = aiResponse;
+                logger.info(`🤖 [IA] Dados extraídos: ${JSON.stringify(extractedData)}`);
+            } catch (aiError) {
+                logger.warn(`⚠️ Falha na IA, usando extração padrão: ${aiError.message}`);
+                extractedData = parseMessageWithAI(msgText);
+            }
+
+            // 2. Sincronização com Banco de Dados
+            if (extractedData.code) {
+                try {
+                    const existing = await Coupon.findByCode(extractedData.code.toUpperCase());
+                    if (existing) {
+                        logger.info(`📦 [Banco] Cupom ${extractedData.code} encontrado, mesclando dados.`);
+                        // Mesclar dados do banco (prioridade) com os novos da mensagem
+                        extractedData = {
+                            ...extractedData,
+                            ...existing,
+                            id: null, // Resetar ID para criar novo ou tratar como novo objeto na sessão
+                            _original_id: existing.id // Guardar para aprovação posterior
+                        };
+                        await ctx.reply('📦 *Cupom encontrado no banco!* Os dados foram carregados automaticamente.', { parse_mode: 'Markdown' });
+                    }
+                } catch (dbError) {
+                    logger.error(`Erro ao buscar cupom no banco: ${dbError.message}`);
+                }
+            }
+
             ctx.session.tempData.coupon = { ...coupon, ...extractedData };
-            // Após clonar, perguntar da foto
-            // Se já tem aplicabilidade definida (parseada ou default), confirma
-            // A parseMessageWithAI define is_general
+
+            // 3. Detecção de Foto na Mensagem Original
+            if (ctx.message && ctx.message.photo && ctx.message.photo.length > 0) {
+                const photo = ctx.message.photo[ctx.message.photo.length - 1];
+                const fileInfo = await ctx.api.getFile(photo.file_id);
+                const fileUrl = `https://api.telegram.org/file/bot${process.env.ADMIN_BOT_TOKEN}/${fileInfo.file_path}`;
+
+                ctx.session.tempData.coupon.pending_image_url = fileUrl;
+
+                const kb = new InlineKeyboard()
+                    .text('✅ Usar Foto da Mensagem', 'cp:photo:use_current')
+                    .text('📸 Enviar Outra', 'cp:photo:yes')
+                    .text('❌ Usar Padrão (Logo)', 'cp:photo:no');
+
+                await ctx.reply('🖼️ *Detectei uma foto na mensagem!*\nO que deseja fazer?', { parse_mode: 'Markdown', reply_markup: kb });
+                ctx.session.step = 'COUPON_WAITING_PHOTO_DECISION';
+                return;
+            }
         }
 
-        // Fluxo pós-clone: Pergunta da Foto
+        // Fluxo padrão se não tiver foto ou falhar extração
         return await askPhotoQuestion(ctx);
     }
 
@@ -133,6 +200,24 @@ export const handleCouponSteps = async (ctx, text) => {
             return await showReviewMenu(ctx);
         } else {
             await ctx.reply('❌ Digite um valor válido ou 0.');
+        }
+    }
+
+    else if (step === 'COUPON_MANUAL_MAX_DISCOUNT' || step === 'COUPON_EDIT_FIELD_MAX_DISCOUNT') {
+        const num = parseFloat(text.replace(',', '.').replace(/[^0-9.]/g, ''));
+        if (text === '0' || text.toLowerCase() === 'pular') {
+            coupon.max_discount_value = null;
+        } else if (!isNaN(num)) {
+            coupon.max_discount_value = num;
+        } else {
+            return ctx.reply('❌ Digite um valor válido ou 0 para pular.');
+        }
+
+        if (step === 'COUPON_MANUAL_MAX_DISCOUNT') {
+            return await askPlatformSelection(ctx);
+        } else {
+            await ctx.reply(`✅ Limite de desconto atualizado.`);
+            return await showReviewMenu(ctx);
         }
     }
 
@@ -196,7 +281,20 @@ export const handleCouponCallbacks = async (ctx, action) => {
     // --- FLUXO MANUAL ---
     if (action.startsWith('cp:type:')) {
         coupon.discount_type = action.split(':')[2];
-        await ctx.editMessageText('Selecione a *Plataforma*:', { parse_mode: 'Markdown', reply_markup: getPlatformKeyboard() });
+
+        if (coupon.discount_type === 'percentage') {
+            ctx.session.step = 'COUPON_MANUAL_MAX_DISCOUNT';
+            const kb = new InlineKeyboard().text('⏩ Pular', 'cp:skip_max_discount');
+            await ctx.editMessageText('💰 *Limite Máximo de Desconto* (R$)\nDigite o valor máximo (ex: 20) ou 0 para sem limite:', { parse_mode: 'Markdown', reply_markup: kb });
+        } else {
+            coupon.max_discount_value = null;
+            await askPlatformSelection(ctx);
+        }
+    }
+
+    if (action === 'cp:skip_max_discount') {
+        coupon.max_discount_value = null;
+        await askPlatformSelection(ctx);
     }
 
     if (action.startsWith('cp:plat:')) {
@@ -230,13 +328,20 @@ export const handleCouponCallbacks = async (ctx, action) => {
         }
     }
 
-    // DECISÃO DE FOTO
+    if (action === 'cp:photo:use_current') {
+        coupon.image_url = coupon.pending_image_url;
+        delete coupon.pending_image_url;
+        await ctx.editMessageText('✅ Foto da mensagem será utilizada.');
+        await showReviewMenu(ctx);
+    }
+
     if (action === 'cp:photo:yes') {
         ctx.session.step = 'COUPON_WAITING_PHOTO';
         await ctx.editMessageText('📸 *Envie a foto do cupom agora:*', { parse_mode: 'Markdown' });
     }
     if (action === 'cp:photo:no') {
         coupon.image_url = null; // Reset para garantir default
+        delete coupon.pending_image_url;
         await showReviewMenu(ctx);
     }
 
@@ -268,6 +373,7 @@ export const handleCouponCallbacks = async (ctx, action) => {
         let prompt = '';
         if (field === 'code') { prompt = '✏️ Digite o novo *CÓDIGO*:'; ctx.session.step = 'COUPON_EDIT_FIELD_CODE'; }
         else if (field === 'discount') { prompt = '✏️ Digite o *VALOR*:'; ctx.session.step = 'COUPON_EDIT_FIELD_DISCOUNT'; }
+        else if (field === 'max_discount') { prompt = '✏️ Digite o *Limite Máximo* (0 para sem limite):'; ctx.session.step = 'COUPON_EDIT_FIELD_MAX_DISCOUNT'; }
         else if (field === 'min') { prompt = '✏️ Digite o *Mínimo* (0 para limpar):'; ctx.session.step = 'COUPON_EDIT_FIELD_MIN'; }
         else if (field === 'expiration') { prompt = '📅 Digite a nova *Data* (DD/MM/AAAA) ou "0":'; ctx.session.step = 'COUPON_EDIT_FIELD_EXPIRATION'; }
         else if (field === 'products') { prompt = '📝 Digite os *Produtos* (separados por vírgula):'; ctx.session.step = 'COUPON_EDIT_FIELD_PRODUCTS'; }
@@ -304,7 +410,7 @@ async function showReviewMenu(ctx) {
 
     const keyboard = new InlineKeyboard()
         .text('✏️ Plat', 'cp:edit:plat').text('✏️ Cód', 'cp:edit:code').text('✏️ Val', 'cp:edit:discount').row()
-        .text('✏️ Mín', 'cp:edit:min').text('✏️ Expira', 'cp:edit:expiration').row()
+        .text('✏️ Limite R$', 'cp:edit:max_discount').text('✏️ Mín', 'cp:edit:min').text('✏️ Expira', 'cp:edit:expiration').row()
         .text('✏️ Aplicabilidade', 'cp:edit:app').text('✏️ Foto', 'cp:edit:photo').row()
         .text('🚀 Salvar e Publicar', 'cp:publish_now').row()
         .text('💾 Apenas Salvar', 'cp:save_only');
@@ -313,6 +419,10 @@ async function showReviewMenu(ctx) {
     ctx.session.step = 'COUPON_CONFIRM_PUBLISH';
     try { await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: keyboard }); }
     catch (e) { await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard }); }
+}
+
+async function askPlatformSelection(ctx) {
+    await ctx.editMessageText('Selecione a *Plataforma*:', { parse_mode: 'Markdown', reply_markup: getPlatformKeyboard() });
 }
 
 function getPlatformKeyboard() {
@@ -328,6 +438,7 @@ function formatMatches(c) {
         `🎟️ *${c.code || '?'}*\n` +
         `💰 ${c.discount_value || 0}${c.discount_type === 'percentage' ? '%' : ' R$'}\n`;
 
+    if (c.max_discount_value) txt += `💰 Limite Desconto: R$ ${c.max_discount_value}\n`;
     if (c.min_purchase) txt += `🛒 Mín: R$ ${c.min_purchase}\n`;
     if (c.valid_until) txt += `📅 Expira: ${new Date(c.valid_until).toLocaleDateString('pt-BR')}\n`;
     if (c.is_general === false) {
@@ -364,6 +475,27 @@ async function saveCoupon(ctx, data) {
         if (toSave.is_general === undefined) toSave.is_general = true;
 
         const saved = await Coupon.create(toSave);
+
+        // 4. Aprovação Automática de Cupons Pendentes
+        if (saved && saved.code) {
+            try {
+                // Buscar outros cupons com o mesmo código que estão pendentes
+                const pendingCoupons = await Coupon.findAllByCode(saved.code, {
+                    excludeId: saved.id,
+                    onlyPending: true
+                });
+
+                if (pendingCoupons.length > 0) {
+                    logger.info(`✅ [Aprovação] Aprovando ${pendingCoupons.length} cupons pendentes com código ${saved.code}`);
+                    for (const pc of pendingCoupons) {
+                        await Coupon.approve(pc.id);
+                    }
+                }
+            } catch (approvalError) {
+                logger.error(`Erro ao aprovar cupons pendentes: ${approvalError.message}`);
+            }
+        }
+
         return saved;
     } catch (e) {
         logger.error('Erro ao salvar cupom:', e);
@@ -409,10 +541,15 @@ function parseMessageWithAI(text) {
     else if (t.includes('kabum')) data.platform = 'kabum';
     else if (t.includes('pichau')) data.platform = 'pichau';
 
-    // Código
-    const codeMatch = text.match(/(?:cupom|c[óo]digo|use|code)[:\s]*([A-Z0-9_-]{4,20})/i);
-    if (codeMatch) data.code = codeMatch[1].toUpperCase();
-    else { const upperMatch = text.match(/\b[A-Z0-9]{5,15}\b/); if (upperMatch) data.code = upperMatch[0]; }
+    // Código - Aprimorado para aspas simples
+    const quoteMatch = text.match(/'([^']+)'/);
+    if (quoteMatch) {
+        data.code = quoteMatch[1].toUpperCase();
+    } else {
+        const codeMatch = text.match(/(?:cupom|c[óo]digo|use|code)[:\s]*([A-Z0-9_-]{4,20})/i);
+        if (codeMatch) data.code = codeMatch[1].toUpperCase();
+        else { const upperMatch = text.match(/\b[A-Z0-9]{5,15}\b/); if (upperMatch) data.code = upperMatch[0]; }
+    }
 
     // Desconto
     const percentMatch = text.match(/(\d+)%\s*(?:off|de desconto)/i);

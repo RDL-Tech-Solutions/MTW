@@ -37,7 +37,14 @@ export default function Products() {
     submitting: false,
     analyzing: false,
     batchDeleting: false,
-    scheduling: false
+    scheduling: false,
+    republishing: false
+  });
+
+  const [isRepublishDialogOpen, setIsRepublishDialogOpen] = useState(false);
+  const [republishingProduct, setRepublishingProduct] = useState(null);
+  const [republishFormData, setRepublishFormData] = useState({
+    coupon_id: ''
   });
 
   const [formData, setFormData] = useState({
@@ -271,6 +278,52 @@ export default function Products() {
       platform: product.platform || 'shopee'
     });
     setIsDialogOpen(true);
+  };
+
+  const handleRepublish = (product) => {
+    setRepublishingProduct(product);
+    setRepublishFormData({
+      coupon_id: product.coupon_id || ''
+    });
+    setIsRepublishDialogOpen(true);
+  };
+
+  const handleRepublishSubmit = async () => {
+    if (!republishingProduct) return;
+
+    setProcessingActions(prev => ({ ...prev, republishing: true }));
+    try {
+      const response = await api.post(`/products/${republishingProduct.id}/republish`, {
+        coupon_id: republishFormData.coupon_id || null
+      });
+
+      const { publishResult } = response.data.data;
+
+      if (publishResult.success) {
+        toast({
+          title: "Sucesso!",
+          description: "Produto republicado com sucesso.",
+          variant: "success",
+        });
+        fetchProducts(pagination.page);
+      } else {
+        toast({
+          title: "Aviso",
+          description: response.data.message || "Produto atualizado, mas houve falha no envio para alguns canais.",
+          variant: "warning",
+        });
+      }
+      setIsRepublishDialogOpen(false);
+    } catch (error) {
+      console.error('Erro ao republicar produto:', error);
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || "Erro ao republicar produto. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingActions(prev => ({ ...prev, republishing: false }));
+    }
   };
 
   const handleAnalyzeLink = async () => {
@@ -1123,10 +1176,22 @@ export default function Products() {
                                   </a>
                                 </Button>
                               )}
+                              {(product.status === 'approved' || product.status === 'published') && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRepublish(product)}
+                                  title="Republicar"
+                                  className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
+                                >
+                                  <Zap className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleEdit(product)}
+                                title="Editar"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
@@ -1136,6 +1201,7 @@ export default function Products() {
                                 onClick={() => handleDelete(product.id)}
                                 disabled={processingActions.deleting.has(product.id)}
                                 className="disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Deletar"
                               >
                                 {processingActions.deleting.has(product.id) ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1157,6 +1223,67 @@ export default function Products() {
                 totalPages={pagination.totalPages}
                 onPageChange={(newPage) => fetchProducts(newPage)}
               />
+
+              {/* Modal de Republicação */}
+              <Dialog open={isRepublishDialogOpen} onOpenChange={setIsRepublishDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Republicar Produto</DialogTitle>
+                    <DialogDescription>
+                      Deseja republicar o produto "{republishingProduct?.name}"?
+                      Você pode opcionalmente vincular um cupom abaixo.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="republish_coupon_id">Vincular Cupom (Opcional)</Label>
+                      <select
+                        id="republish_coupon_id"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={republishFormData.coupon_id}
+                        onChange={(e) => setRepublishFormData({ coupon_id: e.target.value })}
+                      >
+                        <option value="">Nenhum cupom</option>
+                        {coupons
+                          .filter(c => c.is_active && (c.platform === republishingProduct?.platform || c.platform === 'general'))
+                          .map(coupon => {
+                            let discountText = coupon.discount_type === 'percentage'
+                              ? `${coupon.discount_value}% OFF`
+                              : `R$ ${parseFloat(coupon.discount_value || 0).toFixed(2)} OFF`;
+
+                            return (
+                              <option key={coupon.id} value={coupon.id}>
+                                {coupon.code} - {discountText}
+                              </option>
+                            );
+                          })}
+                      </select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {republishFormData.coupon_id
+                          ? 'O produto será republicado usando o template de "Promoção + Cupom".'
+                          : 'O produto será republicado usando o template de "Nova Promoção".'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsRepublishDialogOpen(false)} disabled={processingActions.republishing}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleRepublishSubmit} disabled={processingActions.republishing}>
+                      {processingActions.republishing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Republicando...
+                        </>
+                      ) : (
+                        'Confirmar Republicação'
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </>
           )}
         </CardContent>

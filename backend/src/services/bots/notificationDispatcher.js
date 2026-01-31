@@ -95,16 +95,20 @@ class NotificationDispatcher {
 
       logger.info(`📤 Disparando notificação: ${eventType}`);
 
-      // INJEÇÃO DE IMAGEM PARA CUPONS (USANDO ARQUIVO LOCAL)
-      if (eventType === 'coupon_new' && !data.image_url) {
-        const platform = data.platform ? data.platform.toLowerCase() : 'general';
-        const logoPath = this.getPlatformLogoPath(platform);
+      // INJEÇÃO DE IMAGEM PARA CUPONS (USANDO ARQUIVO LOCAL - DEFINITIVO)
+      if (eventType === 'coupon_new') {
+        if (!data.image_url) {
+          const platform = data.platform ? data.platform.toLowerCase() : 'general';
+          const logoPath = this.getPlatformLogoPath(platform);
 
-        if (logoPath) {
-          data.image_url = logoPath;
-          logger.info(`🖼️ Imagem de plataforma (LOCAL) injetada para cupom (${platform}): ${data.image_url}`);
+          if (logoPath) {
+            data.image_url = logoPath;
+            logger.info(`🖼️ [Dispatcher] Usando LOGO PADRÃO (Local): ${path.basename(logoPath)} para ${platform}`);
+          } else {
+            logger.warn(`⚠️ [Dispatcher] Falha ao encontrar logo local para ${platform}`);
+          }
         } else {
-          logger.warn(`⚠️ Não foi possível encontrar logo local para ${platform} nem fallback.`);
+          logger.info(`📸 [Dispatcher] MANTENDO imagem original do cupom: ${typeof data.image_url === 'string' ? data.image_url.substring(0, 80) : 'Buffer'}`);
         }
       }
 
@@ -592,10 +596,10 @@ class NotificationDispatcher {
             parse_mode: parseMode
           });
 
-          if (result && result.message_id) {
+          if (result && (result.messageId || result.message_id)) {
             sent++;
             await this.logSend(channel.id, eventType, data);
-            results.push({ channelId: channel.id, chatId: channel.identifier, success: true, messageId: result.message_id });
+            results.push({ channelId: channel.id, chatId: channel.identifier, success: true, messageId: result.messageId || result.message_id });
           }
         } catch (error) {
           logger.error(`❌ Erro ao enviar imagem Telegram para canal ${channel.id}: ${error.message}`);

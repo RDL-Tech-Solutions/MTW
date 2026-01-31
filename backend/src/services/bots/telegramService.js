@@ -241,6 +241,7 @@ class TelegramService {
           return {
             success: true,
             messageId: response.data.result.message_id,
+            message_id: response.data.result.message_id,
             data: response.data
           };
         } catch (downloadError) {
@@ -276,6 +277,7 @@ class TelegramService {
             return {
               success: true,
               messageId: response.data.result.message_id,
+              message_id: response.data.result.message_id,
               data: response.data
             };
           } catch (urlError) {
@@ -325,6 +327,7 @@ class TelegramService {
         return {
           success: true,
           messageId: response.data.result.message_id,
+          message_id: response.data.result.message_id,
           data: response.data
         };
       }
@@ -543,6 +546,7 @@ class TelegramService {
         return {
           success: true,
           messageId: response.data.result.message_id,
+          message_id: response.data.result.message_id,
           data: response.data
         };
       } catch (markdownError) {
@@ -573,6 +577,7 @@ class TelegramService {
               return {
                 success: true,
                 messageId: response.data.result.message_id,
+                message_id: response.data.result.message_id,
                 data: response.data,
                 warning: 'Mensagem enviada com HTML escapado devido a erro de parsing'
               };
@@ -598,6 +603,7 @@ class TelegramService {
           return {
             success: true,
             messageId: response.data.result.message_id,
+            message_id: response.data.result.message_id,
             data: response.data,
             warning: 'Mensagem enviada sem formatação devido a erro de parsing'
           };

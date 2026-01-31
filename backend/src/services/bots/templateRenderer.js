@@ -599,6 +599,11 @@ ${variables.coupon_section || ''}
           couponMsg += `\n💳 **Compra mínima:** ${variables.min_purchase}`;
         }
 
+        // Adicionar limite de desconto apenas se existir
+        if (variables.max_discount && variables.max_discount.trim()) {
+          couponMsg += `\n${variables.max_discount}`;
+        }
+
         // Adicionar aplicabilidade apenas se existir
         if (variables.applicability && variables.applicability.trim()) {
           couponMsg += `\n${variables.applicability}`;

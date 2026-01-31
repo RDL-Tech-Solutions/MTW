@@ -137,7 +137,8 @@ class AdvancedTemplateGenerator {
         // Substituir placeholders por variáveis formatadas em Markdown
         .replace(/CODIGO_CUPOM/gi, '`{coupon_code}`')
         .replace(/VALOR_DESCONTO/gi, '**{discount_value}**')
-        .replace(/VALOR_MINIMO/gi, '**{min_purchase}**');
+        .replace(/VALOR_MINIMO/gi, '**{min_purchase}**')
+        .replace(/VALOR_LIMITE/gi, '{max_discount}');
 
       // Substituir APLICABILIDADE conforme configuração
       if (isGeneral === true) {
@@ -387,6 +388,7 @@ ${randomPersona.instruction}
     Código: ${coupon.code}
     Desconto: ${discountText}
 ${context.hasMinPurchase ? `Mínimo: R$ ${coupon.min_purchase}` : 'Sem mínimo!'}
+${context.hasMaxDiscount ? `Limite Máximo de Desconto: R$ ${coupon.max_discount_value}` : ''}
 ${context.isGeneral === true ? 'TODOS OS PRODUTOS (destaque isso!)' : ''}
 ${context.isGeneral === false ? 'Produtos selecionados (mencione!)' : ''}
 
@@ -400,8 +402,9 @@ Crie uma mensagem curta e PERFEITA para vender este cupom no Telegram/WhatsApp s
     4. Use CODIGO_CUPOM para o código
     5. Use VALOR_DESCONTO para o desconto
     6. Use VALOR_MINIMO se tiver mínimo
-    7. Use APLICABILIDADE se tiver is_general definido
-    8. NUNCA mencione datas, validades ou links
+    7. Use VALOR_LIMITE se tiver limite de desconto (R$)
+    8. Use APLICABILIDADE se tiver is_general definido
+    9. NUNCA mencione datas, validades ou links
     9. Use QUEBRA DE LINHA DUPLA entre frases/parágrafos para não ficar tudo junto
     10. MÁXIMO DE 850 CARACTERES
 

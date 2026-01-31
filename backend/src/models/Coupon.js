@@ -67,7 +67,8 @@ class Coupon {
       message_hash = null,
       confidence_score = null,
       ai_decision_reason = null,
-      ai_edit_history = null
+      ai_edit_history = null,
+      image_url = null
     } = couponData;
 
     // Normalizar plataforma para valor válido
@@ -100,7 +101,8 @@ class Coupon {
       message_hash: message_hash || null,
       confidence_score: confidence_score !== null && confidence_score !== undefined ? confidence_score : null,
       ai_decision_reason: ai_decision_reason || null,
-      ai_edit_history: ai_edit_history || null
+      ai_edit_history: ai_edit_history || null,
+      image_url: image_url || null
     };
 
     // Adicionar campos opcionais se fornecidos
