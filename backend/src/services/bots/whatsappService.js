@@ -50,6 +50,79 @@ class WhatsAppService {
   }
 
   /**
+   * Enviar imagem por ID (upload prévio) com caption
+   * @param {string} groupId - ID do grupo
+   * @param {string} mediaId - ID da mídia no WhatsApp
+   * @param {string} caption - Legenda
+   */
+  async sendImageById(groupId, mediaId, caption = '') {
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: groupId,
+      type: 'image',
+      image: {
+        id: mediaId
+      }
+    };
+
+    if (caption && caption.trim().length > 0) {
+      payload.image.caption = caption.substring(0, 1024);
+    }
+
+    return await this._sendApiRequest(groupId, payload, 'imagem_id');
+  }
+
+  /**
+   * Upload de mídia para WhatsApp
+   * @param {string} filePath - Caminho local do arquivo
+   * @param {string} mimeType - Tipo MIME (image/jpeg, etc)
+   */
+  async uploadMedia(filePath, mimeType = 'image/jpeg') {
+    try {
+      if (!this.apiUrl || !this.apiToken) {
+        await this.loadConfig();
+      }
+
+      const fs = (await import('fs'));
+      const FormData = (await import('form-data')).default;
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Arquivo não encontrado para upload: ${filePath}`);
+      }
+
+      const form = new FormData();
+      form.append('file', fs.createReadStream(filePath));
+      form.append('type', mimeType);
+      form.append('messaging_product', 'whatsapp');
+
+      logger.info(`📤 Uploading media to WhatsApp: ${filePath}`);
+
+      // URL base para upload é diferente (graph.facebook.com/vXX.X/PHONE_ID/media)
+      // Extrair versão e base da URL configurada
+      // Geralmente apiUrl é https://graph.facebook.com/v18.0
+      
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/media`,
+        form,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiToken}`,
+            ...form.getHeaders()
+          },
+          timeout: 30000
+        }
+      );
+
+      logger.info(`✅ Media uploaded. ID: ${response.data.id}`);
+      return response.data.id;
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || error.message;
+      logger.error(`❌ Erro ao fazer upload de mídia WhatsApp: ${msg}`);
+      throw error;
+    }
+  }
+
+  /**
    * Enviar imagem para um grupo do WhatsApp
    * @param {string} groupId - ID do grupo
    * @param {string} imageUrl - URL da imagem

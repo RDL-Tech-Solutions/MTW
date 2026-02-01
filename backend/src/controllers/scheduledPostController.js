@@ -92,9 +92,14 @@ class ScheduledPostController {
      * GET /api/scheduled-posts/debug
      * Endpoint de debug para diagnosticar problemas com posts agendados
      */
+    /**
+     * GET /api/scheduled-posts/debug
+     * Endpoint de debug para diagnosticar problemas com posts agendados
+     */
     static async debug(req, res, next) {
         try {
             const { supabase } = await import('../config/database.js');
+            const schedulerCron = (await import('../cron/schedulerCron.js')).default;
             const now = new Date();
 
             logger.info('🔍 Executando diagnóstico de posts agendados...');
@@ -137,15 +142,23 @@ class ScheduledPostController {
 
             if (countError) throw countError;
 
+            const cronStatus = {
+                isRunning: !!schedulerCron.task,
+                envEnabled: process.env.ENABLE_CRON_JOBS === 'true',
+                isVercel: !!process.env.VERCEL,
+                timezone: process.env.TZ || 'not set'
+            };
+
             const diagnostics = {
                 serverInfo: {
                     currentTime: now.toISOString(),
                     localTime: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
-                    timezone: process.env.TZ || 'not set (using system default)',
+                    timezone: process.env.TZ || 'not set',
                     nodeVersion: process.version,
                     platform: process.platform,
                     uptime: process.uptime()
                 },
+                cronStatus,
                 postsStatus: {
                     pending: pending.length,
                     processing: processing?.length || 0,
@@ -161,40 +174,55 @@ class ScheduledPostController {
                         attempts: p.attempts,
                         minutesOverdue: Math.floor((now - new Date(p.scheduled_at)) / 60000)
                     })),
-                    processingPosts: processing?.map(p => ({
-                        id: p.id,
-                        scheduled_at: p.scheduled_at,
-                        platform: p.platform,
-                        processing_started_at: p.processing_started_at,
-                        minutesInProcessing: p.processing_started_at
-                            ? Math.floor((now - new Date(p.processing_started_at)) / 60000)
-                            : null
-                    })) || [],
                     stuckPosts: stuck.map(p => ({
                         id: p.id,
                         scheduled_at: p.scheduled_at,
-                        platform: p.platform,
-                        processing_started_at: p.processing_started_at,
                         minutesStuck: Math.floor((now - new Date(p.processing_started_at)) / 60000)
-                    })),
-                    recentPosts: allRecent?.slice(0, 10).map(p => ({
-                        id: p.id,
-                        status: p.status,
-                        scheduled_at: p.scheduled_at,
-                        platform: p.platform,
-                        attempts: p.attempts
-                    })) || []
+                    }))
                 },
-                cronStatus: {
-                    schedulerCronRunning: 'Check logs for cron execution messages',
-                    lastExecutionTime: 'Check logs for last execution timestamp'
-                }
+                solutions: !cronStatus.envEnabled ?
+                    ['⚠️ ENV VAR MISSING: Set ENABLE_CRON_JOBS=true in your .env file'] :
+                    (!cronStatus.isRunning ? ['⚠️ CRON STOPPED: Use POST /api/scheduled-posts/cron/start to start it'] : [])
             };
 
             logger.info('✅ Diagnóstico concluído');
             res.json(successResponse(diagnostics, 'Diagnóstico de posts agendados'));
         } catch (error) {
             logger.error(`❌ Erro no diagnóstico: ${error.message}`);
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/scheduled-posts/cron/start
+     * Forçar inicio do cron
+     */
+    static async startCron(req, res, next) {
+        try {
+            const schedulerCron = (await import('../cron/schedulerCron.js')).default;
+            if (schedulerCron.task) {
+                return res.json(successResponse({ status: 'already_running' }, 'O cron já está rodando.'));
+            }
+            schedulerCron.start();
+            res.json(successResponse({ status: 'started' }, 'Cron de agendamento iniciado manualmente.'));
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/scheduled-posts/cron/stop
+     * Parar cron
+     */
+    static async stopCron(req, res, next) {
+        try {
+            const schedulerCron = (await import('../cron/schedulerCron.js')).default;
+            if (!schedulerCron.task) {
+                return res.json(successResponse({ status: 'not_running' }, 'O cron não está rodando.'));
+            }
+            schedulerCron.stop();
+            res.json(successResponse({ status: 'stopped' }, 'Cron de agendamento parado manualmente.'));
+        } catch (error) {
             next(error);
         }
     }

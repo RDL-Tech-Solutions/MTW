@@ -89,7 +89,11 @@ export const handleCouponSteps = async (ctx, text) => {
         const msgText = text || (ctx.message && ctx.message.caption);
 
         if (msgText) {
-            await ctx.reply('🤖 Analisando mensagem com IA...', { reply_to_message_id: ctx.message.message_id });
+            const replyOptions = {};
+            if (ctx.message && ctx.message.message_id) {
+                replyOptions.reply_to_message_id = ctx.message.message_id;
+            }
+            await ctx.reply('🤖 Analisando mensagem com IA...', replyOptions);
 
             // 1. Tentar Extração via IA (Análise Completa)
             let extractedData = {};
@@ -141,13 +145,23 @@ export const handleCouponSteps = async (ctx, text) => {
 
             ctx.session.tempData.coupon = { ...coupon, ...extractedData };
 
-            // 3. Detecção de Foto na Mensagem Original
-            if (ctx.message && ctx.message.photo && ctx.message.photo.length > 0) {
-                const photo = ctx.message.photo[ctx.message.photo.length - 1];
-                const fileInfo = await ctx.api.getFile(photo.file_id);
-                const fileUrl = `https://api.telegram.org/file/bot${process.env.ADMIN_BOT_TOKEN}/${fileInfo.file_path}`;
+            // 3. Detecção de Foto na Mensagem Original (ou encaminhada)
+            // Verificar explicitamente a mensagem atual OU se já temos uma URL pendente vinda do index.js
+            const hasCurrentPhoto = ctx.message && ctx.message.photo && ctx.message.photo.length > 0;
+            const hasPendingPhoto = ctx.session.tempData.coupon.pending_image_url;
 
-                ctx.session.tempData.coupon.pending_image_url = fileUrl;
+            if (hasCurrentPhoto || hasPendingPhoto) {
+                // Se for foto nova na mensagem atual, processar ela
+                if (hasCurrentPhoto) {
+                    try {
+                        const photo = ctx.message.photo[ctx.message.photo.length - 1];
+                        const fileInfo = await ctx.api.getFile(photo.file_id);
+                        const fileUrl = `https://api.telegram.org/file/bot${process.env.ADMIN_BOT_TOKEN}/${fileInfo.file_path}`;
+                        ctx.session.tempData.coupon.pending_image_url = fileUrl;
+                    } catch (e) {
+                        logger.warn('Erro ao processar foto da mensagem no passo clone:', e);
+                    }
+                }
 
                 const kb = new InlineKeyboard()
                     .text('✅ Usar Foto da Mensagem', 'cp:photo:use_current')
@@ -158,6 +172,7 @@ export const handleCouponSteps = async (ctx, text) => {
                 ctx.session.step = 'COUPON_WAITING_PHOTO_DECISION';
                 return;
             }
+
         }
 
         // Fluxo padrão se não tiver foto ou falhar extração

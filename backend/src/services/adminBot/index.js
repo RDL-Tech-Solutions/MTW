@@ -11,6 +11,77 @@ import * as pendingHandler from './handlers/pendingHandler.js';
 import * as editHandler from './handlers/editHandler.js';
 import Product from '../../models/Product.js'; // Importar Model Product para actions diretas
 
+// Handler Unificado de Texto e Legenda (Caption)
+const handleGeneralInput = async (ctx, text) => {
+    const step = ctx.session.step;
+
+    // Fluxo de Login
+    if (step === 'AWAITING_EMAIL') {
+        return await authService.handleEmail(ctx, text);
+    }
+    if (step === 'AWAITING_PASSWORD') {
+        return await authService.handlePassword(ctx, text);
+    }
+
+    // Ações do Menu (Requer Autenticação)
+    if (!authService.isAuthenticated(ctx)) {
+        return ctx.reply('🔒 Acesso negado. Use /login.');
+    }
+
+    // Fluxo de Cupom (inputs de texto)
+    if (step.startsWith('COUPON_')) {
+        return await couponHandler.handleCouponSteps(ctx, text);
+    }
+
+    // Fluxo de Edição (Wizard Steps)
+    if (step.startsWith('EDIT_WIZARD_') && step !== 'EDIT_WIZARD_CONFIRM') {
+        return await editHandler.handleWizardStep(ctx, text);
+    }
+
+    switch (text) {
+        case '🎫 Criar Cupom':
+            await couponHandler.startCreateCoupon(ctx);
+            break;
+        case '📋 Pendentes':
+            await pendingHandler.listPendingProducts(ctx, 1);
+            break;
+        default:
+            // Verificação aprimorada: Link ou Texto Longo (Clone)
+            if (text.startsWith('http') || (text.length > 20 && (text.includes('R$') || text.toLowerCase().includes('cupom') || text.toLowerCase().includes('oferta') || text.toLowerCase().includes('desconto')))) {
+
+                // Armazenar texto para processamento posterior
+                ctx.session.tempData.pendingInput = text;
+
+                // Armazenar ID da foto se houver (para clonagem)
+                if (ctx.message && ctx.message.photo && ctx.message.photo.length > 0) {
+                    const photo = ctx.message.photo[ctx.message.photo.length - 1]; // Maior resolução
+                    ctx.session.tempData.pendingPhoto = photo.file_id;
+                }
+
+                if (!ctx.session.tempData.coupon) ctx.session.tempData.coupon = { is_general: true };
+
+                const { InlineKeyboard } = await import('grammy');
+                const kb = new InlineKeyboard()
+                    .text('🛍️ Captura de Produto', 'action_choice:capture').row()
+                    .text('🎫 Clonagem de Cupom', 'action_choice:clone');
+
+                const replyOptions = {
+                    parse_mode: 'Markdown',
+                    reply_markup: kb
+                };
+
+                // Tentar responder citando a mensagem, se possível
+                if (ctx.message && ctx.message.message_id) {
+                    replyOptions.reply_to_message_id = ctx.message.message_id;
+                }
+
+                await ctx.reply('🤖 *O que deseja fazer com esta mensagem?*', replyOptions);
+            } else {
+                await ctx.reply('Comando não reconhecido ou use o menu. Envie um Link ou uma Mensagem de Oferta para processar.', { reply_markup: adminMainMenu });
+            }
+    }
+};
+
 let bot = null;
 
 export const initAdminBot = async () => {
@@ -57,57 +128,24 @@ export const initAdminBot = async () => {
             await ctx.reply('Menu Principal:', { reply_markup: adminMainMenu });
         });
 
-        // Handler de Texto Geral (Roteamento por Estado ou Menu)
+        // Handler de Texto Geral
         bot.on('message:text', async (ctx) => {
             const text = ctx.message.text;
-            const step = ctx.session.step;
-
-            // Fluxo de Login
-            if (step === 'AWAITING_EMAIL') {
-                return await authService.handleEmail(ctx, text);
-            }
-            if (step === 'AWAITING_PASSWORD') {
-                return await authService.handlePassword(ctx, text);
-            }
-
-            // Ações do Menu (Requer Autenticação)
-            if (!authService.isAuthenticated(ctx)) {
-                return ctx.reply('🔒 Acesso negado. Use /login.');
-            }
-
-            // Fluxo de Cupom (inputs de texto)
-            if (step.startsWith('COUPON_')) {
-                return await couponHandler.handleCouponSteps(ctx, text);
-            }
-
-            // Fluxo de Edição (Wizard Steps)
-            if (step.startsWith('EDIT_WIZARD_') && step !== 'EDIT_WIZARD_CONFIRM') {
-                return await editHandler.handleWizardStep(ctx, text);
-            }
-
-            switch (text) {
-                case '🎫 Criar Cupom':
-                    await couponHandler.startCreateCoupon(ctx);
-                    break;
-                case '📋 Pendentes':
-                    await pendingHandler.listPendingProducts(ctx, 1);
-                    break;
-                default:
-                    // Captura Automática se for link
-                    if (text.startsWith('http')) {
-                        await captureLinkHandler(ctx, text);
-                        ctx.session.step = 'IDLE';
-                    } else {
-                        await ctx.reply('Comando não reconhecido ou use o menu. Para capturar, envie apenas o link.', { reply_markup: adminMainMenu });
-                    }
-            }
+            await handleGeneralInput(ctx, text);
         });
 
-        // Handler de Fotos (para Cupons)
+        // Handler de Fotos
         bot.on('message:photo', async (ctx) => {
             const step = ctx.session.step;
-            if (step && step.startsWith('COUPON_')) {
-                return await couponHandler.handleCouponSteps(ctx, null); // Passa null no texto, o handler deve pegar ctx.message.photo
+
+            // PRIORIDADE: Se estiver em um passo de receber foto (Cupom), processa a foto
+            if (step && step.startsWith('COUPON_WAITING_PHOTO')) {
+                return await couponHandler.handleCouponSteps(ctx, null);
+            }
+
+            // Se tiver uma legenda (caption), trata como imput de texto/comando
+            if (ctx.message.caption) {
+                return await handleGeneralInput(ctx, ctx.message.caption);
             }
         });
 
@@ -144,9 +182,6 @@ export const initAdminBot = async () => {
                     return await editHandler.handleWizardCouponSelect(ctx, id);
                 }
 
-                // Legado (manter ou remover se não usado mais)
-                // if (data.startsWith('pending:edit:')) ...
-
                 // Pendentes
                 if (data.startsWith('pending:')) {
                     if (data === 'pending:refresh') return await pendingHandler.listPendingProducts(ctx, 1);
@@ -160,13 +195,53 @@ export const initAdminBot = async () => {
                     }
                     if (data === 'pending:back') return await pendingHandler.listPendingProducts(ctx, 1);
                     if (data.startsWith('pending:edit:')) return ctx.answerCallbackQuery('Edição complexa não implementada neste MVP. Use o painel web.');
-                    // if (data.startsWith('pending:reject:')) ... (implementar se necessário)
                 }
 
-                // Publicação direta -> Agora inicia fluxo rápido de verificação (Cupom -> Resumo -> Publicar)
+                // Handler de Publicação Rápida
                 if (data.startsWith('publish:now:')) {
                     const id = data.split(':')[2];
                     return await editHandler.startQuickPublishFlow(ctx, id);
+                }
+
+                // === INTERCEPTAÇÃO DE AÇÃO (PRODUTO vs CUPOM) ===
+                if (data === 'action_choice:capture') {
+                    const text = ctx.session.tempData.pendingInput;
+                    if (!text) return ctx.reply('❌ Dados perdidos. Envie o link novamente.');
+
+                    await ctx.editMessageText('🕵️ Iniciando captura de produto...');
+                    await captureLinkHandler(ctx, text);
+                    ctx.session.step = 'IDLE';
+                    delete ctx.session.tempData.pendingInput;
+                }
+
+                if (data === 'action_choice:clone') {
+                    const text = ctx.session.tempData.pendingInput;
+                    if (!text) return ctx.reply('❌ Dados perdidos. Envie a mensagem novamente.');
+
+                    await ctx.editMessageText('📋 Processando mensagem para clonagem de cupom...');
+
+                    // Configurar estado para simular que estamos no passo de espera
+                    ctx.session.step = 'COUPON_CLONE_WAITING_MSG';
+                    // Inicializar estrutura do cupom se não existir
+                    if (!ctx.session.tempData.coupon) ctx.session.tempData.coupon = { is_general: true };
+
+                    // Verificar se temos foto pendente do encaminhamento
+                    if (ctx.session.tempData.pendingPhoto) {
+                        try {
+                            const photoId = ctx.session.tempData.pendingPhoto;
+                            const fileInfo = await ctx.api.getFile(photoId);
+                            const fileUrl = `https://api.telegram.org/file/bot${process.env.ADMIN_BOT_TOKEN}/${fileInfo.file_path}`;
+                            ctx.session.tempData.coupon.pending_image_url = fileUrl;
+                            logger.info('📸 Foto encaminhada recuperada e definida para o cupom.');
+                        } catch (err) {
+                            logger.warn('Falha ao recuperar foto encaminhada:', err);
+                        }
+                    }
+
+                    // Chamar handler diretamente passando o texto armazenado
+                    await couponHandler.handleCouponSteps(ctx, text);
+                    delete ctx.session.tempData.pendingInput;
+                    delete ctx.session.tempData.pendingPhoto;
                 }
 
                 // Cupons (Fluxo Avançado Unificado)
@@ -177,14 +252,13 @@ export const initAdminBot = async () => {
 
                 // Shortcut criar cupom para produto capturado
                 if (data.startsWith('coupon:create:')) {
-                    // Iniciar fluxo de cupom mas talvez pré-preencher algo? Por enquanto fluxo padrão.
                     await couponHandler.startCreateCoupon(ctx);
                     await ctx.answerCallbackQuery();
                 }
 
             } catch (e) {
                 logger.error('Erro callback admin:', e);
-                await ctx.answerCallbackQuery('Erro ao processar ação.');
+                try { await ctx.answerCallbackQuery('Erro ao processar ação.'); } catch (e2) { }
             }
         });
 

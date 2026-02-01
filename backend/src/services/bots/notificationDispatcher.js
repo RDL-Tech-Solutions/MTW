@@ -13,6 +13,7 @@ import NotificationLog from '../../models/NotificationLog.js';
 import BotSendLog from '../../models/BotSendLog.js';
 import whatsappService from './whatsappService.js';
 import telegramService from './telegramService.js';
+import imageConverterService from './imageConverterService.js';
 import templateRenderer from './templateRenderer.js';
 import logger from '../../config/logger.js';
 
@@ -442,7 +443,40 @@ class NotificationDispatcher {
       if (channel.platform === 'whatsapp') {
         try {
           if (hasValidImage) {
-            result = await whatsappService.sendImage(channel.identifier, imageUrl, message);
+            // FLUXO DE IMAGEM OTIMIZADO (WebP -> JPEG -> Upload -> Send)
+            // Resolve problema de imagens WebP do Mercado Livre que a API não aceita via URL
+
+            let localImagePath = null;
+            try {
+              // 1. Processar imagem (Download + Conversão para JPEG)
+              logger.info(`🔄 [Dispatcher] Processando imagem para WhatsApp: ${imageUrl}`);
+              localImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
+
+              // 2. Fazer upload da mídia para a API do WhatsApp
+              logger.info(`⬆️ [Dispatcher] Fazendo upload da mídia para WhatsApp...`);
+              const mediaId = await whatsappService.uploadMedia(localImagePath);
+
+              if (mediaId) {
+                // 3. Enviar mensagem usando o ID da mídia
+                logger.info(`✅ [Dispatcher] Mídia enviada com sucesso (ID: ${mediaId}). Enviando mensagem...`);
+                result = await whatsappService.sendImageById(channel.identifier, mediaId, message);
+              } else {
+                throw new Error('Falha ao obter ID da mídia após upload');
+              }
+            } catch (mediaError) {
+              logger.error(`❌ [Dispatcher] Erro no fluxo de mídia WhatsApp: ${mediaError.message}`);
+              throw mediaError; // Repassar para o catch externo fazer fallback
+            } finally {
+              // 4. Limpar arquivo temporário
+              if (localImagePath && fs.existsSync(localImagePath)) {
+                try {
+                  fs.unlinkSync(localImagePath);
+                  logger.debug(`🧹 [Dispatcher] Arquivo temporário removido: ${localImagePath}`);
+                } catch (cleanupError) {
+                  logger.warn(`⚠️ [Dispatcher] Falha ao remover arquivo temporário: ${cleanupError.message}`);
+                }
+              }
+            }
           } else {
             result = await whatsappService.sendMessage(channel.identifier, message);
           }
@@ -678,8 +712,9 @@ class NotificationDispatcher {
   }
 
   async sendToWhatsAppWithImage(message, imageUrl, eventType = 'general', data = null, options = {}) {
+    let localImagePath = null;
     try {
-      // Normalizar URL protocol-relative (//exemplo.com -> https://exemplo.com)
+      // Normalizar URL protocol-relative
       if (typeof imageUrl === 'string' && imageUrl.startsWith('//')) {
         imageUrl = 'https:' + imageUrl;
       }
@@ -701,6 +736,25 @@ class NotificationDispatcher {
 
       if (channels.length === 0) return { success: false, sent: 0, total: 0, reason: "Segmentação." };
 
+      // PREPARAÇÃO DA IMAGEM (Unificada para todos os canais)
+      let mediaId = null;
+      let mediaError = null;
+
+      try {
+        logger.info(`🔄 [Dispatcher] Processando imagem para WhatsApp (Batch): ${imageUrl}`);
+        // 1. Processar imagem (Download + Conversão)
+        localImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
+
+        // 2. Fazer upload (Uma única vez)
+        logger.info(`⬆️ [Dispatcher] Fazendo upload da mídia para WhatsApp...`);
+        mediaId = await whatsappService.uploadMedia(localImagePath);
+        logger.info(`✅ [Dispatcher] Mídia pronta para envio em massa. ID: ${mediaId}`);
+      } catch (err) {
+        logger.error(`❌ [Dispatcher] Falha na preparação da imagem (Batch): ${err.message}`);
+        mediaError = err.message;
+        // Continuaremos para enviar apenas texto como fallback
+      }
+
       let sent = 0;
       const results = [];
 
@@ -709,8 +763,17 @@ class NotificationDispatcher {
         if (isDuplicate) continue;
 
         try {
-          // Usar sendMessageWithImage que envia imagem SEM caption + mensagem separada
-          const result = await whatsappService.sendMessageWithImage(channel.identifier, imageUrl, message);
+          let result;
+
+          if (mediaId) {
+            // Enviar com imagem (ID já processado)
+            result = await whatsappService.sendImageById(channel.identifier, mediaId, message);
+          } else {
+            // Fallback para texto se imagem falhou
+            logger.warn(`⚠️ [Dispatcher] Enviando apenas TEXTO para canal ${channel.id} (Falha na imagem: ${mediaError})`);
+            result = await whatsappService.sendMessage(channel.identifier, message);
+          }
+
           if (result && result.success) {
             sent++;
             await this.logSend(channel.id, eventType, data);
@@ -728,13 +791,25 @@ class NotificationDispatcher {
           }
           results.push({ channelId: channel.id, success: !!(result && result.success) });
         } catch (error) {
+          logger.error(`❌ [Dispatcher] Erro no envio individual WhatsApp: ${error.message}`);
           results.push({ channelId: channel.id, success: false, error: error.message });
         }
       }
 
       return { success: sent > 0, sent, total: channels.length, results };
+
     } catch (error) {
       return { success: false, reason: error.message };
+    } finally {
+      // Limpeza do arquivo temporário (Sempre executar)
+      if (localImagePath && fs.existsSync(localImagePath)) {
+        try {
+          fs.unlinkSync(localImagePath);
+          logger.debug(`🧹 [Dispatcher] Arquivo temporário removido: ${localImagePath}`);
+        } catch (cleanupError) {
+          logger.warn(`⚠️ [Dispatcher] Falha ao remover arquivo temporário batch: ${cleanupError.message}`);
+        }
+      }
     }
   }
 
@@ -794,6 +869,99 @@ class NotificationDispatcher {
       logger.error(`❌ Erro em sendToWhatsApp: ${error.message}`);
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Enviar mensagem customizada para todos os canais ativos
+   * @param {string} message - Mensagem a ser enviada
+   */
+  async sendCustomMessageToAllChannels(message) {
+    logger.info(`📤 Enviando mensagem customizada para todos os canais`);
+
+    try {
+      const allChannels = await BotChannel.findActive();
+
+      if (!allChannels || allChannels.length === 0) {
+        return { success: false, message: 'Nenhum canal ativo' };
+      }
+
+      // Buscar configuração global para respeitar flags master de ativação
+      const BotConfig = (await import('../../models/BotConfig.js')).default;
+      const botConfig = await BotConfig.get();
+
+      // Filtrar canais de plataformas desabilitadas globalmente
+      const activeChannels = allChannels.filter(channel => {
+        if (channel.platform === 'telegram' && botConfig.telegram_enabled === false) {
+          return false;
+        }
+        if (channel.platform === 'whatsapp' && botConfig.whatsapp_enabled === false) {
+          return false;
+        }
+        return true;
+      });
+
+      if (activeChannels.length === 0) {
+        return { success: false, message: 'Plataformas desabilitadas' };
+      }
+
+      const results = {
+        total: activeChannels.length,
+        sent: 0,
+        failed: 0,
+        details: []
+      };
+
+      for (const channel of activeChannels) {
+        try {
+          let result;
+          if (channel.platform === 'telegram') {
+            const parseMode = await this.getTelegramParseMode();
+            const convertedMessage = await templateRenderer.convertBoldFormatting(message, 'telegram', parseMode);
+
+            result = await telegramService.sendMessage(channel.identifier, convertedMessage, {
+              parse_mode: parseMode
+            });
+
+            if (result && (result.message_id || result.messageId)) {
+              results.sent++;
+              results.details.push({ channelId: channel.id, platform: channel.platform, success: true, result });
+            } else {
+              results.failed++;
+              results.details.push({ channelId: channel.id, platform: channel.platform, success: false, error: 'Falha no envio (sem ID)' });
+            }
+          } else if (channel.platform === 'whatsapp') {
+            const convertedMessage = await templateRenderer.convertBoldFormatting(message, 'whatsapp');
+            result = await whatsappService.sendMessage(channel.identifier, convertedMessage);
+
+            if (result && result.success) {
+              results.sent++;
+              results.details.push({ channelId: channel.id, platform: channel.platform, success: true, result });
+            } else {
+              results.failed++;
+              results.details.push({ channelId: channel.id, platform: channel.platform, success: false, error: 'Falha no envio' });
+            }
+          }
+        } catch (error) {
+          logger.error(`❌ Erro ao enviar mensagem customizada para canal ${channel.id}: ${error.message}`);
+          results.failed++;
+          results.details.push({ channelId: channel.id, platform: channel.platform, success: false, error: error.message });
+        }
+      }
+
+      logger.info(`✅ Mensagem customizada enviada: ${results.sent} sucesso, ${results.failed} falhas`);
+      return results;
+    } catch (error) {
+      logger.error(`❌ Erro em sendCustomMessageToAllChannels: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Enviar teste padrão para todos os canais
+   */
+  async sendTestToAllChannels() {
+    const message = `🤖 *Teste de Bot*\n\n✅ Bot configurado e funcionando!\n⏰ ${new Date().toLocaleString('pt-BR')}`;
+    return this.sendCustomMessageToAllChannels(message);
   }
 }
 

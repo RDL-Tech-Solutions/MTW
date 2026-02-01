@@ -243,6 +243,7 @@ class PublishService {
    */
   async notifyWhatsAppBot(product, options = {}) {
     try {
+      logger.info(`🤖 [notifyWhatsAppBot] Iniciando notificação WhatsApp para: ${product.name} (ID: ${product.id})`);
       const message = await this.formatBotMessage(product, 'whatsapp', options);
 
       // Log detalhado sobre a imagem
@@ -707,16 +708,16 @@ class PublishService {
             }
           };
 
-          // Disparar ambos simultaneamente
-          const botPromises = [
-            safeNotify('telegram'),
-            safeNotify('whatsapp')
-          ];
+          // Executar sequencialmente para evitar condições de corrida e facilitar debug
+          logger.info(`🚀 Iniciando envio SEQUENCIAL para Bots (Telegram -> WhatsApp)...`);
 
-          logger.info(`⏳ Aguardando conclusão dos envios paralelos...`);
-          await Promise.all(botPromises);
+          // 1. Telegram
+          const telegramResult = await safeNotify('telegram');
+          
+          // 2. WhatsApp (executar mesmo se Telegram falhar)
+          const whatsappResult = await safeNotify('whatsapp');
 
-          logger.info(`✅ Envio paralelo concluído.`);
+          logger.info(`✅ Envio sequencial concluído.`);
           logger.info(`   - Telegram: ${results.telegram ? 'SUCESSO' : 'FALHA (' + (results.telegramReason || 'Desconhecido') + ')'}`);
           logger.info(`   - WhatsApp: ${results.whatsapp ? 'SUCESSO' : 'FALHA (' + (results.whatsappReason || 'Desconhecido') + ')'}`);
         } else {
