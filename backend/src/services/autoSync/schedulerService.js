@@ -221,8 +221,9 @@ class SchedulerService {
     /**
      * Processar um único post agendado (Publicar)
      * @param {Object} post - Objeto do post agendado
+     * @param {Object} options - Opções adicionais (couponId, etc.)
      */
-    async processSinglePost(post) {
+    async processSinglePost(post, options = {}) {
         const startTime = new Date();
         const maxRetries = 3;
         const currentAttempt = (post.attempts || 0) + 1;
@@ -249,6 +250,29 @@ class SchedulerService {
                 if (post.metadata.skipAiCategory) publishOptions.skipAiCategory = post.metadata.skipAiCategory;
                 if (post.metadata.manualCategoryId) publishOptions.manualCategoryId = post.metadata.manualCategoryId;
                 logger.info(`📂 Publicando post agendado com categoria manual protegida: ${post.metadata.manualCategoryId}`);
+            }
+
+            // NOVO: Vincular cupom se fornecido
+            if (options.couponId) {
+                const Coupon = (await import('../../models/Coupon.js')).default;
+                const coupon = await Coupon.findById(options.couponId);
+
+                if (coupon) {
+                    logger.info(`🎟️ Vinculando cupom ${coupon.code} ao produto ${post.products.name}`);
+
+                    // Adicionar dados do cupom ao produto
+                    post.products.coupon_id = coupon.id;
+                    post.products.coupon_code = coupon.code;
+                    post.products.coupon_discount = coupon.discount_value;
+                    post.products.coupon_discount_type = coupon.discount_type;
+                    post.products.coupon_valid_until = coupon.valid_until;
+
+                    // Forçar uso do template promotion_with_coupon
+                    publishOptions.forceTemplate = 'promotion_with_coupon';
+                    logger.info(`📋 Forçando template 'promotion_with_coupon'`);
+                } else {
+                    logger.warn(`⚠️ Cupom ${options.couponId} não encontrado, publicando sem cupom`);
+                }
             }
 
             // Executar publicação com retry logic

@@ -37,29 +37,29 @@ class BotConfig {
       telegram_bot_username: '',
       telegram_parse_mode: 'HTML',
       telegram_disable_preview: false,
-      
+
       // WhatsApp
       whatsapp_enabled: false,
       whatsapp_api_url: '',
       whatsapp_api_token: '',
       whatsapp_phone_number_id: '',
       whatsapp_business_account_id: '',
-      
+
       // Notificações
       notify_new_products: true,
       notify_new_coupons: true,
       notify_expired_coupons: false,
       notify_price_drops: true,
       min_discount_to_notify: 20,
-      
+
       // Mensagens personalizadas
       message_template_product: '🔥 *Nova Promoção!*\n\n🛍 *{name}*\n\n{old_price}💰 *R$ {price}* {discount}\n\n🏪 Loja: {platform}\n\n[🔗 Ver Oferta]({link})',
       message_template_coupon: '🎟 *Novo Cupom!*\n\n🏪 Loja: {platform}\n💬 Código: `{code}`\n💰 Desconto: {discount}\n⏳ Válido até: {expires}',
-      
+
       // Rate limiting
       rate_limit_per_minute: 20,
       delay_between_messages: 500,
-      
+
       created_at: null,
       updated_at: null
     };
@@ -72,7 +72,7 @@ class BotConfig {
     try {
       // Verificar se já existe
       const existing = await this.get();
-      
+
       const dataToSave = {
         ...configData,
         updated_at: new Date().toISOString()
@@ -88,13 +88,13 @@ class BotConfig {
           .single();
 
         if (error) throw error;
-        
+
         logger.info('✅ Configuração de bots atualizada');
         return data;
       } else {
         // Criar
         dataToSave.created_at = new Date().toISOString();
-        
+
         const { data, error } = await supabase
           .from('bot_config')
           .insert([dataToSave])
@@ -102,7 +102,7 @@ class BotConfig {
           .single();
 
         if (error) throw error;
-        
+
         logger.info('✅ Configuração de bots criada');
         return data;
       }
@@ -118,7 +118,7 @@ class BotConfig {
   static async updateField(field, value) {
     try {
       const config = await this.get();
-      
+
       if (!config.id) {
         // Criar configuração com o campo
         return await this.upsert({ [field]: value });
@@ -126,7 +126,7 @@ class BotConfig {
 
       const { data, error } = await supabase
         .from('bot_config')
-        .update({ 
+        .update({
           [field]: value,
           updated_at: new Date().toISOString()
         })
@@ -155,9 +155,9 @@ class BotConfig {
    */
   static async isWhatsAppConfigured() {
     const config = await this.get();
-    return config.whatsapp_enabled && 
-           !!config.whatsapp_api_url && 
-           !!config.whatsapp_api_token;
+    return config.whatsapp_enabled &&
+      !!config.whatsapp_api_url &&
+      !!config.whatsapp_api_token;
   }
 
   /**

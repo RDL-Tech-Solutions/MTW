@@ -36,11 +36,17 @@ class ScheduledPostController {
     /**
      * POST /api/scheduled-posts/:id/publish-now
      * Forçar publicação imediata
+     * Body (opcional): { coupon_id: string }
      */
     static async publishNow(req, res, next) {
         try {
             const { id } = req.params;
+            const { coupon_id } = req.body || {};
+
             logger.info(`🚀 Forçando publicação imediata do agendamento ${id}...`);
+            if (coupon_id) {
+                logger.info(`   🎟️ Cupom vinculado: ${coupon_id}`);
+            }
 
             const post = await ScheduledPost.findById(id);
             if (!post) {
@@ -51,7 +57,7 @@ class ScheduledPostController {
                 return res.status(400).json(errorResponse('Este item já foi publicado'));
             }
 
-            const success = await schedulerService.processSinglePost(post); // Reutiliza lógica refatorada
+            const success = await schedulerService.processSinglePost(post, { couponId: coupon_id });
 
             if (success) {
                 res.json(successResponse(null, 'Publicado com sucesso!'));
@@ -62,6 +68,7 @@ class ScheduledPostController {
             next(error);
         }
     }
+
 
     /**
      * DELETE /api/scheduled-posts/bulk/pending

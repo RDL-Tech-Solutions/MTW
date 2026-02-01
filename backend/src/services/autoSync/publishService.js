@@ -123,7 +123,7 @@ class PublishService {
    */
   async notifyTelegramBot(product, options = {}) {
     try {
-      const message = await this.formatBotMessage(product, 'telegram');
+      const message = await this.formatBotMessage(product, 'telegram', options);
 
       // Log detalhado sobre a imagem
       logger.info(`📸 Verificando imagem do produto (Telegram): ${product.name}`);
@@ -243,7 +243,7 @@ class PublishService {
    */
   async notifyWhatsAppBot(product, options = {}) {
     try {
-      const message = await this.formatBotMessage(product, 'whatsapp');
+      const message = await this.formatBotMessage(product, 'whatsapp', options);
 
       // Log detalhado sobre a imagem
       logger.info(`📸 Verificando imagem do produto (WhatsApp): ${product.name}`);
@@ -342,9 +342,10 @@ class PublishService {
    * Formatar mensagem para bots usando templates
    * @param {Object} product - Dados do produto
    * @param {string} platform - Plataforma (telegram, whatsapp)
+   * @param {Object} options - Opções adicionais (forceTemplate, etc.)
    * @returns {Promise<string>}
    */
-  async formatBotMessage(product, platform = 'telegram') {
+  async formatBotMessage(product, platform = 'telegram', options = {}) {
     try {
       // IMPORTANTE: Sempre usar template do painel admin
       // Escolher template baseado se produto tem cupom ou não
@@ -352,7 +353,11 @@ class PublishService {
       // Se não tem cupom, usar template 'new_promotion' (sem cupom)
       let templateType = 'new_promotion';
 
-      if (product.coupon_id) {
+      // Verificar se há forceTemplate nas opções (prioridade máxima)
+      if (options.forceTemplate) {
+        templateType = options.forceTemplate;
+        logger.info(`📋 Template forçado via options: '${templateType}'`);
+      } else if (product.coupon_id) {
         templateType = 'promotion_with_coupon';
         logger.info(`📋 Produto tem cupom vinculado (${product.coupon_id}), usando template 'promotion_with_coupon'`);
       } else {
@@ -365,7 +370,7 @@ class PublishService {
 
       // Preparar variáveis do template
       // NOTA: Se IA ADVANCED for usada, o título será otimizado e as variáveis serão atualizadas depois
-      const variables = await templateRenderer.preparePromotionVariables(product);
+      const variables = await templateRenderer.preparePromotionVariables(product, platform);
 
       // Renderizar template - pode usar template do banco ou IA ADVANCED
       // Se IA ADVANCED for usada, o título será otimizado e as variáveis serão atualizadas
@@ -671,26 +676,51 @@ class PublishService {
       // Se for publicação manual (options.manual = true), envia imediato.
       // Se for auto-sync (padrão), usa o agendamento inteligente.
       if (options.manual) {
-        // Telegram (apenas se should_send_to_bots = true)
+        // Executar ambos os bots em paralelo de forma RESILIENTE
         if (product.should_send_to_bots !== false) {
-          const telegramResult = await this.notifyTelegramBot(product, options);
-          results.telegram = telegramResult?.success || telegramResult === true;
-          if (telegramResult?.reason) {
-            results.telegramReason = telegramResult.reason;
-          }
-        } else {
-          logger.info(`⏸️ Telegram desabilitado pela IA para este produto`);
-        }
+          logger.info(`🚀 Iniciando envio paralelo para Bots (Telegram e WhatsApp)...`);
 
-        // WhatsApp (apenas se should_send_to_bots = true)
-        if (product.should_send_to_bots !== false) {
-          const whatsappResult = await this.notifyWhatsAppBot(product, options);
-          results.whatsapp = whatsappResult?.success || whatsappResult === true;
-          if (whatsappResult?.reason) {
-            results.whatsappReason = whatsappResult.reason;
-          }
+          // Função auxiliar interna para isolar a execução de cada bot
+          const safeNotify = async (platform) => {
+            try {
+              logger.info(`📤 [${platform}] Iniciando processo...`);
+              const startTime = Date.now();
+
+              let result;
+              if (platform === 'telegram') {
+                result = await this.notifyTelegramBot(product, options);
+              } else {
+                result = await this.notifyWhatsAppBot(product, options);
+              }
+
+              const duration = Date.now() - startTime;
+              results[platform] = result?.success || result === true;
+              if (result?.reason) results[`${platform}Reason`] = result.reason;
+
+              logger.info(`✅ [${platform}] Finalizado em ${duration}ms. Sucesso: ${results[platform]}`);
+              return { platform, result };
+            } catch (error) {
+              logger.error(`❌ [${platform}] ERRO CRÍTICO no processo paralelo: ${error.message}`);
+              results[platform] = false;
+              results[`${platform}Reason`] = `Erro crítico: ${error.message}`;
+              return { platform, error: error.message };
+            }
+          };
+
+          // Disparar ambos simultaneamente
+          const botPromises = [
+            safeNotify('telegram'),
+            safeNotify('whatsapp')
+          ];
+
+          logger.info(`⏳ Aguardando conclusão dos envios paralelos...`);
+          await Promise.all(botPromises);
+
+          logger.info(`✅ Envio paralelo concluído.`);
+          logger.info(`   - Telegram: ${results.telegram ? 'SUCESSO' : 'FALHA (' + (results.telegramReason || 'Desconhecido') + ')'}`);
+          logger.info(`   - WhatsApp: ${results.whatsapp ? 'SUCESSO' : 'FALHA (' + (results.whatsappReason || 'Desconhecido') + ')'}`);
         } else {
-          logger.info(`⏸️ WhatsApp desabilitado pela IA para este produto`);
+          logger.info(`⏸️ Bots desabilitados pela IA para este produto`);
         }
       } else {
         // Agendamento Inteligente (apenas se bots não foram explicitamente desabilitados)

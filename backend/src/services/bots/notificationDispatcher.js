@@ -531,7 +531,7 @@ class NotificationDispatcher {
             templateType = 'new_promotion';
             logger.info(`📋 Produto sem cupom, usando template 'new_promotion'`);
           }
-          variables = await templateRenderer.preparePromotionVariables(data);
+          variables = await templateRenderer.preparePromotionVariables(data, platform);
           break;
 
         case 'coupon_new':

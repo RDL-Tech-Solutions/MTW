@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Trash2, Play, Search, Calendar, Clock, AlertCircle, CheckCircle2, Loader2, RefreshCw, Trash } from 'lucide-react';
+import { Trash2, Play, Search, Calendar, Clock, AlertCircle, CheckCircle2, Loader2, RefreshCw, Trash, Tag } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export default function ScheduledPosts() {
     const { toast } = useToast();
@@ -27,6 +29,13 @@ export default function ScheduledPosts() {
     });
 
     const [bulkDeleting, setBulkDeleting] = useState(false);
+
+    // Estados para modal de cupom
+    const [couponModalOpen, setCouponModalOpen] = useState(false);
+    const [selectedPostId, setSelectedPostId] = useState(null);
+    const [availableCoupons, setAvailableCoupons] = useState([]);
+    const [selectedCoupon, setSelectedCoupon] = useState('none');
+    const [loadingCoupons, setLoadingCoupons] = useState(false);
 
     useEffect(() => {
         fetchPosts(1);
@@ -77,17 +86,47 @@ export default function ScheduledPosts() {
     };
 
     const handlePublishNow = async (id) => {
-        if (!confirm('Deseja forçar a publicação imediata? Isso ignorará o horário otimizado.')) return;
+        // Abrir modal para vincular cupom
+        setSelectedPostId(id);
+        setCouponModalOpen(true);
+        fetchCoupons();
+    };
 
-        setProcessing(prev => ({ ...prev, publish: id }));
+    const fetchCoupons = async () => {
         try {
-            await api.post(`/scheduled-posts/${id}/publish-now`);
+            setLoadingCoupons(true);
+            const response = await api.get('/coupons/active');
+            // A resposta é { success: true, data: { coupons: [...], total, page, limit, totalPages } }
+            setAvailableCoupons(response.data.data.coupons || []);
+        } catch (error) {
+            console.error('Erro ao carregar cupons:', error);
+            toast({ title: "Erro", description: "Falha ao carregar cupons.", variant: "destructive" });
+        } finally {
+            setLoadingCoupons(false);
+        }
+    };
+
+    const confirmPublish = async () => {
+        if (!selectedPostId) return;
+
+        setProcessing(prev => ({ ...prev, publish: selectedPostId }));
+        setCouponModalOpen(false);
+
+        try {
+            const payload = (selectedCoupon && selectedCoupon !== 'none') ? { coupon_id: selectedCoupon } : {};
+            await api.post(`/scheduled-posts/${selectedPostId}/publish-now`, payload);
             fetchPosts(pagination.page);
-            toast({ title: "Sucesso!", description: "Publicação iniciada!", variant: "success" });
+            toast({
+                title: "Sucesso!",
+                description: (selectedCoupon && selectedCoupon !== 'none') ? "Publicação com cupom iniciada!" : "Publicação iniciada!",
+                variant: "success"
+            });
         } catch (error) {
             toast({ title: "Erro!", description: "Falha ao publicar.", variant: "destructive" });
         } finally {
             setProcessing(prev => ({ ...prev, publish: null }));
+            setSelectedPostId(null);
+            setSelectedCoupon('none');
         }
     };
 
@@ -359,6 +398,75 @@ export default function ScheduledPosts() {
                 totalPages={pagination.totalPages}
                 onPageChange={fetchPosts}
             />
+
+            {/* Modal de Vinculação de Cupom */}
+            <Dialog open={couponModalOpen} onOpenChange={setCouponModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Tag className="h-5 w-5" />
+                            Vincular Cupom (Opcional)
+                        </DialogTitle>
+                        <DialogDescription>
+                            Selecione um cupom para vincular a esta publicação. O template "Promoção + Cupom" será usado automaticamente.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        {loadingCoupons ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Cupom</label>
+                                <Select value={selectedCoupon} onValueChange={setSelectedCoupon}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Sem cupom" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Sem cupom</SelectItem>
+                                        {availableCoupons.map(coupon => (
+                                            <SelectItem key={coupon.id} value={coupon.id}>
+                                                <div className="flex items-center gap-2">
+                                                    <Tag className="h-3 w-3" />
+                                                    <span className="font-mono font-semibold">{coupon.code}</span>
+                                                    <span className="text-muted-foreground">-</span>
+                                                    <span className="text-green-600">
+                                                        {coupon.discount_type === 'percentage'
+                                                            ? `${coupon.discount_value}% OFF`
+                                                            : `R$ ${coupon.discount_value} OFF`
+                                                        }
+                                                    </span>
+                                                    {coupon.platform && (
+                                                        <Badge variant="outline" className="ml-auto text-xs">
+                                                            {coupon.platform}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {availableCoupons.length === 0 && (
+                                    <p className="text-sm text-muted-foreground mt-2">
+                                        Nenhum cupom ativo disponível.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCouponModalOpen(false)}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={confirmPublish} disabled={loadingCoupons}>
+                            {(selectedCoupon && selectedCoupon !== 'none') ? 'Publicar com Cupom' : 'Publicar Agora'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

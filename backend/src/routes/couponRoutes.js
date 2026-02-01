@@ -69,6 +69,7 @@ const preprocessCouponData = (req, res, next) => {
 
 // Rotas públicas
 router.get('/', CouponController.listActive);
+router.get('/active', CouponController.listActive); // Alias para listActive
 router.get('/expiring', CouponController.expiringSoon);
 router.get('/code/:code', CouponController.getByCode);
 // IMPORTANTE: Rotas específicas devem vir ANTES de rotas com parâmetros dinâmicos

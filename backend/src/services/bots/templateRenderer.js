@@ -97,7 +97,7 @@ class TemplateRenderer {
     }
   }
 
-  async preparePromotionVariables(product) {
+  async preparePromotionVariables(product, platform = 'telegram') {
     // Log do affiliate_link que será usado
     logger.info(`🔗 Preparando variáveis de template. affiliate_link: ${product.affiliate_link?.substring(0, 100) || 'NÃO DEFINIDO'}...`);
 
@@ -230,6 +230,18 @@ class TemplateRenderer {
       try {
         coupon = await Coupon.findById(product.coupon_id);
         if (coupon && coupon.is_active) {
+          // Atribuir código do cupom com formatação específica por plataforma
+          const rawCode = coupon.code || '';
+          if (rawCode) {
+            // WhatsApp usa negrito (*código*), Telegram usa backticks (`código`)
+            if (platform === 'whatsapp') {
+              couponCode = `*${rawCode}*`; // Negrito para WhatsApp
+            } else {
+              couponCode = `\`${rawCode}\``; // Backticks para Telegram
+            }
+            logger.info(`🎟️ Código do cupom formatado para ${platform}: ${couponCode}`);
+          }
+
           const discountVal = Number(coupon.discount_value) || 0;
           const discountText = coupon.discount_type === 'percentage'
             ? `${discountVal}% OFF`
@@ -578,7 +590,7 @@ ${variables.coupon_section || ''}
 🎟️ Com Cupom: ${variables.final_price || variables.price_with_coupon || '{final_price}'}
 🏷️ ${variables.discount_percentage || 0}% OFF
 
-🎟️ CUPOM: \`${variables.coupon_code || '{coupon_code}'}\`
+🎟️ CUPOM: ${variables.coupon_code || '{coupon_code}'}
 
 🛒 Plataforma: ${variables.platform_name || '{platform_name}'}
 
@@ -696,16 +708,16 @@ ${variables.coupon_section || ''}
 
     // Tentar encontrar onde inserir
     if (message.includes('CUPOM:')) {
-      return message.replace(/CUPOM:/i, `CUPOM: \`${couponCode}\``);
+      return message.replace(/CUPOM:/i, `CUPOM: ${couponCode}`);
     }
 
     // Inserir no final antes do link
     if (message.includes('🔗') || message.includes('http')) {
       const parts = message.split(/(?=🔗|http)/);
-      return `${parts[0]}\n🎟️ Cupom: \`${couponCode}\`\n\n${parts.slice(1).join('')}`;
+      return `${parts[0]}\n🎟️ Cupom: ${couponCode}\n\n${parts.slice(1).join('')}`;
     }
 
-    return `${message}\n\n🎟️ Cupom: \`${couponCode}\``;
+    return `${message}\n\n🎟️ Cupom: ${couponCode}`;
   }
 
   /**
@@ -865,11 +877,13 @@ ${variables.coupon_section || ''}
         finalMessage = finalMessage.replace(/.*(Mercado Livre|Shopee|Amazon|AliExpress).*$/gmi, '');
       }
 
-      if (key === 'coupon_code' && replacement && replacement !== 'N/A') {
-        // Lógica de formatação de cupom simplificada se não estiver formatado
-        if (!finalMessage.includes(`\`${replacement}\``) && !finalMessage.includes(replacement)) {
-          replacement = `\`${replacement}\``;
-        }
+      if (key === 'coupon_code') {
+        // Remover backticks hardcoded ao redor da variável coupon_code no template ANTES da substituição
+        // Isso corrige templates customizados antigos que tenham ` ` ao redor de {coupon_code}
+        finalMessage = finalMessage.replace(/`\{coupon_code\}`/g, '{coupon_code}');
+
+        // PROIBIDO adicionar formatação extra aqui
+        // A variável já vem formatada do preparePromotionVariables (*code* para zap, `code` para telegram)
       }
 
       if (key === 'min_purchase' && replacement) {
