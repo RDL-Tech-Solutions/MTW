@@ -3,6 +3,8 @@ import { conversations, createConversation } from '@grammyjs/conversations';
 import logger from '../../config/logger.js';
 import authService from './services/authService.js';
 import { adminMainMenu } from './menus/mainMenu.js';
+import aiService from './services/aiService.js';
+import supabase from '../../config/database.js';
 
 // Handlers
 import { captureLinkHandler } from './handlers/captureHandler.js';
@@ -11,76 +13,7 @@ import * as pendingHandler from './handlers/pendingHandler.js';
 import * as editHandler from './handlers/editHandler.js';
 import Product from '../../models/Product.js'; // Importar Model Product para actions diretas
 
-// Handler Unificado de Texto e Legenda (Caption)
-const handleGeneralInput = async (ctx, text) => {
-    const step = ctx.session.step;
 
-    // Fluxo de Login
-    if (step === 'AWAITING_EMAIL') {
-        return await authService.handleEmail(ctx, text);
-    }
-    if (step === 'AWAITING_PASSWORD') {
-        return await authService.handlePassword(ctx, text);
-    }
-
-    // Ações do Menu (Requer Autenticação)
-    if (!authService.isAuthenticated(ctx)) {
-        return ctx.reply('🔒 Acesso negado. Use /login.');
-    }
-
-    // Fluxo de Cupom (inputs de texto)
-    if (step.startsWith('COUPON_')) {
-        return await couponHandler.handleCouponSteps(ctx, text);
-    }
-
-    // Fluxo de Edição (Wizard Steps)
-    if (step.startsWith('EDIT_WIZARD_') && step !== 'EDIT_WIZARD_CONFIRM') {
-        return await editHandler.handleWizardStep(ctx, text);
-    }
-
-    switch (text) {
-        case '🎫 Criar Cupom':
-            await couponHandler.startCreateCoupon(ctx);
-            break;
-        case '📋 Pendentes':
-            await pendingHandler.listPendingProducts(ctx, 1);
-            break;
-        default:
-            // Verificação aprimorada: Link ou Texto Longo (Clone)
-            if (text.startsWith('http') || (text.length > 20 && (text.includes('R$') || text.toLowerCase().includes('cupom') || text.toLowerCase().includes('oferta') || text.toLowerCase().includes('desconto')))) {
-
-                // Armazenar texto para processamento posterior
-                ctx.session.tempData.pendingInput = text;
-
-                // Armazenar ID da foto se houver (para clonagem)
-                if (ctx.message && ctx.message.photo && ctx.message.photo.length > 0) {
-                    const photo = ctx.message.photo[ctx.message.photo.length - 1]; // Maior resolução
-                    ctx.session.tempData.pendingPhoto = photo.file_id;
-                }
-
-                if (!ctx.session.tempData.coupon) ctx.session.tempData.coupon = { is_general: true };
-
-                const { InlineKeyboard } = await import('grammy');
-                const kb = new InlineKeyboard()
-                    .text('🛍️ Captura de Produto', 'action_choice:capture').row()
-                    .text('🎫 Clonagem de Cupom', 'action_choice:clone');
-
-                const replyOptions = {
-                    parse_mode: 'Markdown',
-                    reply_markup: kb
-                };
-
-                // Tentar responder citando a mensagem, se possível
-                if (ctx.message && ctx.message.message_id) {
-                    replyOptions.reply_to_message_id = ctx.message.message_id;
-                }
-
-                await ctx.reply('🤖 *O que deseja fazer com esta mensagem?*', replyOptions);
-            } else {
-                await ctx.reply('Comando não reconhecido ou use o menu. Envie um Link ou uma Mensagem de Oferta para processar.', { reply_markup: adminMainMenu });
-            }
-    }
-};
 
 let bot = null;
 
@@ -103,6 +36,124 @@ export const initAdminBot = async () => {
                 tempData: {}
             })
         }));
+
+        // AI ADVANCED Toggle
+        const toggleAiMode = async (ctx, active) => {
+            if (!ctx.session.user) return;
+
+            try {
+                // Atualizar no banco
+                await supabase.from('users').update({ ai_mode_active: active }).eq('id', ctx.session.user.id);
+
+                // Atualizar sessão
+                ctx.session.user.ai_mode_active = active;
+
+                if (active) {
+                    await ctx.reply('🤖 *ESTADO ALTERADO: IA ATIVADA*\n\nAgora você está falando com a IA Advanced. Digite qualquer comando em linguagem natural.\n_Ex: "Listar produtos pendentes"_', {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            keyboard: [[{ text: "❌ Sair da IA" }]],
+                            resize_keyboard: true,
+                            persistent: true
+                        }
+                    });
+                } else {
+                    await ctx.reply('🔙 *IA Desativada*. Retornando ao menu padrão.', {
+                        parse_mode: 'Markdown',
+                        reply_markup: adminMainMenu
+                    });
+                }
+            } catch (error) {
+                logger.error('Erro ao alternar modo IA:', error);
+                await ctx.reply('Erro ao salvar estado da IA.');
+            }
+        };
+
+        // Command handler for AI exit (prioridade alta)
+        bot.hears('❌ Sair da IA', async (ctx) => {
+            if (authService.isAuthenticated(ctx)) {
+                await toggleAiMode(ctx, false);
+            }
+        });
+
+        // Handler Unificado de Texto e Legenda (Caption)
+        const handleGeneralInput = async (ctx, text) => {
+            const step = ctx.session.step;
+
+            // Fluxo de Login
+            if (step === 'AWAITING_EMAIL') {
+                return await authService.handleEmail(ctx, text);
+            }
+            if (step === 'AWAITING_PASSWORD') {
+                return await authService.handlePassword(ctx, text);
+            }
+
+            // Ações do Menu (Requer Autenticação)
+            if (!authService.isAuthenticated(ctx)) {
+                return ctx.reply('🔒 Acesso negado. Use /login.');
+            }
+
+            // Fluxo de Cupom (inputs de texto)
+            if (step.startsWith('COUPON_')) {
+                return await couponHandler.handleCouponSteps(ctx, text);
+            }
+
+            // Fluxo de Edição (Wizard Steps)
+            if (step.startsWith('EDIT_WIZARD_') && step !== 'EDIT_WIZARD_CONFIRM') {
+                return await editHandler.handleWizardStep(ctx, text);
+            }
+
+            switch (text) {
+                case '🤖 IA ADVANCED':
+                    await toggleAiMode(ctx, true);
+                    break;
+                case '🎫 Criar Cupom':
+                    await couponHandler.startCreateCoupon(ctx);
+                    break;
+                case '📋 Pendentes':
+                    await pendingHandler.listPendingProducts(ctx, 1);
+                    break;
+                default:
+                    // SE ESTIVER EM MODO IA
+                    if (ctx.session.user?.ai_mode_active) {
+                        return await aiService.processMessage(ctx, text);
+                    }
+
+                    // Verificação aprimorada: Link ou Texto Longo (Clone)
+                    if (text.startsWith('http') || (text.length > 20 && (text.includes('R$') || text.toLowerCase().includes('cupom') || text.toLowerCase().includes('oferta') || text.toLowerCase().includes('desconto')))) {
+
+                        // Armazenar texto para processamento posterior
+                        ctx.session.tempData.pendingInput = text;
+
+                        // Armazenar ID da foto se houver (para clonagem)
+                        if (ctx.message && ctx.message.photo && ctx.message.photo.length > 0) {
+                            const photo = ctx.message.photo[ctx.message.photo.length - 1]; // Maior resolução
+                            ctx.session.tempData.pendingPhoto = photo.file_id;
+                        }
+
+                        if (!ctx.session.tempData.coupon) ctx.session.tempData.coupon = { is_general: true };
+
+                        const { InlineKeyboard } = await import('grammy');
+                        const kb = new InlineKeyboard()
+                            .text('🛍️ Captura de Produto', 'action_choice:capture').row()
+                            .text('🎫 Clonagem de Cupom', 'action_choice:clone');
+
+                        const replyOptions = {
+                            parse_mode: 'Markdown',
+                            reply_markup: kb
+                        };
+
+                        // Tentar responder citando a mensagem, se possível
+                        if (ctx.message && ctx.message.message_id) {
+                            replyOptions.reply_to_message_id = ctx.message.message_id;
+                        }
+
+                        await ctx.reply('🤖 *O que deseja fazer com esta mensagem?*', replyOptions);
+                    } else {
+                        await ctx.reply('Comando não reconhecido ou use o menu. Envie um Link ou uma Mensagem de Oferta para processar.', { reply_markup: adminMainMenu });
+                    }
+            }
+        };
 
         // Logger básico
         bot.use(async (ctx, next) => {
@@ -250,7 +301,6 @@ export const initAdminBot = async () => {
                     try { await ctx.answerCallbackQuery(); } catch (e) { }
                 }
 
-                // Shortcut criar cupom para produto capturado
                 if (data.startsWith('coupon:create:')) {
                     await couponHandler.startCreateCoupon(ctx);
                     await ctx.answerCallbackQuery();
@@ -261,6 +311,9 @@ export const initAdminBot = async () => {
                 try { await ctx.answerCallbackQuery('Erro ao processar ação.'); } catch (e2) { }
             }
         });
+
+
+
 
         // Error Handling
         bot.catch((err) => {

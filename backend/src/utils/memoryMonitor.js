@@ -41,10 +41,15 @@ export function stopMemoryMonitoring() {
  * Verificar uso de memória e alertar se necessário
  */
 export function checkMemoryUsage() {
+    const MAX_MEMORY_MB = parseInt(process.env.MAX_MEMORY_MB) || 512;
+
     const usage = process.memoryUsage();
     const heapUsedMB = Math.round(usage.heapUsed / 1024 / 1024);
     const heapTotalMB = Math.round(usage.heapTotal / 1024 / 1024);
-    const heapUsedPercent = (usage.heapUsed / usage.heapTotal * 100).toFixed(2);
+
+    // Calcular porcentagem baseada no LIMITE MÁXIMO (não no total alocado atual)
+    // V8 gerencia heapTotal dinamicamente, então usar/total é enganoso (sempre será alto)
+    const heapUsedPercent = (heapUsedMB / MAX_MEMORY_MB * 100).toFixed(2);
     const rssUsedMB = Math.round(usage.rss / 1024 / 1024);
 
     const now = Date.now();
@@ -54,7 +59,8 @@ export function checkMemoryUsage() {
     const WARNING_COOLDOWN = 300000; // 5 min
 
     if (parseFloat(heapUsedPercent) > MEMORY_CRITICAL_THRESHOLD && timeSinceLastWarning > WARNING_COOLDOWN) {
-        logger.error(`🚨 MEMÓRIA CRÍTICA: ${heapUsedPercent}% (${heapUsedMB}MB / ${heapTotalMB}MB)`);
+        logger.error(`🚨 MEMÓRIA CRÍTICA: ${heapUsedPercent}% (${heapUsedMB}MB / ${MAX_MEMORY_MB}MB Limit)`);
+        logger.error(`   Allocated: ${heapTotalMB}MB`);
         logger.error(`   RSS: ${rssUsedMB}MB`);
         logger.error(`   External: ${Math.round(usage.external / 1024 / 1024)}MB`);
         lastWarningTime = now;

@@ -64,6 +64,7 @@ class AppSettings {
                 expo_access_token,
                 openrouter_api_key,
                 openrouter_model,
+                openrouter_model_admin,
                 openrouter_enabled,
                 cleanup_schedule_hour,
                 cleanup_last_run,
@@ -315,6 +316,7 @@ class AppSettings {
     return {
       apiKey: settings.openrouter_api_key || process.env.OPENROUTER_API_KEY || null,
       model: settings.openrouter_model || process.env.OPENROUTER_MODEL || 'mistralai/mixtral-8x7b-instruct',
+      adminModel: settings.openrouter_model_admin || process.env.OPENROUTER_MODEL_ADMIN || 'mistralai/mixtral-8x7b-instruct',
       enabled: settings.openrouter_enabled !== undefined ? settings.openrouter_enabled : (process.env.OPENROUTER_ENABLED === 'true' || false)
     };
   }

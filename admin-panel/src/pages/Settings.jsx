@@ -49,6 +49,7 @@ export default function Settings() {
     // OpenRouter / IA
     openrouter_api_key: '',
     openrouter_model: 'mistralai/mistral-7b-instruct',
+    openrouter_model_admin: 'mistralai/mixtral-8x7b-instruct',
     openrouter_enabled: false,
 
     // Configurações de IA Avançadas
@@ -226,6 +227,7 @@ export default function Settings() {
           backend_api_key: realValues.backend_api_key || '',
           openrouter_api_key: realValues.openrouter_api_key || '',
           openrouter_model: data.openrouter_model || 'mistralai/mistral-7b-instruct',
+          openrouter_model_admin: data.openrouter_model_admin || 'mistralai/mixtral-8x7b-instruct',
           openrouter_enabled: data.openrouter_enabled ?? false,
           ai_auto_publish_confidence_threshold: data.ai_auto_publish_confidence_threshold ?? 0.90,
           ai_enable_auto_publish: data.ai_enable_auto_publish !== undefined ? data.ai_enable_auto_publish : true,
@@ -394,6 +396,7 @@ export default function Settings() {
           backend_api_key: dataToSend.backend_api_key ? prev.backend_api_key : prev.backend_api_key,
           openrouter_api_key: dataToSend.openrouter_api_key ? prev.openrouter_api_key : prev.openrouter_api_key,
           openrouter_model: responseData.openrouter_model !== undefined ? responseData.openrouter_model : prev.openrouter_model,
+          openrouter_model_admin: responseData.openrouter_model_admin !== undefined ? responseData.openrouter_model_admin : prev.openrouter_model_admin,
           openrouter_enabled: responseData.openrouter_enabled !== undefined ? responseData.openrouter_enabled : prev.openrouter_enabled,
           ai_auto_publish_confidence_threshold: responseData.ai_auto_publish_confidence_threshold !== undefined ? responseData.ai_auto_publish_confidence_threshold : prev.ai_auto_publish_confidence_threshold,
           ai_enable_auto_publish: responseData.ai_enable_auto_publish !== undefined ? responseData.ai_enable_auto_publish : prev.ai_enable_auto_publish,
@@ -1250,6 +1253,36 @@ export default function Settings() {
                   </p>
                 </div>
 
+                <div>
+                  <Label htmlFor="openrouter_model_admin">Modelo do Admin Bot (IA Convsersacional)</Label>
+                  <select
+                    id="openrouter_model_admin"
+                    value={settings.openrouter_model_admin || 'mistralai/mixtral-8x7b-instruct'}
+                    onChange={(e) => setSettings({ ...settings, openrouter_model_admin: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={!settings.openrouter_enabled}
+                  >
+                    <optgroup label="🆓 Modelos Gratuitos">
+                      {getModelsByType('free').map(model => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} ({model.provider}){model.supportsJson ? ' ✓ JSON' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="💳 Modelos Pagos">
+                      {getModelsByType('paid').map(model => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} ({model.provider}){model.supportsJson ? ' ✓ JSON' : ''} - {model.pricing || 'Custo variável'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Modelo usado para o <strong>Admin Bot </strong> (chat, comandos, gerenciamento).
+                    Recomendado: <code>mistralai/mixtral-8x7b-instruct</code> ou superior (Claude/GPT-4o) para melhor inteligência.
+                  </p>
+                </div>
+
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h4 className="font-semibold text-blue-900 mb-2">ℹ️ Como funciona</h4>
                   <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
@@ -1650,7 +1683,7 @@ function ServerMonitoring() {
             <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all ${stats.memory.heapUsedPercent > 90 ? 'bg-red-500' :
-                    stats.memory.heapUsedPercent > 80 ? 'bg-yellow-500' : 'bg-green-500'
+                  stats.memory.heapUsedPercent > 80 ? 'bg-yellow-500' : 'bg-green-500'
                   }`}
                 style={{ width: `${stats.memory.heapUsedPercent}%` }}
               />
@@ -1679,7 +1712,7 @@ function ServerMonitoring() {
             <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all ${stats.systemRAM.usedPercent > 90 ? 'bg-red-500' :
-                    stats.systemRAM.usedPercent > 80 ? 'bg-yellow-500' : 'bg-green-500'
+                  stats.systemRAM.usedPercent > 80 ? 'bg-yellow-500' : 'bg-green-500'
                   }`}
                 style={{ width: `${stats.systemRAM.usedPercent}%` }}
               />

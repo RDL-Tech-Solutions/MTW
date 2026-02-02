@@ -346,7 +346,7 @@ class OpenRouterClient {
       });
 
       const requestPayload = {
-        model: config.model,
+        model: options.model || config.model,
         messages: messages,
         temperature: 0.2, // Temperatura baixa para respostas mais consistentes
         max_tokens: options.forceTextMode ? 1500 : 1000 // Reduzido para evitar timeout em modelos gratuitos
