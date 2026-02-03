@@ -11,6 +11,8 @@ import { captureLinkHandler } from './handlers/captureHandler.js';
 import * as couponHandler from './handlers/couponHandler.js';
 import * as pendingHandler from './handlers/pendingHandler.js';
 import * as editHandler from './handlers/editHandler.js';
+import * as autoSyncHandler from './handlers/autoSyncHandler.js';
+import * as scheduledPostsHandler from './handlers/scheduledPostsHandler.js';
 import Product from '../../models/Product.js'; // Importar Model Product para actions diretas
 
 
@@ -103,6 +105,19 @@ export const initAdminBot = async () => {
                 return await editHandler.handleWizardStep(ctx, text);
             }
 
+            // Busca de Pendentes
+            if (step === 'AWAITING_PENDING_SEARCH') {
+                if (!ctx.session.tempData.pendingFilters) ctx.session.tempData.pendingFilters = {};
+                ctx.session.tempData.pendingFilters.search = text;
+                ctx.session.step = 'IDLE';
+                return await pendingHandler.listPendingProducts(ctx, 1);
+            }
+
+            // Edição Auto-Sync (Keywords, Interval, Discount)
+            if (step && step.startsWith('AUTOSYNC_EDIT_')) {
+                return await autoSyncHandler.handleEditInput(ctx, text);
+            }
+
             switch (text) {
                 case '🤖 IA ADVANCED':
                     await toggleAiMode(ctx, true);
@@ -113,7 +128,23 @@ export const initAdminBot = async () => {
                 case '📋 Pendentes':
                     await pendingHandler.listPendingProducts(ctx, 1);
                     break;
+                case '🔄 Auto-Sync':
+                    await autoSyncHandler.showAutoSyncMenu(ctx);
+                    break;
+                case '📅 Posts Agendados':
+                    await scheduledPostsHandler.showScheduledPostsMenu(ctx);
+                    break;
                 default:
+                    // Deletar Post Agendado (/del_ID)
+                    if (text.startsWith('/del_')) {
+                        return await scheduledPostsHandler.deletePostByCommand(ctx, text);
+                    }
+
+                    // Antecipar Post (/pub_ID)
+                    if (text.startsWith('/pub_')) {
+                        return await scheduledPostsHandler.forcePublishPost(ctx, text);
+                    }
+
                     // SE ESTIVER EM MODO IA
                     if (ctx.session.user?.ai_mode_active) {
                         return await aiService.processMessage(ctx, text);
@@ -212,6 +243,14 @@ export const initAdminBot = async () => {
                     return await editHandler.handleWizardConfirm(ctx, action);
                 }
 
+                if (data.startsWith('vc:')) {
+                    return await aiService.handleCouponSelection(ctx, data);
+                }
+
+                if (data.startsWith('vincular_cupom:')) {
+                    return await aiService.handleCouponSelection(ctx, data);
+                }
+
                 if (data.startsWith('wizard_cat:')) {
                     const action = data.split(':')[1];
                     return await editHandler.handleWizardCategorySelection(ctx, action);
@@ -245,7 +284,50 @@ export const initAdminBot = async () => {
                         return await pendingHandler.viewPendingDetail(ctx, id);
                     }
                     if (data === 'pending:back') return await pendingHandler.listPendingProducts(ctx, 1);
+
+                    // Novos Handlers de Filtro e Busca
+                    if (data === 'pending:filter:menu') return await pendingHandler.showFilterMenu(ctx);
+
+                    if (data.startsWith('pending:filter:')) {
+                        const filter = data.split(':')[2];
+                        if (filter === 'clear') {
+                            ctx.session.tempData.pendingFilters = {};
+                        } else {
+                            if (!ctx.session.tempData.pendingFilters) ctx.session.tempData.pendingFilters = {};
+                            ctx.session.tempData.pendingFilters.platform = filter;
+                        }
+                        return await pendingHandler.listPendingProducts(ctx, 1);
+                    }
+
+                    if (data === 'pending:search:start') {
+                        ctx.session.step = 'AWAITING_PENDING_SEARCH';
+                        return await ctx.reply('🔍 *Busca de Pendentes*\nDigite o termo que deseja buscar (ex: o nome do produto):', { parse_mode: 'Markdown' });
+                    }
+
                     if (data.startsWith('pending:edit:')) return ctx.answerCallbackQuery('Edição complexa não implementada neste MVP. Use o painel web.');
+                }
+
+                // === AUTO-SYNC ===
+                if (data === 'menu:autosync') return await autoSyncHandler.showAutoSyncMenu(ctx);
+
+                if (data.startsWith('autosync:')) {
+                    if (data === 'autosync:toggle:global') return await autoSyncHandler.toggleGlobal(ctx);
+                    if (data === 'autosync:toggle:ai') return await autoSyncHandler.toggleAi(ctx);
+
+                    if (data.startsWith('autosync:toggle_plat:')) return await autoSyncHandler.togglePlatform(ctx, data.split(':')[2]);
+                    if (data.startsWith('autosync:toggle_pub:')) return await autoSyncHandler.toggleAutoPublish(ctx, data.split(':')[2]);
+
+                    if (data === 'autosync:sync_all') return await autoSyncHandler.triggerSyncAll(ctx);
+                    if (data.startsWith('autosync:sync_now:')) return await autoSyncHandler.triggerSync(ctx, data.split(':')[2]);
+
+                    if (data.startsWith('autosync:edit:')) return await autoSyncHandler.startEdit(ctx, data.split(':')[2]);
+                }
+
+                // === SCHEDULED POSTS ===
+                if (data.startsWith('scheduled:')) {
+                    if (data === 'scheduled:refresh') return await scheduledPostsHandler.showScheduledPostsMenu(ctx);
+                    if (data === 'scheduled:delete_all_confirm') return await scheduledPostsHandler.confirmDeleteAll(ctx);
+                    if (data === 'scheduled:delete_all_execute') return await scheduledPostsHandler.executeDeleteAll(ctx);
                 }
 
                 // Handler de Publicação Rápida
@@ -259,7 +341,13 @@ export const initAdminBot = async () => {
                     const text = ctx.session.tempData.pendingInput;
                     if (!text) return ctx.reply('❌ Dados perdidos. Envie o link novamente.');
 
-                    await ctx.editMessageText('🕵️ Iniciando captura de produto...');
+                    try {
+                        await ctx.editMessageText('🕵️ Iniciando captura de produto...');
+                    } catch (e) {
+                        // Se falhar (ex: legenda de foto), deleta e manda nova
+                        try { await ctx.deleteMessage(); } catch (delErr) { }
+                        await ctx.reply('🕵️ Iniciando captura de produto...');
+                    }
                     await captureLinkHandler(ctx, text);
                     ctx.session.step = 'IDLE';
                     delete ctx.session.tempData.pendingInput;
@@ -269,7 +357,12 @@ export const initAdminBot = async () => {
                     const text = ctx.session.tempData.pendingInput;
                     if (!text) return ctx.reply('❌ Dados perdidos. Envie a mensagem novamente.');
 
-                    await ctx.editMessageText('📋 Processando mensagem para clonagem de cupom...');
+                    try {
+                        await ctx.editMessageText('📋 Processando mensagem para clonagem de cupom...');
+                    } catch (e) {
+                        try { await ctx.deleteMessage(); } catch (delErr) { }
+                        await ctx.reply('📋 Processando mensagem para clonagem de cupom...');
+                    }
 
                     // Configurar estado para simular que estamos no passo de espera
                     ctx.session.step = 'COUPON_CLONE_WAITING_MSG';

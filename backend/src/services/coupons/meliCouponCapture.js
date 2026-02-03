@@ -39,9 +39,9 @@ class MeliCouponCapture {
       if (!this.settingsLoaded) {
         await this.loadSettings();
       }
-      
+
       const url = `${this.baseUrl}${endpoint}`;
-      
+
       // IMPORTANTE: Sempre tentar obter token se disponível (recomendação de segurança)
       let token = this.accessToken;
       if (!token) {
@@ -73,12 +73,12 @@ class MeliCouponCapture {
     } catch (error) {
       const status = error.response?.status;
       const errorData = error.response?.data;
-      
+
       // Tratamento detalhado de erro 403 conforme documentação
       if (status === 403) {
         const errorCode = errorData?.code || errorData?.error;
         const errorMessage = errorData?.message || error.message;
-        
+
         logger.warn(`⚠️ Erro 403 - Acesso negado:`);
         logger.warn(`   Endpoint: ${endpoint}`);
         logger.warn(`   Código: ${errorCode}`);
@@ -127,15 +127,16 @@ class MeliCouponCapture {
       const sellerPromotions = await this.captureSellerPromotions();
       coupons.push(...sellerPromotions);
 
-      // 4. (NOVO) Capturar via Scraping de Busca (usando meliSync melhorado)
-      // Isso garante que peguemos cupons que aparecem apenas nas listings de produtos
-      // e que a API oficial não retorna por falta de permissão ou escopo.
+      // 4. (DESATIVADO) Capturar via Scraping de Busca (usando meliSync melhorado)
+      // logger.info('🕷️ Scraping de cupons desativado conforme solicitação.');
+      /*
       try {
         const scrapedCoupons = await this.scrapeCouponsFromSearch();
         coupons.push(...scrapedCoupons);
       } catch (scrapeError) {
         logger.error(`Erro no scraping de cupons ML: ${scrapeError.message}`);
       }
+      */
 
       logger.info(`✅ Mercado Livre: ${coupons.length} cupons capturados`);
       return coupons;
@@ -299,7 +300,7 @@ class MeliCouponCapture {
     try {
       // Determinar se campanha é geral ou para produtos/categorias específicas
       const isGeneral = !campaign.item_ids || campaign.item_ids.length === 0;
-      
+
       const coupon = {
         platform: 'mercadolivre',
         code: campaign.coupon_code || `CAMP-${campaign.id}`,
@@ -438,7 +439,7 @@ class MeliCouponCapture {
 
       // Extrair ID MLB- do link
       const productId = this.extractMeliProductId(originalUrl);
-      
+
       if (!productId) {
         logger.warn(`⚠️ Não foi possível extrair ID MLB- do link: ${originalUrl.substring(0, 100)}`);
         return '';
@@ -490,7 +491,7 @@ class MeliCouponCapture {
           data: null
         };
       }
-      
+
       // Outros erros devem ser logados
       logger.warn(`Erro ao verificar cupom ${couponCode}: ${error.message}`);
       return {
@@ -534,10 +535,10 @@ class MeliCouponCapture {
 
           // Determinar se é cupom geral ou para produtos selecionados
           // Se o cupom tem categoria específica ou "produtos selecionados" no título, é específico
-          const isGeneral = !product.coupon.applicable_products || 
-                           product.coupon.applicable_products.length === 0 ||
-                           (product.title && !product.title.toLowerCase().includes('produtos selecionados') && 
-                            !product.title.toLowerCase().includes('categoria'));
+          const isGeneral = !product.coupon.applicable_products ||
+            product.coupon.applicable_products.length === 0 ||
+            (product.title && !product.title.toLowerCase().includes('produtos selecionados') &&
+              !product.title.toLowerCase().includes('categoria'));
 
           const coupon = {
             platform: 'mercadolivre',

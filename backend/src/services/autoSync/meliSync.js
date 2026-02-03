@@ -6,6 +6,8 @@ import linkAnalyzer from '../linkAnalyzer.js'; // Reaproveitar helper de parsePr
 import Coupon from '../../models/Coupon.js';
 import categoryDetector from '../categoryDetector.js';
 import AppSettings from '../../models/AppSettings.js';
+import CouponValidator from '../../utils/couponValidator.js';
+import SyncConfig from '../../models/SyncConfig.js';
 
 class MeliSync {
   /**
@@ -281,8 +283,8 @@ class MeliSync {
             const couponText = couponElement.text().trim();
             const couponValue = linkAnalyzer.parsePrice(couponText);
 
-            // Tentar extrair código
-            const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9]{3,20})/i);
+            // Tentar extrair código (mínimo 4 caracteres, alfanumérico)
+            const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,20})/i);
 
             if (couponValue > 0 && codeMatch) {
               const code = codeMatch[1].toUpperCase();
@@ -300,7 +302,8 @@ class MeliSync {
             // Tentar texto solto de 'CUPOM' 
             const allText = container.text();
             // Regex mais estrita para pegar código: CUPOM [CODE]
-            const codeMatch = allText.match(/CUPOM\s+([A-Z0-9]+)\s+R\$/i) || allText.match(/CUPOM\s*:?\s*([A-Z0-9]{4,15})/i);
+            const codeMatch = allText.match(/CUPOM\s+([A-Z0-9\-_]{4,15})\s+R\$/i) ||
+              allText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,15})/i);
 
             if (codeMatch) {
               const potentialCode = codeMatch[1];
@@ -436,8 +439,8 @@ class MeliSync {
               const couponText = polyCoupon.text().trim();
               const couponValue = linkAnalyzer.parsePrice(couponText);
 
-              // Tentar extrair código
-              const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9]{3,20})/i);
+              // Tentar extrair código (mínimo 4 caracteres)
+              const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,20})/i);
 
               if (couponValue > 0 && codeMatch) {
                 const code = codeMatch[1].toUpperCase();
@@ -455,7 +458,9 @@ class MeliSync {
               // Tentar texto solto de 'CUPOM' no container
               const allText = container.text();
               // Regex mais estrita para pegar código: CUPOM [CODE]
-              const codeMatch = allText.match(/CUPOM\s+([A-Z0-9]+)\s+R\$/i) || allText.match(/CUPOM\s*:?\s*([A-Z0-9]{4,15})/i);
+              // Regex mais estrita para pegar código: CUPOM [CODE]
+              const codeMatch = allText.match(/CUPOM\s+([A-Z0-9\-_]{4,15})\s+R\$/i) ||
+                allText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,15})/i);
 
               if (codeMatch) {
                 const potentialCode = codeMatch[1];
@@ -509,22 +514,21 @@ class MeliSync {
   isValidCouponCode(code) {
     if (!code || typeof code !== 'string') return false;
 
-    // Código deve ter entre 4 e 20 caracteres
-    if (code.length < 4 || code.length > 20) return false;
+    // Usar validador centralizado para consistência
+    const validation = CouponValidator.validateCode(code);
 
-    // Não deve ser palavra comum em português ou inglês
-    const invalidWords = [
-      'DE', 'DA', 'DO', 'OFF', 'COM', 'PARA', 'CUPOM', 'DESCONTO',
-      'VALOR', 'REAL', 'REAIS', 'GRATIS', 'FREE', 'FRETE'
-    ];
-    if (invalidWords.includes(code.toUpperCase())) return false;
+    if (!validation.valid) return false;
 
-    // Deve conter pelo menos uma letra E um número (padrão comum de cupons válidos)
+    // Verificação adicional de "letras e números" para evitar specs técnicas que passaram pelo validador
     const hasLetter = /[A-Z]/i.test(code);
     const hasNumber = /[0-9]/.test(code);
 
-    // Cupons válidos geralmente têm letras e números
-    return hasLetter && hasNumber;
+    // Se tiver só letras ou só números, geralmente éspec técnica ou genérico (exceto se for fallback)
+    if (!validation.isFallback && !(hasLetter && hasNumber)) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -905,6 +909,46 @@ class MeliSync {
       return { product: newProduct, isNew: true };
     } catch (error) {
       logger.error(`❌ Erro ao salvar produto: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Executar ciclo completo de sincronização (Sync Interface)
+   */
+  async sync() {
+    try {
+      logger.info('🔄 Iniciando Sync Automático: Mercado Livre');
+      const config = await SyncConfig.get();
+
+      let keywords = [];
+      if (config.keywords) {
+        keywords = config.keywords.split(',').map(k => k.trim()).filter(k => k);
+      }
+
+      if (keywords.length === 0) keywords = ['smartphone', 'notebook', 'iphone', 'tv 4k', 'playstation 5'];
+
+      const allProducts = await this.fetchMeliProducts(keywords.join(','), 50, { forceScraping: false });
+      const promotions = await this.filterMeliPromotions(allProducts, config.min_discount_percentage);
+
+      let newCount = 0;
+      const SchedulerService = (await import('./schedulerService.js')).default;
+
+      for (const promo of promotions) {
+        try {
+          const { product, isNew } = await this.saveMeliToDatabase(promo, Product);
+          if (isNew) {
+            newCount++;
+            if (config.mercadolivre_auto_publish) {
+              await SchedulerService.scheduleProduct(product);
+            }
+          }
+        } catch (err) { }
+      }
+      logger.info(`✅ Sync ML Finalizado: ${newCount} novos.`);
+      return { success: true, newProducts: newCount };
+    } catch (error) {
+      logger.error(`❌ Erro Sync ML: ${error.message}`);
       throw error;
     }
   }

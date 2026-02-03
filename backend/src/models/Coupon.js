@@ -689,14 +689,14 @@ class Coupon {
         logger.debug('ℹ️ Nenhum cupom pendente/rejeitado antigo para remover');
       }
 
-      // 2. Excluir processados (não pendentes) com mais de 7 dias
+      // 2. Excluir processados (não pendentes) com mais de 24 horas (era 7 dias)
       // IMPORTANTE: Respeitar valid_until - só deletar se expirado E antigo
-      // Deletar SE: (1) Cupom antigo (>7 dias) E (2) (Sem validade OU já expirou)
+      // Deletar SE: (1) Cupom antigo (>24h) E (2) (Sem validade OU já expirou)
       const { data: deletedProcessed, count: processedCount, error: processedError } = await supabase
         .from('coupons')
         .delete({ count: 'exact' })
         .eq('is_pending_approval', false)
-        .lt('updated_at', sevenDaysAgo)
+        .lt('updated_at', twentyFourHoursAgo) // ALTERADO: 7 dias -> 24 horas
         .or(`valid_until.is.null,valid_until.lt.${now.toISOString()}`)
         .select('id, code, valid_until, updated_at');
 

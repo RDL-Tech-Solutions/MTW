@@ -11,7 +11,7 @@ import { adminMainMenu } from '../menus/mainMenu.js';
  */
 export const startEditWizard = async (ctx, productId, isQuick = false) => {
     try {
-        await ctx.answerCallbackQuery();
+        if (ctx.callbackQuery) await ctx.answerCallbackQuery();
 
         ctx.session.tempData.editingProductId = productId;
         ctx.session.tempData.editData = {}; // Dados temporários da edição
@@ -328,7 +328,12 @@ const generateSummaryAndConfirm = async (ctx) => {
     try {
         // Se for edição de mensagem (callback)
         if (ctx.callbackQuery) {
-            await ctx.editMessageText(summary, { parse_mode: 'Markdown', reply_markup: keyboard });
+            try {
+                await ctx.editMessageText(summary, { parse_mode: 'Markdown', reply_markup: keyboard });
+            } catch (e) {
+                try { await ctx.deleteMessage(); } catch (err) { }
+                await ctx.reply(summary, { parse_mode: 'Markdown', reply_markup: keyboard });
+            }
         } else {
             await ctx.reply(summary, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
@@ -337,7 +342,12 @@ const generateSummaryAndConfirm = async (ctx) => {
         // Fallback sem markdown
         const safeSummary = summary.replace(/\*/g, '').replace(/_/g, '');
         if (ctx.callbackQuery) {
-            await ctx.editMessageText(safeSummary, { reply_markup: keyboard });
+            try {
+                await ctx.editMessageText(safeSummary, { reply_markup: keyboard });
+            } catch (err) {
+                try { await ctx.deleteMessage(); } catch (delErr) { }
+                await ctx.reply(safeSummary, { reply_markup: keyboard });
+            }
         } else {
             await ctx.reply(safeSummary, { reply_markup: keyboard });
         }
@@ -354,7 +364,12 @@ export const handleWizardConfirm = async (ctx, action) => {
         const editData = ctx.session.tempData.editData;
 
         if (action === 'cancel') {
-            await ctx.editMessageText('❌ Edição cancelada.');
+            try {
+                await ctx.editMessageText('❌ Edição cancelada.');
+            } catch (e) {
+                try { await ctx.deleteMessage(); } catch (err) { }
+                await ctx.reply('❌ Edição cancelada.');
+            }
             ctx.session.step = 'IDLE';
             return;
         }
@@ -376,7 +391,12 @@ export const handleWizardConfirm = async (ctx, action) => {
 
         if (action === 'save_publish') {
             await ctx.answerCallbackQuery('🚀 Processando publicação...');
-            await ctx.editMessageText('⏳ Publicando nos canais... aguarde.');
+            try {
+                await ctx.editMessageText('⏳ Publicando nos canais... aguarde.');
+            } catch (e) {
+                // Se falhar edit, manda novo msg de status
+                await ctx.reply('⏳ Publicando nos canais... aguarde.');
+            }
 
             // Buscar produto atualizado completo
             const fullProduct = await Product.findById(productId);
@@ -421,7 +441,12 @@ export const handleWizardConfirm = async (ctx, action) => {
         } else {
             // Apenas salvar
             await ctx.answerCallbackQuery('✅ Salvo!');
-            await ctx.editMessageText('✅ Alterações salvas com sucesso! (Não publicado)', { reply_markup: adminMainMenu });
+            try {
+                await ctx.editMessageText('✅ Alterações salvas com sucesso! (Não publicado)', { reply_markup: adminMainMenu });
+            } catch (e) {
+                try { await ctx.deleteMessage(); } catch (err) { }
+                await ctx.reply('✅ Alterações salvas com sucesso! (Não publicado)', { reply_markup: adminMainMenu });
+            }
         }
 
         ctx.session.step = 'IDLE';
@@ -440,7 +465,7 @@ export const handleWizardConfirm = async (ctx, action) => {
  */
 export const startQuickPublishFlow = async (ctx, productId) => {
     try {
-        await ctx.answerCallbackQuery('🚀 Preparando publicação...');
+        if (ctx.callbackQuery) await ctx.answerCallbackQuery();
 
         // Inicializar sessão
         ctx.session.tempData.editingProductId = productId;

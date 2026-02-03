@@ -514,7 +514,8 @@ class LinkAnalyzer {
         currentPrice: currentPrice,
         oldPrice: oldPrice > currentPrice ? oldPrice : 0,
         platform: 'shopee',
-        affiliateLink: url
+        affiliateLink: url,
+        productId: ids.itemId
       };
     } catch (error) {
       // Se for erro 403, não logar como erro crítico
@@ -982,7 +983,7 @@ class LinkAnalyzer {
                       let candidatePrice = priceValue;
                       if (candidatePrice > 1000000) candidatePrice = candidatePrice / 100000;
                       else if (candidatePrice > 1000 && candidatePrice < 100000) candidatePrice = candidatePrice / 100;
-                      if (candidatePrice > 0 && candidatePrice < 100000 && currentPrice === 0) {
+                      if (candidatePrice > 0 && candidatePrice < 100000) {
                         currentPrice = candidatePrice;
                         console.log(`   ✅ Preço encontrado em script grande via padrão: ${currentPrice}`);
                       }
@@ -1026,6 +1027,8 @@ class LinkAnalyzer {
                     // Shopee pode usar valores grandes (centavos de milhão)
                     if (candidatePrice > 0) {
                       if (candidatePrice > 1000000) {
+                        currentPrice = candidatePrice / 100000;
+                      } else if (candidatePrice > 100000 && candidatePrice < 10000000) {
                         currentPrice = candidatePrice / 100000;
                       } else if (candidatePrice > 1000 && candidatePrice < 100000) {
                         currentPrice = candidatePrice / 100;
@@ -1745,7 +1748,8 @@ class LinkAnalyzer {
           currentPrice: currentPrice || 0,
           oldPrice: oldPrice || 0,
           platform: 'shopee',
-          affiliateLink: finalUrl
+          affiliateLink: finalUrl,
+          productId: (await this.extractShopeeIds(finalUrl))?.itemId || null
         };
 
         console.log('📦 Dados extraídos da Shopee:');
@@ -2707,7 +2711,8 @@ class LinkAnalyzer {
         oldPrice: finalOldPrice,
         coupon: coupon,
         platform: 'mercadolivre',
-        affiliateLink: product.permalink
+        affiliateLink: product.permalink,
+        productId: productId
       };
     } catch (error) {
       console.error('Erro ao buscar na API do ML:', error.message);
@@ -2734,6 +2739,7 @@ class LinkAnalyzer {
 
       // PRIMEIRO: Tentar usar a API oficial (mais rápido e preciso)
       let productId = this.extractMeliProductId(url);
+      const originalProductId = productId; // Salvar ID original
 
       // Se não encontrou ID e é link encurtado, não conseguiu seguir redirecionamento
       if (!productId && url.includes('/sec/')) {
@@ -2942,7 +2948,8 @@ class LinkAnalyzer {
         // Vamos adicionar detecção básica aqui?
         // Sim, a logica de scrapeMeliPrices é mais robusta. Mas vamos adicionar null por enquanto.
         platform: 'mercadolivre',
-        affiliateLink: url
+        affiliateLink: url,
+        productId: originalProductId
       };
 
       // Tentar re-scan usando scrapeMeliPrices se suspeitarmos que perdemos algo?
@@ -3888,7 +3895,8 @@ class LinkAnalyzer {
         currentPrice: currentPrice,
         oldPrice: oldPrice > currentPrice ? oldPrice : null,
         imageUrl: imageUrl,
-        affiliateLink: url
+        affiliateLink: url,
+        productId: url.match(/\/item\/(\d+)/)?.[1] || url.match(/\/i\/(\d+)/)?.[1]
       };
     } catch (error) {
       console.error('❌ Erro ao extrair informações do AliExpress:', error.message);
@@ -3955,12 +3963,13 @@ class LinkAnalyzer {
         console.log('🔗 Link direto, pulando redirecionamentos');
       }
 
+      let result;
       if (platform === 'shopee') {
         try {
-          return await this.extractShopeeInfo(finalUrl);
+          result = await this.extractShopeeInfo(finalUrl);
         } catch (shopeeError) {
           console.error('❌ Erro ao extrair info Shopee:', shopeeError.message);
-          return {
+          result = {
             error: `Erro ao extrair informações da Shopee: ${shopeeError.message}`,
             platform: 'shopee',
             affiliateLink: finalUrl
@@ -3968,10 +3977,10 @@ class LinkAnalyzer {
         }
       } else if (platform === 'mercadolivre') {
         try {
-          return await this.extractMeliInfo(finalUrl);
+          result = await this.extractMeliInfo(finalUrl);
         } catch (meliError) {
           console.error('❌ Erro ao extrair info Mercado Livre:', meliError.message);
-          return {
+          result = {
             error: `Erro ao extrair informações do Mercado Livre: ${meliError.message}`,
             platform: 'mercadolivre',
             affiliateLink: finalUrl
@@ -3979,10 +3988,10 @@ class LinkAnalyzer {
         }
       } else if (platform === 'amazon') {
         try {
-          return await this.extractAmazonInfo(finalUrl);
+          result = await this.extractAmazonInfo(finalUrl);
         } catch (amazonError) {
           console.error('❌ Erro ao extrair info Amazon:', amazonError.message);
-          return {
+          result = {
             error: `Erro ao extrair informações da Amazon: ${amazonError.message}`,
             platform: 'amazon',
             affiliateLink: finalUrl
@@ -4002,7 +4011,7 @@ class LinkAnalyzer {
 
               if (productDetails && productDetails.price > 0) {
                 console.log(`   ✅ Dados obtidos via API AliExpress!`);
-                return {
+                result = {
                   platform: 'aliexpress',
                   name: productDetails.title,
                   currentPrice: productDetails.price,
@@ -4012,36 +4021,53 @@ class LinkAnalyzer {
                 };
               } else {
                 console.log(`   ⚠️ API não retornou dados completos, tentando web scraping...`);
+                result = await this.extractAliExpressInfo(finalUrl);
               }
             } catch (apiError) {
               console.log(`   ⚠️ Erro ao usar API AliExpress: ${apiError.message}, tentando web scraping...`);
+              result = await this.extractAliExpressInfo(finalUrl);
             }
+          } else {
+            result = await this.extractAliExpressInfo(finalUrl);
           }
-
-          // Fallback para web scraping
-          return await this.extractAliExpressInfo(finalUrl);
         } catch (aliexpressError) {
           console.error('❌ Erro ao extrair info AliExpress:', aliexpressError.message);
-          return {
+          result = {
             error: `Erro ao extrair informações do AliExpress: ${aliexpressError.message}`,
             platform: 'aliexpress',
             affiliateLink: finalUrl
           };
         }
       } else if (platform === 'kabum') {
-        return await this.extractKabumInfo(finalUrl);
+        result = await this.extractKabumInfo(finalUrl);
       } else if (platform === 'magazineluiza') {
-        return await this.extractMagaluInfo(finalUrl);
+        result = await this.extractMagaluInfo(finalUrl);
       } else if (platform === 'pichau') {
-        return await this.extractPichauInfo(finalUrl);
+        result = await this.extractPichauInfo(finalUrl);
 
       } else {
-        return {
+        result = {
           platform: 'unknown',
           affiliateLink: finalUrl,
           error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza ou Pichau.'
         };
       }
+
+      // IMPORTANTE: Preservar o link original enviado pelo usuário como affiliateLink
+      // especialmente se for um link já afiliado (ajuda muito na automação)
+      if (result && !result.error) {
+        // Se o link original parece mais "completo" ou é o que o usuário quer preservar
+        // Para ML, se tiver matt_word ou for link encurtado /sec/, com certeza é o que queremos
+        const isMeliAffiliate = url.includes('mercadolivre.com') && (url.includes('matt_word=') || url.includes('/sec/'));
+        const isShopeeAffiliate = url.includes('shopee.com') && (url.includes('utm_') || url.includes('aff_click_id') || url.includes('s.shopee.com.br'));
+
+        if (isMeliAffiliate || isShopeeAffiliate || !result.affiliateLink) {
+          result.affiliateLink = url;
+          console.log('✅ Link original PRESERVADO no resultado da análise');
+        }
+      }
+
+      return result;
     } catch (error) {
       console.error('❌ Erro geral ao analisar link:', error);
       return {

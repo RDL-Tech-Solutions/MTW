@@ -459,8 +459,8 @@ class OpenRouterClient {
           .replace(/```$/gm, '')  // ``` no final de linha
           .trim();
 
-        // Passo 2: Procurar por padrão { ... } no conteúdo limpo
-        const jsonMatch = contentWithoutMarkdown.match(/\{[\s\S]*\}/);
+        // Passo 2: Procurar por padrão { ... } ou [ ... ] no conteúdo limpo
+        const jsonMatch = contentWithoutMarkdown.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
         let cleanedContent = jsonMatch ? jsonMatch[0] : contentWithoutMarkdown;
 
         // Passo 3: Limpar conteúdo: remover prefixos comuns de modelos de IA
@@ -496,12 +496,34 @@ class OpenRouterClient {
             .replace(/```$/gm, '')
             .trim();
 
-          // Passo 2: Remover tudo antes do primeiro { e depois do último }
+          // Passo 2: Remover tudo antes do primeiro { ou [ e depois do último } ou ]
           const firstBrace = contentForExtraction.indexOf('{');
+          const firstBracket = contentForExtraction.indexOf('[');
           const lastBrace = contentForExtraction.lastIndexOf('}');
+          const lastBracket = contentForExtraction.lastIndexOf(']');
 
-          if (firstBrace === -1) {
-            logger.error(`   ❌ Nenhum caractere '{' encontrado no conteúdo`);
+          // Determinar início (o que vier primeiro)
+          let start = -1;
+          if (firstBrace !== -1 && firstBracket !== -1) {
+            start = Math.min(firstBrace, firstBracket);
+          } else if (firstBrace !== -1) {
+            start = firstBrace;
+          } else {
+            start = firstBracket;
+          }
+
+          // Determinar fim (o que vier por último)
+          let end = -1;
+          if (lastBrace !== -1 && lastBracket !== -1) {
+            end = Math.max(lastBrace, lastBracket);
+          } else if (lastBrace !== -1) {
+            end = lastBrace;
+          } else {
+            end = lastBracket;
+          }
+
+          if (start === -1) {
+            logger.error(`   ❌ Nenhum caractere '{' ou '[' encontrado no conteúdo`);
 
             // Limpar tokens especiais para verificar melhor
             const contentTrimmed = contentForExtraction
@@ -526,8 +548,8 @@ class OpenRouterClient {
             throw new Error(`Resposta da IA não contém JSON válido. Conteúdo: ${contentForExtraction.substring(0, 100)}...`);
           }
 
-          if (lastBrace === -1 || lastBrace <= firstBrace) {
-            logger.error(`   ❌ JSON incompleto ou malformado (firstBrace: ${firstBrace}, lastBrace: ${lastBrace})`);
+          if (end === -1 || end <= start) {
+            logger.error(`   ❌ JSON incompleto ou malformado (start: ${start}, end: ${end})`);
 
             // Se encontrou { mas não }, a resposta foi truncada
             if (finishReason === 'length') {
@@ -537,7 +559,7 @@ class OpenRouterClient {
             throw new Error(`Resposta da IA contém JSON incompleto ou malformado. Possível truncamento.`);
           }
 
-          const extractedJson = contentForExtraction.substring(firstBrace, lastBrace + 1);
+          const extractedJson = contentForExtraction.substring(start, end + 1);
           logger.debug(`   🔍 Tentando extrair JSON: ${extractedJson.substring(0, 200)}...`);
 
           // Limpar markdown do JSON extraído antes de parsear (limpeza final)

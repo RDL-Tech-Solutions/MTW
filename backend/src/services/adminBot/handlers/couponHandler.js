@@ -286,11 +286,21 @@ export const handleCouponCallbacks = async (ctx, action) => {
     // --- INÍCIO ---
     if (action === 'cp:start_clone') {
         ctx.session.step = 'COUPON_CLONE_WAITING_MSG';
-        await ctx.editMessageText('📋 *Modo Clone*\nCole a mensagem do cupom:', { parse_mode: 'Markdown' });
+        try {
+            await ctx.editMessageText('📋 *Modo Clone*\nCole a mensagem do cupom:', { parse_mode: 'Markdown' });
+        } catch (e) {
+            try { await ctx.deleteMessage(); } catch (delErr) { }
+            await ctx.reply('📋 *Modo Clone*\nCole a mensagem do cupom:', { parse_mode: 'Markdown' });
+        }
     }
     if (action === 'cp:start_manual') {
         ctx.session.step = 'COUPON_MANUAL_CODE';
-        await ctx.editMessageText('✍️ Digite o *CÓDIGO* do cupom:', { parse_mode: 'Markdown' });
+        try {
+            await ctx.editMessageText('✍️ Digite o *CÓDIGO* do cupom:', { parse_mode: 'Markdown' });
+        } catch (e) {
+            try { await ctx.deleteMessage(); } catch (delErr) { }
+            await ctx.reply('✍️ Digite o *CÓDIGO* do cupom:', { parse_mode: 'Markdown' });
+        }
     }
 
     // --- FLUXO MANUAL ---
@@ -338,15 +348,20 @@ export const handleCouponCallbacks = async (ctx, action) => {
             await askPhotoQuestion(ctx);
         } else {
             coupon.is_general = false;
-            ctx.session.step = 'COUPON_MANUAL_PRODUCTS';
-            await ctx.editMessageText('📝 Digite a lista de **Produtos Selecionados** (nomes ou links, separados por vírgula):', { parse_mode: 'Markdown' });
+            coupon.applicable_products = []; // Lista vazia (genérico)
+            // Pular pergunta de produtos, ir direto para foto
+            await askPhotoQuestion(ctx);
         }
     }
 
     if (action === 'cp:photo:use_current') {
         coupon.image_url = coupon.pending_image_url;
         delete coupon.pending_image_url;
-        await ctx.editMessageText('✅ Foto da mensagem será utilizada.');
+        try {
+            await ctx.editMessageText('✅ Foto da mensagem será utilizada.');
+        } catch (e) {
+            await ctx.reply('✅ Foto da mensagem será utilizada.');
+        }
         await showReviewMenu(ctx);
     }
 
@@ -404,14 +419,20 @@ export const handleCouponCallbacks = async (ctx, action) => {
     // --- SALVAR / PUBLICAR ---
     if (action === 'cp:save_only') {
         await saveCoupon(ctx, coupon);
-        await ctx.editMessageText('💾 Cupom salvo com sucesso! (Não publicado)');
+        try {
+            await ctx.editMessageText('💾 Cupom salvo com sucesso! (Não publicado)');
+        } catch (e) {
+            await ctx.reply('💾 Cupom salvo com sucesso! (Não publicado)');
+        }
         ctx.session.step = 'IDLE';
     }
 
     if (action === 'cp:publish_now') {
         const saved = await saveCoupon(ctx, coupon);
         if (saved) {
-            await ctx.editMessageText('🚀 Enviando para canais...');
+            try {
+                await ctx.editMessageText('🚀 Enviando para canais...');
+            } catch (e) { await ctx.reply('🚀 Enviando para canais...'); }
             await publishCoupon(ctx, saved);
         }
     }
@@ -424,20 +445,42 @@ async function showReviewMenu(ctx) {
     const preview = formatMatches(coupon);
 
     const keyboard = new InlineKeyboard()
-        .text('✏️ Plat', 'cp:edit:plat').text('✏️ Cód', 'cp:edit:code').text('✏️ Val', 'cp:edit:discount').row()
-        .text('✏️ Limite R$', 'cp:edit:max_discount').text('✏️ Mín', 'cp:edit:min').text('✏️ Expira', 'cp:edit:expiration').row()
-        .text('✏️ Aplicabilidade', 'cp:edit:app').text('✏️ Foto', 'cp:edit:photo').row()
-        .text('🚀 Salvar e Publicar', 'cp:publish_now').row()
+        .text(coupon.platform ? `🏪 ${coupon.platform}` : '🏪 Plataforma', 'cp:edit:plat')
+        .text(coupon.code ? `🎟️ ${coupon.code}` : '🎟️ Código', 'cp:edit:code').row()
+
+        .text(coupon.discount_value ? `💰 ${coupon.discount_value}${coupon.discount_type === 'percentage' ? '%' : 'R$'}` : '💰 Valor', 'cp:edit:discount')
+        .text(coupon.max_discount_value ? `📉 Max R$${coupon.max_discount_value}` : '📉 Limite', 'cp:edit:max_discount').row()
+
+        .text(coupon.min_purchase ? `🛒 Mín R$${coupon.min_purchase}` : '🛒 Mínimo', 'cp:edit:min')
+        .text(coupon.valid_until ? `📅 ${new Date(coupon.valid_until).toLocaleDateString('pt-BR').substring(0, 5)}` : '📅 Expira', 'cp:edit:expiration').row()
+
+        .text(coupon.is_general ? '🌍 Todos Produtos' : '🔒 Selecionados', 'cp:edit:app')
+        .text(coupon.image_url ? '📸 Com Foto' : '🖼️ Sem Foto', 'cp:edit:photo').row()
+
+        .text('🚀 PUBLICAR AGORA', 'cp:publish_now').row()
         .text('💾 Apenas Salvar', 'cp:save_only');
 
-    const msg = `📋 *Revisão do Cupom*\n\n${preview}\n\nO que deseja fazer?`;
+    const msg = `📋 *Revisão do Cupom*\n\n${preview}\n\n_Toque nos botões para editar cada campo._`;
     ctx.session.step = 'COUPON_CONFIRM_PUBLISH';
     try { await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: keyboard }); }
-    catch (e) { await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard }); }
+    catch (e) {
+        try { await ctx.deleteMessage(); } catch (delErr) { }
+        await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
 }
 
 async function askPlatformSelection(ctx) {
-    await ctx.editMessageText('Selecione a *Plataforma*:', { parse_mode: 'Markdown', reply_markup: getPlatformKeyboard() });
+    const msg = 'Selecione a *Plataforma* do cupom:';
+    if (ctx.callbackQuery) {
+        try {
+            await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: getPlatformKeyboard() });
+        } catch (e) {
+            try { await ctx.deleteMessage(); } catch (delErr) { }
+            await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: getPlatformKeyboard() });
+        }
+    } else {
+        await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: getPlatformKeyboard() });
+    }
 }
 
 function getPlatformKeyboard() {
@@ -449,23 +492,17 @@ function getPlatformKeyboard() {
 }
 
 function formatMatches(c) {
-    let txt = `🏪 *${c.platform || '?'}*\n` +
-        `🎟️ *${c.code || '?'}*\n` +
-        `💰 ${c.discount_value || 0}${c.discount_type === 'percentage' ? '%' : ' R$'}\n`;
+    let txt = `🏪 Plataforma: *${c.platform || '❓ Indefinida'}*\n` +
+        `🎟️ Código: *${c.code || '❓'}*\n` +
+        `💰 Desconto: *${c.discount_value || 0}${c.discount_type === 'percentage' ? '%' : ' R$'}*\n`;
 
-    if (c.max_discount_value) txt += `💰 Limite Desconto: R$ ${c.max_discount_value}\n`;
-    if (c.min_purchase) txt += `🛒 Mín: R$ ${c.min_purchase}\n`;
-    if (c.valid_until) txt += `📅 Expira: ${new Date(c.valid_until).toLocaleDateString('pt-BR')}\n`;
-    if (c.is_general === false) {
-        txt += `🔒 Produtos Selecionados (${c.applicable_products?.length || 0} produtos)\n`;
-    } else {
-        txt += `🌍 Todos os Produtos\n`;
-    }
-    if (c.image_url) {
-        txt += `📸 Foto personalizada: Sim\n`;
-    } else {
-        txt += `📸 Foto: Padrão (Logo)\n`;
-    }
+    if (c.max_discount_value) txt += `📉 Limite: R$ ${c.max_discount_value}\n`;
+    if (c.min_purchase) txt += `🛒 Mínimo: R$ ${c.min_purchase}\n`;
+    if (c.valid_until) txt += `📅 Validade: ${new Date(c.valid_until).toLocaleDateString('pt-BR')}\n`;
+
+    txt += `📦 Regra: ${c.is_general ? '🌍 Todos Produtos' : `🔒 Em produtos selecionados`}\n`;
+    txt += `📸 Imagem: ${c.image_url ? '✅ Personalizada' : '🖼️ Padrão'}\n`;
+
     return txt;
 }
 

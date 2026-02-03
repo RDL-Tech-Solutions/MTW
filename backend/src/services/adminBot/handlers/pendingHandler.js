@@ -10,7 +10,8 @@ const PAGE_SIZE = 5;
  */
 export const listPendingProducts = async (ctx, page = 1) => {
     try {
-        // const { tenantId } = ctx.session.user; // REMOVIDO
+        const filters = ctx.session.tempData.pendingFilters || {};
+        const { platform, search } = filters;
         const offset = (page - 1) * PAGE_SIZE;
 
         if (page === 1 && !ctx.callbackQuery) {
@@ -21,44 +22,64 @@ export const listPendingProducts = async (ctx, page = 1) => {
             limit: PAGE_SIZE,
             page: page,
             sort: 'created_at',
-            order: 'desc'
-            // tenant_id removido anteriormente
+            order: 'desc',
+            platform,
+            search
         });
 
-        if (!products || products.length === 0) {
-            const msg = '✅ *Nenhum produto pendente.* Todos em dia!';
-            if (ctx.callbackQuery) {
-                // Tentar editar, se falhar mandar novo (caso seja msg de texto antes)
-                try { await ctx.editMessageText(msg, { parse_mode: 'Markdown' }); }
-                catch (e) { await ctx.reply(msg, { parse_mode: 'Markdown' }); }
-            } else {
-                await ctx.reply(msg, { parse_mode: 'Markdown' });
-            }
-            return;
-        }
+        let message = `📋 *Produtos Pendentes* (${total})\n`;
 
-        let message = `📋 *Produtos Pendentes* (${total})\n\n`;
+        // Exibir filtros ativos
+        if (platform || search) {
+            message += `\n🔍 *Filtros Ativos:*`;
+            if (platform) message += `\n📍 Plataforma: \`${platform.toUpperCase()}\``;
+            if (search) message += `\n📝 Busca: \`${search}\``;
+            message += `\n`;
+        }
+        message += `\n`;
+
         const keyboard = new InlineKeyboard();
 
-        products.forEach((p, index) => {
-            const idx = offset + index + 1;
-            const price = p.current_price ? `R$${p.current_price}` : '';
-            // Botão para ver detalhes
-            keyboard.text(`${idx}. ${p.name.substring(0, 20)}... ${price}`, `pending:view:${p.id}`).row();
-        });
+        if (!products || products.length === 0) {
+            message += '✅ *Nenhum produto encontrado.*';
+            keyboard.text('🔍 Nova Busca', 'pending:search:start').row();
+            if (platform || search) keyboard.text('❌ Limpar Filtros', 'pending:filter:clear').row();
+            keyboard.text('🔙 Voltar ao Início', 'pending:back');
+        } else {
+            products.forEach((p, index) => {
+                const idx = offset + index + 1;
+                const price = p.current_price ? `R$${p.current_price}` : '';
+                keyboard.text(`${idx}. ${p.name.substring(0, 20)}... ${price}`, `pending:view:${p.id}`).row();
+            });
 
-        // Paginação
-        const totalPages = Math.ceil(total / PAGE_SIZE);
-        const navRow = [];
-        if (page > 1) navRow.push({ text: '⬅️ Ant', callback_data: `pending:page:${page - 1}` });
-        if (page < totalPages) navRow.push({ text: 'Prox ➡️', callback_data: `pending:page:${page + 1}` });
+            // Paginação
+            const totalPages = Math.ceil(total / PAGE_SIZE);
+            const navRow = [];
+            if (page > 1) navRow.push({ text: '⬅️ Ant', callback_data: `pending:page:${page - 1}` });
+            if (page < totalPages) navRow.push({ text: 'Prox ➡️', callback_data: `pending:page:${page + 1}` });
+            if (navRow.length > 0) keyboard.row(...navRow);
 
-        if (navRow.length > 0) keyboard.row(...navRow);
+            // Botões de Filtro e Busca
+            keyboard.row()
+                .text('🔍 Buscar', 'pending:search:start')
+                .text('📍 Filtrar Loja', 'pending:filter:menu');
 
-        keyboard.row().text('🔄 Atualizar', 'pending:refresh');
+            if (platform || search) {
+                keyboard.row().text('❌ Limpar Filtros', 'pending:filter:clear');
+            }
+
+            keyboard.row().text('🔄 Atualizar', 'pending:refresh');
+        }
 
         if (ctx.callbackQuery) {
-            await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard });
+            try {
+                await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard });
+            } catch (e) {
+                // Se falhar (ex: era uma foto), apaga e manda nova
+                logger.debug('Falha ao editar lista (provavelmente era foto), mandando nova.');
+                try { await ctx.deleteMessage(); } catch (err) { }
+                await ctx.reply(message, { parse_mode: 'Markdown', reply_markup: keyboard });
+            }
         } else {
             await ctx.reply(message, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
@@ -115,3 +136,32 @@ export const viewPendingDetail = async (ctx, productId) => {
         logger.error('Erro view pendente:', error);
     }
 }
+
+/**
+ * Menu de Filtro por Plataforma
+ */
+export const showFilterMenu = async (ctx) => {
+    const keyboard = new InlineKeyboard()
+        .text('🛍️ Shopee', 'pending:filter:shopee')
+        .text('🛒 Mercado Livre', 'pending:filter:mercadolivre').row()
+        .text('📦 Amazon', 'pending:filter:amazon')
+        .text('🌐 AliExpress', 'pending:filter:aliexpress').row()
+        .text('🏷️ Kabum', 'pending:filter:kabum')
+        .text('🔵 Magalu', 'pending:filter:magazineluiza').row()
+        .text('💻 Pichau', 'pending:filter:pichau')
+        .text('🔘 Outros', 'pending:filter:general').row()
+        .text('🔙 Voltar', 'pending:page:1');
+
+    const msg = '📍 *Filtrar por Plataforma:*\nEscolha uma loja para listar os pendentes:';
+
+    if (ctx.callbackQuery) {
+        try {
+            await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+        } catch (e) {
+            try { await ctx.deleteMessage(); } catch (err) { }
+            await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+        }
+    } else {
+        await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+};

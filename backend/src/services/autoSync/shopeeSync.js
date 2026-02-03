@@ -1,8 +1,10 @@
 import logger from '../../config/logger.js';
 import shopeeService from '../shopee/shopeeService.js';
 import Coupon from '../../models/Coupon.js';
+import Product from '../../models/Product.js';
 import categoryDetector from '../categoryDetector.js';
 import AppSettings from '../../models/AppSettings.js';
+import SyncConfig from '../../models/SyncConfig.js';
 
 class ShopeeSync {
   /**
@@ -430,6 +432,52 @@ class ShopeeSync {
       return { product: newProduct, isNew: true };
     } catch (error) {
       logger.error(`❌ Erro ao salvar produto: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Executar ciclo completo de sincronização (Sync Interface)
+   */
+  async sync() {
+    try {
+      logger.info('🔄 Iniciando Sync Automático: Shopee');
+      const config = await SyncConfig.get();
+
+      let keywords = [];
+      if (config.keywords) {
+        keywords = config.keywords.split(',').map(k => k.trim()).filter(k => k);
+      }
+
+      if (keywords.length === 0) keywords = ['garrafa termica', 'fone bluetooth', 'relogio inteligente', 'acessorios celular'];
+
+      // Buscar
+      const allProducts = await this.fetchShopeeProducts(keywords, 50);
+
+      // Filtrar
+      const promotions = await this.filterShopeePromotions(allProducts, config.min_discount_percentage);
+
+      let newCount = 0;
+      const SchedulerService = (await import('./schedulerService.js')).default;
+
+      for (const promo of promotions) {
+        try {
+          // Salvar (passando Model Product conforme assinatura)
+          const { product, isNew } = await this.saveShopeeToDatabase(promo, Product);
+
+          if (isNew) {
+            newCount++;
+            if (config.shopee_auto_publish) {
+              await SchedulerService.scheduleProduct(product);
+            }
+          }
+        } catch (err) { }
+      }
+
+      logger.info(`✅ Sync Shopee Finalizado: ${newCount} novos.`);
+      return { success: true, newProducts: newCount };
+    } catch (error) {
+      logger.error(`❌ Erro Sync Shopee: ${error.message}`);
       throw error;
     }
   }

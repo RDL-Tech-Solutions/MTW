@@ -420,7 +420,8 @@ class NotificationDispatcher {
       let result;
 
       // VERIFICAR SE TEM IMAGEM PARA ENVIAR
-      // Meta API SÓ ACEITA LINKS PÚBLICOS (http/https)
+      // Meta API SÓ ACEITA LINKS PÚBLICOS (http/https) PARA MÉTODO DIRETO
+      // Mas suportamos arquivos locais para LOGOS e fallbacks
       let imageUrl = data.image_url;
 
       // Normalizar URL protocol-relative (//exemplo.com -> https://exemplo.com)
@@ -432,25 +433,36 @@ class NotificationDispatcher {
         typeof imageUrl === 'string' &&
         (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
 
-      const hasValidImage = !!imageUrl && isPublicUrl;
+      const isLocalFile = imageUrl &&
+        typeof imageUrl === 'string' &&
+        !isPublicUrl &&
+        (imageUrl.includes('/') || imageUrl.includes('\\')) &&
+        fs.existsSync(imageUrl);
 
-      if (!isPublicUrl && imageUrl) {
-        logger.warn(`⚠️ [Dispatcher] Imagem ignorada por não ser uma URL pública ou válida: ${imageUrl}`);
+      const hasValidImage = !!imageUrl && (isPublicUrl || isLocalFile);
+
+      if (!hasValidImage && imageUrl) {
+        logger.warn(`⚠️ [Dispatcher] Imagem ignorada por não ser uma URL pública ou arquivo local válido: ${imageUrl}`);
       } else if (hasValidImage) {
-        logger.info(`🖼️ [Dispatcher] Usando imagem: ${imageUrl}`);
+        logger.info(`🖼️ [Dispatcher] Usando imagem: ${isLocalFile ? 'Arquivo Local' : imageUrl}`);
       }
 
       if (channel.platform === 'whatsapp') {
         try {
           if (hasValidImage) {
-            // FLUXO DE IMAGEM OTIMIZADO (WebP -> JPEG -> Upload -> Send)
-            // Resolve problema de imagens WebP do Mercado Livre que a API não aceita via URL
-
+            // FLUXO DE IMAGEM OTIMIZADO
             let localImagePath = null;
             try {
-              // 1. Processar imagem (Download + Conversão para JPEG)
-              logger.info(`🔄 [Dispatcher] Processando imagem para WhatsApp: ${imageUrl}`);
-              localImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
+              if (isPublicUrl) {
+                // 1. Processar imagem da URL (Download + Conversão para JPEG)
+                // Resolve problema de imagens WebP do Mercado Livre que a API não aceita via URL
+                logger.info(`🔄 [Dispatcher] Processando imagem remota para WhatsApp: ${imageUrl}`);
+                localImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
+              } else {
+                // 1. Já é um arquivo local (ex: logo padrão)
+                logger.info(`📁 [Dispatcher] Usando arquivo local diretamente para WhatsApp: ${imageUrl}`);
+                localImagePath = imageUrl;
+              }
 
               // 2. Fazer upload da mídia para a API do WhatsApp
               logger.info(`⬆️ [Dispatcher] Fazendo upload da mídia para WhatsApp...`);
@@ -467,8 +479,8 @@ class NotificationDispatcher {
               logger.error(`❌ [Dispatcher] Erro no fluxo de mídia WhatsApp: ${mediaError.message}`);
               throw mediaError; // Repassar para o catch externo fazer fallback
             } finally {
-              // 4. Limpar arquivo temporário
-              if (localImagePath && fs.existsSync(localImagePath)) {
+              // 4. Limpar arquivo temporário (SÓ SE FOI CRIADO PELO CONVERSOR)
+              if (isPublicUrl && localImagePath && fs.existsSync(localImagePath)) {
                 try {
                   fs.unlinkSync(localImagePath);
                   logger.debug(`🧹 [Dispatcher] Arquivo temporário removido: ${localImagePath}`);

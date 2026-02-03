@@ -9,6 +9,75 @@ import AppSettings from '../../models/AppSettings.js';
  * Endpoint: https://open-api.affiliate.shopee.com.br/graphql
  */
 class ShopeeService {
+  /** 
+   * Buscar deals (compatibilidade) - Mapeia para getShopeeOffers
+   */
+  async getDeals(limit = 50, offset = 0) {
+    try {
+      const page = Math.floor(offset / limit) + 1;
+      const offers = await this.getShopeeOffers({ limit, page });
+
+      return offers.nodes.map(node => ({
+        deal_id: node.productId || 0,
+        deal_title: node.offerName,
+        deal_description: '',
+        deal_url: node.offerLink || node.originalLink,
+        discount_type: 'FIXED',
+        discount_value: 0,
+        min_spend: 0,
+        start_time: node.periodStartTime || Math.floor(Date.now() / 1000),
+        end_time: node.periodEndTime || Math.floor(Date.now() / 1000) + 86400,
+        campaign_name: node.offerName
+      }));
+    } catch (error) {
+      logger.error(`Erro ao buscar deals: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Buscar detalhes do voucher (compatibilidade) - Mock
+   */
+  async getVoucherDetails(voucherId) {
+    return {
+      voucher_id: voucherId,
+      voucher_code: typeof voucherId === 'string' ? voucherId : `V${voucherId}`,
+      voucher_name: 'Cupom Shopee',
+      discount_type: 'FIXED',
+      discount_amount: 0,
+      min_spend: 0,
+      start_time: Math.floor(Date.now() / 1000),
+      end_time: Math.floor(Date.now() / 1000) + 86400
+    };
+  }
+
+  /**
+   * Buscar produtos por categoria (compatibilidade)
+   */
+  async getProductsByCategory(categoryId, limit = 50, offset = 0) {
+    try {
+      const page = Math.floor(offset / limit) + 1;
+      const offers = await this.getProductOffers({
+        productCatId: parseInt(categoryId),
+        limit,
+        page
+      });
+
+      return offers.nodes.map(node => ({
+        item_id: node.itemId,
+        name: node.productName,
+        url: node.offerLink,
+        image: node.imageUrl,
+        price: node.priceMin ? parseFloat(node.priceMin) : 0,
+        price_before_discount: node.priceMax ? parseFloat(node.priceMax) : 0,
+        commission_rate: parseFloat(node.commissionRate || 0)
+      }));
+    } catch (error) {
+      logger.error(`Erro ao buscar produtos por categoria: ${error.message}`);
+      return [];
+    }
+  }
+
   constructor() {
     // Inicializar com valores do .env (fallback)
     this.appId = process.env.SHOPEE_PARTNER_ID || process.env.SHOPEE_APP_ID;
@@ -25,36 +94,36 @@ class ShopeeService {
   async loadSettings() {
     try {
       const config = await AppSettings.getShopeeConfig();
-      
+
       // SEMPRE usar valores do banco se existirem, senão usar .env como fallback
       const appIdFromDb = config.partnerId; // AppID = Partner ID
       const secretFromDb = config.partnerKey; // Secret = Partner Key
-      
+
       // Log detalhado dos valores recebidos
       logger.info(`📦 Carregando configurações Shopee Affiliate API:`);
       logger.info(`   - AppID do banco: ${appIdFromDb ? `${appIdFromDb.substring(0, 4)}... (${appIdFromDb.length} caracteres)` : 'não encontrado'}`);
       logger.info(`   - Secret do banco: ${secretFromDb ? `✅ configurado (${secretFromDb.length} caracteres)` : 'não encontrado'}`);
       logger.info(`   - AppID do .env: ${process.env.SHOPEE_PARTNER_ID ? `${process.env.SHOPEE_PARTNER_ID.substring(0, 4)}...` : 'não configurado'}`);
-      
+
       const oldAppId = this.appId;
       const hadAppId = !!this.appId;
       const hadSecret = !!this.secret;
-      
+
       // Priorizar banco de dados
       if (appIdFromDb) {
         this.appId = appIdFromDb;
       } else if (!this.appId) {
         this.appId = process.env.SHOPEE_PARTNER_ID || process.env.SHOPEE_APP_ID;
       }
-      
+
       if (secretFromDb) {
         this.secret = secretFromDb;
       } else if (!this.secret) {
         this.secret = process.env.SHOPEE_PARTNER_KEY || process.env.SHOPEE_SECRET;
       }
-      
+
       this.settingsLoaded = true;
-      
+
       // Log detalhado sobre origem das configurações
       if (appIdFromDb) {
         if (!hadAppId || oldAppId !== this.appId) {
@@ -63,7 +132,7 @@ class ShopeeService {
       } else if (this.appId && !hadAppId) {
         logger.warn(`⚠️ Shopee AppID não encontrado no banco, usando .env: ${this.appId.substring(0, 4)}...`);
       }
-      
+
       if (secretFromDb) {
         if (!hadSecret) {
           logger.info(`📦 Shopee Secret carregado do BANCO DE DADOS: ✅`);
@@ -71,7 +140,7 @@ class ShopeeService {
       } else if (this.secret && !hadSecret) {
         logger.warn(`⚠️ Shopee Secret não encontrado no banco, usando .env`);
       }
-      
+
       // Log de erro se não encontrou em nenhum lugar
       if (!this.appId) {
         logger.error(`❌ Shopee AppID não configurado (nem no banco nem no .env)`);
@@ -98,26 +167,26 @@ class ShopeeService {
       logger.warn('⚠️ Configurações não carregadas, tentando carregar...');
       // Não usar await aqui para não bloquear
     }
-    
+
     // Payload é o corpo da requisição em JSON (string)
     const payloadString = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    
+
     // Base string: AppId + Timestamp + Payload + Secret
     const baseString = `${this.appId}${timestamp}${payloadString}${this.secret}`;
-    
+
     logger.debug(`🔐 Gerando assinatura Shopee GraphQL:`);
     logger.debug(`   - AppID: ${this.appId ? `${this.appId.substring(0, 4)}...` : 'NÃO CONFIGURADO'}`);
     logger.debug(`   - Timestamp: ${timestamp}`);
     logger.debug(`   - Payload length: ${payloadString.length} caracteres`);
     logger.debug(`   - Base String: ${this.appId ? `${this.appId.substring(0, 4)}...${timestamp}[payload]${this.secret.substring(0, 4)}...` : 'N/A'}`);
-    
+
     const signature = crypto
       .createHash('sha256')
       .update(baseString)
       .digest('hex');
-    
+
     logger.debug(`   - Signature gerada: ${signature.substring(0, 16)}...`);
-    
+
     return signature;
   }
 
@@ -138,34 +207,34 @@ class ShopeeService {
       }
 
       const timestamp = Math.floor(Date.now() / 1000);
-      
+
       // Construir payload GraphQL
       const payload = {
         query,
         ...(variables && Object.keys(variables).length > 0 && { variables }),
         ...(operationName && { operationName })
       };
-      
+
       const payloadString = JSON.stringify(payload);
-      
+
       // Log detalhado do payload antes de enviar
       logger.debug(`📤 Payload GraphQL completo:`);
       logger.debug(`   Query: ${query.substring(0, 200)}...`);
       logger.debug(`   Variables: ${JSON.stringify(variables, null, 2)}`);
       logger.debug(`   Payload string: ${payloadString.substring(0, 500)}...`);
-      
+
       // Gerar assinatura
       const signature = this.generateSignature(timestamp, payloadString);
-      
+
       // Construir header de autorização
       // Formato: SHA256 Credential={AppId}, Timestamp={Timestamp}, Signature={Signature}
       const authorization = `SHA256 Credential=${this.appId}, Timestamp=${timestamp}, Signature=${signature}`;
-      
+
       logger.info(`🔗 Fazendo requisição GraphQL Shopee:`);
       logger.info(`   - Endpoint: ${this.apiUrl}`);
       logger.info(`   - Operation: ${operationName || 'query'}`);
       logger.info(`   - AppID: ${this.appId.substring(0, 4)}...`);
-      
+
       const response = await axios.post(
         this.apiUrl,
         payload,
@@ -200,14 +269,14 @@ class ShopeeService {
             }
           }
         });
-        
+
         // Verificar se é erro de autenticação
-        const authError = errors.find(e => 
-          e.extensions?.code === 10020 || 
+        const authError = errors.find(e =>
+          e.extensions?.code === 10020 ||
           e.message?.toLowerCase().includes('signature') ||
           e.message?.toLowerCase().includes('authentication')
         );
-        
+
         if (authError) {
           throw new Error(`Erro de autenticação: ${authError.message || 'Assinatura inválida'}`);
         }
@@ -218,10 +287,10 @@ class ShopeeService {
       if (error.response) {
         const status = error.response.status;
         const data = error.response.data || {};
-        
+
         logger.error(`❌ Erro na API Shopee GraphQL (${status}): ${error.response.statusText}`);
         logger.error(`   Resposta: ${JSON.stringify(data).substring(0, 500)}`);
-        
+
         // Tratamento específico para erros de autenticação
         if (status === 401 || status === 403) {
           logger.error(`❌ CRÍTICO: Erro de autenticação!`);
@@ -280,7 +349,7 @@ class ShopeeService {
         }
       }
     `;
-    
+
     logger.debug(`📝 Query shopeeOfferV2: keyword="${keyword}", sortType=${sortType}, page=${page}, limit=${limit}`);
 
     try {
@@ -290,14 +359,14 @@ class ShopeeService {
         page: page !== null && page !== undefined ? page : 1,
         limit: limit !== null && limit !== undefined ? limit : 50
       };
-      
+
       // keyword é opcional
       if (keyword !== null && keyword !== undefined && keyword.trim()) {
         variables.keyword = keyword.trim();
       }
-      
+
       logger.debug(`📝 Variáveis enviadas para shopeeOfferV2: ${JSON.stringify(variables, null, 2)}`);
-      
+
       const response = await this.makeGraphQLRequest(query, variables, 'ShopeeOfferV2');
 
       if (response.errors) {
@@ -394,7 +463,7 @@ class ShopeeService {
         page: page !== null && page !== undefined ? page : 1,
         limit: limit !== null && limit !== undefined ? limit : 50
       };
-      
+
       if (shopId !== null && shopId !== undefined) variables.shopId = shopId;
       if (keyword !== null && keyword !== undefined && keyword.trim()) variables.keyword = keyword.trim();
       if (shopType !== null && shopType !== undefined) variables.shopType = Array.isArray(shopType) ? shopType : [shopType];
@@ -402,9 +471,9 @@ class ShopeeService {
       if (sellerCommCoveRatio !== null && sellerCommCoveRatio !== undefined && sellerCommCoveRatio.trim()) {
         variables.sellerCommCoveRatio = sellerCommCoveRatio.trim();
       }
-      
+
       logger.debug(`📝 Variáveis enviadas para shopOfferV2: ${JSON.stringify(variables, null, 2)}`);
-      
+
       const response = await this.makeGraphQLRequest(query, variables, 'ShopOfferV2');
 
       if (response.errors) {
@@ -503,7 +572,7 @@ class ShopeeService {
       // Conforme documentação: "listType can only be used as a query parameter with matchId, 
       // can not be used as a query parameter with the rest of the input"
       const variables = {};
-      
+
       // Se listType está definido, só pode usar com matchId
       if (listType !== null && listType !== undefined) {
         variables.listType = listType;
@@ -518,16 +587,16 @@ class ShopeeService {
         if (productCatId !== null && productCatId !== undefined) variables.productCatId = productCatId;
         if (keyword !== null && keyword !== undefined && keyword.trim()) variables.keyword = keyword.trim();
       }
-      
+
       // sortType, page e limit são sempre enviados
       variables.sortType = sortType !== null && sortType !== undefined ? sortType : 2;
       variables.page = page !== null && page !== undefined ? page : 1;
       variables.limit = limit !== null && limit !== undefined ? limit : 50;
-      
+
       // isAMSOffer e isKeySeller podem ser usados com qualquer combinação
       if (isAMSOffer !== null && isAMSOffer !== undefined) variables.isAMSOffer = isAMSOffer;
       if (isKeySeller !== null && isKeySeller !== undefined) variables.isKeySeller = isKeySeller;
-      
+
       logger.debug(`📝 Variáveis enviadas para productOfferV2: ${JSON.stringify(variables, null, 2)}`);
 
       const response = await this.makeGraphQLRequest(query, variables, 'ProductOfferV2');
@@ -829,7 +898,7 @@ class ShopeeService {
     try {
       // Converter itemId para Int64 (número)
       const itemIdNum = typeof itemId === 'string' ? parseInt(itemId, 10) : itemId;
-      
+
       if (!itemIdNum || isNaN(itemIdNum)) {
         logger.error(`❌ itemId inválido: ${itemId}`);
         return null;
@@ -883,10 +952,10 @@ class ShopeeService {
             page: 1,
             limit: 50 // Buscar mais para aumentar chance de encontrar
           });
-          
+
           // Filtrar pelo itemId
           if (topOffers.nodes && topOffers.nodes.length > 0) {
-            const found = topOffers.nodes.find(node => 
+            const found = topOffers.nodes.find(node =>
               node.itemId && (String(node.itemId) === String(itemIdNum))
             );
             if (found) {
@@ -901,7 +970,7 @@ class ShopeeService {
 
       if (offers && offers.nodes && offers.nodes.length > 0) {
         const node = offers.nodes[0];
-        
+
         // Calcular preço médio se tiver priceMin e priceMax
         let price = 0;
         if (node.priceMin && node.priceMax) {

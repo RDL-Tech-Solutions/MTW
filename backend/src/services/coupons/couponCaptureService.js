@@ -141,7 +141,7 @@ class CouponCaptureService {
           // Mapear resultados de volta para cupons
           const approvedCodes = new Set(filterResult.approved.map(r => r.coupon.code));
           filteredCoupons = validCoupons.filter(c => approvedCodes.has(c.code));
-          
+
           logger.info(`🤖 IA: ${filterResult.approved.length} aprovados, ${filterResult.rejected.length} rejeitados, ${filterResult.needsReview.length} precisam revisão`);
         } catch (aiError) {
           logger.warn(`⚠️ Erro na filtragem IA, usando filtragem tradicional: ${aiError.message}`);
@@ -201,8 +201,7 @@ class CouponCaptureService {
         coupons_created: created,
         errors,
         duration_ms: duration,
-        ai_optimized: optimized || 0,
-        ai_filtered: settings.use_ai_filtering ? (validCoupons.length - filteredCoupons.length) : 0
+        ai_optimized: optimized || 0
       });
 
       logger.info(`✅ ${platform}: ${created} novos cupons salvos${optimized > 0 ? ` (${optimized} otimizados com IA)` : ''}${settings.use_ai_filtering ? ` (${validCoupons.length - filteredCoupons.length} filtrados pela IA)` : ''}`);
@@ -400,7 +399,7 @@ class CouponCaptureService {
       } else {
         activeCoupons = await Coupon.findActive({ limit: 100 });
       }
-      
+
       let verified = 0;
       let invalid = 0;
 

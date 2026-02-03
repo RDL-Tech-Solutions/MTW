@@ -3,6 +3,8 @@ import crypto from 'crypto';
 import logger from '../../config/logger.js';
 import AppSettings from '../../models/AppSettings.js';
 import Coupon from '../../models/Coupon.js';
+import Product from '../../models/Product.js';
+import SyncConfig from '../../models/SyncConfig.js';
 import categoryDetector from '../categoryDetector.js';
 
 class AliExpressSync {
@@ -795,6 +797,62 @@ class AliExpressSync {
       return { product: newProduct, isNew: true };
     } catch (error) {
       logger.error(`❌ Erro ao salvar produto: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Executar ciclo completo de sincronização
+   */
+  async sync() {
+    try {
+      logger.info('🔄 Iniciando Sync Automático: AliExpress');
+      const config = await SyncConfig.get();
+
+      let keywords = [];
+      if (config.keywords) {
+        keywords = config.keywords.split(',').map(k => k.trim()).filter(k => k);
+      }
+
+      if (keywords.length === 0) keywords = ['xiaomi', 'baseus', 'ugreen', 'lenovo', 'anker', 'smartwatch'];
+
+      // FORÇAR ORIGEM BRASIL conforme solicitação do usuário
+      const productOrigin = 'brazil';
+
+      // Buscar
+      const allProducts = await this.fetchAliExpressProducts(keywords.join(','), 50, productOrigin);
+
+      if (allProducts.length === 0) {
+        logger.info('   ℹ️ Nenhum produto AliExpress encontrado (filtro BR).');
+        return { success: true, newProducts: 0 };
+      }
+
+      // Filtrar Promoções
+      const promotions = this.filterAliExpressPromotions(allProducts, config.min_discount_percentage);
+
+      let newCount = 0;
+      const SchedulerService = (await import('./schedulerService.js')).default;
+
+      for (const promo of promotions) {
+        try {
+          const { product, isNew } = await this.saveAliExpressToDatabase(promo, Product);
+
+          if (isNew) {
+            newCount++;
+            if (config.aliexpress_auto_publish) {
+              await SchedulerService.scheduleProduct(product);
+            }
+          }
+        } catch (err) {
+          // logger.error(`Erro ao salvar produto Ali: ${err.message}`);
+        }
+      }
+
+      logger.info(`✅ Sync AliExpress Finalizado: ${newCount} novos.`);
+      return { success: true, newProducts: newCount };
+
+    } catch (error) {
+      logger.error(`❌ Erro Sync AliExpress: ${error.message}`);
       throw error;
     }
   }

@@ -30,6 +30,11 @@ class CouponValidator {
     '000',       // Placeholder zero
     'AAAA',      // Placeholder repetido
     'ZZZZ',      // Placeholder final
+    // UNIDADES TÉCNICAS (Falsos positivos comuns)
+    '80MM', '58MM', '110V', '220V', 'USB', 'REDE', 'HDMI', 'FULLHD', 'WIFI',
+    '32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB', '4GB', '8GB', '16GB',
+    'RAM', 'SSD', 'HD', 'CPU', 'GPU', 'LED', 'IPS', 'LCD', 'OLED', 'AMOLED',
+    'PROMO', 'FRETE', 'GRATIS', 'OFF', 'DESC', 'VALOR', 'COUPON', 'CUPOM'
   ];
 
   /**
@@ -50,6 +55,9 @@ class CouponValidator {
     /^[0-9]{1,3}$/i,    // Apenas 1-3 números (muito curto)
     /^(.)\1{3,}$/i,     // Apenas caracteres repetidos (AAAA, BBBB, 0000, 1111, etc)
     /^[0-9]{4,}$/i,     // Apenas números repetidos (0000, 1111, etc)
+    /^\d+(MM|CM|KG|V|GB|TB|HZ)$/i, // Medidas técnicas (80MM, 110V, 60HZ)
+    /^[0-9]+[A-Z]{1,2}$/i,          // Números seguidos de 1-2 letras (ex: 80MM, 1TB)
+    /^[A-Z]{1,2}[0-9]+$/i,          // 1-2 letras seguidas de números (ex: V110, G5)
   ];
 
   /**
