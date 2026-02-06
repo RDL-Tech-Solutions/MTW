@@ -3943,7 +3943,10 @@ class LinkAnalyzer {
         url.includes('s.shopee.com.br') ||
         url.includes('s.shopee.com') ||
         url.includes('s.click.aliexpress.com') ||
-        url.includes('aliexpress.com/e/_');
+        url.includes('aliexpress.com/e/_') ||
+        url.includes('tidd.ly') ||
+        url.includes('bit.ly') ||
+        url.includes('divulgador.magalu.com');
 
       // IMPORTANTE: Para Shopee, NÃO seguir redirecionamentos aqui
       // Deixar extractShopeeInfo fazer isso com lógica API-first
@@ -3956,6 +3959,17 @@ class LinkAnalyzer {
           console.warn('⚠️ Erro ao seguir redirecionamentos:', redirectError.message);
           finalUrl = url; // Usar URL original se falhar
         }
+
+        // Se a plataforma original era desconhecida, tentar detectar novamente com a URL final
+        if (platform === 'unknown') {
+          const newPlatform = this.detectPlatform(finalUrl);
+          if (newPlatform !== 'unknown') {
+            console.log(`🏷️ Plataforma redetectada após redirecionamento: ${newPlatform}`);
+            // Precisamos atualizar a variável platform, mas ela é const. 
+            // Vamos alterar o fluxo para usar a nova detecção.
+            return this.delegateExtraction(newPlatform, finalUrl, url);
+          }
+        }
       } else if (platform === 'shopee') {
         console.log('🔗 Link Shopee detectado, deixando extractShopeeInfo gerenciar redirecionamentos');
         finalUrl = url; // Manter URL original para Shopee
@@ -3963,111 +3977,7 @@ class LinkAnalyzer {
         console.log('🔗 Link direto, pulando redirecionamentos');
       }
 
-      let result;
-      if (platform === 'shopee') {
-        try {
-          result = await this.extractShopeeInfo(finalUrl);
-        } catch (shopeeError) {
-          console.error('❌ Erro ao extrair info Shopee:', shopeeError.message);
-          result = {
-            error: `Erro ao extrair informações da Shopee: ${shopeeError.message}`,
-            platform: 'shopee',
-            affiliateLink: finalUrl
-          };
-        }
-      } else if (platform === 'mercadolivre') {
-        try {
-          result = await this.extractMeliInfo(finalUrl);
-        } catch (meliError) {
-          console.error('❌ Erro ao extrair info Mercado Livre:', meliError.message);
-          result = {
-            error: `Erro ao extrair informações do Mercado Livre: ${meliError.message}`,
-            platform: 'mercadolivre',
-            affiliateLink: finalUrl
-          };
-        }
-      } else if (platform === 'amazon') {
-        try {
-          result = await this.extractAmazonInfo(finalUrl);
-        } catch (amazonError) {
-          console.error('❌ Erro ao extrair info Amazon:', amazonError.message);
-          result = {
-            error: `Erro ao extrair informações da Amazon: ${amazonError.message}`,
-            platform: 'amazon',
-            affiliateLink: finalUrl
-          };
-        }
-      } else if (platform === 'aliexpress') {
-        try {
-          // Tentar usar API primeiro se tivermos o ID do produto
-          const productIdMatch = finalUrl.match(/\/item\/(\d+)/);
-          if (productIdMatch && productIdMatch[1]) {
-            const productId = productIdMatch[1];
-            console.log(`   🔍 Tentando obter detalhes via API AliExpress para produto ID: ${productId}`);
-
-            try {
-              const aliExpressSync = (await import('./autoSync/aliExpressSync.js')).default;
-              const productDetails = await aliExpressSync.getProductDetails(productId);
-
-              if (productDetails && productDetails.price > 0) {
-                console.log(`   ✅ Dados obtidos via API AliExpress!`);
-                result = {
-                  platform: 'aliexpress',
-                  name: productDetails.title,
-                  currentPrice: productDetails.price,
-                  oldPrice: productDetails.original_price || null,
-                  imageUrl: productDetails.thumbnail,
-                  affiliateLink: productDetails.permalink || finalUrl
-                };
-              } else {
-                console.log(`   ⚠️ API não retornou dados completos, tentando web scraping...`);
-                result = await this.extractAliExpressInfo(finalUrl);
-              }
-            } catch (apiError) {
-              console.log(`   ⚠️ Erro ao usar API AliExpress: ${apiError.message}, tentando web scraping...`);
-              result = await this.extractAliExpressInfo(finalUrl);
-            }
-          } else {
-            result = await this.extractAliExpressInfo(finalUrl);
-          }
-        } catch (aliexpressError) {
-          console.error('❌ Erro ao extrair info AliExpress:', aliexpressError.message);
-          result = {
-            error: `Erro ao extrair informações do AliExpress: ${aliexpressError.message}`,
-            platform: 'aliexpress',
-            affiliateLink: finalUrl
-          };
-        }
-      } else if (platform === 'kabum') {
-        result = await this.extractKabumInfo(finalUrl);
-      } else if (platform === 'magazineluiza') {
-        result = await this.extractMagaluInfo(finalUrl);
-      } else if (platform === 'pichau') {
-        result = await this.extractPichauInfo(finalUrl);
-
-      } else {
-        result = {
-          platform: 'unknown',
-          affiliateLink: finalUrl,
-          error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza ou Pichau.'
-        };
-      }
-
-      // IMPORTANTE: Preservar o link original enviado pelo usuário como affiliateLink
-      // especialmente se for um link já afiliado (ajuda muito na automação)
-      if (result && !result.error) {
-        // Se o link original parece mais "completo" ou é o que o usuário quer preservar
-        // Para ML, se tiver matt_word ou for link encurtado /sec/, com certeza é o que queremos
-        const isMeliAffiliate = url.includes('mercadolivre.com') && (url.includes('matt_word=') || url.includes('/sec/'));
-        const isShopeeAffiliate = url.includes('shopee.com') && (url.includes('utm_') || url.includes('aff_click_id') || url.includes('s.shopee.com.br'));
-
-        if (isMeliAffiliate || isShopeeAffiliate || !result.affiliateLink) {
-          result.affiliateLink = url;
-          console.log('✅ Link original PRESERVADO no resultado da análise');
-        }
-      }
-
-      return result;
+      return this.delegateExtraction(platform, finalUrl, url);
     } catch (error) {
       console.error('❌ Erro geral ao analisar link:', error);
       return {
@@ -4075,6 +3985,118 @@ class LinkAnalyzer {
         affiliateLink: url
       };
     }
+  }
+
+  // Delegar extração para o método correto (refatorado para suportar redetecção)
+  async delegateExtraction(platform, finalUrl, originalUrl) {
+    let result;
+    if (platform === 'shopee') {
+      try {
+        result = await this.extractShopeeInfo(finalUrl);
+      } catch (shopeeError) {
+        console.error('❌ Erro ao extrair info Shopee:', shopeeError.message);
+        result = {
+          error: `Erro ao extrair informações da Shopee: ${shopeeError.message}`,
+          platform: 'shopee',
+          affiliateLink: finalUrl
+        };
+      }
+    } else if (platform === 'mercadolivre') {
+      try {
+        result = await this.extractMeliInfo(finalUrl);
+      } catch (meliError) {
+        console.error('❌ Erro ao extrair info Mercado Livre:', meliError.message);
+        result = {
+          error: `Erro ao extrair informações do Mercado Livre: ${meliError.message}`,
+          platform: 'mercadolivre',
+          affiliateLink: finalUrl
+        };
+      }
+    } else if (platform === 'amazon') {
+      try {
+        result = await this.extractAmazonInfo(finalUrl);
+      } catch (amazonError) {
+        console.error('❌ Erro ao extrair info Amazon:', amazonError.message);
+        result = {
+          error: `Erro ao extrair informações da Amazon: ${amazonError.message}`,
+          platform: 'amazon',
+          affiliateLink: finalUrl
+        };
+      }
+    } else if (platform === 'aliexpress') {
+      try {
+        // Tentar usar API primeiro se tivermos o ID do produto
+        const productIdMatch = finalUrl.match(/\/item\/(\d+)/);
+        if (productIdMatch && productIdMatch[1]) {
+          const productId = productIdMatch[1];
+          console.log(`   🔍 Tentando obter detalhes via API AliExpress para produto ID: ${productId}`);
+
+          try {
+            const aliExpressSync = (await import('./autoSync/aliExpressSync.js')).default;
+            const productDetails = await aliExpressSync.getProductDetails(productId);
+
+            if (productDetails && productDetails.price > 0) {
+              console.log(`   ✅ Dados obtidos via API AliExpress!`);
+              result = {
+                platform: 'aliexpress',
+                name: productDetails.title,
+                currentPrice: productDetails.price,
+                oldPrice: productDetails.original_price || null,
+                imageUrl: productDetails.thumbnail,
+                affiliateLink: productDetails.permalink || finalUrl
+              };
+            } else {
+              console.log(`   ⚠️ API não retornou dados completos, tentando web scraping...`);
+              result = await this.extractAliExpressInfo(finalUrl);
+            }
+          } catch (apiError) {
+            console.log(`   ⚠️ Erro ao usar API AliExpress: ${apiError.message}, tentando web scraping...`);
+            result = await this.extractAliExpressInfo(finalUrl);
+          }
+        } else {
+          result = await this.extractAliExpressInfo(finalUrl);
+        }
+      } catch (aliexpressError) {
+        console.error('❌ Erro ao extrair info AliExpress:', aliexpressError.message);
+        result = {
+          error: `Erro ao extrair informações do AliExpress: ${aliexpressError.message}`,
+          platform: 'aliexpress',
+          affiliateLink: finalUrl
+        };
+      }
+    } else if (platform === 'kabum') {
+      result = await this.extractKabumInfo(finalUrl);
+    } else if (platform === 'magazineluiza') {
+      result = await this.extractMagaluInfo(finalUrl);
+    } else if (platform === 'pichau') {
+      result = await this.extractPichauInfo(finalUrl);
+
+    } else {
+      result = {
+        platform: 'unknown',
+        affiliateLink: finalUrl,
+        error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza ou Pichau.'
+      };
+    }
+
+    // IMPORTANTE: Preservar o link original enviado pelo usuário como affiliateLink
+    // especialmente se for um link já afiliado (ajuda muito na automação)
+    if (result && !result.error) {
+      // Se o link original parece mais "completo" ou é o que o usuário quer preservar
+      // Para ML, se tiver matt_word ou for link encurtado /sec/, com certeza é o que queremos
+      const isMeliAffiliate = originalUrl.includes('mercadolivre.com') && (originalUrl.includes('matt_word=') || originalUrl.includes('/sec/'));
+      const isShopeeAffiliate = originalUrl.includes('shopee.com') && (originalUrl.includes('utm_') || originalUrl.includes('aff_click_id') || originalUrl.includes('s.shopee.com.br'));
+
+      // Link encurtado genérico (tidd.ly, bit.ly, magalu) também deve ser preservado se possível
+      const isShortLink = originalUrl.includes('tidd.ly') || originalUrl.includes('bit.ly') || originalUrl.includes('divulgador.magalu.com');
+
+      if (isMeliAffiliate || isShopeeAffiliate || isShortLink || !result.affiliateLink) {
+        result.affiliateLink = originalUrl;
+        console.log('✅ Link original PRESERVADO no resultado da análise');
+      }
+    }
+
+    return result;
   }
 
   // Limpar texto
@@ -4110,9 +4132,21 @@ class LinkAnalyzer {
   // ============================================
   async extractKabumInfo(url) {
     try {
-      console.log('🔍 Extraindo informações da Kabum...');
+      // Limpar URL de parâmetros de rastreamento para evitar bloqueios ou inconsistências
+      let cleanUrl = url;
+      try {
+        const urlObj = new URL(url);
+        // Remover parâmêtros comuns de rastreamento
+        const paramsToRemove = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid', 'fbclid', 'ttclid'];
+        paramsToRemove.forEach(param => urlObj.searchParams.delete(param));
+        cleanUrl = urlObj.toString();
+      } catch (e) {
+        // Ignorar erro de URL inválida (usar original)
+      }
 
-      const response = await axios.get(url, {
+      console.log(`🔍 Extraindo informações da Kabum: ${cleanUrl}`);
+
+      const response = await axios.get(cleanUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -4122,79 +4156,119 @@ class LinkAnalyzer {
       });
 
       const $ = cheerio.load(response.data);
+      let name = '';
+      let currentPrice = 0;
+      let oldPrice = 0;
+      let imageUrl = '';
+      let description = '';
 
-      // Nome do produto
-      let name = $('h1[class*="title"], h1.product_title, .product-name h1, h1').first().text().trim();
+      // Tentar extrair do JSON-LD FIRST (mais confiável)
+      try {
+        $('script[type="application/ld+json"]').each((i, el) => {
+          const content = $(el).html();
+          if (content) {
+            const json = JSON.parse(content);
+            const product = Array.isArray(json) ? json.find(i => i['@type'] === 'Product') : (json['@type'] === 'Product' ? json : null);
+            if (product) {
+              name = product.name || name;
+              description = product.description || description;
+              imageUrl = Array.isArray(product.image) ? product.image[0] : (product.image || imageUrl);
+
+              const offer = product.offers;
+              if (offer) {
+                if (Array.isArray(offer)) {
+                  const bestOffer = offer[0];
+                  currentPrice = parseFloat(bestOffer.price || 0);
+                } else {
+                  currentPrice = parseFloat(offer.price || 0);
+                }
+              }
+            }
+          }
+        });
+      } catch (e) {
+        console.log('   ⚠️ Erro ao extrair JSON-LD da Kabum:', e.message);
+      }
+
+      // Tentar __NEXT_DATA__ para dados complementares e preços mais precisos
+      try {
+        const nextDataText = $('#__NEXT_DATA__').html();
+        if (nextDataText) {
+          const nextData = JSON.parse(nextDataText);
+          const product = nextData.props?.pageProps?.product;
+          if (product) {
+            name = name || product.title;
+            if (product.prices) {
+              currentPrice = product.prices.priceWithDiscount || product.prices.price || currentPrice;
+              oldPrice = product.prices.oldPrice || oldPrice || 0;
+            }
+            imageUrl = imageUrl || product.thumbnail;
+            description = description || product.tagDescription;
+          }
+        }
+      } catch (e) {
+        console.log('   ⚠️ Erro ao extrair __NEXT_DATA__ da Kabum:', e.message);
+      }
+
+      // Fallback para seletores DOM se ainda faltarem dados
+      if (!name) {
+        name = $('h1[class*="title"], h1.product_title, .product-name h1, h1').first().text().trim();
+      }
       if (!name) {
         name = $('meta[property="og:title"]').attr('content')?.trim();
       }
 
-      // Preço atual - seletores atualizados para 2026
-      let currentPrice = 0;
-      const priceSelectors = [
-        '[class*="finalPrice"]',
-        '[class*="priceCard"]',
-        '[data-test-id="price"]',
-        '[class*="price_value"]',
-        '[class*="productPrice"]',
-        'span[class*="price"]',
-        '.sc-price',
-        'meta[property="product:price:amount"]',
-        'meta[property="og:price:amount"]'
-      ];
+      if (currentPrice === 0) {
+        const priceSelectors = [
+          '[class*="finalPrice"]',
+          '[class*="priceCard"]',
+          '[data-test-id="price"]',
+          '[class*="price_value"]',
+          '[class*="productPrice"]',
+          'span[class*="price"]',
+          '.sc-price',
+          'meta[property="product:price:amount"]',
+          'meta[property="og:price:amount"]'
+        ];
 
-      for (const selector of priceSelectors) {
-        if (selector.startsWith('meta')) {
-          const priceText = $(selector).attr('content');
+        for (const selector of priceSelectors) {
+          const priceText = selector.startsWith('meta') ? $(selector).attr('content') : $(selector).first().text().trim();
           if (priceText) {
             currentPrice = this.parsePrice(priceText);
-            if (currentPrice > 0) {
-              console.log(`💰 Preço atual encontrado (${selector}): R$ ${currentPrice}`);
-              break;
-            }
-          }
-        } else {
-          const priceText = $(selector).first().text().trim();
-          if (priceText) {
-            currentPrice = this.parsePrice(priceText);
-            if (currentPrice > 0) {
-              console.log(`💰 Preço atual encontrado (${selector}): R$ ${currentPrice}`);
-              break;
-            }
+            if (currentPrice > 0) break;
           }
         }
       }
 
-      // Preço antigo - seletores atualizados
-      let oldPrice = 0;
-      const oldPriceSelectors = [
-        '[class*="oldPrice"]',
-        '[class*="old-price"]',
-        '[class*="was"]',
-        '[class*="priceOld"]',
-        '[class*="original"]'
-      ];
+      if (oldPrice === 0) {
+        const oldPriceSelectors = [
+          '[class*="oldPrice"]',
+          '[class*="old-price"]',
+          '[class*="was"]',
+          '[class*="priceOld"]',
+          '[class*="original"]'
+        ];
 
-      for (const selector of oldPriceSelectors) {
-        const oldPriceText = $(selector).first().text().trim();
-        if (oldPriceText) {
-          oldPrice = this.parsePrice(oldPriceText);
-          if (oldPrice > currentPrice && oldPrice > 0) {
-            console.log(`💰 Preço antigo encontrado (${selector}): R$ ${oldPrice}`);
-            break;
+        for (const selector of oldPriceSelectors) {
+          const oldPriceText = $(selector).first().text().trim();
+          if (oldPriceText) {
+            oldPrice = this.parsePrice(oldPriceText);
+            if (oldPrice > currentPrice && oldPrice > 0) break;
           }
         }
       }
 
-      // Imagem
-      let imageUrl = $('meta[property="og:image"]').attr('content') ||
-        $('.product-image img, .productImage img, img[class*="product"]').first().attr('src') ||
-        '';
+      if (!imageUrl) {
+        imageUrl = $('meta[property="og:image"]').attr('content') ||
+          $('.product-image img, .productImage img, img[class*="product"]').first().attr('src') ||
+          '';
+      }
 
-      // Descrição
-      const description = $('meta[property="og:description"]').attr('content') ||
-        $('.description, .product-description').first().text().trim() ||
-        '';
+      if (!description) {
+        description = $('meta[property="og:description"]').attr('content') ||
+          $('.description, .product-description').first().text().trim() ||
+          '';
+      }
 
       console.log(`✅ Kabum - ${name?.substring(0, 50)}, R$ ${currentPrice}`);
 
@@ -4222,7 +4296,7 @@ class LinkAnalyzer {
   // ============================================
   async extractMagaluInfo(url) {
     try {
-      console.log('🔍 Extraindo informações da Magazine Luiza...');
+      console.log(`🔍 Extraindo informações da Magazine Luiza de: ${url}`);
 
       const response = await axios.get(url, {
         headers: {
@@ -4234,46 +4308,130 @@ class LinkAnalyzer {
       });
 
       const $ = cheerio.load(response.data);
+      let name = '';
+      let currentPrice = 0;
+      let oldPrice = 0;
+      let imageUrl = '';
+      let description = '';
 
-      // Nome do produto
-      let name = $('h1[data-testid="heading-product-title"], h1.header-product__title, h1').first().text().trim();
-      if (!name) {
-        name = $('meta[property="og:title"]').attr('content')?.trim();
+      // Tentar extrair do JSON-LD FIRST (mais confiável para nome limpo)
+      try {
+        $('script[type="application/ld+json"]').each((i, el) => {
+          const content = $(el).html();
+          if (content) {
+            const json = JSON.parse(content);
+            const product = Array.isArray(json) ? json.find(i => i['@type'] === 'Product') : (json['@type'] === 'Product' ? json : null);
+            if (product && product.name) {
+              console.log(`   🔍 Nome encontrado em JSON-LD: "${product.name}"`);
+              name = product.name;
+
+              if (product.offers) {
+                const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
+                currentPrice = parseFloat(offer.price || 0);
+              }
+              imageUrl = Array.isArray(product.image) ? product.image[0] : product.image;
+              description = product.description;
+              return false;
+            }
+          }
+        });
+      } catch (e) {
+        console.log('   ⚠️ Erro ao extrair JSON-LD da Magalu:', e.message);
       }
 
-      // Preço atual
-      let currentPrice = 0;
-      const priceSelectors = [
-        '[data-testid="price-value"]',
-        '.price-template__text',
-        '[class*="price"] [class*="best"]',
-        'meta[property="product:price:amount"]'
-      ];
+      // Tentar __NEXT_DATA__ (sempre tentar para complementar preços)
+      try {
+        const nextDataText = $('#__NEXT_DATA__').html();
+        if (nextDataText) {
+          const nextData = JSON.parse(nextDataText);
+          const product = nextData.props?.pageProps?.data?.product || nextData.props?.pageProps?.product;
+          if (product) {
+            name = name || product.title || product.name;
+            if (product.price || product.prices) {
+              const prices = product.prices || product.price;
+              currentPrice = prices.priceWithDiscount || prices.price || prices.value || currentPrice;
+              oldPrice = prices.oldPrice || prices.originalPrice || oldPrice || 0;
+            }
+            imageUrl = imageUrl || (product.images ? product.images[0] : product.thumbnail);
+            description = description || product.description;
+          }
+        }
+      } catch (e) {
+        console.log('   ⚠️ Erro ao extrair __NEXT_DATA__ da Magalu:', e.message);
+      }
 
-      for (const selector of priceSelectors) {
-        const priceText = $(selector).first().text().trim() || $(selector).attr('content');
-        if (priceText) {
-          currentPrice = this.parsePrice(priceText);
-          if (currentPrice > 0) break;
+      // Fallback para seletores DOM (com limpeza agressiva)
+      if (!name) {
+        const nameSelectors = [
+          '[data-testid="heading-product-title"]',
+          '.header-product__title',
+          '.main-title',
+          '[data-testid="product-title"]',
+          'h1[class*="title"]',
+          'h1'
+        ];
+
+        for (const selector of nameSelectors) {
+          let extracted = $(selector).first().text().trim();
+          if (extracted) {
+            // Limpar sufixos comuns em Magalu
+            extracted = extracted.replace(/\s*-\s*Magazine Luiza\s*$/i, '')
+              .replace(/^Oferta\s+[^-]+\s*-\s*/i, '')
+              .trim();
+
+            if (extracted.length > 5 && !extracted.toLowerCase().includes('parece que')) {
+              name = extracted;
+              break;
+            }
+          }
         }
       }
 
-      // Preço antigo
-      let oldPrice = 0;
-      const oldPriceText = $('[data-testid="price-original"], .price-template__old-price, [class*="old-price"]').first().text().trim();
-      if (oldPriceText) {
-        oldPrice = this.parsePrice(oldPriceText);
+      if (!name) {
+        name = $('meta[property="og:title"]').attr('content') || $('title').text();
+        if (name) {
+          name = name.replace(/\s*-\s*Magazine Luiza\s*$/i, '')
+            .replace(/^Oferta\s+[^-]+\s*-\s*/i, '')
+            .trim();
+        }
       }
 
-      // Imagem
-      let imageUrl = $('meta[property="og:image"]').attr('content') ||
-        $('[data-testid="product-image"], .product-image img, img[class*="product"]').first().attr('src') ||
-        '';
+      // Fallback para preços se JSON falhou
+      if (currentPrice === 0) {
+        const priceSelectors = [
+          '[data-testid="price-value"]',
+          '.price-template__text',
+          '[class*="price"] [class*="best"]',
+          'meta[property="product:price:amount"]'
+        ];
 
-      // Descrição
-      const description = $('meta[property="og:description"]').attr('content') ||
-        $('.description, [data-testid="product-description"]').first().text().trim() ||
-        '';
+        for (const selector of priceSelectors) {
+          const priceText = selector.startsWith('meta') ? $(selector).attr('content') : $(selector).first().text().trim();
+          if (priceText) {
+            currentPrice = this.parsePrice(priceText);
+            if (currentPrice > 0) break;
+          }
+        }
+      }
+
+      if (oldPrice === 0) {
+        const oldPriceText = $('[data-testid="price-original"], .price-template__old-price, [class*="old-price"]').first().text().trim();
+        if (oldPriceText) {
+          oldPrice = this.parsePrice(oldPriceText);
+        }
+      }
+
+      if (!imageUrl) {
+        imageUrl = $('meta[property="og:image"]').attr('content') ||
+          $('[data-testid="product-image"], .product-image img, img[class*="product"]').first().attr('src') ||
+          '';
+      }
+
+      if (!description) {
+        description = $('meta[property="og:description"]').attr('content') ||
+          $('.description, [data-testid="product-description"]').first().text().trim() ||
+          '';
+      }
 
       console.log(`✅ Magazine Luiza - ${name?.substring(0, 50)}, R$ ${currentPrice}`);
 

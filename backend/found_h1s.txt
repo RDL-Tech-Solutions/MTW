@@ -1,0 +1,14 @@
+--- Findings ---
+Page Title: "Oferta vprecocerto - Smartphone Samsung A07 128GB Preto 4GB RAM Tela 6,7" Câm. Dupla + Selfie 8MP - Magazine Luiza"
+OG Title: "Oferta vprecocerto - Smartphone Samsung A07 128GB Preto 4GB RAM Tela 6,7" Câm. Dupla + Selfie 8MP - Magazine Luiza"
+Generic H1: "Recomendado pelo Influenciador"
+Data Test ID: ""
+--- All H1s ---
+--- Search Results ---
+Found in <title> class="undefined" id="undefined": "Oferta vprecocerto - Smartphone Samsung A07 128GB ..."
+Found in <span> class="whitespace-nowrap py-2xsm hover:text-interaction-default" id="undefined": "+ Samsung..."
+Found in <span> class="whitespace-nowrap py-2xsm hover:text-interaction-default" id="undefined": "+ Smart Tv Samsung..."
+Found in <span> class="whitespace-nowrap py-2xsm hover:text-interaction-default" id="undefined": "Notebook Samsung..."
+Found in <span> class="whitespace-nowrap py-2xsm hover:text-interaction-default" id="undefined": "Tablets..."
+Found in <h2> class="break-words text-on-surface-2 font-xsm-regular text-left my-2xsm" id="undefined": "Smartphone Samsung A07 128GB Preto 4GB RAM Tela 6,..."
+Found in <script> class="undefined" id="__NEXT_DATA__": "{"props":{"pageProps":{"ctx":{"req":{"url":"/smart..."

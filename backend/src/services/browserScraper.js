@@ -307,9 +307,18 @@ class BrowserScraper {
     async extractKabumProductInfo(url) {
         return this.pool.withPage(async (page) => {
             try {
-                logger.info(`   🔍 Extraindo dados do produto: ${url}`);
+                // Limpar URL
+                let cleanUrl = url;
+                try {
+                    const urlObj = new URL(url);
+                    const paramsToRemove = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid', 'fbclid', 'ttclid'];
+                    paramsToRemove.forEach(param => urlObj.searchParams.delete(param));
+                    cleanUrl = urlObj.toString();
+                } catch (e) { }
 
-                await page.goto(url, {
+                logger.info(`   🔍 Extraindo dados do produto: ${cleanUrl}`);
+
+                await page.goto(cleanUrl, {
                     waitUntil: 'networkidle2',
                     timeout: 30000
                 });

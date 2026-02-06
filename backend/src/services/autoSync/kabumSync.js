@@ -18,7 +18,19 @@ class KabumSync {
             const offerPages = [
                 'https://www.kabum.com.br/acabaramdechegar', // Produtos recentes
                 'https://www.kabum.com.br/ofertas',
-                'https://www.kabum.com.br/lancamentos'
+                'https://www.kabum.com.br/lancamentos',
+                'https://www.kabum.com.br/promocao/maisvendidos',
+                'https://www.kabum.com.br/promocao/COMPUTADORKABUM',
+                'https://www.kabum.com.br/gamer',
+                'https://www.kabum.com.br/computadores',
+                'https://www.kabum.com.br/celular-smartphone',
+                'https://www.kabum.com.br/tv',
+                'https://www.kabum.com.br/hardware/placa-de-video-vga',
+                'https://www.kabum.com.br/hardware/fontes',
+                'https://www.kabum.com.br/hardware/placas-mae',
+                'https://www.kabum.com.br/hardware/processadores',
+                'https://www.kabum.com.br/hardware/ssd-2-5',
+                'https://www.kabum.com.br/hardware/memoria-ram'
             ];
 
             const allProductUrls = [];

@@ -58,7 +58,9 @@ export const captureLinkHandler = async (ctx, url) => {
             url.includes('amzn.to') || // Amazon Short Link
             (url.includes('shopee') && url.length < 60) || // Shopee Short Link
             url.includes('bit.ly') ||
-            url.includes('t.me');
+            url.includes('t.me') ||
+            url.includes('tidd.ly') ||
+            url.includes('divulgador.magalu.com');
 
         if (isShortLink) {
             finalAffiliateLink = url;

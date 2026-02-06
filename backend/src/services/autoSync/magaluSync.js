@@ -16,7 +16,13 @@ class MagaluSync {
             // URLs de páginas de ofertas da Magazine Luiza
             const offerPages = [
                 'https://www.magazineluiza.com.br/ofertas/',
-                'https://www.magazineluiza.com.br/selecao/ofertasdodia/'
+                'https://www.magazineluiza.com.br/selecao/ofertasdodia/',
+                'https://www.magazineluiza.com.br/celulares-e-smartphones/l/te/',
+                'https://www.magazineluiza.com.br/tv-e-video/l/et/',
+                'https://www.magazineluiza.com.br/eletrodomesticos/l/ed/',
+                'https://www.magazineluiza.com.br/moveis/l/mo/',
+                'https://www.magazineluiza.com.br/informatica/l/in/',
+                'https://www.magazineluiza.com.br/moda-e-acessorios/l/md/'
             ];
 
             const allProductUrls = [];
