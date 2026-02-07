@@ -4,7 +4,7 @@ import { supabase } from '../../config/database.js';
 import notificationDispatcher from '../bots/notificationDispatcher.js';
 import templateRenderer from '../bots/templateRenderer.js';
 import telegramService from '../bots/telegramService.js';
-import whatsappService from '../bots/whatsappService.js';
+// import whatsappService from '../bots/whatsappService.js'; // REMOVED
 import schedulerService from './schedulerService.js';
 import logger from '../../config/logger.js';
 import Product from '../../models/Product.js';
@@ -217,7 +217,8 @@ class PublishService {
       const productNoImage = { ...product, image_url: null };
       const dispatchResult = await notificationDispatcher.dispatch(
         'promotion_new',
-        productNoImage
+        productNoImage,
+        { ...options, platformFilter: 'telegram' }
       );
 
       // O dispatch retorna um objeto complexo { sent: N, ... }
@@ -678,10 +679,9 @@ class PublishService {
       // Se for auto-sync (padrão), usa o agendamento inteligente.
       if (options.manual) {
         // Executar ambos os bots em paralelo de forma RESILIENTE
+        // Executar ambos os bots (Sequential para evitar issues, mas logicamente agrupados)
         if (product.should_send_to_bots !== false) {
-          logger.info(`🚀 Iniciando envio paralelo para Bots (Telegram e WhatsApp)...`);
 
-          // Função auxiliar interna para isolar a execução de cada bot
           const safeNotify = async (platform) => {
             try {
               logger.info(`📤 [${platform}] Iniciando processo...`);
@@ -713,7 +713,7 @@ class PublishService {
 
           // 1. Telegram
           const telegramResult = await safeNotify('telegram');
-          
+
           // 2. WhatsApp (executar mesmo se Telegram falhar)
           const whatsappResult = await safeNotify('whatsapp');
 

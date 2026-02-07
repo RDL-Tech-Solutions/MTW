@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import api from '../services/api';
+import QRCode from 'react-qr-code'; // Ensure this is installed
 import {
   Plus, Edit, Trash2, MessageSquare, Send, Activity,
   Settings, Bot, CheckCircle, XCircle, Eye, EyeOff,
-  Wifi, WifiOff, RefreshCw, Save, AlertCircle, FileText, Loader2
+  Wifi, WifiOff, RefreshCw, Save, AlertCircle, FileText, Loader2,
+  List, Copy, Search, ExternalLink
 } from 'lucide-react';
 import BotTemplates from '../components/BotTemplates';
 import { Button } from '../components/ui/button';
@@ -27,10 +29,26 @@ export default function Bots() {
   const [deletingChannel, setDeletingChannel] = useState({});
   const [testingChannel, setTestingChannel] = useState({});
 
+  // WhatsApp Web Auth
+  const [connectionMethod, setConnectionMethod] = useState('code'); // 'code' or 'qr'
+  const [qrCode, setQrCode] = useState(null);
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+
+  // Chat List
+  const [chats, setChats] = useState([]);
+  const [loadingChats, setLoadingChats] = useState(false);
+  const [showChatsModal, setShowChatsModal] = useState(false);
+  const [chatSearch, setChatSearch] = useState('');
+
+  const [pairingCode, setPairingCode] = useState(null);
+  const qrIntervalRef = useRef(null);
+
   // Status dos bots
   const [status, setStatus] = useState({
     telegram: { configured: false, working: false },
-    whatsapp: { configured: false, working: false }
+    whatsapp: { configured: false, working: false },
+    whatsapp_web: { configured: false, working: false, info: null }
   });
 
   // Configurações - garantir valores padrão não-nulos
@@ -48,6 +66,11 @@ export default function Bots() {
     whatsapp_api_token: '',
     whatsapp_phone_number_id: '',
     whatsapp_business_account_id: '',
+
+    // WhatsApp Web (Pessoal)
+    whatsapp_web_enabled: false,
+    whatsapp_web_pairing_number: '',
+    whatsapp_web_admin_numbers: '',
 
     // Notificações
     notify_new_products: true,
@@ -106,6 +129,69 @@ export default function Bots() {
       console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchQrCode = async () => {
+    setLoadingQr(true);
+    try {
+      const res = await api.get('/bots/config/whatsapp-web/qr');
+      if (res.data.success && res.data.data.qr) {
+        setQrCode(res.data.data.qr);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar QR Code', e);
+    } finally {
+      setLoadingQr(false);
+    }
+  };
+
+  // Polling para QR Code e detecção de conexão
+  useEffect(() => {
+    // Se conectou, parar geração e limpar QR/Código
+    if (status.whatsapp_web?.working) {
+      if (isGeneratingQr) setIsGeneratingQr(false);
+      if (qrCode) setQrCode(null);
+      if (pairingCode) {
+        setPairingCode(null);
+        toast({
+          title: "Conectado!",
+          description: "WhatsApp Web conectado via código com sucesso.",
+          variant: "default",
+        });
+      }
+      return;
+    }
+
+    if (isGeneratingQr && !status.whatsapp_web?.working) {
+      fetchQrCode(); // Initial fetch
+      qrIntervalRef.current = setInterval(() => {
+        fetchQrCode();
+        fetchStatus(); // Também atualizar status para detectar conexão rapidamente
+      }, 3000); // Polling mais rápido (3s)
+    } else {
+      if (qrIntervalRef.current) clearInterval(qrIntervalRef.current);
+    }
+    return () => {
+      if (qrIntervalRef.current) clearInterval(qrIntervalRef.current);
+    };
+  }, [connectionMethod, isGeneratingQr, status.whatsapp_web?.working]);
+
+  const fetchChats = async () => {
+    setLoadingChats(true);
+    try {
+      const res = await api.get('/bots/config/whatsapp-web/chats');
+      if (res.data.success) {
+        setChats(res.data.data);
+      }
+    } catch (e) {
+      toast({
+        title: "Erro ao listar chats",
+        description: e.response?.data?.message || "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingChats(false);
     }
   };
 
@@ -348,10 +434,10 @@ export default function Bots() {
     }
 
     setChannelForm({
-      platform: channel.platform,
-      channel_id: channel.identifier || channel.channel_id,
-      channel_name: channel.name || channel.channel_name,
-      is_active: channel.is_active,
+      platform: channel.platform || 'telegram',
+      channel_id: channel.identifier || channel.channel_id || '',
+      channel_name: channel.name || channel.channel_name || '',
+      is_active: channel.is_active !== undefined ? channel.is_active : true,
       only_coupons: channel.only_coupons || false,
       no_coupons: channel.no_coupons || false,
       category_filter: categoryFilter
@@ -454,22 +540,23 @@ export default function Bots() {
           </CardContent>
         </Card>
 
-        <Card className={`border-2 ${status.whatsapp?.working ? 'border-green-500/50' : status.whatsapp?.configured ? 'border-yellow-500/50' : 'border-gray-300'}`}>
+        {/* Status Card: WhatsApp Web */}
+        <Card className={`border-2 ${status.whatsapp_web?.working ? 'border-green-500/50' : status.whatsapp_web?.configured ? 'border-yellow-500/50' : 'border-gray-300'}`}>
           <CardHeader className="p-3 sm:p-4 pb-2">
             <CardTitle className="text-sm sm:text-lg flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <svg className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                 </svg>
-                WhatsApp
+                WhatsApp Web
               </span>
-              {status.whatsapp?.working ? (
+              {status.whatsapp_web?.working ? (
                 <Badge variant="success" className="flex items-center gap-1 text-xs">
                   <Wifi className="h-3 w-3" /> Online
                 </Badge>
-              ) : status.whatsapp?.configured ? (
+              ) : status.whatsapp_web?.configured ? (
                 <Badge variant="warning" className="flex items-center gap-1 text-xs">
-                  <AlertCircle className="h-3 w-3" /> Config
+                  <AlertCircle className="h-3 w-3" /> Conectando
                 </Badge>
               ) : (
                 <Badge variant="destructive" className="flex items-center gap-1 text-xs">
@@ -480,13 +567,20 @@ export default function Bots() {
           </CardHeader>
           <CardContent className="p-3 sm:p-4 pt-0">
             <div className="text-xs sm:text-sm text-muted-foreground">
-              <span>{status.whatsapp?.configured ? 'API Meta configurada' : 'Nenhuma API configurada'}</span>
+              {status.whatsapp_web?.info?.wid?.user ? (
+                <span>Número: {status.whatsapp_web.info.wid.user}</span>
+              ) : (
+                <span>Não pareado</span>
+              )}
               <span className="block mt-1">
-                {status.whatsapp?.channels || 0} canais ativos
+                {/* Aqui poderíamos mostrar canais do whatsapp se tivéssemos um contador separado no status, mas por hora mostramos o status geral */}
+                {status.whatsapp_web?.working ? 'Pronto para enviar' : 'Desconectado'}
               </span>
             </div>
           </CardContent>
         </Card>
+
+
       </div>
 
       {/* Tabs Responsivas */}
@@ -623,96 +717,247 @@ export default function Bots() {
             </CardContent>
           </Card>
 
-          {/* WhatsApp Config */}
+          {/* WhatsApp Web (Pessoal) Config */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                <svg className="h-5 w-5 text-green-600" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                 </svg>
-                Configuração do WhatsApp
+                WhatsApp Web (Pessoal)
               </CardTitle>
               <CardDescription>
-                Configure a API do WhatsApp Business (Meta)
+                Conecte seu número pessoal para enviar notificações
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label htmlFor="whatsapp_enabled">API Habilitada</Label>
+                <Label htmlFor="whatsapp_web_enabled">Habilitado</Label>
                 <input
                   type="checkbox"
-                  id="whatsapp_enabled"
-                  checked={config.whatsapp_enabled}
-                  onChange={(e) => setConfig({ ...config, whatsapp_enabled: e.target.checked })}
+                  id="whatsapp_web_enabled"
+                  checked={config.whatsapp_web_enabled}
+                  onChange={(e) => setConfig({ ...config, whatsapp_web_enabled: e.target.checked })}
                   className="h-5 w-5 rounded"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="whatsapp_api_url">URL da API</Label>
-                <Input
-                  id="whatsapp_api_url"
-                  value={config.whatsapp_api_url}
-                  onChange={(e) => setConfig({ ...config, whatsapp_api_url: e.target.value })}
-                  placeholder="https://graph.facebook.com/v18.0"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="whatsapp_api_token">Access Token *</Label>
-                <div className="relative">
-                  <Input
-                    id="whatsapp_api_token"
-                    type={showTokens.whatsapp ? 'text' : 'password'}
-                    value={config.whatsapp_api_token}
-                    onChange={(e) => setConfig({ ...config, whatsapp_api_token: e.target.value })}
-                    placeholder="EAAxxxxxxx..."
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowTokens({ ...showTokens, whatsapp: !showTokens.whatsapp })}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              {/* Status Display */}
+              {status.whatsapp_web?.working ? (
+                <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                      ✅ Conectado
+                    </p>
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      {status.whatsapp_web.info?.wid?.user || 'Sessão Ativa'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchChats();
+                      setShowChatsModal(true);
+                    }}
+                    className="h-8 border-green-200 hover:bg-green-50 text-green-700"
                   >
-                    {showTokens.whatsapp ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    <Search className="h-3.5 w-3.5 mr-1" />
+                    Consultar IDs
+                  </Button>
                 </div>
+              ) : (
+                <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg flex items-center justify-between">
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    ⚠️ Não conectado
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchChats();
+                      setShowChatsModal(true);
+                    }}
+                    className="h-8 border-yellow-200 hover:bg-yellow-100 text-yellow-800 dark:border-yellow-900 dark:hover:bg-yellow-900 dark:text-yellow-200"
+                  >
+                    <Search className="h-3.5 w-3.5 mr-1" />
+                    Consultar IDs
+                  </Button>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp_web_pairing_number">Seu Número de Celular (com DDD)</Label>
+                <Input
+                  id="whatsapp_web_pairing_number"
+                  value={config.whatsapp_web_pairing_number || ''}
+                  onChange={(e) => setConfig({ ...config, whatsapp_web_pairing_number: e.target.value })}
+                  placeholder="5511999999999"
+                  disabled={status.whatsapp_web?.working}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Apenas números, inclua 55+DDD (ex: 5511999999999)
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="whatsapp_phone_number_id">Phone Number ID *</Label>
+                <Label htmlFor="whatsapp_web_admin_numbers">Números Admins (Opcional)</Label>
                 <Input
-                  id="whatsapp_phone_number_id"
-                  value={config.whatsapp_phone_number_id}
-                  onChange={(e) => setConfig({ ...config, whatsapp_phone_number_id: e.target.value })}
-                  placeholder="123456789012345"
+                  id="whatsapp_web_admin_numbers"
+                  value={config.whatsapp_web_admin_numbers || ''}
+                  onChange={(e) => setConfig({ ...config, whatsapp_web_admin_numbers: e.target.value })}
+                  placeholder="5511888888888, 5511777777777"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Números autorizados a enviar comandos (separados por vírgula)
+                </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="whatsapp_business_account_id">Business Account ID</Label>
-                <Input
-                  id="whatsapp_business_account_id"
-                  value={config.whatsapp_business_account_id}
-                  onChange={(e) => setConfig({ ...config, whatsapp_business_account_id: e.target.value })}
-                  placeholder="123456789012345"
-                />
-              </div>
+              {/* Seletor de Método de Conexão */}
+              {!status.whatsapp_web?.working && (
+                <div className="space-y-4 pt-2 border-t mt-4">
+                  <div className="flex gap-4 mb-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="connectionMethod"
+                        value="qr"
+                        checked={connectionMethod === 'qr'}
+                        onChange={() => setConnectionMethod('qr')}
+                      />
+                      <span className="text-sm font-medium">QR Code</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="connectionMethod"
+                        value="code"
+                        checked={connectionMethod === 'code'}
+                        onChange={() => setConnectionMethod('code')}
+                      />
+                      <span className="text-sm font-medium">Código de Pareamento</span>
+                    </label>
+                  </div>
 
-              <Button
-                onClick={handleTestWhatsApp}
-                disabled={!config.whatsapp_api_token || !config.whatsapp_phone_number_id || testing.whatsapp}
-                variant="outline"
-                className="w-full"
-              >
-                {testing.whatsapp ? (
-                  <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Testando...</>
-                ) : (
-                  <><Wifi className="mr-2 h-4 w-4" />Testar Conexão</>
-                )}
-              </Button>
+                  {connectionMethod === 'code' ? (
+                    <div className="space-y-4">
+                      {pairingCode && (
+                        <div className="p-6 bg-primary/5 border-2 border-dashed border-primary/20 rounded-xl flex flex-col items-center justify-center space-y-3 animate-in fade-in zoom-in duration-300">
+                          <span className="text-sm font-medium text-primary">Seu Código de Pareamento:</span>
+                          <div className="text-4xl font-mono font-black tracking-widest text-primary bg-white px-6 py-3 rounded-lg shadow-sm border">
+                            {pairingCode}
+                          </div>
+                          <p className="text-xs text-center text-muted-foreground max-w-[280px]">
+                            1. No celular: Aparelhos Conectados > Conectar com número de telefone
+                            <br />
+                            2. Digite este código no seu WhatsApp.
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPairingCode(null)}
+                            className="text-xs h-7 text-muted-foreground hover:text-red-500"
+                          >
+                            Limpar Código
+                          </Button>
+                        </div>
+                      )}
+
+                      <Button
+                        onClick={async () => {
+                          try {
+                            setTesting(prev => ({ ...prev, whatsapp_web: true }));
+                            const res = await api.post('/bots/config/whatsapp-web/pair', {
+                              phoneNumber: config.whatsapp_web_pairing_number
+                            });
+
+                            const code = res.data.data?.code;
+                            if (code) {
+                              setPairingCode(code);
+                              toast({
+                                title: "Código Gerado!",
+                                description: `Código: ${code}`,
+                                variant: "default",
+                              });
+                            } else {
+                              throw new Error("Código não retornado pelo servidor");
+                            }
+                          } catch (e) {
+                            toast({
+                              title: "Erro",
+                              description: e.response?.data?.message || e.message || "Erro ao solicitar código",
+                              variant: "destructive"
+                            });
+                          } finally {
+                            setTesting(prev => ({ ...prev, whatsapp_web: false }));
+                          }
+                        }}
+                        disabled={!config.whatsapp_web_pairing_number || testing.whatsapp_web}
+                        className="w-full"
+                      >
+                        {testing.whatsapp_web ? (
+                          <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Gerando Código...</>
+                        ) : (
+                          <><Wifi className="mr-2 h-4 w-4" />{pairingCode ? 'Gerar Novo Código' : 'Gerar Código de Pareamento'}</>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      {!isGeneratingQr ? (
+                        <Button
+                          onClick={() => setIsGeneratingQr(true)}
+                          disabled={testing.whatsapp_web}
+                          className="w-full"
+                        >
+                          <Wifi className="mr-2 h-4 w-4" />
+                          Gerar QR Code
+                        </Button>
+                      ) : (
+                        <>
+                          <div className="p-4 bg-white rounded-lg border shadow-sm">
+                            {qrCode ? (
+                              <div style={{ background: 'white', padding: '16px' }}>
+                                <QRCode value={qrCode} size={200} />
+                              </div>
+                            ) : (
+                              <div className="w-[200px] h-[200px] flex items-center justify-center bg-gray-100 text-gray-400">
+                                {loadingQr ? <Loader2 className="h-8 w-8 animate-spin" /> : 'Iniciando...'}
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-center text-muted-foreground w-full">
+                            Abra o WhatsApp &gt; Menu &gt; Aparelhos Conectados &gt; Conectar Aparelho
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={fetchQrCode}
+                            disabled={loadingQr}
+                          >
+                            <RefreshCw className={`mr-2 h-3 w-3 ${loadingQr ? 'animate-spin' : ''}`} /> Atualizar QR
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setIsGeneratingQr(false);
+                              setQrCode(null);
+                            }}
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          >
+                            Cancelar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
+
+
 
           {/* Configurações de Notificação */}
           <Card className="lg:col-span-2">
@@ -848,207 +1093,226 @@ export default function Bots() {
                 <CardTitle>Canais de Notificação</CardTitle>
                 <CardDescription>Gerencie os canais que receberão as notificações</CardDescription>
               </div>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingChannel(null);
-                    setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
-                  }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Novo Canal
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
-                    <DialogDescription>Configure um canal para receber notificações</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleSaveChannel} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="platform">Plataforma *</Label>
-                      <select
-                        id="platform"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={channelForm.platform}
-                        onChange={(e) => setChannelForm({ ...channelForm, platform: e.target.value })}
-                      >
-                        <option value="telegram">Telegram</option>
-                        <option value="whatsapp">WhatsApp</option>
-                      </select>
-                    </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    fetchChats();
+                    setShowChatsModal(true);
+                  }}
+                  className="hidden sm:flex"
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  Consultar IDs WhatsApp
+                </Button>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="channel_id">
-                        {channelForm.platform === 'telegram' ? 'Chat ID *' : 'Número do WhatsApp *'}
-                      </Label>
-                      <Input
-                        id="channel_id"
-                        value={channelForm.channel_id}
-                        onChange={(e) => setChannelForm({ ...channelForm, channel_id: e.target.value })}
-                        placeholder={channelForm.platform === 'telegram' ? '-1001234567890' : '5511999999999'}
-                        required
-                      />
-                      {channelForm.platform === 'telegram' && (
-                        <p className="text-xs text-muted-foreground">
-                          Use o @userinfobot ou @getidsbot para obter o Chat ID
-                        </p>
-                      )}
-                    </div>
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => {
+                      setEditingChannel(null);
+                      setChannelForm({ platform: 'telegram', channel_id: '', channel_name: '', is_active: true, only_coupons: false, category_filter: [] });
+                    }}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Novo Canal
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>{editingChannel ? 'Editar Canal' : 'Novo Canal'}</DialogTitle>
+                      <DialogDescription>Configure um canal para receber notificações</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSaveChannel} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="platform">Plataforma *</Label>
+                        <select
+                          id="platform"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={channelForm.platform}
+                          onChange={(e) => setChannelForm({ ...channelForm, platform: e.target.value })}
+                        >
+                          <option value="telegram">Telegram</option>
+                          {/* <option value="whatsapp">WhatsApp (Cloud API)</option> REMOVED */}
+                          <option value="whatsapp_web">WhatsApp Web (Pessoal)</option>
+                        </select>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="channel_name">Nome do Canal *</Label>
-                      <Input
-                        id="channel_name"
-                        value={channelForm.channel_name}
-                        onChange={(e) => setChannelForm({ ...channelForm, channel_name: e.target.value })}
-                        placeholder="Ex: Canal Principal"
-                        required
-                      />
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="channel_id">
+                          {channelForm.platform === 'telegram' ? 'Chat ID *' : 'Número do WhatsApp *'}
+                        </Label>
+                        <Input
+                          id="channel_id"
+                          value={channelForm.channel_id}
+                          onChange={(e) => setChannelForm({ ...channelForm, channel_id: e.target.value })}
+                          placeholder={
+                            channelForm.platform === 'telegram' ? '-1001234567890' :
+                              channelForm.platform === 'whatsapp_web' ? '12036312345678@g.us' :
+                                '5511999999999'
+                          }
+                          required
+                        />
+                        {channelForm.platform === 'telegram' && (
+                          <p className="text-xs text-muted-foreground">
+                            Use o @userinfobot ou @getidsbot para obter o Chat ID
+                          </p>
+                        )}
+                      </div>
 
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="is_active"
-                        checked={channelForm.is_active}
-                        onChange={(e) => setChannelForm({ ...channelForm, is_active: e.target.checked })}
-                        className="h-4 w-4 rounded"
-                      />
-                      <Label htmlFor="is_active">Canal ativo</Label>
-                    </div>
-
-                    <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
-                      <h4 className="font-medium text-sm">Configurações de Conteúdo</h4>
+                      <div className="space-y-2">
+                        <Label htmlFor="channel_name">Nome do Canal *</Label>
+                        <Input
+                          id="channel_name"
+                          value={channelForm.channel_name}
+                          onChange={(e) => setChannelForm({ ...channelForm, channel_name: e.target.value })}
+                          placeholder="Ex: Canal Principal"
+                          required
+                        />
+                      </div>
 
                       <div className="flex items-center space-x-2">
                         <input
                           type="checkbox"
-                          id="only_coupons"
-                          checked={channelForm.only_coupons}
-                          onChange={(e) => setChannelForm({ ...channelForm, only_coupons: e.target.checked, no_coupons: false, category_filter: [] })}
+                          id="is_active"
+                          checked={channelForm.is_active}
+                          onChange={(e) => setChannelForm({ ...channelForm, is_active: e.target.checked })}
                           className="h-4 w-4 rounded"
                         />
-                        <Label htmlFor="only_coupons" className="cursor-pointer">
-                          Apenas cupons (não recebe produtos)
-                        </Label>
+                        <Label htmlFor="is_active">Canal ativo</Label>
                       </div>
-                      <p className="text-xs text-muted-foreground ml-6">
-                        Se marcado, este canal só receberá notificações de cupons, nunca de produtos
-                      </p>
 
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="no_coupons"
-                          checked={channelForm.no_coupons}
-                          disabled={channelForm.only_coupons}
-                          onChange={(e) => setChannelForm({ ...channelForm, no_coupons: e.target.checked, only_coupons: false })}
-                          className="h-4 w-4 rounded disabled:opacity-50"
-                        />
-                        <Label htmlFor="no_coupons" className={`cursor-pointer ${channelForm.only_coupons ? 'opacity-50' : ''}`}>
-                          Não recebe cupons (apenas produtos)
-                        </Label>
-                      </div>
-                      <p className="text-xs text-muted-foreground ml-6">
-                        Se marcado, este canal só receberá notificações de produtos, nunca de cupons
-                      </p>
+                      <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                        <h4 className="font-medium text-sm">Configurações de Conteúdo</h4>
 
-                      {!channelForm.only_coupons && (
-                        <div className="space-y-2">
-                          <Label>
-                            Categorias de Produtos (máximo 10)
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="only_coupons"
+                            checked={channelForm.only_coupons}
+                            onChange={(e) => setChannelForm({ ...channelForm, only_coupons: e.target.checked, no_coupons: false, category_filter: [] })}
+                            className="h-4 w-4 rounded"
+                          />
+                          <Label htmlFor="only_coupons" className="cursor-pointer">
+                            Apenas cupons (não recebe produtos)
                           </Label>
-                          <div className="max-h-[200px] overflow-y-auto border rounded-md p-2 space-y-2">
-                            {categories.length === 0 ? (
-                              <p className="text-xs text-muted-foreground text-center py-4">
-                                Carregando categorias...
-                              </p>
-                            ) : (
-                              categories.map(category => {
-                                const isSelected = channelForm.category_filter.includes(category.id);
-                                const canSelect = isSelected || channelForm.category_filter.length < 10;
+                        </div>
+                        <p className="text-xs text-muted-foreground ml-6">
+                          Se marcado, este canal só receberá notificações de cupons, nunca de produtos
+                        </p>
 
-                                return (
-                                  <div key={category.id} className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`category_${category.id}`}
-                                      checked={isSelected}
-                                      disabled={!canSelect && !isSelected}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          if (channelForm.category_filter.length < 10) {
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="no_coupons"
+                            checked={channelForm.no_coupons}
+                            disabled={channelForm.only_coupons}
+                            onChange={(e) => setChannelForm({ ...channelForm, no_coupons: e.target.checked, only_coupons: false })}
+                            className="h-4 w-4 rounded disabled:opacity-50"
+                          />
+                          <Label htmlFor="no_coupons" className={`cursor-pointer ${channelForm.only_coupons ? 'opacity-50' : ''}`}>
+                            Não recebe cupons (apenas produtos)
+                          </Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground ml-6">
+                          Se marcado, este canal só receberá notificações de produtos, nunca de cupons
+                        </p>
+
+                        {!channelForm.only_coupons && (
+                          <div className="space-y-2">
+                            <Label>
+                              Categorias de Produtos (máximo 10)
+                            </Label>
+                            <div className="max-h-[200px] overflow-y-auto border rounded-md p-2 space-y-2">
+                              {categories.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-4">
+                                  Carregando categorias...
+                                </p>
+                              ) : (
+                                categories.map(category => {
+                                  const isSelected = channelForm.category_filter.includes(category.id);
+                                  const canSelect = isSelected || channelForm.category_filter.length < 10;
+
+                                  return (
+                                    <div key={category.id} className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        id={`category_${category.id}`}
+                                        checked={isSelected}
+                                        disabled={!canSelect && !isSelected}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            if (channelForm.category_filter.length < 10) {
+                                              setChannelForm({
+                                                ...channelForm,
+                                                category_filter: [...channelForm.category_filter, category.id]
+                                              });
+                                            }
+                                          } else {
                                             setChannelForm({
                                               ...channelForm,
-                                              category_filter: [...channelForm.category_filter, category.id]
+                                              category_filter: channelForm.category_filter.filter(id => id !== category.id)
                                             });
                                           }
-                                        } else {
-                                          setChannelForm({
-                                            ...channelForm,
-                                            category_filter: channelForm.category_filter.filter(id => id !== category.id)
-                                          });
-                                        }
-                                      }}
-                                      className="h-4 w-4 rounded"
-                                    />
-                                    <Label
-                                      htmlFor={`category_${category.id}`}
-                                      className={`cursor-pointer flex-1 ${!canSelect && !isSelected ? 'opacity-50' : ''}`}
-                                    >
-                                      <span className="mr-1">{category.icon}</span>
-                                      {category.name}
-                                    </Label>
-                                  </div>
-                                );
-                              })
+                                        }}
+                                        className="h-4 w-4 rounded"
+                                      />
+                                      <Label
+                                        htmlFor={`category_${category.id}`}
+                                        className={`cursor-pointer flex-1 ${!canSelect && !isSelected ? 'opacity-50' : ''}`}
+                                      >
+                                        <span className="mr-1">{category.icon}</span>
+                                        {category.name}
+                                      </Label>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {channelForm.category_filter.length > 0
+                                ? `Selecionadas: ${channelForm.category_filter.length} categoria(s). ${channelForm.category_filter.length < 10 ? 'Você pode selecionar mais.' : 'Limite atingido.'}`
+                                : 'Selecione até 10 categorias. Se nenhuma for selecionada, o canal receberá produtos de todas as categorias.'
+                              }
+                            </p>
+                            {channelForm.category_filter.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {channelForm.category_filter.map(catId => {
+                                  const category = categories.find(c => c.id === catId);
+                                  return category ? (
+                                    <Badge key={catId} variant="secondary" className="cursor-pointer" onClick={() => {
+                                      setChannelForm({
+                                        ...channelForm,
+                                        category_filter: channelForm.category_filter.filter(id => id !== catId)
+                                      });
+                                    }}>
+                                      {category.icon} {category.name} ×
+                                    </Badge>
+                                  ) : null;
+                                })}
+                              </div>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {channelForm.category_filter.length > 0
-                              ? `Selecionadas: ${channelForm.category_filter.length} categoria(s). ${channelForm.category_filter.length < 10 ? 'Você pode selecionar mais.' : 'Limite atingido.'}`
-                              : 'Selecione até 10 categorias. Se nenhuma for selecionada, o canal receberá produtos de todas as categorias.'
-                            }
-                          </p>
-                          {channelForm.category_filter.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {channelForm.category_filter.map(catId => {
-                                const category = categories.find(c => c.id === catId);
-                                return category ? (
-                                  <Badge key={catId} variant="secondary" className="cursor-pointer" onClick={() => {
-                                    setChannelForm({
-                                      ...channelForm,
-                                      category_filter: channelForm.category_filter.filter(id => id !== catId)
-                                    });
-                                  }}>
-                                    {category.icon} {category.name} ×
-                                  </Badge>
-                                ) : null;
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button type="submit" disabled={savingChannel}>
-                        {savingChannel ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Salvando...
-                          </>
-                        ) : (
-                          editingChannel ? 'Salvar' : 'Criar'
                         )}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
+                      </div>
+
+                      <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                          Cancelar
+                        </Button>
+                        <Button type="submit" disabled={savingChannel}>
+                          {savingChannel ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Salvando...
+                            </>
+                          ) : (
+                            editingChannel ? 'Salvar' : 'Criar'
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent className="p-0 sm:p-6 overflow-hidden">
               <div className="overflow-x-auto scrollbar-hide">
@@ -1091,9 +1355,11 @@ export default function Bots() {
                             <TableCell>
                               <Badge variant="outline" className="capitalize text-[10px] sm:text-xs">
                                 {channel.platform === 'telegram' ? (
-                                  <><MessageSquare className="mr-1 h-3 w-3 text-blue-500" />{channel.platform}</>
+                                  <><MessageSquare className="mr-1 h-3 w-3 text-blue-400" />Telegram</>
+                                ) : channel.platform === 'whatsapp_web' ? (
+                                  <><span className="mr-1 text-green-500">📱</span>WhatsApp Web</>
                                 ) : (
-                                  <><span className="mr-1 text-green-500">📱</span>{channel.platform}</>
+                                  <><span className="mr-1 text-green-600">🏢</span>WhatsApp API</>
                                 )}
                               </Badge>
                             </TableCell>
@@ -1216,6 +1482,28 @@ export default function Bots() {
                 ) : (
                   logs.map((log, index) => (
                     <div key={log.id || index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border rounded-lg gap-3">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${status.whatsapp_web?.working ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <span className="font-medium">
+                            {status.whatsapp_web?.working ? 'Conectado' : 'Desconectado'}
+                          </span>
+                          {status.whatsapp_web?.working && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs ml-2"
+                              onClick={() => {
+                                setShowChatsModal(true);
+                                fetchChats();
+                              }}
+                            >
+                              <List className="h-3 w-3 mr-1" /> Consultar IDs
+                            </Button>
+                          )}
+                        </div>
+                        {/* ... existing badge code ... */}
+                      </div>
                       <div className="flex items-center gap-3">
                         <div className={`shrink-0 w-2.5 h-2.5 rounded-full ${log.success ? 'bg-green-500' : 'bg-red-500'}`} />
                         <div className="min-w-0">
@@ -1249,6 +1537,88 @@ export default function Bots() {
             </CardContent>
           </Card>
         )}
+      <Dialog open={showChatsModal} onOpenChange={setShowChatsModal}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Listagem de Chats/Grupos do WhatsApp</DialogTitle>
+            <DialogDescription>
+              Copie o ID do grupo para configurar nos Canais.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center space-x-2 py-4">
+            <Search className="h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Buscar por nome..."
+              value={chatSearch}
+              onChange={(e) => setChatSearch(e.target.value)}
+              className="flex-1"
+            />
+          </div>
+
+          <div className="border rounded-md flex-1 overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>ID (Copie este valor)</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingChats ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                      <p className="text-xs text-muted-foreground mt-2">Carregando chats...</p>
+                    </TableCell>
+                  </TableRow>
+                ) : chats.filter(c => c.name.toLowerCase().includes(chatSearch.toLowerCase())).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      Nenhum chat encontrado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  chats.filter(c => c.name.toLowerCase().includes(chatSearch.toLowerCase())).map((chat) => (
+                    <TableRow key={chat.id}>
+                      <TableCell className="font-medium">{chat.name}</TableCell>
+                      <TableCell>
+                        {chat.isChannel ? (
+                          <Badge className="bg-purple-500 hover:bg-purple-600 text-white border-none">
+                            Canal
+                          </Badge>
+                        ) : (
+                          <Badge variant={chat.isGroup ? 'secondary' : 'outline'}>
+                            {chat.isGroup ? 'Grupo' : 'Privado'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs truncate max-w-[200px]" title={chat.id}>
+                        {chat.id}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            navigator.clipboard.writeText(chat.id);
+                            toast({ title: "ID Copiado!", duration: 1500 });
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

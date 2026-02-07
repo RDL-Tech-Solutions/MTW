@@ -2,6 +2,10 @@
 node_modules
 /.pnp
 .pnp.js
+/.wwebjs_auth
+/.wwebjs_auth_test
+/.wwebjs_cache
+
 
 # Testing
 /coverage

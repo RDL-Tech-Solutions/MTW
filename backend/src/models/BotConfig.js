@@ -38,12 +38,10 @@ class BotConfig {
       telegram_parse_mode: 'HTML',
       telegram_disable_preview: false,
 
-      // WhatsApp
-      whatsapp_enabled: false,
-      whatsapp_api_url: '',
-      whatsapp_api_token: '',
-      whatsapp_phone_number_id: '',
-      whatsapp_business_account_id: '',
+      // WhatsApp Web (Pessoal)
+      whatsapp_web_enabled: false,
+      whatsapp_web_pairing_number: '',
+      whatsapp_web_admin_numbers: '', // Comma separated
 
       // Notificações
       notify_new_products: true,
@@ -150,40 +148,7 @@ class BotConfig {
     return config.telegram_enabled && !!config.telegram_bot_token;
   }
 
-  /**
-   * Verificar se WhatsApp está configurado
-   */
-  static async isWhatsAppConfigured() {
-    const config = await this.get();
-    return config.whatsapp_enabled &&
-      !!config.whatsapp_api_url &&
-      !!config.whatsapp_api_token;
-  }
 
-  /**
-   * Buscar token do Telegram (para uso interno)
-   * Prioriza banco de dados, usa .env apenas como fallback
-   */
-  static async getTelegramToken() {
-    const config = await this.get();
-    // Priorizar banco de dados, .env apenas como fallback de emergência
-    return config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
-  }
-
-  /**
-   * Buscar configurações do WhatsApp (para uso interno)
-   * Prioriza banco de dados, usa .env apenas como fallback
-   */
-  static async getWhatsAppConfig() {
-    const config = await this.get();
-    // Priorizar banco de dados, .env apenas como fallback de emergência
-    return {
-      apiUrl: config.whatsapp_api_url || process.env.WHATSAPP_API_URL,
-      apiToken: config.whatsapp_api_token || process.env.WHATSAPP_API_TOKEN,
-      phoneNumberId: config.whatsapp_phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID
-    };
-  }
 }
 
 export default BotConfig;
-

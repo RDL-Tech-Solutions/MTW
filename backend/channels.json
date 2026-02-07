@@ -1,0 +1,51 @@
+[
+  {
+    "id": "095f7df0-9ba8-48e1-8fa9-6dd843e9ba46",
+    "name": "PrecoCerto Cupom",
+    "platform": "telegram",
+    "identifier": "-1003277657866",
+    "is_active": true
+  },
+  {
+    "id": "3cc30da9-c359-492e-997e-b896553eacb5",
+    "name": "Precocerto",
+    "platform": "telegram",
+    "identifier": "-1003590527597",
+    "is_active": true
+  },
+  {
+    "id": "99cff89c-8d8e-415e-bc18-3829aef6d1ea",
+    "name": "precoCerto Game",
+    "platform": "telegram",
+    "identifier": "-1003512637022",
+    "is_active": true
+  },
+  {
+    "id": "2ee69368-17bb-473f-8526-088f437e6d9f",
+    "name": "Roberto",
+    "platform": "whatsapp",
+    "identifier": "5571999541560",
+    "is_active": true
+  },
+  {
+    "id": "f36446fd-605a-4eb0-bf30-5a82d3420859",
+    "name": "Moh",
+    "platform": "whatsapp",
+    "identifier": "5571999172338",
+    "is_active": true
+  },
+  {
+    "id": "88650c0f-c533-4a62-8d36-993b133a6fa2",
+    "name": "d",
+    "platform": "whatsapp_web",
+    "identifier": "120363405400556600@newsletter",
+    "is_active": true
+  },
+  {
+    "id": "d813463e-f9ad-472c-aaa2-f893039b0512",
+    "name": "fre",
+    "platform": "whatsapp_web",
+    "identifier": "120363423394638237@newsletter",
+    "is_active": true
+  }
+]

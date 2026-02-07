@@ -27,10 +27,10 @@ export const generateRefreshToken = (payload) => {
 
 // Verificar token
 export const verifyToken = (token, isRefreshToken = false) => {
-  const secret = isRefreshToken 
-    ? process.env.JWT_REFRESH_SECRET 
+  const secret = isRefreshToken
+    ? process.env.JWT_REFRESH_SECRET
     : process.env.JWT_SECRET;
-  
+
   return jwt.verify(token, secret);
 };
 
@@ -89,11 +89,11 @@ export const successResponse = (data, message = 'Sucesso', meta = null) => {
     data,
     message
   };
-  
+
   if (meta) {
     response.meta = meta;
   }
-  
+
   return response;
 };
 
@@ -111,7 +111,7 @@ export const isCouponValid = (coupon) => {
   const now = new Date();
   const validFrom = new Date(coupon.valid_from);
   const validUntil = new Date(coupon.valid_until);
-  
+
   return (
     coupon.is_active &&
     now >= validFrom &&
@@ -123,7 +123,7 @@ export const isCouponValid = (coupon) => {
 // Calcular preço com desconto
 export const calculateDiscountedPrice = (price, coupon) => {
   if (!coupon || !isCouponValid(coupon)) return price;
-  
+
   if (coupon.discount_type === 'percentage') {
     return price - (price * (coupon.discount_value / 100));
   } else {
@@ -188,6 +188,12 @@ export const daysUntilExpiration = (date) => {
   return diffDays;
 };
 
+// Formatar número de telefone (apenas dígitos)
+export const formatPhoneNumber = (phone) => {
+  if (!phone) return '';
+  return phone.toString().replace(/\D/g, '');
+};
+
 export default {
   hashPassword,
   comparePassword,
@@ -211,5 +217,8 @@ export default {
   isValidUUID,
   generateCouponCode,
   formatDate,
-  daysUntilExpiration
+  generateCouponCode,
+  formatDate,
+  daysUntilExpiration,
+  formatPhoneNumber
 };

@@ -11,7 +11,8 @@ const LOGOS_DIR = path.join(PROJECT_ROOT, 'src', 'assets', 'logos');
 import BotChannel from '../../models/BotChannel.js';
 import NotificationLog from '../../models/NotificationLog.js';
 import BotSendLog from '../../models/BotSendLog.js';
-import whatsappService from './whatsappService.js';
+// import whatsappService from './whatsappService.js'; // REMOVED
+import whatsappWebService from '../../services/whatsappWeb/whatsappWebService.js'; // Novo serviço Web
 import telegramService from './telegramService.js';
 import imageConverterService from './imageConverterService.js';
 import templateRenderer from './templateRenderer.js';
@@ -31,6 +32,9 @@ class NotificationDispatcher {
     terabyte: 'terabyte.png',
     general: 'general.png'
   };
+
+  // Cache em memória para evitar race conditions de duplicação (TTL curto)
+  static processingCache = new Set();
 
   /**
    * Obter caminho absoluto do logo da plataforma
@@ -94,7 +98,26 @@ class NotificationDispatcher {
         data = { ...data };
       }
 
-      logger.info(`📤 Disparando notificação: ${eventType}`);
+      const dispatchId = Math.random().toString(36).substring(7);
+      logger.info(`📤 [${dispatchId}] Disparando notificação: ${eventType} | manual=${options.manual || false}`);
+
+      // --- DEDUPLICAÇÃO EM MEMÓRIA ---
+      const entityId = data.id || data.product_id || data.coupon_id;
+      const cacheKey = `${eventType}_${entityId}`;
+
+      // FIX: Dedup em memória deve funcionar SEMPRE, mesmo para manual,
+      // para evitar cliques duplos/race conditions na mesma fração de segundo.
+      if (NotificationDispatcher.processingCache.has(cacheKey)) {
+        logger.warn(`✋ [${dispatchId}] Bloqueado por cache em memória (Race Condition evitada): ${cacheKey}`);
+        return { success: false, message: 'Duplicidade detectada (Memória)' };
+      }
+
+      if (entityId) {
+        NotificationDispatcher.processingCache.add(cacheKey);
+        // Auto-limpeza após 15 segundos
+        setTimeout(() => NotificationDispatcher.processingCache.delete(cacheKey), 15000);
+      }
+      // -------------------------------
 
       // INJEÇÃO DE IMAGEM PARA CUPONS (USANDO ARQUIVO LOCAL - DEFINITIVO)
       if (eventType === 'coupon_new') {
@@ -125,14 +148,28 @@ class NotificationDispatcher {
       const BotConfig = (await import('../../models/BotConfig.js')).default;
       const botConfig = await BotConfig.get();
 
-      // Filtrar canais de plataformas desabilitadas globalmente
+      // Filtrar canais de plataformas desabilitadas globalmente e por filtro de opção
       const activeChannels = allChannels.filter(channel => {
+        // Platform Filter Check
+        if (options.platformFilter) {
+          // Se filtrar por 'whatsapp', permitir 'whatsapp' e 'whatsapp_web'
+          if (options.platformFilter === 'whatsapp') {
+            if (channel.platform !== 'whatsapp' && channel.platform !== 'whatsapp_web') return false;
+          } else if (channel.platform !== options.platformFilter) {
+            return false;
+          }
+        }
+
         if (channel.platform === 'telegram' && botConfig.telegram_enabled === false) {
           logger.debug(`   🚫 Canal Telegram ${channel.id} ignorado (Telegram desabilitado globalmente)`);
           return false;
         }
         if (channel.platform === 'whatsapp' && botConfig.whatsapp_enabled === false) {
           logger.debug(`   🚫 Canal WhatsApp ${channel.id} ignorado (WhatsApp desabilitado globalmente)`);
+          return false;
+        }
+        if (channel.platform === 'whatsapp_web' && botConfig.whatsapp_web_enabled === false) {
+          logger.debug(`   🚫 Canal WhatsApp Web ${channel.id} ignorado (WhatsApp Web desabilitado globalmente)`);
           return false;
         }
         return true;
@@ -144,7 +181,9 @@ class NotificationDispatcher {
       }
 
       // Filtrar canais usando segmentação inteligente
+      console.time('🔍 Time: Filtering Channels');
       const channels = await this.filterChannelsBySegmentation(activeChannels, eventType, data);
+      console.timeEnd('🔍 Time: Filtering Channels');
 
       if (channels.length === 0) {
         logger.info(`⏸️ Nenhum canal passou nos filtros de segmentação`);
@@ -162,9 +201,51 @@ class NotificationDispatcher {
       };
 
       // Enviar para cada canal filtrado
-      for (const channel of channels) {
+
+      // 1. Processar imagem UMA VEZ para todos os canais (Otimização)
+      let sharedLocalImagePath = null;
+      let originalImageUrl = data.image_url;
+
+      try {
+        if (eventType === 'promotion_new' || eventType === 'coupon_new') {
+          const imageUrl = data.image_url;
+          const isPublicUrl = imageUrl && typeof imageUrl === 'string' && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
+
+          if (isPublicUrl) {
+            const useWebVersionAny = channels.some(c => c.platform === 'whatsapp_web');
+
+            if (useWebVersionAny) {
+              console.time('🖼️ Time: Image Download');
+              logger.info('🖼️ [Dispatcher] Baixando e convertendo imagem ANTES do loop de envio (Otimização)...');
+              try {
+                sharedLocalImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
+              } catch (e) {
+                logger.error(`❌ Erro no download da imagem: ${e.message}`);
+              }
+              console.timeEnd('🖼️ Time: Image Download');
+            }
+          }
+        }
+      } catch (imgError) {
+        logger.error(`❌ [Dispatcher] Falha ao processar imagem otimizada: ${imgError.message}`);
+        // Continua, vai tentar baixar individualmente ou falhar no envio
+      }
+
+      // 2. Loop de envio (Sequencial para evitar Race Conditions e Duplicações)
+      // Revertendo paralelismo temporariamente para estabilidade
+      console.time('🚀 Time: Total Dispatch Loop');
+
+      for (const [index, channel] of channels.entries()) {
+        console.time(`📦 Time: Channel ${index + 1}/${channels.length} (${channel.name})`);
+
         try {
-          // Verificar duplicação antes de enviar. options.manual bypasses duplicates.
+          // Validar se imagem local ainda existe
+          if (sharedLocalImagePath && !fs.existsSync(sharedLocalImagePath)) {
+            logger.warn('⚠️ Imagem otimizada sumiu durante o loop, revertendo para URL original');
+            sharedLocalImagePath = null;
+          }
+
+          // Verificar duplicação logicamente
           const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data, options.manual);
           if (isDuplicate) {
             logger.debug(`⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
@@ -173,33 +254,56 @@ class NotificationDispatcher {
               platform: channel.platform,
               success: false,
               skipped: true,
-              reason: 'Duplicado (enviado recentemente)'
+              reason: 'Duplicado'
             });
+            console.timeEnd(`📦 Time: Channel ${index + 1}/${channels.length} (${channel.name})`);
             continue;
           }
 
-          const result = await this.sendToChannel(channel, eventType, data);
+          // Preparar dados para o canal
+          let channelData = { ...data };
+
+          // Injetar caminho local APENAS se formos usar
+          if (sharedLocalImagePath) {
+            if (channel.platform === 'whatsapp_web' || channel.platform === 'whatsapp') {
+              channelData.image_url = sharedLocalImagePath;
+              //logger.info(`📸 Usando imagem local compartilhada para ${channel.platform}`);
+            }
+          }
+
+          const result = await this.sendToChannel(channel, eventType, channelData);
 
           if (result.success) {
             results.sent++;
-            // Registrar envio para controle de duplicação
             await this.logSend(channel.id, eventType, data);
           } else {
             results.failed++;
           }
 
           results.details.push(result);
-        } catch (error) {
-          logger.error(`❌ Erro ao enviar para canal ${channel.id}: ${error.message}`);
+
+        } catch (err) {
+          logger.error(`❌ Erro canal ${channel.id}: ${err.message}`);
           results.failed++;
-          results.details.push({
-            channelId: channel.id,
-            platform: channel.platform,
-            success: false,
-            error: error.message
-          });
+          results.details.push({ success: false, error: err.message, channelId: channel.id });
+        }
+
+        console.timeEnd(`📦 Time: Channel ${index + 1}/${channels.length} (${channel.name})`);
+      }
+      console.timeEnd('🚀 Time: Total Dispatch Loop');
+
+      // 3. Limpeza da imagem compartilhada
+      if (sharedLocalImagePath && fs.existsSync(sharedLocalImagePath)) {
+        try {
+          // Pequeno delay para garantir que o arquivo não está lockado
+          setTimeout(() => {
+            try { fs.unlinkSync(sharedLocalImagePath); } catch (e) { }
+          }, 5000);
+        } catch (e) {
+          logger.warn(`⚠️ Erro ao limpar imagem temp: ${e.message}`);
         }
       }
+
 
       logger.info(`✅ Notificação enviada: ${results.sent} sucesso, ${results.failed} falhas, ${results.filtered} filtrados`);
       return results;
@@ -447,55 +551,44 @@ class NotificationDispatcher {
         logger.info(`🖼️ [Dispatcher] Usando imagem: ${isLocalFile ? 'Arquivo Local' : imageUrl}`);
       }
 
-      if (channel.platform === 'whatsapp') {
+      if (channel.platform === 'whatsapp' || channel.platform === 'whatsapp_web') {
+        // Enforce Web Version for ALL WhatsApp channels (Since Cloud API is removed)
+        const useWebVersion = true;
+
         try {
+          // --- VERSÃO WHATSAPP WEB ---
           if (hasValidImage) {
-            // FLUXO DE IMAGEM OTIMIZADO
             let localImagePath = null;
             try {
+              // Usar o mesmo conversor da Cloud API para garantir download robusto (User-Agent, headers, etc)
               if (isPublicUrl) {
-                // 1. Processar imagem da URL (Download + Conversão para JPEG)
-                // Resolve problema de imagens WebP do Mercado Livre que a API não aceita via URL
-                logger.info(`🔄 [Dispatcher] Processando imagem remota para WhatsApp: ${imageUrl}`);
                 localImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
               } else {
-                // 1. Já é um arquivo local (ex: logo padrão)
-                logger.info(`📁 [Dispatcher] Usando arquivo local diretamente para WhatsApp: ${imageUrl}`);
                 localImagePath = imageUrl;
               }
 
-              // 2. Fazer upload da mídia para a API do WhatsApp
-              logger.info(`⬆️ [Dispatcher] Fazendo upload da mídia para WhatsApp...`);
-              const mediaId = await whatsappService.uploadMedia(localImagePath);
+              result = await whatsappWebService.sendImage(channel.identifier, localImagePath, message);
 
-              if (mediaId) {
-                // 3. Enviar mensagem usando o ID da mídia
-                logger.info(`✅ [Dispatcher] Mídia enviada com sucesso (ID: ${mediaId}). Enviando mensagem...`);
-                result = await whatsappService.sendImageById(channel.identifier, mediaId, message);
-              } else {
-                throw new Error('Falha ao obter ID da mídia após upload');
-              }
             } catch (mediaError) {
-              logger.error(`❌ [Dispatcher] Erro no fluxo de mídia WhatsApp: ${mediaError.message}`);
-              throw mediaError; // Repassar para o catch externo fazer fallback
+              logger.error(`❌ [Dispatcher] Erro no envio de imagem WhatsApp Web: ${mediaError.message}`);
+              // Fallback para texto
+              result = await whatsappWebService.sendMessage(channel.identifier, message);
             } finally {
-              // 4. Limpar arquivo temporário (SÓ SE FOI CRIADO PELO CONVERSOR)
+              // Limpar arquivo temporário
               if (isPublicUrl && localImagePath && fs.existsSync(localImagePath)) {
                 try {
                   fs.unlinkSync(localImagePath);
-                  logger.debug(`🧹 [Dispatcher] Arquivo temporário removido: ${localImagePath}`);
                 } catch (cleanupError) {
                   logger.warn(`⚠️ [Dispatcher] Falha ao remover arquivo temporário: ${cleanupError.message}`);
                 }
               }
             }
           } else {
-            result = await whatsappService.sendMessage(channel.identifier, message);
+            result = await whatsappWebService.sendMessage(channel.identifier, message);
           }
         } catch (error) {
-          logger.warn(`⚠️ [Dispatcher] Falha ao enviar imagem WhatsApp para ${channel.id}. Tentando fallback para TEXTO... Motivo: ${error.message}`);
-          // FALLBACK DEFINITIVO
-          result = await whatsappService.sendMessage(channel.identifier, message);
+          logger.error(`❌ [Dispatcher] Erro geral WhatsApp: ${error.message}`);
+          throw error;
         }
       } else if (channel.platform === 'telegram') {
         const parseMode = await this.getTelegramParseMode();
@@ -730,17 +823,22 @@ class NotificationDispatcher {
       if (typeof imageUrl === 'string' && imageUrl.startsWith('//')) {
         imageUrl = 'https:' + imageUrl;
       }
-      // Verificar flag global
-      const BotConfig = (await import('../../models/BotConfig.js')).default;
-      const botConfig = await BotConfig.get();
 
-      if (botConfig.whatsapp_enabled === false) {
-        logger.warn('⚠️ WhatsApp desabilitado globalmente. Abortando envio de imagem.');
-        return { success: false, reason: 'WhatsApp desabilitado globalmente' };
+      // Definição de hasValidImage (FIX: ReferenceError)
+      const isPublicUrl = imageUrl && typeof imageUrl === 'string' && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
+      const isLocalFile = imageUrl && typeof imageUrl === 'string' && !isPublicUrl && (imageUrl.includes('/') || imageUrl.includes('\\')) && fs.existsSync(imageUrl);
+      const hasValidImage = !!imageUrl && (isPublicUrl || isLocalFile);
+
+      // Buscar canais
+      const whatsappChannels = await BotChannel.findActive('whatsapp');
+      const whatsappWebChannels = await BotChannel.findActive('whatsapp_web');
+
+      const allChannels = [...whatsappChannels, ...whatsappWebChannels];
+
+      if (allChannels.length === 0) {
+        logger.warn('⚠️ Nenhum canal WhatsApp ativo encontrado');
+        return { success: false, reason: 'Nenhum canal WhatsApp ativo' };
       }
-
-      const allChannels = await BotChannel.findActive('whatsapp');
-      if (!allChannels || allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo' };
 
       const channels = data
         ? await this.filterChannelsBySegmentation(allChannels, eventType, { ...data, id: data.product_id || data.coupon_id || data.id })
@@ -748,97 +846,54 @@ class NotificationDispatcher {
 
       if (channels.length === 0) return { success: false, sent: 0, total: 0, reason: "Segmentação." };
 
-      // PREPARAÇÃO DA IMAGEM (Unificada para todos os canais)
-      let mediaId = null;
-      let mediaError = null;
-
-      try {
-        logger.info(`🔄 [Dispatcher] Processando imagem para WhatsApp (Batch): ${imageUrl}`);
-        // 1. Processar imagem (Download + Conversão)
-        localImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
-
-        // 2. Fazer upload (Uma única vez)
-        logger.info(`⬆️ [Dispatcher] Fazendo upload da mídia para WhatsApp...`);
-        mediaId = await whatsappService.uploadMedia(localImagePath);
-        logger.info(`✅ [Dispatcher] Mídia pronta para envio em massa. ID: ${mediaId}`);
-      } catch (err) {
-        logger.error(`❌ [Dispatcher] Falha na preparação da imagem (Batch): ${err.message}`);
-        mediaError = err.message;
-        // Continuaremos para enviar apenas texto como fallback
-      }
-
       let sent = 0;
-      const results = [];
+      let finalReason = null;
 
+      // Enviar para cada canal
       for (const channel of channels) {
-        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
-        if (isDuplicate) continue;
-
         try {
-          let result;
+          const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
+          if (isDuplicate) continue;
 
-          if (mediaId) {
-            // Enviar com imagem (ID já processado)
-            result = await whatsappService.sendImageById(channel.identifier, mediaId, message);
+          if (hasValidImage) {
+            await whatsappWebService.sendImage(channel.identifier, imageUrl, message);
           } else {
-            // Fallback para texto se imagem falhou
-            logger.warn(`⚠️ [Dispatcher] Enviando apenas TEXTO para canal ${channel.id} (Falha na imagem: ${mediaError})`);
-            result = await whatsappService.sendMessage(channel.identifier, message);
+            await whatsappWebService.sendMessage(channel.identifier, message);
           }
 
-          if (result && result.success) {
-            sent++;
-            await this.logSend(channel.id, eventType, data);
+          sent++;
+          await this.logSend(channel.id, eventType, data);
 
-            // Registrar sucesso no log de notificação
-            await NotificationLog.create({
-              event_type: eventType,
-              platform: 'whatsapp',
-              channel_id: channel.id,
-              channel_name: channel.name,
-              success: true,
-              message_id: result.messageId,
-              payload: data
-            });
-          }
-          results.push({ channelId: channel.id, success: !!(result && result.success) });
-        } catch (error) {
-          logger.error(`❌ [Dispatcher] Erro no envio individual WhatsApp: ${error.message}`);
-          results.push({ channelId: channel.id, success: false, error: error.message });
+        } catch (err) {
+          logger.error(`Erro envio whats individual: ${err.message}`);
+          finalReason = err.message;
         }
       }
 
-      return { success: sent > 0, sent, total: channels.length, results };
-
+      return { success: sent > 0, sent, total: channels.length, reason: finalReason };
     } catch (error) {
+      logger.error(`❌ Erro geral sendToWhatsAppWithImage: ${error.message}`);
       return { success: false, reason: error.message };
     } finally {
-      // Limpeza do arquivo temporário (Sempre executar)
-      if (localImagePath && fs.existsSync(localImagePath)) {
-        try {
-          fs.unlinkSync(localImagePath);
-          logger.debug(`🧹 [Dispatcher] Arquivo temporário removido: ${localImagePath}`);
-        } catch (cleanupError) {
-          logger.warn(`⚠️ [Dispatcher] Falha ao remover arquivo temporário batch: ${cleanupError.message}`);
-        }
-      }
+      // Nada crítico para limpar se não usamos download manual neste bloco simplificado,
+      // mas se usarmos, seria aqui. O Dispatcher principal já cuida da limpeza global se ele baixou.
     }
   }
 
   async sendToWhatsApp(message, data = {}, options = {}) {
     try {
-      // Verificar flag global
       const BotConfig = (await import('../../models/BotConfig.js')).default;
       const botConfig = await BotConfig.get();
 
-      if (botConfig.whatsapp_enabled === false) {
-        logger.warn('⚠️ WhatsApp desabilitado globalmente. Abortando envio de texto.');
-        return { success: false, reason: 'WhatsApp desabilitado globalmente' };
-      }
-
       const eventType = data.eventType || 'promotion_new';
-      const allChannels = await BotChannel.findActive('whatsapp');
-      if (!allChannels || allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo' };
+
+      // Buscar canais de ambas as plataformas
+      const whatsappChannels = botConfig.whatsapp_enabled !== false ? await BotChannel.findActive('whatsapp') : [];
+      const whatsappWebChannels = botConfig.whatsapp_web_enabled !== false ? await BotChannel.findActive('whatsapp_web') : [];
+
+      const allChannels = [...whatsappChannels, ...whatsappWebChannels];
+
+      if (allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo ou habilitado' };
 
       const channels = await this.filterChannelsBySegmentation(allChannels, eventType, data);
       if (channels.length === 0) return { success: false, sent: 0, total: allChannels.length, reason: "Segmentação." };
@@ -854,7 +909,9 @@ class NotificationDispatcher {
         }
 
         try {
-          const result = await whatsappService.sendMessage(channel.identifier, message);
+          // Simplificado: Sempre usa Web Service (já que Cloud API foi removida)
+          const result = await whatsappWebService.sendMessage(channel.identifier, message);
+
           if (result && result.success) {
             sent++;
             await this.logSend(channel.id, eventType, data);

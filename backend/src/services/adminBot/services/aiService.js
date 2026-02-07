@@ -1,4 +1,5 @@
 import openrouterClient from '../../../ai/openrouterClient.js'; // AI Client
+import { InlineKeyboard } from 'grammy';
 import logger from '../../../config/logger.js';
 import SyncConfig from '../../../models/SyncConfig.js';
 import Product from '../../../models/Product.js';
@@ -12,6 +13,7 @@ import ScheduledPost from '../../../models/ScheduledPost.js';
 import { adminMainMenu } from '../menus/mainMenu.js';
 import notificationDispatcher from '../../bots/notificationDispatcher.js';
 import publishService from '../../autoSync/publishService.js';
+import schedulerService from '../../autoSync/schedulerService.js';
 import { syncProducts } from '../../cron/syncProducts.js';
 import LinkAnalyzer from '../../linkAnalyzer.js';
 import fs from 'fs/promises';
@@ -288,6 +290,10 @@ Responda com o JSON da ação a ser tomada.
 
             case 'republish_product':
                 await this.republishProduct(ctx, parameters);
+                break;
+
+            case 'schedule_ai':
+                await this.handleScheduleAI(ctx, parameters);
                 break;
 
             case 'manage_schedules':
@@ -1812,6 +1818,93 @@ Responda com o JSON da ação a ser tomada.
         } catch (error) {
             logger.error('Erro checkPlatformCoupons:', error);
             return [];
+        }
+    }
+
+    /**
+     * Agendar via IA (Callback ou Ação)
+     */
+    async handleScheduleAI(ctx, params) {
+        // Params pode vir de JSON (AI) ou ser o próprio productId (se chamado via callback wrapper)
+        // Mas a chamada do index.js provavelmente passará o ID extraido do callback
+
+        let productId;
+        if (typeof params === 'object' && params.id) {
+            productId = params.id;
+        } else if (typeof params === 'object' && params.product_id) {
+            productId = params.product_id;
+        } else if (typeof params === 'string') {
+            productId = params;
+        }
+
+        if (!productId) {
+            if (ctx.reply) await ctx.reply('⚠️ ID do produto não identificado.');
+            return;
+        }
+
+        try {
+            const product = await Product.findById(productId);
+            if (!product) {
+                if (ctx.answerCallbackQuery) await ctx.answerCallbackQuery('Produto não encontrado.');
+                return;
+            }
+
+            // VERIFICAÇÃO DE CATEGORIA (Enforce)
+            if (!product.category_id) {
+                // Se não tem categoria, pedir para selecionar
+                const categories = await Category.findAll(true);
+                const limitedCats = categories.slice(0, 15); // Top 15
+
+                const kb = new InlineKeyboard();
+                limitedCats.forEach((c, index) => {
+                    kb.text(c.name, `schedule_set_cat:${product.id}:${c.id}`);
+                    if ((index + 1) % 2 === 0) kb.row(); // 2 por linha
+                });
+
+                if (ctx.reply) await ctx.reply(`📂 *Categoria Necessária*\n\nPara a IA agendar no melhor horário, preciso saber a categoria do produto *${product.name}*.\n\nSelecione abaixo:`, { parse_mode: 'Markdown', reply_markup: kb });
+                return;
+            }
+
+            if (ctx.answerCallbackQuery) await ctx.answerCallbackQuery('⏳ Solicitando agendamento à IA...');
+            if (ctx.reply) await ctx.reply(`⏳ *IA analisando melhor horário para ${product.name}...*`, { parse_mode: 'Markdown' });
+
+            // Chamar Scheduler Service
+            await schedulerService.scheduleProduct(product);
+
+            if (ctx.reply) await ctx.reply('✅ *Agendamento Solicitado com Sucesso!*\n\nO produto foi colocado na fila e a IA decidirá o momento ideal para publicar nas próximas horas (ou amanhã).', { parse_mode: 'Markdown' });
+
+            // Tentar remover botões da mensagem original para evitar duplo clique
+            if (ctx.callbackQuery && ctx.editMessageReplyMarkup) {
+                try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (e) { }
+            }
+
+        } catch (error) {
+            logger.error('Erro handleScheduleAI:', error);
+            if (ctx.reply) await ctx.reply(`❌ Erro ao agendar: ${error.message}`);
+        }
+    }
+    /**
+     * Definir categoria e continuar agendamento
+     */
+    async handleScheduleCategory(ctx, data) {
+        // data format: schedule_set_cat:productId:categoryId
+        const parts = data.split(':');
+        const productId = parts[1];
+        const categoryId = parts[2];
+
+        try {
+            await Product.update(productId, { category_id: categoryId });
+            if (ctx.answerCallbackQuery) await ctx.answerCallbackQuery('✅ Categoria salva!');
+
+            // Remover menu de categorias
+            try { await ctx.editMessageText('✅ Categoria definida. Retomando agendamento...'); } catch (e) { }
+
+            // Chamar handleScheduleAI novamente (agora vai passar na verificação)
+            return await this.handleScheduleAI(ctx, productId);
+
+        } catch (error) {
+            logger.error('Erro handleScheduleCategory:', error);
+            if (ctx.reply) await ctx.reply('❌ Erro ao salvar categoria.');
         }
     }
 }

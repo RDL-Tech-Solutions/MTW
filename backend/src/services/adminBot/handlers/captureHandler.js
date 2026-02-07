@@ -124,10 +124,12 @@ export const captureLinkHandler = async (ctx, url) => {
             `_Status: Pendente (Salvo no Banco)_`;
 
         // Keyboard atualizado
+        // Keyboard atualizado
         const keyboard = new InlineKeyboard()
-            .text('✏️ Editar e Publicar', `edit_wizard:start:${product.id}`)
-            .row()
             .text('🚀 Publicar Agora', `publish:now:${product.id}`)
+            .text('📅 Agendar (IA)', `schedule_ai:${product.id}`)
+            .row()
+            .text('✏️ Editar e Publicar', `edit_wizard:start:${product.id}`)
             .text('🎫 Criar Cupom', `coupon:create:${product.id}`);
 
         // Tentar enviar com foto

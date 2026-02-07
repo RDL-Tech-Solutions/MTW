@@ -5,6 +5,9 @@ import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Rota de teste pública para debug (Temporário)
+router.post('/test-image', botController.sendTestImage);
+
 // Todas as rotas requerem autenticação de admin
 router.use(authenticateToken, requireAdmin);
 
@@ -15,6 +18,10 @@ router.get('/config', botController.getConfig);
 router.post('/config', botController.saveConfig);
 router.post('/config/test-telegram', botController.testTelegram);
 router.post('/config/test-whatsapp', botController.testWhatsApp);
+router.post('/config/whatsapp-web/pair', botController.pairWhatsAppWeb);
+router.get('/config/whatsapp-web/qr', botController.getQrCode);
+router.get('/config/whatsapp-web/chats', botController.getWhatsAppChats); // Nova rota
+router.get('/config/whatsapp-web/status', botController.getWhatsAppWebStatus);
 
 // ============================================
 // CANAIS

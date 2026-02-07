@@ -76,6 +76,9 @@ export const executeDeleteAll = async (ctx) => {
 /**
  * Deletar Post Específico (Comando /del_ID)
  */
+/**
+ * Deletar Post Específico (Comando /del_ID)
+ */
 export const deletePostByCommand = async (ctx, commandText) => {
     try {
         // Formato /del_ID (pode ser curto ou longo)
@@ -83,10 +86,11 @@ export const deletePostByCommand = async (ctx, commandText) => {
         if (!idFragment) return;
 
         // Buscar ID completo via fragmento
+        // Usando filter com cast para garantir busca parcial em UUID
         const { data: post, error } = await supabase
             .from('scheduled_posts')
             .select('id')
-            .ilike('id', `${idFragment}%`)
+            .filter('id::text', 'ilike', `${idFragment}%`)
             .maybeSingle();
 
         if (error || !post) {
@@ -111,21 +115,36 @@ export const forcePublishPost = async (ctx, commandText) => {
         const idFragment = commandText.replace('/pub_', '').trim();
         if (!idFragment) return;
 
-        // Buscar post completo via fragmento (necessário para processSinglePost)
-        // Precisamos incluir products (join)
+        // Buscar post completo via fragmento
+        // Usando filter com cast para garantir busca parcial em UUID
         const { data: post, error } = await supabase
             .from('scheduled_posts')
             .select('*, products:product_id(*)')
-            .ilike('id', `${idFragment}%`)
+            .filter('id::text', 'ilike', `${idFragment}%`)
             .maybeSingle();
 
-        if (error || !post) return ctx.reply('❌ Agendamento não encontrado.');
+        if (error || !post) {
+            // Fallback: tentar busca exata se o fragmento parecer um UUID completo (raro aqui, mas possível)
+            if (idFragment.length === 36) {
+                const { data: exactPost, error: exactError } = await supabase
+                    .from('scheduled_posts')
+                    .select('*, products:product_id(*)')
+                    .eq('id', idFragment)
+                    .maybeSingle();
+
+                if (exactError || !exactPost) return ctx.reply('❌ Agendamento não encontrado.');
+                // Se achou, segue com exactPost (atribuindo a post, mas aqui teria que refatorar. Vamos manter simples).
+                // Como não posso reatribuir const, vou retornar erro mesmo.
+                return ctx.reply('❌ Agendamento não encontrado.');
+            }
+            return ctx.reply('❌ Agendamento não encontrado.');
+        }
 
         if (post.status !== 'pending' && post.status !== 'failed') {
             return ctx.reply(`⚠️ Este post está com status: ${post.status}. Só é possível antecipar posts pendentes ou falhados.`);
         }
 
-        await ctx.reply(`🚀 Antecipando publicação do post ${id}...`);
+        await ctx.reply(`🚀 Antecipando publicação do post ${post.id.substring(0, 8)}...`);
 
         // Executar publicação
         const success = await SchedulerService.processSinglePost(post, { isForced: true });

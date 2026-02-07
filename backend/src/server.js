@@ -286,4 +286,20 @@ if (!process.env.VERCEL) {
   startServer();
 }
 
+// Iniciar WhatsApp Web (Se habilitado no .env ou no DB - Server tenta iniciar, Client decide)
+// A lógica agora é: Tentar iniciar SE NÃO ESTIVER EXPLICITAMENTE DESABILITADO no env.
+// O Client internamente verifica a flag do banco de dados.
+const enableWhatsAppWeb = process.env.WHATSAPP_WEB_ENABLED !== 'false';
+if (enableWhatsAppWeb && !process.env.VERCEL) {
+  // Pequeno delay para não concorrer com startup do server/DB
+  setTimeout(() => {
+    console.log('📱 Iniciando integração WhatsApp Web...');
+    import('./services/whatsappWeb/index.js').then(({ default: whatsappClient }) => {
+      whatsappClient.initialize();
+    }).catch(err => {
+      console.error('❌ Erro ao carregar serviço WhatsApp Web:', err);
+    });
+  }, 5000);
+}
+
 export default app;

@@ -13,7 +13,10 @@ import * as pendingHandler from './handlers/pendingHandler.js';
 import * as editHandler from './handlers/editHandler.js';
 import * as autoSyncHandler from './handlers/autoSyncHandler.js';
 import * as scheduledPostsHandler from './handlers/scheduledPostsHandler.js';
+
 import Product from '../../models/Product.js'; // Importar Model Product para actions diretas
+import Coupon from '../../models/Coupon.js';
+import PublishService from '../autoSync/publishService.js';
 
 
 
@@ -145,6 +148,25 @@ export const initAdminBot = async () => {
                         return await scheduledPostsHandler.forcePublishPost(ctx, text);
                     }
 
+                    // Republicar Produto (/republicar ID)
+                    if (text.startsWith('/republicar')) {
+                        const parts = text.split(' ');
+                        if (parts.length < 2) return ctx.reply('❌ Use: /republicar ID');
+                        const pid = parts[1].trim();
+                        const prod = await Product.findById(pid);
+                        if (!prod) return ctx.reply('❌ Produto não encontrado.');
+
+                        const { InlineKeyboard } = await import('grammy');
+                        const kb = new InlineKeyboard()
+                            .text('Sim', `repub:yes:${pid}`)
+                            .text('Não', `repub:no:${pid}`);
+
+                        return ctx.reply(`🔄 *Republicando: ${prod.name}*\n\nDeseja vincular um cupom?`, {
+                            parse_mode: 'Markdown',
+                            reply_markup: kb
+                        });
+                    }
+
                     // SE ESTIVER EM MODO IA
                     if (ctx.session.user?.ai_mode_active) {
                         return await aiService.processMessage(ctx, text);
@@ -243,6 +265,15 @@ export const initAdminBot = async () => {
                     return await editHandler.handleWizardConfirm(ctx, action);
                 }
 
+                if (data.startsWith('schedule_ai:')) {
+                    const id = data.split(':')[1];
+                    return await aiService.handleScheduleAI(ctx, id);
+                }
+
+                if (data.startsWith('schedule_set_cat:')) {
+                    return await aiService.handleScheduleCategory(ctx, data);
+                }
+
                 if (data.startsWith('vc:')) {
                     return await aiService.handleCouponSelection(ctx, data);
                 }
@@ -334,6 +365,62 @@ export const initAdminBot = async () => {
                 if (data.startsWith('publish:now:')) {
                     const id = data.split(':')[2];
                     return await editHandler.startQuickPublishFlow(ctx, id);
+                }
+
+                // === REPUBLICACAO ===
+                if (data.startsWith('repub:')) {
+                    const parts = data.split(':');
+                    const action = parts[1];
+                    const pid = parts[2];
+
+                    if (action === 'no') {
+                        await ctx.editMessageText('🚀 Publicando sem cupom...');
+                        const prod = await Product.findById(pid);
+                        if (!prod) return ctx.reply('❌ Produto não encontrado.');
+
+                        const res = await PublishService.publishAll(prod, { manual: true });
+                        await ctx.reply(res.success ? '✅ Publicado com sucesso!' : `❌ Erro: ${res.reason}`);
+                    }
+
+                    if (action === 'yes') {
+                        const prod = await Product.findById(pid);
+                        if (!prod) return ctx.reply('❌ Produto não encontrado.');
+
+                        // Buscar cupons
+                        const platform = prod.platform || 'general';
+                        const result = await Coupon.findActive({ platform, limit: 10 });
+                        const coupons = result.coupons || [];
+
+                        if (coupons.length === 0) {
+                            await ctx.editMessageText(`⚠️ Sem cupons ativos para ${platform}. Publicando sem cupom...`);
+                            const res = await PublishService.publishAll(prod, { manual: true });
+                            await ctx.reply(res.success ? '✅ Publicado com sucesso!' : `❌ Erro: ${res.reason}`);
+                            return;
+                        }
+
+                        // Montar teclado de cupons
+                        const { InlineKeyboard } = await import('grammy');
+                        const kb = new InlineKeyboard();
+                        coupons.forEach(c => {
+                            kb.text(`${c.code} (-${c.discount_type === 'percentage' ? c.discount_value + '%' : c.discount_value})`, `repub:sel_coup:${pid}:${c.id}`).row();
+                        });
+                        kb.text('❌ Cancelar Vínculo', `repub:no:${pid}`);
+
+                        await ctx.editMessageText('🎟️ *Selecione o Cupom:*', { parse_mode: 'Markdown', reply_markup: kb });
+                    }
+
+                    if (action === 'sel_coup') {
+                        const couponId = parts[3];
+                        await ctx.editMessageText('🚀 Vinculando cupom e publicando...');
+
+                        const prod = await Product.findById(pid);
+                        if (!prod) return ctx.reply('❌ Produto não encontrado.');
+
+                        // Clonar e atribuir cupom
+                        const prodToPub = { ...prod, coupon_id: couponId };
+                        const res = await PublishService.publishAll(prodToPub, { manual: true });
+                        await ctx.reply(res.success ? '✅ Publicado com sucesso!' : `❌ Erro: ${res.reason}`);
+                    }
                 }
 
                 // === INTERCEPTAÇÃO DE AÇÃO (PRODUTO vs CUPOM) ===

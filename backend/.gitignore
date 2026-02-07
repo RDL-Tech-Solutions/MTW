@@ -43,3 +43,9 @@ temp/
 # Telegram sessions (Node.js)
 telegram_sessions/
 *.session
+
+# WhatsApp Web Sessions
+.wwebjs_auth/
+.wwebjs_auth_test/
+.wwebjs_cache/
+

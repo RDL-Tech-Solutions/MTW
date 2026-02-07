@@ -2,7 +2,7 @@ import BotChannel from '../models/BotChannel.js';
 import BotConfig from '../models/BotConfig.js';
 import NotificationLog from '../models/NotificationLog.js';
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
-import whatsappService from '../services/bots/whatsappService.js';
+
 import telegramService from '../services/bots/telegramService.js';
 import logger from '../config/logger.js';
 import axios from 'axios';
@@ -46,10 +46,10 @@ class BotController {
         });
       }
 
-      if (!['whatsapp', 'telegram'].includes(platform)) {
+      if (!['whatsapp', 'telegram', 'whatsapp_web'].includes(platform)) {
         return res.status(400).json({
           success: false,
-          message: 'Plataforma inválida. Use "whatsapp" ou "telegram"'
+          message: 'Plataforma inválida. Use "whatsapp", "whatsapp_web" ou "telegram"'
         });
       }
 
@@ -236,10 +236,33 @@ class BotController {
         const testMessage = message || `🤖 *Teste de Bot*\n\n✅ Bot configurado e funcionando!\n⏰ ${new Date().toLocaleString('pt-BR')}`;
 
         if (channel.platform === 'whatsapp') {
-          // Converter formatação para WhatsApp
+          // Legacy Cloud API - Not supported anymore
+          return res.status(400).json({
+            success: false,
+            message: 'WhatsApp Cloud API foi descontinuado. Use WhatsApp Web.'
+          });
+        } else if (channel.platform === 'whatsapp_web') {
+          // Usar WhatsApp Web Client
+          const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
+          if (!whatsappWebClient.isReady) {
+            return res.status(503).json({
+              success: false,
+              message: 'WhatsApp Web não está conectado. Vá em Configurações > Bots para conectar.'
+            });
+          }
+
+          // Converter formatação para WhatsApp (Markdown simples)
           const templateRenderer = (await import('../services/bots/templateRenderer.js')).default;
           const convertedMessage = templateRenderer.convertBoldFormatting(testMessage, 'whatsapp');
-          result = await whatsappService.sendMessage(channel.identifier, convertedMessage);
+
+          // ID do canal (pode ser telefone ou group ID)
+          const resultMsg = await whatsappWebClient.sendMessage(channel.identifier, convertedMessage);
+
+          result = {
+            id: resultMsg.id._serialized,
+            timestamp: resultMsg.timestamp
+          };
         } else if (channel.platform === 'telegram') {
           // Buscar parse_mode e converter formatação
           const BotConfig = (await import('../models/BotConfig.js')).default;
@@ -363,11 +386,19 @@ class BotController {
     try {
       const config = await BotConfig.get();
 
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
       const status = {
+        // WhatsApp Cloud (Legacy/Removed) - Mantido placeholder false
         whatsapp: {
-          configured: config.whatsapp_enabled && !!config.whatsapp_api_token,
-          enabled: config.whatsapp_enabled,
-          channels: await BotChannel.countActive('whatsapp')
+          configured: false,
+          enabled: false,
+          channels: 0
+        },
+        whatsapp_web: {
+          configured: config.whatsapp_web_enabled,
+          working: whatsappWebClient.isReady,
+          info: whatsappWebClient.client?.info
         },
         telegram: {
           configured: config.telegram_enabled && !!config.telegram_bot_token,
@@ -426,12 +457,8 @@ class BotController {
         telegram_bot_token: config.telegram_bot_token
           ? `${config.telegram_bot_token.substring(0, 10)}...${config.telegram_bot_token.slice(-5)}`
           : '',
-        whatsapp_api_token: config.whatsapp_api_token
-          ? `${config.whatsapp_api_token.substring(0, 10)}...${config.whatsapp_api_token.slice(-5)}`
-          : '',
         // Indicar se está configurado
         telegram_token_set: !!config.telegram_bot_token,
-        whatsapp_token_set: !!config.whatsapp_api_token
       };
 
       res.json({
@@ -454,17 +481,13 @@ class BotController {
       const configData = req.body;
 
       // Campos válidos na tabela bot_config
+      // Campos válidos na tabela bot_config
       const validFields = [
         'telegram_enabled',
         'telegram_bot_token',
         'telegram_bot_username',
         'telegram_parse_mode',
         'telegram_disable_preview',
-        'whatsapp_enabled',
-        'whatsapp_api_url',
-        'whatsapp_api_token',
-        'whatsapp_phone_number_id',
-        'whatsapp_business_account_id',
         'notify_new_products',
         'notify_new_coupons',
         'notify_expired_coupons',
@@ -473,7 +496,10 @@ class BotController {
         'message_template_product',
         'message_template_coupon',
         'rate_limit_per_minute',
-        'delay_between_messages'
+        'delay_between_messages',
+        'whatsapp_web_enabled',
+        'whatsapp_web_pairing_number',
+        'whatsapp_web_admin_numbers'
       ];
 
       // Filtrar apenas campos válidos
@@ -488,9 +514,6 @@ class BotController {
       if (filteredData.telegram_bot_token && filteredData.telegram_bot_token.includes('...')) {
         delete filteredData.telegram_bot_token;
       }
-      if (filteredData.whatsapp_api_token && filteredData.whatsapp_api_token.includes('...')) {
-        delete filteredData.whatsapp_api_token;
-      }
 
       const config = await BotConfig.upsert(filteredData);
 
@@ -500,12 +523,15 @@ class BotController {
         logger.info('🔄 Cache do token do Telegram limpo (novo token será carregado na próxima requisição)');
       }
 
-      // Limpar cache do WhatsApp se foi atualizado
-      if (filteredData.whatsapp_api_url !== undefined ||
-        filteredData.whatsapp_api_token !== undefined ||
-        filteredData.whatsapp_phone_number_id !== undefined) {
-        whatsappService.clearConfigCache();
-        logger.info('🔄 Cache das configurações do WhatsApp limpo (novas configurações serão carregadas na próxima requisição)');
+      // Se WhatsApp Web foi habilitado, tentar inicializar
+      if (filteredData.whatsapp_web_enabled === true) {
+        try {
+          const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+          whatsappWebClient.initialize();
+          logger.info('🔄 Tentando inicializar WhatsApp Web após alteração de config...');
+        } catch (e) {
+          logger.error('Erro ao tentar auto-init WhatsApp Web:', e);
+        }
       }
 
       logger.info('⚙️ Configurações de bots atualizadas');
@@ -597,64 +623,162 @@ class BotController {
     }
   }
 
-  // Testar conexão do WhatsApp
+  // Testar conexão do WhatsApp (API Cloud) - DEPRECATED
   async testWhatsApp(req, res) {
+    return res.status(410).json({
+      success: false,
+      message: 'WhatsApp Cloud API integration has been removed. Please use WhatsApp Web.'
+    });
+  }
+
+  // Parear WhatsApp Web (Gerar código)
+  async pairWhatsAppWeb(req, res) {
     try {
-      const { api_url, api_token, phone_number_id } = req.body;
+      const { phoneNumber } = req.body;
 
-      // Usar valores fornecidos ou buscar do banco
-      let config = { api_url, api_token, phone_number_id };
-
-      if (!api_url || !api_token) {
-        const savedConfig = await BotConfig.get();
-        // Usar apenas configurações do banco de dados
-        config = {
-          api_url: api_url || savedConfig.whatsapp_api_url,
-          api_token: api_token || savedConfig.whatsapp_api_token,
-          phone_number_id: phone_number_id || savedConfig.whatsapp_phone_number_id
-        };
+      if (!phoneNumber) {
+        return res.status(400).json({ success: false, message: 'Número de telefone obrigatório' });
       }
 
-      if (!config.api_url || !config.api_token) {
+      // Import dinâmico do cliente
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
+      try {
+        await whatsappWebClient.ensureInitialized({
+          enabled: true,
+          pairingNumber: phoneNumber
+        });
+        const code = await whatsappWebClient.requestPairing(phoneNumber);
+
+        res.json({
+          success: true,
+          message: 'Código de pareamento gerado!',
+          data: { code }
+        });
+      } catch (clientError) {
+        console.error('❌ ERRO AO PAREAR:', clientError);
+
+        const errorMessage = clientError.message || clientError.toString();
+
+        // Tratamento para o erro aprimorado do WhatsAppClient
+        if (clientError.message === 'RATE_LIMIT_OR_PROTOCOL_ERROR') {
+          const isRateLimit = clientError.reason === 'RATE_LIMIT' || (clientError.originalError && clientError.originalError.includes('429'));
+          const isInternalGeneric = clientError.reason === 'WHATSAPP_INTERNAL_GENERIC_ERROR';
+
+          let message = 'Ocorreu um erro de protocolo no WhatsApp.';
+          let suggestion = 'Tente novamente em alguns instantes ou use o QR Code.';
+
+          if (isRateLimit) {
+            message = 'O WhatsApp bloqueou temporariamente novas solicitações por excesso de tentativas (Rate Limit).';
+            suggestion = 'Aguarde de 30 a 60 minutos antes de tentar novamente, ou tente conectar via QR Code.';
+          } else if (isInternalGeneric) {
+            message = 'O WhatsApp retornou um erro genérico (Erro t:t). Isso acontece quando o número já está sendo usado, se há muitos aparelhos conectados ou por instabilidade no serviço.';
+            suggestion = 'Verifique se o número está correto (com DDD), se não há muitos aparelhos conectados na conta, ou tente usar o QR Code.';
+          }
+
+          return res.status(isRateLimit ? 429 : 400).json({
+            success: false,
+            message,
+            error: clientError.reason || 'PROTOCOL_ERROR',
+            suggestion
+          });
+        }
+
+        // Detectar erro de Rate Limit legacy
+        if (errorMessage.includes('429') ||
+          errorMessage.includes('rate-overlimit') ||
+          errorMessage.includes('IQErrorRateOverlimit')) {
+
+          return res.status(429).json({
+            success: false,
+            message: 'Muitas tentativas de pareamento recentes. O WhatsApp bloqueou temporariamente novas solicitações.',
+            error: 'RATE_LIMIT_EXCEEDED',
+            suggestion: 'Aguarde alguns minutos (ou até 1 hora) antes de tentar novamente, ou tente usar o QR Code.'
+          });
+        }
+
+        res.status(500).json({
+          success: false,
+          message: `Erro ao solicitar código: ${errorMessage}`,
+          error: errorMessage,
+          stack: process.env.NODE_ENV === 'development' ? clientError.stack : undefined
+        });
+      }
+    } catch (error) {
+      logger.error('Erro ao parear WhatsApp Web:', error);
+      res.status(500).json({ success: false, message: 'Erro interno', error: error.message });
+    }
+  }
+
+  // Obter QR Code atual
+  async getQrCode(req, res) {
+    try {
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
+      // Garantir que o cliente está inicializado para gerar o QR
+      if (!whatsappWebClient.client) {
+        await whatsappWebClient.ensureInitialized({ enabled: true });
+      }
+
+      const qr = whatsappWebClient.getQrCode();
+
+      if (!qr) {
+        return res.status(404).json({
+          success: false,
+          message: 'QR Code ainda não gerado ou expirado. Tente novamente em instantes.'
+        });
+      }
+      res.json({
+        success: true,
+        data: { qr }
+      });
+    } catch (error) {
+      logger.error('Erro ao recuperar QR Code:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao recuperar QR Code'
+      });
+    }
+  }
+
+  // Listar Chats/Grupos do WhatsApp
+  async getWhatsAppChats(req, res) {
+    try {
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
+      if (!whatsappWebClient.isReady) {
         return res.status(400).json({
           success: false,
-          message: 'Configurações do WhatsApp não encontradas'
+          message: 'WhatsApp não está conectado. Conecte primeiro para listar os grupos.'
         });
       }
 
-      // Testar conexão - verificar número de telefone
-      const response = await axios.get(
-        `${config.api_url}/${config.phone_number_id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${config.api_token}`
-          },
-          timeout: 10000
-        }
-      );
+      const chats = await whatsappWebClient.getChats();
+      res.json({
+        success: true,
+        data: chats
+      });
+    } catch (error) {
+      logger.error('Erro ao listar chats:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  // Status WhatsApp Web
+  async getWhatsAppWebStatus(req, res) {
+    try {
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
 
       res.json({
         success: true,
-        message: 'Conexão com WhatsApp bem sucedida!',
         data: {
-          phone_number_id: response.data.id,
-          display_phone_number: response.data.display_phone_number,
-          verified_name: response.data.verified_name
+          isReady: whatsappWebClient.isReady,
+          isConfigured: true, // TODO: verificar config
+          info: whatsappWebClient.client?.info
         }
       });
     } catch (error) {
-      logger.error(`Erro ao testar WhatsApp: ${error.message}`);
-
-      let errorMessage = 'Erro ao conectar com o WhatsApp';
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        errorMessage = 'Token inválido ou sem permissão.';
-      }
-
-      res.status(400).json({
-        success: false,
-        message: errorMessage,
-        error: error.message
-      });
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 
@@ -813,6 +937,32 @@ Você receberá notificações automáticas sobre:
           platform: 'whatsapp',
           message_id: response.data.messages?.[0]?.id
         };
+      } else if (channel.platform === 'whatsapp_web') {
+        // --- ADIÇÃO: Suporte WhatsApp Web ---
+        const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
+        if (!whatsappWebClient.isReady) {
+          return res.status(503).json({
+            success: false,
+            message: 'WhatsApp Web não está conectado. Vá em Configurações > Bots para conectar.'
+          });
+        }
+
+        const message = `🤖 *Teste de Bot WhatsApp Web*
+
+✅ Bot configurado e funcionando!
+📱 Sistema PreçoCerto
+⏰ ${new Date().toLocaleString('pt-BR')}
+🆔 Canal: ${channelName}`;
+
+        // Enviar mensagem
+        const resultMsg = await whatsappWebClient.sendMessage(channelId, message);
+
+        result = {
+          platform: 'whatsapp_web',
+          message_id: resultMsg.id._serialized,
+          timestamp: resultMsg.timestamp
+        };
       }
 
       // Registrar log (usando promotion_new até migration ser executada)
@@ -856,6 +1006,25 @@ Você receberá notificações automáticas sobre:
         message: 'Erro ao enviar mensagem de teste',
         error: error.message
       });
+    }
+  }
+
+  // --- DEBUG: Testar envio de imagem ---
+  async sendTestImage(req, res) {
+    try {
+      const { channelId, imageUrl, caption } = req.body;
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+      const whatsappWebService = (await import('../services/whatsappWeb/whatsappWebService.js')).default;
+
+      if (!whatsappWebClient.isReady) {
+        return res.status(503).json({ success: false, message: 'Client not ready' });
+      }
+
+      const result = await whatsappWebService.sendImage(channelId, imageUrl, caption || 'Teste de Imagem');
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Erro test-image:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 }

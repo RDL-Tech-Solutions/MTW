@@ -943,8 +943,8 @@ ${variables.coupon_section || ''}
     if (platform === 'telegram') {
       final = baseRenderer.convertBoldFormatting(final, platform, 'HTML');
       logger.debug(`🔍 Output Telegram (HTML): ${final.substring(final.indexOf('CUPOM:'), final.indexOf('CUPOM:') + 50)}`);
-    } else if (platform === 'whatsapp') {
-      final = baseRenderer.convertBoldFormatting(final, platform, 'Markdown');
+    } else if (platform === 'whatsapp' || platform === 'whatsapp_web') {
+      final = baseRenderer.convertBoldFormatting(final, 'whatsapp', 'Markdown');
     }
 
     return final.trim();

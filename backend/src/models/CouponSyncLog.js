@@ -47,15 +47,39 @@ class CouponSyncLog {
    * Atualizar log
    */
   static async update(id, updates) {
-    const { data, error } = await supabase
-      .from('coupon_sync_logs')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('coupon_sync_logs')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        // Se o erro for de coluna inexistente, tentar novamente sem as colunas de IA
+        if (error.message?.includes('ai_optimized') || error.message?.includes('ai_filtered')) {
+          console.warn('⚠️ Coluna de IA não encontrada no banco. Tentando update sem elas...');
+          const safeUpdates = { ...updates };
+          delete safeUpdates.ai_optimized;
+          delete safeUpdates.ai_filtered;
+
+          const { data: retryData, error: retryError } = await supabase
+            .from('coupon_sync_logs')
+            .update(safeUpdates)
+            .eq('id', id)
+            .select()
+            .single();
+
+          if (retryError) throw retryError;
+          return retryData;
+        }
+        throw error;
+      }
+      return data;
+    } catch (err) {
+      console.error('Erro ao atualizar CouponSyncLog:', err);
+      throw err;
+    }
   }
 
   /**
