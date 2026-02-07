@@ -51,11 +51,15 @@ if (!isServerless) {
       new winston.transports.File({
         filename: path.join(__dirname, '../../logs/error.log'),
         level: 'error',
+        maxsize: 20 * 1024 * 1024, // 20MB
+        maxFiles: 5,
       }),
 
       // Arquivo geral
       new winston.transports.File({
         filename: path.join(__dirname, '../../logs/app.log'),
+        maxsize: 20 * 1024 * 1024, // 20MB
+        maxFiles: 5,
       })
     );
   } catch (error) {

@@ -46,8 +46,18 @@ class BrowserPool {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
                 '--disable-gpu',
-                '--no-zygote'
+                '--disable-extensions',
+                '--disable-component-update',
+                '--disable-default-apps',
+                '--mute-audio',
+                '--disable-domain-reliability',
+                '--disable-features=AudioServiceOutOfProcess',
+                '--disable-web-security',
+                '--single-process'
             ];
 
             // Se tiver caminho customizado do Chromium (comum em VPS)
@@ -61,7 +71,9 @@ class BrowserPool {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--no-zygote'
+                '--no-zygote',
+                '--mute-audio',
+                '--disable-extensions'
             ];
         }
 

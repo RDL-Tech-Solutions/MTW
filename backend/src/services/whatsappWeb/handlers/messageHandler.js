@@ -17,6 +17,26 @@ const pendingInteractions = new Map();
 // Mapa para escolha inicial (Capture vs Clone)
 const pendingChoices = new Map();
 
+// Limpeza Periódica de Memória (Evitar Leak)
+setInterval(() => {
+    const now = Date.now();
+    const expiryTime = 30 * 60 * 1000; // 30 minutos de inatividade
+
+    for (const [chatId, interaction] of pendingInteractions.entries()) {
+        if (now - (interaction.lastUpdate || 0) > expiryTime) {
+            logger.info(`🧹 Limpando interação pendente expirada de ${chatId}`);
+            pendingInteractions.delete(chatId);
+        }
+    }
+
+    for (const [chatId, choice] of pendingChoices.entries()) {
+        if (now - (choice.timestamp || 0) > expiryTime) {
+            logger.info(`🧹 Limpando escolha pendente expirada de ${chatId}`);
+            pendingChoices.delete(chatId);
+        }
+    }
+}, 15 * 60 * 1000); // Rodar a cada 15 min
+
 export const handleMessage = async (client, msg) => {
     try {
         const contact = await msg.getContact();

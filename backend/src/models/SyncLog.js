@@ -104,6 +104,20 @@ class SyncLog {
 
     return stats;
   }
+
+  // Deletar logs antigos
+  static async deleteOld(days = 30) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { error } = await supabase
+      .from('sync_logs')
+      .delete()
+      .lt('created_at', startDate.toISOString());
+
+    if (error) throw error;
+    return true;
+  }
 }
 
 export default SyncLog;

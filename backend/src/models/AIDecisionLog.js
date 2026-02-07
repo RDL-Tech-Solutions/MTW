@@ -44,7 +44,7 @@ class AIDecisionLog {
         .single();
 
       if (error) throw error;
-      
+
       logger.debug(`📝 Log de decisão da IA criado: ${decision_type} para ${entity_type} ${entity_id}`);
       return data;
     } catch (error) {
@@ -146,6 +146,27 @@ class AIDecisionLog {
     } catch (error) {
       logger.error(`Erro ao buscar estatísticas: ${error.message}`);
       return { total: 0, by_type: {}, success_rate: 0, avg_confidence: 0 };
+    }
+  }
+
+  /**
+   * Deletar logs antigos
+   */
+  static async deleteOld(days = 30) {
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+
+      const { error } = await supabase
+        .from('ai_decision_logs')
+        .delete()
+        .lt('created_at', since.toISOString());
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      logger.error(`Erro ao deletar logs antigos: ${error.message}`);
+      return false;
     }
   }
 }

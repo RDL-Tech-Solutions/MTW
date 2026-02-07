@@ -76,9 +76,10 @@ class WhatsAppClient {
                 authStrategy: new LocalAuth({
                     dataPath: absoluteSessionPath
                 }),
+                takeoverOnConflict: true,
+                takeoverTimeoutMs: 3000,
                 puppeteer: {
                     headless: true,
-                    // userDataDir: path.join(absoluteSessionPath, 'session'), // REMOVIDO: LocalAuth já gerencia isso
                     args: [
                         '--no-sandbox',
                         '--disable-setuid-sandbox',
@@ -87,7 +88,14 @@ class WhatsAppClient {
                         '--no-first-run',
                         '--no-zygote',
                         '--disable-gpu',
-                        '--disable-extensions'
+                        '--disable-extensions',
+                        '--disable-component-update',
+                        '--disable-default-apps',
+                        '--mute-audio',
+                        '--disable-domain-reliability',
+                        '--disable-features=AudioServiceOutOfProcess',
+                        '--disable-web-security',
+                        '--single-process' // Útil em containers/VPS com pouca RAM
                     ],
                     ...config.puppeteer,
                     protocolTimeout: 300000
