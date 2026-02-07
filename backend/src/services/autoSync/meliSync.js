@@ -32,10 +32,13 @@ class MeliSync {
         try {
           // Configurar headers (com ou sem token)
           const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json',
-            'Accept-Language': 'pt-BR'
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'Referer': 'https://www.google.com/',
+            'Connection': 'keep-alive'
           };
+
 
           // Se tiver credenciais, tentar usar token para aumentar limites/evitar 403
           if (meliAuth.isConfigured()) {

@@ -159,12 +159,19 @@ const showProductDetail = async (client, msg, productId) => {
         return { step: 'PENDING_LIST:1' };
     }
 
-    const price = `R$ ${product.current_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const currentPriceFormatted = `R$ ${product.current_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    let priceDisplay = currentPriceFormatted;
+
+    if (product.old_price && product.old_price > product.current_price) {
+        const oldPriceFormatted = `R$ ${product.old_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        priceDisplay = `De ~${oldPriceFormatted}~ por ${currentPriceFormatted}`;
+    }
+
     let text = `🛒 *DETALHE DO PRODUTO*\n\n` +
         `📦 *${product.name}*\n` +
-        `💰 Preço: ${price}\n` +
+        `💰 Preço: ${priceDisplay}\n` +
         `🏪 Loja: ${product.platform}\n` +
-        `🔗 Link Original: ${product.product_url}\n`;
+        `🔗 Link Original: ${product.original_link || 'N/A'}\n`;
 
     if (product.affiliate_link) {
         text += `🔗 *Link Afiliado:* ${product.affiliate_link}\n`;

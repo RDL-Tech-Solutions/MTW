@@ -159,6 +159,20 @@ class WhatsAppClient {
             // Aumentando delay para garantir carregamento total do WASore
             if (this.client.pupPage) {
                 await new Promise(resolve => setTimeout(resolve, 5000));
+
+                // FIX: Inject onCodeReceivedEvent if missing (library doesn't inject it for dynamic pairing)
+                try {
+                    const isDefined = await this.client.pupPage.evaluate(() => typeof window.onCodeReceivedEvent === 'function');
+                    if (!isDefined) {
+                        logger.info('🔧 Injecting missing onCodeReceivedEvent handler for pairing...');
+                        await this.client.pupPage.exposeFunction('onCodeReceivedEvent', (code) => {
+                            this.client.emit('code', code);
+                            return code;
+                        });
+                    }
+                } catch (injectErr) {
+                    logger.warn('⚠️ Error checking/injecting onCodeReceivedEvent:', injectErr.message);
+                }
             }
 
             const code = await this.client.requestPairingCode(cleanNumber);
