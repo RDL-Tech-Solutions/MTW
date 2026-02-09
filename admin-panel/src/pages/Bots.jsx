@@ -5,7 +5,7 @@ import {
   Plus, Edit, Trash2, MessageSquare, Send, Activity,
   Settings, Bot, CheckCircle, XCircle, Eye, EyeOff,
   Wifi, WifiOff, RefreshCw, Save, AlertCircle, FileText, Loader2,
-  List, Copy, Search, ExternalLink
+  List, Copy, Search, ExternalLink, LogOut
 } from 'lucide-react';
 import BotTemplates from '../components/BotTemplates';
 import { Button } from '../components/ui/button';
@@ -359,6 +359,38 @@ export default function Bots() {
       });
     } finally {
       setTesting(prev => ({ ...prev, whatsapp: false }));
+    }
+  };
+
+  // Desconectar WhatsApp Web
+  const handleDisconnectWhatsApp = async () => {
+    if (!confirm('Tem certeza que deseja desconectar o WhatsApp Web? Isso irá interromper o envio de mensagens.')) return;
+
+    setSaving(true);
+    try {
+      await api.post('/bots/config/whatsapp-web/disconnect');
+      toast({
+        title: "Desconectado",
+        description: "WhatsApp Web desconectado com sucesso.",
+        variant: "success"
+      });
+
+      // Atualizar status e limpar config local parcialmente
+      await fetchStatus();
+      setConfig(prev => ({
+        ...prev,
+        whatsapp_web_enabled: false,
+        whatsapp_web_pairing_number: ''
+      }));
+
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao desconectar WhatsApp Web",
+        variant: "destructive"
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -753,18 +785,30 @@ export default function Bots() {
                       {status.whatsapp_web.info?.wid?.user || 'Sessão Ativa'}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      fetchChats();
-                      setShowChatsModal(true);
-                    }}
-                    className="h-8 border-green-200 hover:bg-green-50 text-green-700"
-                  >
-                    <Search className="h-3.5 w-3.5 mr-1" />
-                    Consultar IDs
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        fetchChats();
+                        setShowChatsModal(true);
+                      }}
+                      className="h-8 border-green-200 hover:bg-green-50 text-green-700"
+                    >
+                      <Search className="h-3.5 w-3.5 mr-1" />
+                      Consultar IDs
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDisconnectWhatsApp}
+                      className="h-8"
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5 mr-1" />}
+                      Desconectar
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg flex items-center justify-between">

@@ -782,6 +782,35 @@ class BotController {
     }
   }
 
+  // Desconectar WhatsApp Web
+  async disconnectWhatsAppWeb(req, res) {
+    try {
+      const whatsappWebClient = (await import('../services/whatsappWeb/client.js')).default;
+
+      // 1. Executar desconexão no client
+      await whatsappWebClient.disconnect();
+
+      // 2. Atualizar banco de dados (remover número de pareamento)
+      const BotConfig = (await import('../models/BotConfig.js')).default;
+      await BotConfig.upsert({
+        whatsapp_web_pairing_number: null,
+        whatsapp_web_enabled: false // Desativar para evitar tentativas automáticas de reconexão sem sessão
+      });
+
+      res.json({
+        success: true,
+        message: 'WhatsApp Web desconectado com sucesso'
+      });
+    } catch (error) {
+      logger.error(`Erro ao desconectar WhatsApp Web: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao desconectar WhatsApp Web',
+        error: error.message
+      });
+    }
+  }
+
   // Enviar mensagem de teste para canal específico
   async sendTestToChannel(req, res) {
     try {

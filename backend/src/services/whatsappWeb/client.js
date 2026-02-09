@@ -124,6 +124,76 @@ class WhatsAppClient {
     }
 
     /**
+     * Desconecta o cliente, limpa sessão e reseta estado
+     */
+    async disconnect() {
+        logger.info('🔌 Disconnecting and cleaning up WhatsApp Client...');
+
+        try {
+            // 1. Logout se estiver conectado
+            if (this.client && this.isReady) {
+                try {
+                    await this.client.logout();
+                    logger.info('✅ Client logged out.');
+                } catch (logoutErr) {
+                    logger.warn('⚠️ Error during logout (ignoring):', logoutErr.message);
+                }
+            }
+
+            // 2. Destruir cliente puppeteer
+            if (this.client) {
+                try {
+                    await this.client.destroy();
+                    logger.info('✅ Client destroyed.');
+                } catch (destroyErr) {
+                    logger.warn('⚠️ Error during destroy (ignoring):', destroyErr.message);
+                }
+            }
+
+            // 3. Resetar estado interno
+            this.client = null;
+            this.isReady = false;
+            this.isInitializing = false;
+            this.pairingCodeRequested = false;
+            this.lastQr = null;
+
+            // 4. Remover diretório da sessão
+            const absoluteSessionPath = path.resolve(config.sessionPath);
+            if (fs.existsSync(absoluteSessionPath)) {
+                logger.info(`🧹 Removing session directory: ${absoluteSessionPath}`);
+                // Retry pattern simples para exclusão de arquivos (Windows pode travar)
+                try {
+                    fs.rmSync(absoluteSessionPath, { recursive: true, force: true });
+                    logger.info('✅ Session directory removed.');
+                } catch (fsErr) {
+                    logger.error('❌ Failed to remove session directory (might be locked):', fsErr.message);
+                    // Tentar novamente após delay
+                    setTimeout(() => {
+                        try {
+                            if (fs.existsSync(absoluteSessionPath)) {
+                                fs.rmSync(absoluteSessionPath, { recursive: true, force: true });
+                                logger.info('✅ Session directory removed (retry).');
+                            }
+                        } catch (retryErr) {
+                            logger.error('❌ Failed to remove session directory on retry:', retryErr.message);
+                        }
+                    }, 5000);
+                }
+            }
+
+            // 5. Atualizar config em memória
+            config.update({
+                enabled: false,
+                pairingNumber: null
+            });
+
+        } catch (error) {
+            logger.error('❌ Error during disconnect:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Garante que o cliente está inicializado (útil se foi habilitado após startup ou durante pareamento)
      * @param {Object} overrideConfig - Configurações opcionais para forçar inicialização
      */

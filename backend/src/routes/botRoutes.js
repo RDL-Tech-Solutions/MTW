@@ -22,6 +22,7 @@ router.post('/config/whatsapp-web/pair', botController.pairWhatsAppWeb);
 router.get('/config/whatsapp-web/qr', botController.getQrCode);
 router.get('/config/whatsapp-web/chats', botController.getWhatsAppChats); // Nova rota
 router.get('/config/whatsapp-web/status', botController.getWhatsAppWebStatus);
+router.post('/config/whatsapp-web/disconnect', botController.disconnectWhatsAppWeb); // Nova rota de desconexão
 
 // ============================================
 // CANAIS
