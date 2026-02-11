@@ -8,6 +8,7 @@ import categoryDetector from '../categoryDetector.js';
 import AppSettings from '../../models/AppSettings.js';
 import CouponValidator from '../../utils/couponValidator.js';
 import SyncConfig from '../../models/SyncConfig.js';
+import browserPool from '../../utils/browserPool.js';
 
 class MeliSync {
   /**
@@ -121,6 +122,12 @@ class MeliSync {
             // Se API retornar vazio, falhar, ou scraping for forçado
             if (forceScraping) logger.info('   🕷️ Modo Scraping forçado para capturar cupons.');
             products = await this.scrapeSearchPage(term);
+
+            // Se cheerio scraping retornou vazio (comum em VPS - JS rendering), tentar Puppeteer
+            if (products.length === 0) {
+              logger.info(`   🔄 Cheerio retornou 0 resultados. Tentando Puppeteer (JS rendering)...`);
+              products = await this.scrapeSearchPagePuppeteer(term);
+            }
           }
         } catch (error) {
           // Catch geral do loop
@@ -505,6 +512,182 @@ class MeliSync {
 
     } catch (error) {
       logger.error(`   ❌ Falha no scraping: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Scraping via Puppeteer (Fallback de 3º nível - para VPS com JS rendering)
+   * Usa browserPool com stealth plugin para renderizar a página completa
+   */
+  async scrapeSearchPagePuppeteer(term) {
+    try {
+      const formattedTerm = term.replace(/\s+/g, '-');
+      const url = `https://lista.mercadolivre.com.br/${formattedTerm}_NoIndex_True`;
+
+      logger.info(`   🎭 Puppeteer Scraping URL: ${url}`);
+
+      const results = await browserPool.withPage(async (page) => {
+        // Bloquear recursos desnecessários para economizar memória na VPS
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+          const type = req.resourceType();
+          if (['font', 'media', 'stylesheet'].includes(type)) {
+            req.abort();
+          } else {
+            req.continue();
+          }
+        });
+
+        await page.goto(url, {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+
+        // Aguardar que os cards de produto sejam renderizados
+        try {
+          await page.waitForSelector('.ui-search-layout__item, .poly-card', { timeout: 10000 });
+        } catch (e) {
+          logger.warn(`   ⚠️ Puppeteer: Nenhum card de produto encontrado após 10s.`);
+          return [];
+        }
+
+        // Scroll para carregar lazy-loaded images
+        await page.evaluate(async () => {
+          for (let i = 0; i < 3; i++) {
+            window.scrollBy(0, window.innerHeight);
+            await new Promise(r => setTimeout(r, 500));
+          }
+          window.scrollTo(0, 0);
+        });
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Extrair dados dos produtos
+        const items = await page.evaluate(() => {
+          const products = [];
+
+          // Helper para extrair preço
+          const parsePrice = (text) => {
+            if (!text) return 0;
+            const cleaned = text.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+            return parseFloat(cleaned) || 0;
+          };
+
+          // Selecionar containers (Layout Clássico OU Poly)
+          const containers = document.querySelectorAll('.ui-search-layout__item, .poly-card');
+
+          containers.forEach((container) => {
+            if (products.length >= 50) return;
+            try {
+              // Link
+              const linkEl = container.querySelector('a.ui-search-link, a.poly-component__title, a[href*="MLB"]');
+              const link = linkEl?.href;
+              if (!link) return;
+
+              // ID
+              const matchId = link.match(/MLB-?(\d+)/i);
+              if (!matchId) return;
+              const id = 'MLB' + matchId[1];
+
+              // Título
+              const titleEl = container.querySelector('.ui-search-item__title, .poly-component__title, h2');
+              const title = titleEl?.textContent?.trim();
+              if (!title) return;
+
+              // Imagem
+              let thumbnail = null;
+              const imgs = container.querySelectorAll('img');
+              for (const img of imgs) {
+                const src = img.src || img.dataset.src || img.dataset.lazy;
+                if (src && src.startsWith('http') && !src.includes('data:image')) {
+                  thumbnail = src;
+                  break;
+                }
+              }
+              // Melhorar tamanho da imagem
+              if (thumbnail && thumbnail.includes('-I.jpg')) {
+                thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
+              }
+
+              // Preço Atual
+              const priceSelectors = [
+                '.ui-search-price__second-line .andes-money-amount__fraction',
+                '.poly-price__current .andes-money-amount__fraction',
+                '.andes-money-amount--cents-superscript .andes-money-amount__fraction',
+                '.andes-money-amount__fraction'
+              ];
+              let price = 0;
+              for (const sel of priceSelectors) {
+                const el = container.querySelector(sel);
+                if (el) {
+                  price = parsePrice(el.textContent);
+                  if (price > 0) break;
+                }
+              }
+
+              // Preço Original (riscado)
+              const origSelectors = [
+                '.ui-search-price__original-value .andes-money-amount__fraction',
+                '.poly-price__original-value .andes-money-amount__fraction',
+                's .andes-money-amount__fraction',
+                'del .andes-money-amount__fraction',
+                '.andes-money-amount--previous .andes-money-amount__fraction'
+              ];
+              let originalPrice = 0;
+              for (const sel of origSelectors) {
+                const el = container.querySelector(sel);
+                if (el) {
+                  const parsed = parsePrice(el.textContent);
+                  if (parsed > 0 && parsed > price) {
+                    originalPrice = parsed;
+                    break;
+                  }
+                }
+              }
+
+              // Cupom (se visível)
+              let coupon = null;
+              const couponEl = container.querySelector('.ui-search-item__coupon, .poly-component__coupon');
+              if (couponEl) {
+                const couponText = couponEl.textContent.trim();
+                const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,20})/i);
+                const valMatch = couponText.match(/R\$\s*([\d.,]+)/);
+                if (codeMatch && valMatch) {
+                  coupon = {
+                    code: codeMatch[1].toUpperCase(),
+                    discount_value: parsePrice(valMatch[1]),
+                    discount_type: 'fixed',
+                    platform: 'mercadolivre'
+                  };
+                }
+              }
+
+              if (price > 0) {
+                products.push({
+                  id,
+                  title,
+                  permalink: link,
+                  thumbnail,
+                  price,
+                  original_price: originalPrice > price ? originalPrice : null,
+                  available_quantity: 1,
+                  coupon
+                });
+              }
+            } catch (e) { /* ignorar item com erro */ }
+          });
+
+          return products;
+        });
+
+        return items;
+      });
+
+      logger.info(`   ✅ (Puppeteer) ${results.length} resultados encontrados.`);
+      return results;
+
+    } catch (error) {
+      logger.error(`   ❌ Falha no Puppeteer scraping ML: ${error.message}`);
       return [];
     }
   }
