@@ -17,6 +17,60 @@ const pendingInteractions = new Map();
 // Mapa para escolha inicial (Capture vs Clone)
 const pendingChoices = new Map();
 
+// Cache de admin numbers do banco (recarrega a cada 60s)
+let _cachedAdminNumbers = null;
+let _adminNumbersCacheTime = 0;
+const ADMIN_CACHE_TTL = 60 * 1000; // 60 segundos
+
+/**
+ * Normaliza um número de telefone removendo tudo que não é dígito
+ */
+function normalizePhone(num) {
+    if (!num) return '';
+    return num.replace(/\D/g, '');
+}
+
+/**
+ * Busca admin numbers do banco com cache de 60s
+ * Combina números do .env (config) + banco de dados
+ */
+async function getAdminNumbers() {
+    const now = Date.now();
+    if (_cachedAdminNumbers && (now - _adminNumbersCacheTime) < ADMIN_CACHE_TTL) {
+        return _cachedAdminNumbers;
+    }
+
+    try {
+        const BotConfig = (await import('../../../models/BotConfig.js')).default;
+        const dbConfig = await BotConfig.get();
+
+        // Números do banco
+        const dbNumbers = (dbConfig.whatsapp_web_admin_numbers || '')
+            .split(',')
+            .map(n => normalizePhone(n))
+            .filter(Boolean);
+
+        // Números do .env (config original)
+        const envNumbers = (config.adminNumbers || [])
+            .map(n => normalizePhone(n))
+            .filter(Boolean);
+
+        // Combinar e deduplicar
+        const allNumbers = [...new Set([...dbNumbers, ...envNumbers])];
+
+        _cachedAdminNumbers = allNumbers;
+        _adminNumbersCacheTime = now;
+
+        logger.debug(`[AdminAuth] Loaded admin numbers: ${JSON.stringify(allNumbers)} (DB: ${dbNumbers.length}, ENV: ${envNumbers.length})`);
+
+        return allNumbers;
+    } catch (err) {
+        logger.error(`[AdminAuth] Error loading admin numbers from DB: ${err.message}`);
+        // Fallback para config em memória
+        return (config.adminNumbers || []).map(n => normalizePhone(n)).filter(Boolean);
+    }
+}
+
 // Limpeza Periódica de Memória (Evitar Leak)
 setInterval(() => {
     const now = Date.now();
@@ -40,11 +94,11 @@ setInterval(() => {
 export const handleMessage = async (client, msg) => {
     try {
         const contact = await msg.getContact();
-        const senderNum = contact.number;
+        const senderNum = normalizePhone(contact.number);
         const fromMe = msg.fromMe;
 
-        // 1. Validação de Segurança
-        const allowedNumbers = config.adminNumbers || [];
+        // 1. Validação de Segurança (busca números atualizados do DB com cache)
+        const allowedNumbers = await getAdminNumbers();
         const isAllowed = fromMe || allowedNumbers.includes(senderNum);
 
         logger.info(`[MsgHandler] Auth Check: Sender=${senderNum}, Allowed=${JSON.stringify(allowedNumbers)}, IsAllowed=${isAllowed}, FromMe=${fromMe}`);
