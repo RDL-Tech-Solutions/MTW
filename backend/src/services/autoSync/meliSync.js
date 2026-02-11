@@ -523,44 +523,110 @@ class MeliSync {
   async scrapeSearchPagePuppeteer(term) {
     try {
       const formattedTerm = term.replace(/\s+/g, '-');
-      const url = `https://lista.mercadolivre.com.br/${formattedTerm}_NoIndex_True`;
+      // URL limpa sem _NoIndex_True (pode causar redirecionamentos)
+      const url = `https://lista.mercadolivre.com.br/${formattedTerm}`;
 
       logger.info(`   🎭 Puppeteer Scraping URL: ${url}`);
 
       const results = await browserPool.withPage(async (page) => {
-        // Bloquear recursos desnecessários para economizar memória na VPS
+        // Bloquear apenas recursos pesados (NÃO bloquear CSS - necessário para renderizar layout)
         await page.setRequestInterception(true);
         page.on('request', (req) => {
           const type = req.resourceType();
-          if (['font', 'media', 'stylesheet'].includes(type)) {
+          if (['font', 'media'].includes(type)) {
             req.abort();
           } else {
             req.continue();
           }
         });
 
-        await page.goto(url, {
-          waitUntil: 'networkidle2',
-          timeout: 30000
+        // Configurar cookies de aceite para evitar popups
+        await page.setCookie({
+          name: 'cookieConsent',
+          value: 'accepted',
+          domain: '.mercadolivre.com.br'
         });
 
-        // Aguardar que os cards de produto sejam renderizados
+        await page.goto(url, {
+          waitUntil: 'domcontentloaded',
+          timeout: 45000
+        });
+
+        // Tentar fechar popups de cookie / CEP que bloqueiam a página
         try {
-          await page.waitForSelector('.ui-search-layout__item, .poly-card', { timeout: 10000 });
-        } catch (e) {
-          logger.warn(`   ⚠️ Puppeteer: Nenhum card de produto encontrado após 10s.`);
+          const popupSelectors = [
+            'button[data-testid="action:understood-button"]',  // "Entendi" cookie
+            '.cookie-consent-banner-opt-out__action button',
+            'button.cookie-consent-banner-opt-out__action--primary',
+            '[data-js="cookie-consent-dismiss"]',
+            'button:has-text("Entendi")',
+            'button:has-text("Aceitar cookies")',
+          ];
+          for (const sel of popupSelectors) {
+            try {
+              const btn = await page.$(sel);
+              if (btn) {
+                await btn.click();
+                logger.info(`   🔒 Popup fechado: ${sel}`);
+                await new Promise(r => setTimeout(r, 500));
+                break;
+              }
+            } catch (e) { /* popup não encontrado */ }
+          }
+        } catch (e) { /* sem popups */ }
+
+        // Aguardar renderização JS - com seletores expandidos e mais tempo
+        const cardSelectors = [
+          '.ui-search-layout__item',
+          '.poly-card',
+          '.ui-search-result__wrapper',
+          'li.ui-search-layout__item',
+          'section.ui-search-results',
+          '.andes-card[data-item-id]',
+        ];
+
+        let foundSelector = null;
+        for (const sel of cardSelectors) {
+          try {
+            await page.waitForSelector(sel, { timeout: 8000 });
+            foundSelector = sel;
+            logger.info(`   ✅ Puppeteer: Encontrou cards com seletor: ${sel}`);
+            break;
+          } catch (e) { /* tentar próximo */ }
+        }
+
+        if (!foundSelector) {
+          // Debug: capturar info da página para diagnóstico
+          const debugInfo = await page.evaluate(() => ({
+            title: document.title,
+            url: location.href,
+            bodyLength: document.body.innerHTML.length,
+            text: document.body.innerText.substring(0, 300),
+            allClasses: [...new Set([...document.querySelectorAll('[class]')].map(el =>
+              [...el.classList].filter(c => c.includes('search') || c.includes('poly') || c.includes('card') || c.includes('result'))
+            ).flat())].slice(0, 20)
+          }));
+          logger.warn(`   ⚠️ Puppeteer: Nenhum card de produto encontrado.`);
+          logger.warn(`   📌 Título: ${debugInfo.title}`);
+          logger.warn(`   📌 URL: ${debugInfo.url}`);
+          logger.warn(`   📌 HTML length: ${debugInfo.bodyLength}`);
+          logger.warn(`   📌 Classes relevantes: ${debugInfo.allClasses.join(', ') || 'nenhuma'}`);
+          logger.warn(`   📌 Texto: ${debugInfo.text.substring(0, 150)}`);
           return [];
         }
 
+        // Aguardar um pouco mais para garantir renderização completa
+        await new Promise(r => setTimeout(r, 2000));
+
         // Scroll para carregar lazy-loaded images
         await page.evaluate(async () => {
-          for (let i = 0; i < 3; i++) {
+          for (let i = 0; i < 5; i++) {
             window.scrollBy(0, window.innerHeight);
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 600));
           }
           window.scrollTo(0, 0);
         });
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1500));
 
         // Extrair dados dos produtos
         const items = await page.evaluate(() => {
@@ -574,15 +640,19 @@ class MeliSync {
           };
 
           // Selecionar containers (Layout Clássico OU Poly)
-          const containers = document.querySelectorAll('.ui-search-layout__item, .poly-card');
+          const containers = document.querySelectorAll(
+            '.ui-search-layout__item, .poly-card, .ui-search-result__wrapper'
+          );
 
           containers.forEach((container) => {
             if (products.length >= 50) return;
             try {
               // Link
-              const linkEl = container.querySelector('a.ui-search-link, a.poly-component__title, a[href*="MLB"]');
+              const linkEl = container.querySelector(
+                'a.ui-search-link, a.poly-component__title, a.ui-search-item__group__element, a[href*="MLB"]'
+              );
               const link = linkEl?.href;
-              if (!link) return;
+              if (!link || !link.includes('mercadolivre') && !link.includes('mercadolibre')) return;
 
               // ID
               const matchId = link.match(/MLB-?(\d+)/i);
@@ -590,21 +660,23 @@ class MeliSync {
               const id = 'MLB' + matchId[1];
 
               // Título
-              const titleEl = container.querySelector('.ui-search-item__title, .poly-component__title, h2');
+              const titleEl = container.querySelector(
+                '.ui-search-item__title, .poly-component__title, h2, .ui-search-item__group__element'
+              );
               const title = titleEl?.textContent?.trim();
               if (!title) return;
 
-              // Imagem
+              // Imagem - tentar múltiplos atributos
               let thumbnail = null;
               const imgs = container.querySelectorAll('img');
               for (const img of imgs) {
-                const src = img.src || img.dataset.src || img.dataset.lazy;
+                const src = img.getAttribute('src') || img.getAttribute('data-src')
+                  || img.getAttribute('data-lazy') || img.getAttribute('data-original');
                 if (src && src.startsWith('http') && !src.includes('data:image')) {
                   thumbnail = src;
                   break;
                 }
               }
-              // Melhorar tamanho da imagem
               if (thumbnail && thumbnail.includes('-I.jpg')) {
                 thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
               }
@@ -680,6 +752,7 @@ class MeliSync {
           return products;
         });
 
+        logger.info(`   📊 Puppeteer extraiu ${items.length} produtos da página`);
         return items;
       });
 
