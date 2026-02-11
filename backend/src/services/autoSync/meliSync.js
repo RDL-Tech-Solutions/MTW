@@ -9,6 +9,7 @@ import AppSettings from '../../models/AppSettings.js';
 import CouponValidator from '../../utils/couponValidator.js';
 import SyncConfig from '../../models/SyncConfig.js';
 import browserPool from '../../utils/browserPool.js';
+import browserScraper from '../browserScraper.js';
 
 class MeliSync {
   /**
@@ -158,7 +159,7 @@ class MeliSync {
     try {
       // Formatar termo para URL (ex: "iphone 13" -> "iphone-13")
       const formattedTerm = term.replace(/\s+/g, '-');
-      const url = `https://lista.mercadolivre.com.br/${formattedTerm}_NoIndex_True`;
+      const url = `https://lista.mercadolivre.com.br/${formattedTerm}`;
 
       logger.info(`   🕷️ Scraping URL: ${url}`);
 
@@ -518,251 +519,218 @@ class MeliSync {
 
   /**
    * Scraping via Puppeteer (Fallback de 3º nível - para VPS com JS rendering)
-   * Usa browserPool com stealth plugin para renderizar a página completa
+   * Usa browserScraper com stealth plugin (mesmo padrão do kabumSync que funciona na VPS)
    */
   async scrapeSearchPagePuppeteer(term) {
-    try {
-      const formattedTerm = term.replace(/\s+/g, '-');
-      // URL limpa sem _NoIndex_True (pode causar redirecionamentos)
-      const url = `https://lista.mercadolivre.com.br/${formattedTerm}`;
+    const MAX_RETRIES = 3;
+    const formattedTerm = term.replace(/\s+/g, '-');
+    const url = `https://lista.mercadolivre.com.br/${formattedTerm}`;
 
-      logger.info(`   🎭 Puppeteer Scraping URL: ${url}`);
+    logger.info(`   🎭 Puppeteer Scraping ML: ${url}`);
 
-      const results = await browserPool.withPage(async (page) => {
-        // Bloquear apenas recursos pesados (NÃO bloquear CSS - necessário para renderizar layout)
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-          const type = req.resourceType();
-          if (['font', 'media'].includes(type)) {
-            req.abort();
-          } else {
-            req.continue();
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        logger.info(`   🔄 Tentativa ${attempt}/${MAX_RETRIES}`);
+
+        const results = await browserScraper.pool.withPage(async (page) => {
+          // 1. Navegar (networkidle2 = mesmo padrão do Kabum)
+          logger.info(`   🌐 Navegando para: ${url}`);
+          await page.goto(url, {
+            waitUntil: 'networkidle2',
+            timeout: 45000
+          });
+
+          // 2. Detectar Cloudflare / challenge (mesmo padrão do Kabum)
+          const isChallenge = await page.evaluate(() => {
+            return document.title.includes('Just a moment') ||
+              document.body.textContent.includes('Checking your browser') ||
+              document.body.textContent.includes('Cloudflare') ||
+              document.body.textContent.includes('Verificando') ||
+              document.body.textContent.includes('captcha');
+          });
+
+          if (isChallenge) {
+            logger.warn(`   ☁️ Challenge/Cloudflare detectado! Aguardando bypass automático...`);
+            await page.waitForSelector('.ui-search-layout__item, .poly-card', { timeout: 30000 }).catch(() => {
+              logger.warn(`   ⚠️ Timeout aguardando bypass de challenge`);
+            });
           }
-        });
 
-        // Configurar cookies de aceite para evitar popups
-        await page.setCookie({
-          name: 'cookieConsent',
-          value: 'accepted',
-          domain: '.mercadolivre.com.br'
-        });
-
-        await page.goto(url, {
-          waitUntil: 'domcontentloaded',
-          timeout: 45000
-        });
-
-        // Tentar fechar popups de cookie / CEP que bloqueiam a página
-        try {
-          const popupSelectors = [
-            'button[data-testid="action:understood-button"]',  // "Entendi" cookie
-            '.cookie-consent-banner-opt-out__action button',
-            'button.cookie-consent-banner-opt-out__action--primary',
-            '[data-js="cookie-consent-dismiss"]',
-            'button:has-text("Entendi")',
-            'button:has-text("Aceitar cookies")',
+          // 3. Aguardar seletor de produtos (com fallback)
+          const waitSelectors = [
+            '.ui-search-layout__item',
+            '.poly-card',
+            '.ui-search-result__wrapper',
+            'section.ui-search-results'
           ];
-          for (const sel of popupSelectors) {
+
+          let selectorFound = false;
+          for (const sel of waitSelectors) {
             try {
-              const btn = await page.$(sel);
-              if (btn) {
-                await btn.click();
-                logger.info(`   🔒 Popup fechado: ${sel}`);
-                await new Promise(r => setTimeout(r, 500));
-                break;
-              }
-            } catch (e) { /* popup não encontrado */ }
+              logger.info(`   ⏳ Aguardando elementos carregar (${sel})...`);
+              await page.waitForSelector(sel, { timeout: 15000 });
+              logger.info(`   ✅ Elementos carregados com seletor: ${sel}`);
+              selectorFound = true;
+              break;
+            } catch (e) {
+              logger.debug(`   ⚠️ Seletor '${sel}' não encontrado, tentando próximo...`);
+            }
           }
-        } catch (e) { /* sem popups */ }
 
-        // Aguardar renderização JS - com seletores expandidos e mais tempo
-        const cardSelectors = [
-          '.ui-search-layout__item',
-          '.poly-card',
-          '.ui-search-result__wrapper',
-          'li.ui-search-layout__item',
-          'section.ui-search-results',
-          '.andes-card[data-item-id]',
-        ];
-
-        let foundSelector = null;
-        for (const sel of cardSelectors) {
-          try {
-            await page.waitForSelector(sel, { timeout: 8000 });
-            foundSelector = sel;
-            logger.info(`   ✅ Puppeteer: Encontrou cards com seletor: ${sel}`);
-            break;
-          } catch (e) { /* tentar próximo */ }
-        }
-
-        if (!foundSelector) {
-          // Debug: capturar info da página para diagnóstico
-          const debugInfo = await page.evaluate(() => ({
-            title: document.title,
-            url: location.href,
-            bodyLength: document.body.innerHTML.length,
-            text: document.body.innerText.substring(0, 300),
-            allClasses: [...new Set([...document.querySelectorAll('[class]')].map(el =>
-              [...el.classList].filter(c => c.includes('search') || c.includes('poly') || c.includes('card') || c.includes('result'))
-            ).flat())].slice(0, 20)
-          }));
-          logger.warn(`   ⚠️ Puppeteer: Nenhum card de produto encontrado.`);
-          logger.warn(`   📌 Título: ${debugInfo.title}`);
-          logger.warn(`   📌 URL: ${debugInfo.url}`);
-          logger.warn(`   📌 HTML length: ${debugInfo.bodyLength}`);
-          logger.warn(`   📌 Classes relevantes: ${debugInfo.allClasses.join(', ') || 'nenhuma'}`);
-          logger.warn(`   📌 Texto: ${debugInfo.text.substring(0, 150)}`);
-          return [];
-        }
-
-        // Aguardar um pouco mais para garantir renderização completa
-        await new Promise(r => setTimeout(r, 2000));
-
-        // Scroll para carregar lazy-loaded images
-        await page.evaluate(async () => {
-          for (let i = 0; i < 5; i++) {
-            window.scrollBy(0, window.innerHeight);
-            await new Promise(r => setTimeout(r, 600));
+          if (!selectorFound) {
+            // Debug info para diagnóstico
+            const debugInfo = await page.evaluate(() => ({
+              title: document.title,
+              url: location.href,
+              bodyLen: document.body.innerHTML.length,
+              text: document.body.innerText.substring(0, 200)
+            }));
+            logger.warn(`   ⚠️ Nenhum seletor de produto encontrado`);
+            logger.warn(`   📌 Título: ${debugInfo.title} | URL: ${debugInfo.url} | HTML: ${debugInfo.bodyLen} bytes`);
+            logger.warn(`   📌 Texto: ${debugInfo.text.substring(0, 120)}`);
+            throw new Error('Nenhum produto encontrado - DOM pode não ter carregado');
           }
-          window.scrollTo(0, 0);
-        });
-        await new Promise(r => setTimeout(r, 1500));
 
-        // Extrair dados dos produtos
-        const items = await page.evaluate(() => {
-          const products = [];
+          // 4. Verificar DOM ready (mesmo padrão do Kabum)
+          const domReady = await page.evaluate(() => document.readyState === 'complete');
+          if (!domReady) {
+            logger.warn(`   ⚠️ DOM não está completo, aguardando mais...`);
+            await new Promise(r => setTimeout(r, 3000));
+          }
 
-          // Helper para extrair preço
-          const parsePrice = (text) => {
-            if (!text) return 0;
-            const cleaned = text.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
-            return parseFloat(cleaned) || 0;
-          };
+          // 5. Scroll para carregar lazy loading (mesmo padrão do Kabum)
+          logger.debug(`   📜 Fazendo scroll para carregar lazy loading...`);
+          await page.evaluate(() => { window.scrollBy(0, window.innerHeight * 2); });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await page.evaluate(() => { window.scrollBy(0, window.innerHeight); });
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
-          // Selecionar containers (Layout Clássico OU Poly)
-          const containers = document.querySelectorAll(
-            '.ui-search-layout__item, .poly-card, .ui-search-result__wrapper'
-          );
+          // 6. Extrair dados dos produtos
+          const items = await page.evaluate(() => {
+            const products = [];
+            const parsePrice = (text) => {
+              if (!text) return 0;
+              const cleaned = text.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+              return parseFloat(cleaned) || 0;
+            };
 
-          containers.forEach((container) => {
-            if (products.length >= 50) return;
-            try {
-              // Link
-              const linkEl = container.querySelector(
-                'a.ui-search-link, a.poly-component__title, a.ui-search-item__group__element, a[href*="MLB"]'
-              );
-              const link = linkEl?.href;
-              if (!link || !link.includes('mercadolivre') && !link.includes('mercadolibre')) return;
+            const containers = document.querySelectorAll(
+              '.ui-search-layout__item, .poly-card, .ui-search-result__wrapper'
+            );
 
-              // ID
-              const matchId = link.match(/MLB-?(\d+)/i);
-              if (!matchId) return;
-              const id = 'MLB' + matchId[1];
+            containers.forEach((container) => {
+              if (products.length >= 50) return;
+              try {
+                const linkEl = container.querySelector(
+                  'a.ui-search-link, a.poly-component__title, a.ui-search-item__group__element, a[href*="MLB"]'
+                );
+                const link = linkEl?.href;
+                if (!link) return;
 
-              // Título
-              const titleEl = container.querySelector(
-                '.ui-search-item__title, .poly-component__title, h2, .ui-search-item__group__element'
-              );
-              const title = titleEl?.textContent?.trim();
-              if (!title) return;
+                const matchId = link.match(/MLB-?(\d+)/i);
+                if (!matchId) return;
+                const id = 'MLB' + matchId[1];
 
-              // Imagem - tentar múltiplos atributos
-              let thumbnail = null;
-              const imgs = container.querySelectorAll('img');
-              for (const img of imgs) {
-                const src = img.getAttribute('src') || img.getAttribute('data-src')
-                  || img.getAttribute('data-lazy') || img.getAttribute('data-original');
-                if (src && src.startsWith('http') && !src.includes('data:image')) {
-                  thumbnail = src;
-                  break;
-                }
-              }
-              if (thumbnail && thumbnail.includes('-I.jpg')) {
-                thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
-              }
+                const titleEl = container.querySelector(
+                  '.ui-search-item__title, .poly-component__title, h2'
+                );
+                const title = titleEl?.textContent?.trim();
+                if (!title) return;
 
-              // Preço Atual
-              const priceSelectors = [
-                '.ui-search-price__second-line .andes-money-amount__fraction',
-                '.poly-price__current .andes-money-amount__fraction',
-                '.andes-money-amount--cents-superscript .andes-money-amount__fraction',
-                '.andes-money-amount__fraction'
-              ];
-              let price = 0;
-              for (const sel of priceSelectors) {
-                const el = container.querySelector(sel);
-                if (el) {
-                  price = parsePrice(el.textContent);
-                  if (price > 0) break;
-                }
-              }
-
-              // Preço Original (riscado)
-              const origSelectors = [
-                '.ui-search-price__original-value .andes-money-amount__fraction',
-                '.poly-price__original-value .andes-money-amount__fraction',
-                's .andes-money-amount__fraction',
-                'del .andes-money-amount__fraction',
-                '.andes-money-amount--previous .andes-money-amount__fraction'
-              ];
-              let originalPrice = 0;
-              for (const sel of origSelectors) {
-                const el = container.querySelector(sel);
-                if (el) {
-                  const parsed = parsePrice(el.textContent);
-                  if (parsed > 0 && parsed > price) {
-                    originalPrice = parsed;
+                let thumbnail = null;
+                const imgs = container.querySelectorAll('img');
+                for (const img of imgs) {
+                  const src = img.getAttribute('src') || img.getAttribute('data-src')
+                    || img.getAttribute('data-lazy') || img.getAttribute('data-original');
+                  if (src && src.startsWith('http') && !src.includes('data:image')) {
+                    thumbnail = src;
                     break;
                   }
                 }
-              }
-
-              // Cupom (se visível)
-              let coupon = null;
-              const couponEl = container.querySelector('.ui-search-item__coupon, .poly-component__coupon');
-              if (couponEl) {
-                const couponText = couponEl.textContent.trim();
-                const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,20})/i);
-                const valMatch = couponText.match(/R\$\s*([\d.,]+)/);
-                if (codeMatch && valMatch) {
-                  coupon = {
-                    code: codeMatch[1].toUpperCase(),
-                    discount_value: parsePrice(valMatch[1]),
-                    discount_type: 'fixed',
-                    platform: 'mercadolivre'
-                  };
+                if (thumbnail && thumbnail.includes('-I.jpg')) {
+                  thumbnail = thumbnail.replace('-I.jpg', '-O.jpg');
                 }
-              }
 
-              if (price > 0) {
-                products.push({
-                  id,
-                  title,
-                  permalink: link,
-                  thumbnail,
-                  price,
-                  original_price: originalPrice > price ? originalPrice : null,
-                  available_quantity: 1,
-                  coupon
-                });
-              }
-            } catch (e) { /* ignorar item com erro */ }
+                const priceSelectors = [
+                  '.ui-search-price__second-line .andes-money-amount__fraction',
+                  '.poly-price__current .andes-money-amount__fraction',
+                  '.andes-money-amount--cents-superscript .andes-money-amount__fraction',
+                  '.andes-money-amount__fraction'
+                ];
+                let price = 0;
+                for (const sel of priceSelectors) {
+                  const el = container.querySelector(sel);
+                  if (el) { price = parsePrice(el.textContent); if (price > 0) break; }
+                }
+
+                const origSelectors = [
+                  '.ui-search-price__original-value .andes-money-amount__fraction',
+                  '.poly-price__original-value .andes-money-amount__fraction',
+                  's .andes-money-amount__fraction',
+                  'del .andes-money-amount__fraction'
+                ];
+                let originalPrice = 0;
+                for (const sel of origSelectors) {
+                  const el = container.querySelector(sel);
+                  if (el) {
+                    const parsed = parsePrice(el.textContent);
+                    if (parsed > 0 && parsed > price) { originalPrice = parsed; break; }
+                  }
+                }
+
+                let coupon = null;
+                const couponEl = container.querySelector('.ui-search-item__coupon, .poly-component__coupon');
+                if (couponEl) {
+                  const couponText = couponEl.textContent.trim();
+                  const codeMatch = couponText.match(/CUPOM\s*:?\s*([A-Z0-9\-_]{4,20})/i);
+                  const valMatch = couponText.match(/R\$\s*([\d.,]+)/);
+                  if (codeMatch && valMatch) {
+                    coupon = {
+                      code: codeMatch[1].toUpperCase(),
+                      discount_value: parsePrice(valMatch[1]),
+                      discount_type: 'fixed',
+                      platform: 'mercadolivre'
+                    };
+                  }
+                }
+
+                if (price > 0) {
+                  products.push({
+                    id, title, permalink: link, thumbnail, price,
+                    original_price: originalPrice > price ? originalPrice : null,
+                    available_quantity: 1, coupon
+                  });
+                }
+              } catch (e) { /* ignorar item com erro */ }
+            });
+
+            return products;
           });
 
-          return products;
+          logger.info(`   📊 Puppeteer extraiu ${items.length} produtos da página`);
+          return items;
         });
 
-        logger.info(`   📊 Puppeteer extraiu ${items.length} produtos da página`);
-        return items;
-      });
+        // Se capturou produtos, retornar
+        if (results && results.length > 0) {
+          logger.info(`   ✅ (Puppeteer) ${results.length} resultados encontrados na tentativa ${attempt}.`);
+          return results;
+        }
 
-      logger.info(`   ✅ (Puppeteer) ${results.length} resultados encontrados.`);
-      return results;
+        throw new Error('Nenhum produto capturado - DOM pode não ter carregado');
 
-    } catch (error) {
-      logger.error(`   ❌ Falha no Puppeteer scraping ML: ${error.message}`);
-      return [];
+      } catch (error) {
+        logger.warn(`   ⚠️ Tentativa ${attempt}/${MAX_RETRIES} falhou: ${error.message}`);
+        if (attempt < MAX_RETRIES) {
+          const waitTime = attempt * 3000;
+          logger.info(`   ⏳ Aguardando ${waitTime / 1000}s antes da próxima tentativa...`);
+          await new Promise(r => setTimeout(r, waitTime));
+        }
+      }
     }
+
+    logger.error(`   ❌ Puppeteer ML: Todas as ${MAX_RETRIES} tentativas falharam.`);
+    return [];
   }
 
   /**
