@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, Animated, Pla
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
 import PlatformBadge from './PlatformBadge';
+import { PlatformIcon, getPlatformColor } from '../../utils/platformIcons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 8;
@@ -90,9 +91,9 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
               />
             </TouchableOpacity>
           )}
-          {/* Platform badge */}
-          <View style={s.badgeContainer}>
-            <PlatformBadge platform={product.platform} size="small" />
+          {/* Platform logo */}
+          <View style={s.platformLogoContainer}>
+            <PlatformIcon platform={product.platform} size={isGrid ? 18 : 16} />
           </View>
         </View>
 
@@ -103,7 +104,7 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
           </Text>
 
           {/* Old price */}
-          {product.old_price && product.old_price > product.current_price && (
+          {!!product.old_price && product.old_price > product.current_price && (
             <Text style={s.oldPrice}>
               R$ {parseFloat(product.old_price).toFixed(2).replace('.', ',')}
             </Text>
@@ -122,7 +123,7 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
           )}
 
           {/* Coupon */}
-          {product.coupon_code && (
+          {!!product.coupon_code && (
             <View style={s.couponBadge}>
               <Ionicons name="ticket-outline" size={12} color={colors.success} />
               <Text style={s.couponText}>{product.coupon_code}</Text>
@@ -170,10 +171,26 @@ const gridStyles = (colors) => StyleSheet.create({
       elevation: 2,
     }),
   },
-  badgeContainer: {
+  platformLogoContainer: {
     position: 'absolute',
     bottom: 6,
-    left: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+    } : {
+      elevation: 2,
+    }),
+  },
+  platformLogo: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
   },
   info: {
     padding: 8,
@@ -275,10 +292,26 @@ const listStyles = (colors) => StyleSheet.create({
       elevation: 2,
     }),
   },
-  badgeContainer: {
+  platformLogoContainer: {
     position: 'absolute',
     bottom: 4,
-    left: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+    } : {
+      elevation: 2,
+    }),
+  },
+  platformLogo: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
   },
   info: {
     flex: 1,

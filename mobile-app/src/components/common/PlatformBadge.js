@@ -1,96 +1,33 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-
-const PLATFORM_CONFIG = {
-    shopee: {
-        color: '#EE4D2D',
-        icon: '🛍️',
-        name: 'Shopee',
-    },
-    mercadolivre: {
-        color: '#FFE600',
-        textColor: '#333',
-        icon: '🏪',
-        name: 'Mercado Livre',
-    },
-    amazon: {
-        color: '#FF9900',
-        icon: '📦',
-        name: 'Amazon',
-    },
-    aliexpress: {
-        color: '#E62E04',
-        icon: '🌐',
-        name: 'AliExpress',
-    },
-    kabum: {
-        color: '#FF6500',
-        icon: '💻',
-        name: 'Kabum',
-    },
-    magazineluiza: {
-        color: '#0086FF',
-        icon: '🏬',
-        name: 'Magazine Luiza',
-    },
-    pichau: {
-        color: '#FF6600',
-        icon: '🖥️',
-        name: 'Pichau',
-    },
-    general: {
-        color: '#6B7280',
-        icon: '🏷️',
-        name: 'Geral',
-    },
-    unknown: {
-        color: '#9CA3AF',
-        icon: '❓',
-        name: 'Desconhecido',
-    },
-};
+import { PlatformIcon, getPlatformColor, getPlatformName } from '../../utils/platformIcons';
 
 export default function PlatformBadge({ platform, size = 'medium', showIcon = true, showName = true }) {
-    const config = PLATFORM_CONFIG[platform] || PLATFORM_CONFIG.unknown;
+    const color = getPlatformColor(platform);
+    const name = getPlatformName(platform);
 
-    const sizeStyles = {
-        small: {
-            container: styles.containerSmall,
-            text: styles.textSmall,
-            icon: styles.iconSmall,
-        },
-        medium: {
-            container: styles.containerMedium,
-            text: styles.textMedium,
-            icon: styles.iconMedium,
-        },
-        large: {
-            container: styles.containerLarge,
-            text: styles.textLarge,
-            icon: styles.iconLarge,
-        },
+    const sizeConfig = {
+        small: { container: styles.containerSmall, text: styles.textSmall, iconSize: 14 },
+        medium: { container: styles.containerMedium, text: styles.textMedium, iconSize: 18 },
+        large: { container: styles.containerLarge, text: styles.textLarge, iconSize: 22 },
     };
 
-    const currentSize = sizeStyles[size];
+    const current = sizeConfig[size] || sizeConfig.medium;
 
     return (
-        <View style={[
-            styles.container,
-            currentSize.container,
-            { backgroundColor: config.color }
-        ]}>
+        <View style={[styles.container, current.container, { backgroundColor: color }]}>
             {showIcon && (
-                <Text style={[styles.icon, currentSize.icon]}>
-                    {config.icon}
-                </Text>
+                <View style={[styles.iconWrapper, {
+                    width: current.iconSize + 4,
+                    height: current.iconSize + 4,
+                    borderRadius: (current.iconSize + 4) * 0.25,
+                }]}>
+                    <PlatformIcon platform={platform} size={current.iconSize} />
+                </View>
             )}
             {showName && (
-                <Text style={[
-                    styles.text,
-                    currentSize.text,
-                    { color: config.textColor || '#FFFFFF' }
-                ]}>
-                    {config.name}
+                <Text style={[styles.text, current.text, { color: '#FFFFFF' }]}>
+                    {name}
                 </Text>
             )}
         </View>
@@ -107,12 +44,12 @@ const styles = StyleSheet.create({
     },
     containerSmall: {
         paddingHorizontal: 6,
-        paddingVertical: 2,
+        paddingVertical: 3,
         borderRadius: 8,
     },
     containerMedium: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
         borderRadius: 12,
     },
     containerLarge: {
@@ -120,23 +57,16 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: 16,
     },
-    icon: {
-        marginRight: 4,
-    },
-    iconSmall: {
-        fontSize: 10,
-        marginRight: 2,
-    },
-    iconMedium: {
-        fontSize: 12,
-        marginRight: 4,
-    },
-    iconLarge: {
-        fontSize: 16,
+    iconWrapper: {
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        alignItems: 'center',
+        justifyContent: 'center',
         marginRight: 6,
+        overflow: 'hidden',
     },
     text: {
-        fontWeight: '600',
+        fontWeight: '700',
+        color: '#FFFFFF',
     },
     textSmall: {
         fontSize: 10,

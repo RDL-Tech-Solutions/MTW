@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PlatformLogo } from '../utils/platformLogos.jsx';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -379,8 +380,8 @@ export default function Dashboard() {
                     <h4 className="text-sm font-medium mb-2">Por Plataforma</h4>
                     <div className="space-y-2">
                       {Object.entries(syncStats.platforms).map(([platform, data]) => (
-                        <div key={platform} className="flex items-center justify-between text-sm p-2 bg-muted rounded">
-                          <span className="capitalize">{platform}</span>
+                        <div key={platform} className="flex items-center justify-between text-sm p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
+                          <PlatformLogo platform={platform} size={16} />
                           <div className="flex items-center gap-4">
                             <Badge variant="outline">{data.new || 0} novos</Badge>
                             <Badge variant={data.errors > 0 ? 'destructive' : 'success'}>
@@ -475,6 +476,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div >
   );
 }

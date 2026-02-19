@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { format } from 'date-fns';
 import { Pagination } from '../components/ui/Pagination';
+import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
 
 export default function Coupons() {
   const [activeTab, setActiveTab] = useState('all'); // 'all' ou 'pending'
@@ -1278,28 +1279,7 @@ export default function Coupons() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              coupon.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
-                                coupon.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                                  coupon.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                    coupon.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
-                                      coupon.platform === 'kabum' ? 'bg-orange-200 text-orange-900 border-orange-400' :
-                                        coupon.platform === 'magazineluiza' ? 'bg-blue-200 text-blue-900 border-blue-400' :
-                                          coupon.platform === 'pichau' ? 'bg-purple-100 text-purple-800 border-purple-300' :
-                                            'bg-gray-100 text-gray-800 border-gray-300'
-                            }
-                          >
-                            {coupon.platform === 'mercadolivre' ? 'Mercado Livre' :
-                              coupon.platform === 'shopee' ? 'Shopee' :
-                                coupon.platform === 'amazon' ? 'Amazon' :
-                                  coupon.platform === 'aliexpress' ? 'AliExpress' :
-                                    coupon.platform === 'kabum' ? 'Kabum' :
-                                      coupon.platform === 'magazineluiza' ? 'Magazine Luiza' :
-                                        coupon.platform === 'pichau' ? 'Pichau' :
-                                          'Geral'}
-                          </Badge>
+                          <PlatformLogo platform={coupon.platform} size={16} />
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">

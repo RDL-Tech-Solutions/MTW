@@ -18,7 +18,11 @@ export const authenticateToken = (req, res, next) => {
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) {
-        logger.warn(`Token inválido: ${err.message}`);
+        const secretHint = process.env.JWT_SECRET ? process.env.JWT_SECRET.substring(0, 4) : 'UNDEFINED';
+        // Tentar decodificar sem verificar para ver o payload (iat, exp)
+        const decoded = jwt.decode(token);
+        const expStr = decoded?.exp ? new Date(decoded.exp * 1000).toISOString() : 'N/A';
+        logger.warn(`Token inválido: ${err.message} (Secret hint: ${secretHint}..., Exp: ${expStr})`);
         return res.status(403).json({
           success: false,
           error: ERROR_MESSAGES.INVALID_TOKEN,

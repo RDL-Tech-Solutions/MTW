@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
+import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
 
 export default function Products() {
   const { toast } = useToast();
@@ -881,9 +882,7 @@ export default function Products() {
                             : 'Este produto será enviado usando o template de "Nova Promoção"'}
                         </p>
                       </div>
-                      <Badge className={getTemplateModeInfo(!!formData.coupon_id).color}>
-                        {getTemplateModeInfo(!!formData.coupon_id).icon} {getTemplateModeInfo(!!formData.coupon_id).label}
-                      </Badge>
+                      <PlatformLogo platform={formData.coupon_id ? 'ai_advanced' : 'default'} size={18} />
                     </div>
                     {getTemplateModeInfo(!!formData.coupon_id).label === 'IA ADVANCED' && (
                       <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-800 dark:text-purple-200">
@@ -1143,27 +1142,7 @@ export default function Products() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={`capitalize ${product.platform === 'mercadolivre' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
-                                product.platform === 'shopee' ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                                  product.platform === 'amazon' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                    product.platform === 'aliexpress' ? 'bg-red-100 text-red-800 border-red-300' :
-                                      product.platform === 'kabum' ? 'bg-orange-200 text-orange-900 border-orange-400' :
-                                        product.platform === 'magazineluiza' ? 'bg-blue-200 text-blue-900 border-blue-400' :
-                                          product.platform === 'pichau' ? 'bg-purple-100 text-purple-800 border-purple-300' :
-                                            'bg-gray-100 text-gray-800 border-gray-300'
-                                }`}
-                            >
-                              {product.platform === 'mercadolivre' ? 'Mercado Livre' :
-                                product.platform === 'shopee' ? 'Shopee' :
-                                  product.platform === 'amazon' ? 'Amazon' :
-                                    product.platform === 'aliexpress' ? 'AliExpress' :
-                                      product.platform === 'kabum' ? 'Kabum' :
-                                        product.platform === 'magazineluiza' ? 'Magazine Luiza' :
-                                          product.platform === 'pichau' ? 'Pichau' :
-                                            product.platform}
-                            </Badge>
+                            <PlatformLogo platform={product.platform} size={16} />
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">

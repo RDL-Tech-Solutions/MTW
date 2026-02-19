@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import api from '../services/api';
 import { RefreshCw, Save, Play, TrendingUp, Package, AlertCircle, Brain, Sparkles, DollarSign, FileText, Filter, Loader2 } from 'lucide-react';
+import { PlatformIcon, PlatformLogo } from '../utils/platformLogos.jsx';
 
 export default function AutoSync() {
   const { toast } = useToast();
@@ -875,7 +876,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.mercadolivre_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'mercadolivre' ? (
                   <>
@@ -884,7 +885,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="mercadolivre" size={16} />
                     Mercado Livre
                   </>
                 )}
@@ -895,7 +896,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.shopee_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'shopee' ? (
                   <>
@@ -904,7 +905,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="shopee" size={16} />
                     Shopee
                   </>
                 )}
@@ -915,7 +916,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.amazon_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'amazon' ? (
                   <>
@@ -924,7 +925,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="amazon" size={16} />
                     Amazon
                   </>
                 )}
@@ -935,7 +936,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.aliexpress_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'aliexpress' ? (
                   <>
@@ -944,7 +945,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="aliexpress" size={16} />
                     AliExpress
                   </>
                 )}
@@ -955,7 +956,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.kabum_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'kabum' ? (
                   <>
@@ -964,7 +965,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="kabum" size={16} />
                     Kabum
                   </>
                 )}
@@ -975,7 +976,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.magazineluiza_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'magazineluiza' ? (
                   <>
@@ -984,7 +985,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="magazineluiza" size={16} />
                     Magazine Luiza
                   </>
                 )}
@@ -995,7 +996,7 @@ export default function AutoSync() {
                 disabled={runningPlatform !== null || !config.pichau_enabled}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
               >
                 {runningPlatform === 'pichau' ? (
                   <>
@@ -1004,7 +1005,7 @@ export default function AutoSync() {
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <PlatformIcon platform="pichau" size={16} />
                     Pichau
                   </>
                 )}
@@ -1148,9 +1149,7 @@ export default function AutoSync() {
                       {log.product_name}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={log.platform === 'mercadolivre' ? 'default' : 'secondary'}>
-                        {log.platform === 'mercadolivre' ? 'Mercado Livre' : 'Shopee'}
-                      </Badge>
+                      <PlatformLogo platform={log.platform} size={16} />
                     </TableCell>
                     <TableCell>
                       <span className="font-semibold text-green-600">

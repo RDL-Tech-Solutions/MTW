@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
+import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
 
 export default function PendingProducts() {
   const { toast } = useToast();
@@ -632,31 +633,7 @@ export default function PendingProducts() {
     }).format(price);
   };
 
-  const getPlatformBadge = (platform) => {
-    const colors = {
-      mercadolivre: 'bg-yellow-500',
-      shopee: 'bg-orange-500',
-      amazon: 'bg-blue-500',
-      aliexpress: 'bg-red-500',
-      kabum: 'bg-orange-600',
-      magazineluiza: 'bg-blue-700',
-      pichau: 'bg-purple-600'
-    };
-    return colors[platform] || 'bg-gray-500';
-  };
 
-  const getPlatformName = (platform) => {
-    const names = {
-      mercadolivre: 'Mercado Livre',
-      shopee: 'Shopee',
-      amazon: 'Amazon',
-      aliexpress: 'AliExpress',
-      kabum: 'Kabum',
-      magazineluiza: 'Magazine Luiza',
-      pichau: 'Pichau'
-    };
-    return names[platform] || platform;
-  };
 
   return (
     <div className="space-y-6">
@@ -870,9 +847,7 @@ export default function PendingProducts() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getPlatformBadge(product.platform)}>
-                          {getPlatformName(product.platform)}
-                        </Badge>
+                        <PlatformLogo platform={product.platform} size={16} />
                       </TableCell>
                       <TableCell>
                         {product.category_name ? (
@@ -989,9 +964,7 @@ export default function PendingProducts() {
                   <div>
                     <Label>Plataforma</Label>
                     <div>
-                      <Badge className={getPlatformBadge(selectedProduct.platform)}>
-                        {getPlatformName(selectedProduct.platform)}
-                      </Badge>
+                      <PlatformLogo platform={selectedProduct.platform} size={18} />
                     </div>
                   </div>
                   <div>

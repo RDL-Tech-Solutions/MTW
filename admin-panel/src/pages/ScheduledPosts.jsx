@@ -10,6 +10,7 @@ import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { PlatformLogo } from '../utils/platformLogos.jsx';
 
 export default function ScheduledPosts() {
     const { toast } = useToast();
@@ -330,9 +331,7 @@ export default function ScheduledPosts() {
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="capitalize">
-                                                {post.platform}
-                                            </Badge>
+                                            <PlatformLogo platform={post.platform} size={16} />
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-col">
@@ -439,9 +438,7 @@ export default function ScheduledPosts() {
                                                         }
                                                     </span>
                                                     {coupon.platform && (
-                                                        <Badge variant="outline" className="ml-auto text-xs">
-                                                            {coupon.platform}
-                                                        </Badge>
+                                                        <PlatformLogo platform={coupon.platform} size={14} className="ml-auto" />
                                                     )}
                                                 </div>
                                             </SelectItem>

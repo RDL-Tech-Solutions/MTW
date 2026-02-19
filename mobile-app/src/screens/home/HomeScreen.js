@@ -24,7 +24,7 @@ import ProductCard from '../../components/common/ProductCard';
 import SearchBar from '../../components/common/SearchBar';
 import EmptyState from '../../components/common/EmptyState';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
-import { getPlatformIcon, getPlatformColor } from '../../utils/platformIcons';
+import { getPlatformColor, PlatformLogoBadge } from '../../utils/platformIcons';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 8;
@@ -32,14 +32,15 @@ const GRID_PADDING = 12;
 
 // ── Platform shortcuts for the icon row ──
 const PLATFORM_SHORTCUTS = [
-  { key: 'all', label: 'Todas', icon: 'apps', color: '#666' },
-  { key: PLATFORMS.MERCADOLIVRE, label: 'Mercado Livre', icon: 'cart', color: '#FFE600' },
-  { key: PLATFORMS.SHOPEE, label: 'Shopee', icon: 'storefront', color: '#EE4D2D' },
-  { key: PLATFORMS.AMAZON, label: 'Amazon', icon: 'cube', color: '#FF9900' },
-  { key: PLATFORMS.ALIEXPRESS, label: 'AliExpress', icon: 'globe', color: '#FF4747' },
-  { key: PLATFORMS.KABUM, label: 'Kabum', icon: 'flash', color: '#FF6600' },
-  { key: PLATFORMS.MAGAZINELUIZA, label: 'Magalu', icon: 'bag-handle', color: '#0086FF' },
+  { key: 'all', label: 'Todas', color: '#666' },
+  { key: PLATFORMS.MERCADOLIVRE, label: 'Mercado Livre', color: '#FFE600' },
+  { key: PLATFORMS.SHOPEE, label: 'Shopee', color: '#EE4D2D' },
+  { key: PLATFORMS.AMAZON, label: 'Amazon', color: '#FF9900' },
+  { key: PLATFORMS.ALIEXPRESS, label: 'AliExpress', color: '#FF4747' },
+  { key: PLATFORMS.KABUM, label: 'Kabum', color: '#FF6600' },
+  { key: PLATFORMS.MAGAZINELUIZA, label: 'Magalu', color: '#0086FF' },
 ];
+
 
 export default function HomeScreen({ navigation, route }) {
   const { products, categories, favorites, appCards, fetchProducts, fetchCategories, fetchFavorites, fetchAppCards, addFavorite, removeFavorite, isFavorite, registerClick } = useProductStore();
@@ -76,7 +77,7 @@ export default function HomeScreen({ navigation, route }) {
 
   useEffect(() => {
     loadProducts(true);
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, selectedPlatform]);
 
   const loadProducts = async (reset = false) => {
     if (reset) {
@@ -94,7 +95,13 @@ export default function HomeScreen({ navigation, route }) {
       };
 
       if (searchQuery) filters.search = searchQuery;
-      if (selectedCategory) filters.category_id = selectedCategory;
+      if (selectedCategory) filters.category = selectedCategory;
+      if (selectedPlatform && selectedPlatform !== 'all') filters.platform = selectedPlatform;
+
+      // Adicionar preferências do usuário se existirem
+      const homeFilters = preferences?.home_filters || {};
+      if (homeFilters.min_discount) filters.min_discount = homeFilters.min_discount;
+      if (homeFilters.max_price) filters.max_price = homeFilters.max_price;
 
       const result = await fetchProducts(filters);
 
@@ -177,24 +184,10 @@ export default function HomeScreen({ navigation, route }) {
     }
   };
 
-  // Apply local filters (user preferences + platform)
-  const filteredProducts = products.filter(p => {
-    const homeFilters = preferences?.home_filters || {};
-    const matchesPlatformFilter =
-      !homeFilters.platforms || homeFilters.platforms.length === 0 || homeFilters.platforms.includes(p.platform);
-    const matchesCategory =
-      !homeFilters.categories || homeFilters.categories.length === 0 || (p.category_id && homeFilters.categories.includes(p.category_id));
-    const discount =
-      p.discount_percentage || (p.old_price ? Math.round(((p.old_price - p.current_price) / p.old_price) * 100) : 0);
-    const matchesMinDiscount = !homeFilters.min_discount || discount >= homeFilters.min_discount;
-    const matchesMaxPrice = !homeFilters.max_price || p.current_price <= homeFilters.max_price;
-    const matchesCoupon = !homeFilters.only_with_coupon || !!p.coupon_id;
-
-    // Platform filter from icon row
-    const matchesPlatformIcon = selectedPlatform === 'all' || p.platform === selectedPlatform;
-
-    return matchesPlatformFilter && matchesCategory && matchesMinDiscount && matchesMaxPrice && matchesCoupon && matchesPlatformIcon;
-  });
+  // No app mobile, os filtros agora são processados principalmente no backend.
+  // Mantemos apenas filtros locais que ainda não foram migrados para o backend,
+  // ou que dependem de estado volátil.
+  const filteredProducts = products;
 
   const s = dynamicStyles(colors);
 
@@ -318,7 +311,7 @@ export default function HomeScreen({ navigation, route }) {
                   s.platformIconCircle,
                   isActive && { borderColor: p.color, borderWidth: 2.5 },
                 ]}>
-                  <Ionicons name={p.icon} size={26} color={p.color} />
+                  <PlatformLogoBadge platform={p.key} size={52} />
                 </View>
                 <Text style={[
                   s.platformLabel,
