@@ -61,9 +61,9 @@ const PLATFORM_CONFIG = {
   },
 };
 
-// ── Exported maps (keep compatibility) ──────────────────────
+// ── Exported maps ─────────────────────────────────────────
 export const PLATFORM_LOGOS = Object.fromEntries(
-  Object.entries(PLATFORM_CONFIG).map(([k, v]) => [k, null]) // no more CDN URLs
+  Object.entries(PLATFORM_CONFIG).map(([k]) => [k, null])
 );
 
 const PLATFORM_COLORS_MAP = Object.fromEntries(
@@ -74,30 +74,16 @@ const PLATFORM_NAMES = Object.fromEntries(
   Object.entries(PLATFORM_CONFIG).map(([k, v]) => [k, v.name])
 );
 
-/**
- * Get platform color
- */
-export const getPlatformColor = (platform) => {
-  return PLATFORM_CONFIG[platform?.toLowerCase()]?.bgColor || '#666';
-};
+export const getPlatformColor = (platform) =>
+  PLATFORM_CONFIG[platform?.toLowerCase()]?.bgColor || '#666';
+
+export const getPlatformName = (platform) =>
+  PLATFORM_CONFIG[platform?.toLowerCase()]?.name || 'Geral';
+
+export const getPlatformLogo = () => null;
 
 /**
- * Get formatted platform name
- */
-export const getPlatformName = (platform) => {
-  return PLATFORM_CONFIG[platform?.toLowerCase()]?.name || 'Geral';
-};
-
-/**
- * Get platform logo URL — now returns null (no more CDN)
- */
-export const getPlatformLogo = (platform) => {
-  return null;
-};
-
-/**
- * Styled platform icon component — colored square with letter/abbreviation.
- * No network dependency, works instantly and looks premium.
+ * PlatformIcon — quadrado levemente arredondado
  */
 export const PlatformIcon = ({ platform, size = 24, color: fallbackColor = '#000' }) => {
   const key = platform?.toLowerCase();
@@ -107,25 +93,27 @@ export const PlatformIcon = ({ platform, size = 24, color: fallbackColor = '#000
     return <Ionicons name="gift" size={size} color={fallbackColor} />;
   }
 
-  const fontSize = config.short.length > 2 ? size * 0.35 : size * 0.45;
+  const fontSize =
+    config.short.length > 2
+      ? size * 0.5
+      : size * 0.65;
 
   return (
     <View style={{
       width: size,
       height: size,
+      borderRadius: size * 0.2, // leve arredondamento
       backgroundColor: config.bgColor,
-      borderRadius: size * 0.22,
       alignItems: 'center',
       justifyContent: 'center',
-      overflow: 'hidden',
     }}>
       <Text style={{
         color: config.color,
         fontSize,
+        lineHeight: fontSize,
         fontWeight: '900',
         letterSpacing: -0.5,
         includeFontPadding: false,
-        textAlignVertical: 'center',
       }}>
         {config.short}
       </Text>
@@ -133,75 +121,66 @@ export const PlatformIcon = ({ platform, size = 24, color: fallbackColor = '#000
   );
 };
 
-/**
- * Legacy function wrapper for PlatformIcon component
- */
 export const getPlatformIcon = (platform, size = 24, color = '#000') => {
   return <PlatformIcon platform={platform} size={size} color={color} />;
 };
 
 /**
- * Platform logo badge — circle with styled icon, for icon rows (HomeScreen).
- * Clean, consistent, professional appearance.
+ * PlatformLogoBadge — círculo verdadeiro, sem camada interna
  */
 export const PlatformLogoBadge = ({ platform, size = 40 }) => {
   const key = platform?.toLowerCase();
   const config = PLATFORM_CONFIG[key];
-  const innerSize = size * 0.65;
 
   if (!config) {
     const isAll = key === 'all';
     return (
-      <View style={[badgeStyles.circle, {
+      <View style={{
         width: size,
         height: size,
         borderRadius: size / 2,
         backgroundColor: '#f3f4f6',
-      }]}>
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
         <Ionicons
           name={isAll ? 'apps' : 'basket-outline'}
-          size={size * 0.45}
-          color={isAll ? '#666' : '#999'}
+          size={size * 0.5}
+          color="#777"
         />
       </View>
     );
   }
 
-  const fontSize = config.short.length > 2 ? innerSize * 0.42 : innerSize * 0.52;
+  const fontSize =
+    config.short.length > 2
+      ? size * 0.45
+      : size * 0.6;
 
   return (
-    <View style={[badgeStyles.circle, {
+    <View style={{
       width: size,
       height: size,
-      borderRadius: size / 2,
-      backgroundColor: '#fff',
-      borderWidth: 2,
-      borderColor: config.bgColor + '30',
+      borderRadius: size / 2, // círculo matematicamente correto
+      backgroundColor: config.bgColor,
+      alignItems: 'center',
+      justifyContent: 'center',
       shadowColor: config.bgColor,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.2,
-      shadowRadius: 3,
-      elevation: 2,
-    }]}>
-      <View style={{
-        width: innerSize,
-        height: innerSize,
-        borderRadius: innerSize * 0.22,
-        backgroundColor: config.bgColor,
-        alignItems: 'center',
-        justifyContent: 'center',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 3,
+    }}>
+      <Text style={{
+        color: config.color,
+        fontSize,
+        lineHeight: fontSize,
+        fontWeight: '900',
+        letterSpacing: -0.5,
+        includeFontPadding: false,
       }}>
-        <Text style={{
-          color: config.color,
-          fontSize,
-          fontWeight: '900',
-          letterSpacing: -0.5,
-          includeFontPadding: false,
-          textAlignVertical: 'center',
-        }}>
-          {config.short}
-        </Text>
-      </View>
+        {config.short}
+      </Text>
     </View>
   );
 };
