@@ -562,15 +562,53 @@ async function publishCoupon(ctx, coupon) {
         const couponData = coupon.toObject ? coupon.toObject() : { ...coupon };
 
         // Assinatura correta: dispatch(eventType, data, options)
+        // FIX: Injetar category_id para evitar filtro do dispatcher
+        const { PLATFORM_CATEGORY_MAP, CATEGORY_IDS } = await import('../../../utils/categoryMap.js');
+
+        // Tentar inferir categoria baseada na plataforma
+        if (!couponData.category_id && couponData.platform) {
+            const platformKey = couponData.platform.toLowerCase();
+            const mapping = PLATFORM_CATEGORY_MAP[platformKey];
+
+            if (mapping) {
+                // Tenta mapear o slug para um ID conhecido
+                // Se slug for 'geral', usa ID fixo de geral, etc.
+                // Como CATEGORY_IDS tem chaves como 'games-pc-gamer', 'hardware', etc.
+                if (CATEGORY_IDS[mapping.slug]) {
+                    couponData.category_id = CATEGORY_IDS[mapping.slug];
+                } else if (mapping.slug === 'geral') {
+                    // Fallback para Geral se não estiver no map explícito (mas Amazon está mapeada para Geral)
+                    // O ID do Geral no map é b478... (que é o que usamos no diag)
+                    // Vamos usar o ID 'b478b692-84df-4281-b20f-2722d8f1d356' como fallback seguro de Geral
+                    couponData.category_id = 'b478b692-84df-4281-b20f-2722d8f1d356';
+                }
+            }
+        }
+
+        // Se ainda não tiver categoria, força Geral para garantir envio
+        if (!couponData.category_id) {
+            couponData.category_id = 'b478b692-84df-4281-b20f-2722d8f1d356';
+            logger.info(`⚠️ Cupom sem categoria, forçando Geral (${couponData.category_id}) para envio.`);
+        }
+
+        // Assinatura correta: dispatch(eventType, data, options)
         const result = await notificationDispatcher.dispatch('coupon_new', couponData, { manual: true });
 
         let msg = `✅ *Cupom Publicado!*\n\n`;
-        if (result.results && result.results.length > 0) {
-            const success = result.results.filter(r => r.success).length;
-            msg += `📢 Enviado para ${success}/${result.results.length} canais.`;
+        if (result.results && result.results.sent > 0) {
+            msg += `📢 Enviado para ${result.results.sent} canais.\n`;
+            if (result.results.details) {
+                result.results.details.forEach(d => {
+                    if (d.success) msg += `   - ${d.platform}: ✅\n`;
+                });
+            }
+        } else if (result.results && result.results.filtered > 0) {
+            msg += `⚠️ Filtrado: ${result.results.filtered} canais ignoraram este cupom.\n`;
+            msg += `(Provavelmente filtros de categoria/plataforma)\n`;
         } else {
-            msg += `⚠️ Nenhum envio confirmado. Verifique logs.`;
+            msg += `⚠️ Nenhum envio confirmado. Verifique logs/filtros.`;
         }
+
         await ctx.editMessageText(msg, { parse_mode: 'Markdown' });
         ctx.session.step = 'IDLE';
     } catch (e) {

@@ -163,8 +163,28 @@ class WhatsAppClient {
                 logger.info(`🧹 Removing session directory: ${absoluteSessionPath}`);
                 // Retry pattern simples para exclusão de arquivos (Windows pode travar)
                 try {
-                    fs.rmSync(absoluteSessionPath, { recursive: true, force: true });
-                    logger.info('✅ Session directory removed.');
+                    // Tentar várias vezes remover (Windows Lock Fix)
+                    let retries = 10;
+                    while (retries > 0) {
+                        try {
+                            if (fs.existsSync(absoluteSessionPath)) {
+                                fs.rmSync(absoluteSessionPath, { recursive: true, force: true });
+                            }
+                            logger.info('✅ Session directory removed.');
+                            break;
+                        } catch (err) {
+                            // Se for erro de permissão ou busy, espera e tenta de novo
+                            if (err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES') {
+                                logger.warn(`⚠️ Session dir busy/locked, retrying in 1s... (${retries} left)`);
+                                await new Promise(r => setTimeout(r, 1000));
+                                retries--;
+                            } else {
+                                // Se for outro erro (ex: não existe mais), ignora ou lança
+                                if (err.code === 'ENOENT') break;
+                                throw err;
+                            }
+                        }
+                    }
                 } catch (fsErr) {
                     logger.error('❌ Failed to remove session directory (might be locked):', fsErr.message);
                     // Tentar novamente após delay

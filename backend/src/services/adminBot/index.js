@@ -270,7 +270,7 @@ export const initAdminBot = async () => {
                     return await aiService.handleScheduleAI(ctx, id);
                 }
 
-                if (data.startsWith('schedule_set_cat:')) {
+                if (data.startsWith('sch_cat:')) {
                     return await aiService.handleScheduleCategory(ctx, data);
                 }
 
@@ -386,6 +386,10 @@ export const initAdminBot = async () => {
                         const prod = await Product.findById(pid);
                         if (!prod) return ctx.reply('❌ Produto não encontrado.');
 
+                        // Salvar PID na sessão
+                        if (!ctx.session.tempData) ctx.session.tempData = {};
+                        ctx.session.tempData.repub_product_id = pid;
+
                         // Buscar cupons
                         const platform = prod.platform || 'general';
                         const result = await Coupon.findActive({ platform, limit: 10 });
@@ -402,16 +406,20 @@ export const initAdminBot = async () => {
                         const { InlineKeyboard } = await import('grammy');
                         const kb = new InlineKeyboard();
                         coupons.forEach(c => {
-                            kb.text(`${c.code} (-${c.discount_type === 'percentage' ? c.discount_value + '%' : c.discount_value})`, `repub:sel_coup:${pid}:${c.id}`).row();
+                            // Short callback: repub:sc:COUPON_ID (9 + 36 = 45 chars)
+                            kb.text(`${c.code} (-${c.discount_type === 'percentage' ? c.discount_value + '%' : c.discount_value})`, `repub:sc:${c.id}`).row();
                         });
                         kb.text('❌ Cancelar Vínculo', `repub:no:${pid}`);
 
                         await ctx.editMessageText('🎟️ *Selecione o Cupom:*', { parse_mode: 'Markdown', reply_markup: kb });
                     }
 
-                    if (action === 'sel_coup') {
-                        const couponId = parts[3];
+                    if (action === 'sc') { // Short for sel_coup
+                        const couponId = parts[2]; // repub:sc:COUPON_ID
                         await ctx.editMessageText('🚀 Vinculando cupom e publicando...');
+
+                        const pid = ctx.session.tempData.repub_product_id;
+                        if (!pid) return ctx.reply('❌ Sessão expirada.');
 
                         const prod = await Product.findById(pid);
                         if (!prod) return ctx.reply('❌ Produto não encontrado.');

@@ -386,7 +386,7 @@ class NotificationDispatcher {
       } else {
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
           const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
-          logger.debug(`   🚫 Canal ${channel.id} tem filtro de categoria (${channel.category_filter.join(', ')}), mas ${itemType} não tem categoria definida`);
+          logger.info(`🚫 Canal ${channel.name} (${channel.id}) ignorado: Item (${itemType}) sem categoria definida e canal possui filtro restrito.`);
           continue;
         }
       }

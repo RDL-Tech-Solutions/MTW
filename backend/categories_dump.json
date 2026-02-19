@@ -1,0 +1,52 @@
+[
+  {
+    "name": "Acessórios",
+    "slug": "acessorios",
+    "id": "b478b692-84df-4281-b20f-2722d8f1d356"
+  },
+  {
+    "name": "Beleza",
+    "slug": "beleza",
+    "id": "d577278a-3c1a-4eff-b486-effcad04c7ff"
+  },
+  {
+    "name": "Brinquedos",
+    "slug": "brinquedos",
+    "id": "df5861f9-e361-433f-983a-36bb87248c56"
+  },
+  {
+    "name": "Casa",
+    "slug": "casa",
+    "id": "3bc68bd2-9e4d-4fec-b7c4-59eef8478a6c"
+  },
+  {
+    "name": "Eletrônicos",
+    "slug": "eletronicos",
+    "id": "f5931bf7-759f-4c36-ae74-4e1d12db5873"
+  },
+  {
+    "name": "Esporte",
+    "slug": "esporte",
+    "id": "d35a8047-56b7-4479-9fb1-506ef6f81d14"
+  },
+  {
+    "name": "Games",
+    "slug": "games",
+    "id": "0d216f78-9a48-4a2a-8262-ae4f06fb67c7"
+  },
+  {
+    "name": "Informática",
+    "slug": "informatica",
+    "id": "ae9ecaf7-c5fa-4717-8a2c-62a5d0b939c3"
+  },
+  {
+    "name": "Livros",
+    "slug": "livros",
+    "id": "daef9c6c-9b0a-4d6a-b694-9268bd60ea4a"
+  },
+  {
+    "name": "Moda",
+    "slug": "moda",
+    "id": "680f828c-2c95-4094-9585-abd291252779"
+  }
+]

@@ -21,6 +21,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import supabase from '../../../config/database.js';
 
+
+import { PLATFORM_CATEGORY_MAP, CATEGORY_IDS } from '../../../utils/categoryMap.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -391,6 +394,16 @@ Responda com o JSON da ação a ser tomada.
                     name: productData.name,
                     image_url: productData.imageUrl || 'https://via.placeholder.com/800x800',
                     platform: productData.platform || 'unknown',
+                    category_id: (() => {
+                        if (productData.platform) {
+                            const key = productData.platform.toLowerCase();
+                            const mapEntry = PLATFORM_CATEGORY_MAP[key];
+                            if (mapEntry && mapEntry.slug && CATEGORY_IDS[mapEntry.slug]) {
+                                return CATEGORY_IDS[mapEntry.slug];
+                            }
+                        }
+                        return null;
+                    })(),
                     current_price: productData.currentPrice || 0,
                     old_price: productData.oldPrice || 0,
                     original_link: url,
@@ -1577,8 +1590,15 @@ Responda com o JSON da ação a ser tomada.
                     capture_source: 'ai_autonomous',
                     valid_from: new Date().toISOString(),
                     is_general: true,
-                    valid_until: data.valid_until || null
+                    valid_until: data.valid_until || null,
+                    category_id: data.category_id || (data.platform === 'general' ? null : null) // TODO: Mapear categoria padrão por plataforma se necessário
                 };
+
+                // Tentar inferir categoria baseada na plataforma se não vier da IA
+                // Ex: Gamer -> categoria X. Por enquanto deixa null ou o que vier.
+                if (!couponData.category_id && couponData.platform) {
+                    // Lógica opcional para setar categoria padrão
+                }
 
                 // Verificar duplicata rapidinho? create lança erro se unique constraint falhar?
                 // Coupon.create já lida com try/catch? Não, aqui estamos no try.
@@ -1589,8 +1609,11 @@ Responda com o JSON da ação a ser tomada.
                 // Dispatch notification event directly
                 const notificationData = {
                     ...saved,
-                    image_url: data.image_url || null
+                    image_url: data.image_url || null,
+                    category_id: couponData.category_id // Injetar categoria para roteamento correto (mesmo que não salve no banco)
                 };
+
+                logger.info(`🔍 [DEBUG] Pre-Dispatch Check: CategoryID=${notificationData.category_id}, Platform=${notificationData.platform}`);
 
                 await notificationDispatcher.dispatch('coupon_new', notificationData, { manual: true });
             }
@@ -1855,9 +1878,14 @@ Responda com o JSON da ação a ser tomada.
                 const categories = await Category.findAll(true);
                 const limitedCats = categories.slice(0, 15); // Top 15
 
+                // Salvar ID do produto na sessão para persistência
+                if (!ctx.session.tempData) ctx.session.tempData = {};
+                ctx.session.tempData.schedule_product_id = product.id;
+
                 const kb = new InlineKeyboard();
                 limitedCats.forEach((c, index) => {
-                    kb.text(c.name, `schedule_set_cat:${product.id}:${c.id}`);
+                    // Short callback: sch_cat:CATEGORY_ID (8 + 36 = 44 chars)
+                    kb.text(c.name, `sch_cat:${c.id}`);
                     if ((index + 1) % 2 === 0) kb.row(); // 2 por linha
                 });
 
@@ -1887,10 +1915,17 @@ Responda com o JSON da ação a ser tomada.
      * Definir categoria e continuar agendamento
      */
     async handleScheduleCategory(ctx, data) {
-        // data format: schedule_set_cat:productId:categoryId
+        // data format: sch_cat:categoryId
         const parts = data.split(':');
-        const productId = parts[1];
-        const categoryId = parts[2];
+        const categoryId = parts[1];
+
+        // Recuperar ID do produto da sessão
+        const productId = ctx.session?.tempData?.schedule_product_id;
+
+        if (!productId) {
+            if (ctx.answerCallbackQuery) await ctx.answerCallbackQuery('❌ Sessão expirada. Tente novamente.');
+            return;
+        }
 
         try {
             await Product.update(productId, { category_id: categoryId });

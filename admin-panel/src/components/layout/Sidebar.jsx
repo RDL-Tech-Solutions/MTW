@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Settings,
   Clock,
-  X
+  X,
+  Image as ImageIcon
 } from 'lucide-react';
 import Logo from '../Logo';
 
@@ -29,6 +30,7 @@ const navigation = [
   { name: 'Agendamentos IA', href: '/scheduled-posts', icon: Clock },
   { name: 'Bots', href: '/bots', icon: Bot },
   { name: 'Canais Telegram', href: '/telegram-channels', icon: MessageSquare },
+  { name: 'Cards do App', href: '/app-cards', icon: ImageIcon },
   { name: 'Configurações', href: '/settings', icon: Settings },
 ];
 

@@ -16,7 +16,7 @@ const API_CONFIG = {
 
   // Mobile - usar IP da sua máquina na rede local
   // IMPORTANTE: Altere este IP para o IP da sua máquina
-  mobile: 'http://192.168.7.8:3000/api',
+  mobile: 'http://192.168.7.7:3000/api',
 
   // Produção (quando estiver em produção)
   production: 'https://api.seudominio.com/api',

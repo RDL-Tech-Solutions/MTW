@@ -1,0 +1,28 @@
+--- Diagnóstico de Agendamento ---
+
+1. Configuração do Bot:
+   whatsapp_enabled: undefined
+   whatsapp_web_enabled: true
+   telegram_enabled: true
+
+2. Posts Agendados (Últimos 10):
+   [PENDING] ID: e5294d40 | Plat: whatsapp | Sched: 19/02/2026, 06:19:00 | Att: 0 | Err: N/A
+   [PENDING] ID: 3230cc02 | Plat: telegram | Sched: 19/02/2026, 06:15:00 | Att: 0 | Err: N/A
+   [PUBLISHED] ID: f205d221 | Plat: whatsapp | Sched: 19/02/2026, 06:13:00 | Att: 1 | Err: N/A
+   [PUBLISHED] ID: 18febc47 | Plat: telegram | Sched: 19/02/2026, 06:10:00 | Att: 1 | Err: N/A
+   [PENDING] ID: ec9cd9f7 | Plat: whatsapp | Sched: 19/02/2026, 07:02:00 | Att: 0 | Err: N/A
+   [PENDING] ID: cf30f353 | Plat: telegram | Sched: 19/02/2026, 07:00:00 | Att: 0 | Err: N/A
+   [FAILED] ID: 6c32728f | Plat: whatsapp | Sched: 13/02/2026, 09:58:29 | Att: 3 | Err: Falha no envio do bot após múltiplas tentativas
+   [FAILED] ID: ef58d2b4 | Plat: telegram | Sched: 13/02/2026, 09:54:29 | Att: 3 | Err: Falha no envio do bot após múltiplas tentativas
+   [FAILED] ID: f5be61bc | Plat: whatsapp | Sched: 13/02/2026, 09:57:11 | Att: 3 | Err: Falha no envio do bot após múltiplas tentativas
+   [FAILED] ID: 86fc7fa7 | Plat: telegram | Sched: 13/02/2026, 09:52:11 | Att: 3 | Err: Falha no envio do bot após múltiplas tentativas
+
+3. Posts Travados (Processing):
+   Nenhum post travado.
+
+4. Canais Ativos:
+   [telegram] PrecoCerto Cupom (ID: 095f7df0-9ba8-48e1-8fa9-6dd843e9ba46) | Recipient: -1003277657866
+   [telegram] Precocerto (ID: 3cc30da9-c359-492e-997e-b896553eacb5) | Recipient: -1003590527597
+   [telegram] precoCerto Game (ID: 99cff89c-8d8e-415e-bc18-3829aef6d1ea) | Recipient: -1003512637022
+   [whatsapp_web] PrecoCerto (ID: 20d23b2b-c0bd-4d0b-b9f1-a1973815af2d) | Recipient: 120363423394638237@newsletter
+   [whatsapp_web] PreçoCerto Gamer (ID: 4a2d4790-67b5-4929-bc3a-7b08c39b4692) | Recipient: 120363405400556600@newsletter

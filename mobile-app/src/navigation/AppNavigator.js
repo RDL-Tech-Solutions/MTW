@@ -44,26 +44,12 @@ export default function AppNavigator() {
             <Stack.Screen
               name={SCREEN_NAMES.PRODUCT_DETAILS}
               component={ProductDetailsScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Detalhes do Produto',
-                headerStyle: {
-                  backgroundColor: colors.white,
-                },
-                headerTintColor: colors.text,
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name={SCREEN_NAMES.COUPON_DETAILS}
               component={CouponDetailsScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Detalhes do Cupom',
-                headerStyle: {
-                  backgroundColor: colors.white,
-                },
-                headerTintColor: colors.text,
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name={SCREEN_NAMES.EDIT_PROFILE}

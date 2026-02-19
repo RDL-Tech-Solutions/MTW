@@ -99,7 +99,6 @@ class Coupon {
       channel_origin: channel_origin || null,
       message_id: message_id || null,
       message_hash: message_hash || null,
-      confidence_score: confidence_score !== null && confidence_score !== undefined ? confidence_score : null,
       ai_decision_reason: ai_decision_reason || null,
       ai_edit_history: ai_edit_history || null,
       image_url: image_url || null

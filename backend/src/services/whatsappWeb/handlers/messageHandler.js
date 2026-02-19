@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import logger from '../../../config/logger.js';
 import LinkAnalyzer from '../../linkAnalyzer.js';
 import { handleAdminCommand } from './adminCommandHandler.js';
-import { extractCouponData, formatCouponPreview, saveAndPublishCoupon } from './whatsappCouponHandler.js';
+import { extractCouponData, formatCouponPreview, saveAndPublishCoupon, executeCouponCapture } from './whatsappCouponHandler.js';
 import Coupon from '../../../models/Coupon.js';
 import PublishService from '../../autoSync/publishService.js';
 import { handlePendingFlow } from './whatsappPendingHandler.js';
@@ -398,7 +398,10 @@ export const handleMessage = async (client, msg) => {
                     pendingInteractions.set(chatId, { ...newState, lastUpdate: Date.now() });
                 }
             } else if (body === '2') { // Clone Coupon
-                await executeCouponCapture(client, msg, targetText, chatId);
+                const newState = await executeCouponCapture(client, msg, targetText, chatId);
+                if (newState) {
+                    pendingInteractions.set(chatId, { ...newState, lastUpdate: Date.now() });
+                }
             }
             return;
         }

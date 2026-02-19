@@ -145,6 +145,36 @@ class ScheduledPost {
     }
 
     /**
+     * Buscar agendamento por ID curto (primeiros 8 chars) ou parcial
+     * Resolve em memória para evitar casting de UUID no banco
+     */
+    static async findByShortId(shortId) {
+        try {
+            // Se for UUID completo, usa busca direta
+            if (shortId.length === 36) {
+                return await this.findById(shortId);
+            }
+
+            // Busca os posts mais recentes para filtrar em memória (assume-se que não há milhares de pendentes)
+            const { data: posts, error } = await supabase
+                .from('scheduled_posts')
+                .select('*, products!product_id(*)')
+                .in('status', ['pending', 'failed']) // Só faz sentido buscar nesses status para comandos
+                .order('scheduled_at', { ascending: true })
+                .limit(50); // Limite seguro
+
+            if (error) throw error;
+
+            const match = posts.find(p => p.id.startsWith(shortId));
+            return match || null;
+
+        } catch (error) {
+            logger.error(`Erro ao buscar agendamento por shortId ${shortId}: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
      * Deletar agendamento (Cancelar)
      */
     static async delete(id) {

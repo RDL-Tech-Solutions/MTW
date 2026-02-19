@@ -157,3 +157,31 @@ async function publishCoupon(coupon) {
         return { successCount: 0 };
     }
 }
+
+/**
+ * 4. Executar fluxo de captura (New)
+ */
+export const executeCouponCapture = async (client, msg, text, chatId) => {
+    try {
+        // 1. Extrair
+        const data = extractCouponData(text);
+
+        // 2. Gerar Preview
+        const preview = formatCouponPreview(data);
+
+        // 3. Enviar
+        await msg.reply(preview);
+
+        // 4. Retornar Estado Inicial para Review
+        return {
+            type: 'coupon',
+            data: data,
+            step: 'REVIEW'
+        };
+
+    } catch (error) {
+        logger.error('Erro em executeCouponCapture:', error);
+        await msg.reply('❌ Erro ao processar cupom.');
+        return null;
+    }
+};

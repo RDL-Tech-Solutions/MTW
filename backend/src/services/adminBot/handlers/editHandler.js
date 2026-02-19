@@ -322,6 +322,7 @@ const generateSummaryAndConfirm = async (ctx) => {
 
     const keyboard = new InlineKeyboard()
         .text('✅ Salvar e Publicar', 'wizard_confirm:save_publish').row()
+        .text('🤖 Agendar com IA', 'wizard_confirm:schedule_ai').row()
         .text('💾 Apenas Salvar', 'wizard_confirm:save_only').row()
         .text('❌ Cancelar', 'wizard_confirm:cancel');
 
@@ -437,6 +438,22 @@ export const handleWizardConfirm = async (ctx, action) => {
                 logger.error('Erro no publishService:', pubError);
                 await ctx.editMessageText(`❌ Erro ao invocar serviço de publicação: ${pubError.message}`);
             }
+
+        } else if (action === 'schedule_ai') {
+            await ctx.answerCallbackQuery('⏳ Solicitando agendamento...');
+
+            // Importar aiService dinamicamente para evitar dependência circular se houver
+            // Mas como editHandler é importado pelo index e index pelo aiService, cuidado.
+            // O ideal é chamar o método via index ou importar aqui se seguro.
+            // Vamos tentar importar o aiService aqui.
+            const aiService = (await import('../services/aiService.js')).default;
+
+            // Chamar handleScheduleAI passando o ID do produto
+            // O handleScheduleAI espera (ctx, params) onde params pode ser o ID string
+            await aiService.handleScheduleAI(ctx, productId);
+
+            // Resetar step após agendar
+            ctx.session.step = 'IDLE';
 
         } else {
             // Apenas salvar

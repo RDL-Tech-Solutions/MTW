@@ -1,391 +1,299 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Animated } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useRef, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Animated, Clipboard, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
-import { getPlatformIcon, getPlatformColor, getPlatformName } from '../../utils/platformIcons';
+import { getPlatformIcon, getPlatformColor } from '../../utils/platformIcons';
 
 /**
- * Componente de card de cupom profissional com animações
+ * Enhanced ML-style coupon card with "ticket" visual and copy action
  */
 export default function CouponCard({ coupon, onPress, index = 0 }) {
   const { colors } = useThemeStore();
+  const [copied, setCopied] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: index * 60,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        delay: index * 60,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      delay: Math.min(index * 40, 400),
+      useNativeDriver: true,
+    }).start();
   }, [index]);
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.98,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 0.98, useNativeDriver: true }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+  };
+
+  const handleCopy = () => {
+    if (coupon.code) {
+      Clipboard.setString(coupon.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      onPress();
+    }
   };
 
   const platformColor = getPlatformColor(coupon.platform);
-  const PlatformIconComponent = getPlatformIcon(coupon.platform, 28);
+  const PlatformIconComponent = getPlatformIcon(coupon.platform, 24);
 
   const formatDiscount = () => {
     if (coupon.discount_type === 'percentage') {
-      return `${coupon.discount_value}%`;
+      return `${coupon.discount_value}% OFF`;
     }
-    return `R$ ${coupon.discount_value}`;
+    return `R$${coupon.discount_value} OFF`;
   };
 
   const formatExpiry = () => {
     if (!coupon.valid_until) return null;
-
     const date = new Date(coupon.valid_until);
     const today = new Date();
     const diffTime = date - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) return '⚠️ Expirado';
-    if (diffDays === 0) return '🔥 Expira hoje';
-    if (diffDays === 1) return '⏰ Expira amanhã';
-    if (diffDays <= 3) return `⚡ ${diffDays} dias restantes`;
-    if (diffDays <= 7) return `${diffDays} dias`;
+    if (diffDays < 0) return { text: 'Expirado', urgent: true };
+    if (diffDays === 0) return { text: 'Expira hoje', urgent: true };
+    if (diffDays === 1) return { text: 'Expira amanhã', urgent: true };
+    if (diffDays <= 3) return { text: `${diffDays} dias restantes`, urgent: true };
 
-    return null;
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return { text: `Vence ${day}/${month}`, urgent: false };
   };
 
-  const expiryText = formatExpiry();
-  const isExpiringSoon = expiryText && expiryText.includes('⚡');
-  const isExpiringToday = expiryText && expiryText.includes('🔥');
-
-  const dynamicStyles = createDynamicStyles(colors, platformColor);
+  const expiry = formatExpiry();
+  const s = createStyles(colors, platformColor);
 
   return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [
-          { scale: scaleAnim },
-          { translateY: slideAnim },
-        ],
-      }}
-    >
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={[
-          dynamicStyles.card,
-          coupon.is_out_of_stock && dynamicStyles.outOfStockCard
-        ]}
+        style={[s.card, coupon.is_out_of_stock && s.outOfStockCard]}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        activeOpacity={1}
+        activeOpacity={0.9}
         disabled={coupon.is_out_of_stock}
       >
-        {/* Gradient Overlay - Subtle */}
-        <LinearGradient
-          colors={coupon.is_exclusive
-            ? ['rgba(255, 215, 0, 0.08)', 'transparent']
-            : ['transparent', 'transparent']
-          }
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Conteúdo */}
-        <View style={dynamicStyles.content}>
-          {/* Seção Esquerda - Desconto */}
-          <View style={dynamicStyles.discountSection}>
-            <View style={[dynamicStyles.discountCircle, { backgroundColor: platformColor + '15' }]}>
-              <Text style={[dynamicStyles.discountValue, { color: platformColor }]}>
-                {formatDiscount()}
-              </Text>
-              <Text style={[dynamicStyles.offText, { color: platformColor }]}>OFF</Text>
-            </View>
-
-            {/* Badges */}
-            <View style={dynamicStyles.badgesContainer}>
-              {coupon.is_exclusive && !coupon.is_out_of_stock && (
-                <View style={dynamicStyles.exclusiveBadge}>
-                  <Ionicons name="star" size={12} color="#FFD700" />
-                  <Text style={dynamicStyles.exclusiveText}>VIP</Text>
-                </View>
-              )}
-              {expiryText && (
-                <View style={[
-                  dynamicStyles.expiryBadge,
-                  (isExpiringSoon || isExpiringToday) && dynamicStyles.expiryUrgent
-                ]}>
-                  <Text style={[
-                    dynamicStyles.expiryText,
-                    (isExpiringSoon || isExpiringToday) && dynamicStyles.expiryTextUrgent
-                  ]}>
-                    {expiryText}
-                  </Text>
-                </View>
-              )}
-              {coupon.is_out_of_stock && (
-                <View style={dynamicStyles.outOfStockBadge}>
-                  <Text style={dynamicStyles.outOfStockText}>Esgotado</Text>
-                </View>
-              )}
-            </View>
+        {/* Left Section: Icon & Dotted Separator */}
+        <View style={s.leftSection}>
+          <View style={[s.platformCircle, { backgroundColor: platformColor + '15' }]}>
+            {PlatformIconComponent}
           </View>
-
-          {/* Divisor vertical com tracejado */}
-          <View style={dynamicStyles.dividerContainer}>
-            <View style={[dynamicStyles.divider, { backgroundColor: colors.border }]} />
+          {/* Vertical Dotted Line */}
+          <View style={s.dottedLineContainer}>
+            {[...Array(6)].map((_, i) => (
+              <View key={i} style={[s.dot, { backgroundColor: colors.border }]} />
+            ))}
           </View>
+          {/* Circle Cutouts */}
+          <View style={[s.circleCutout, s.cutoutTop, { backgroundColor: '#EBEBEB' }]} />
+          <View style={[s.circleCutout, s.cutoutBottom, { backgroundColor: '#EBEBEB' }]} />
+        </View>
 
-          {/* Seção Direita - Informações */}
-          <View style={dynamicStyles.infoSection}>
-            {/* Header com plataforma */}
-            <View style={dynamicStyles.platformHeader}>
-              <View style={[dynamicStyles.platformIcon, { backgroundColor: platformColor + '15' }]}>
-                {PlatformIconComponent}
-              </View>
-              <Text style={[dynamicStyles.platformName, { color: colors.textMuted }]}>
-                {getPlatformName(coupon.platform)}
-              </Text>
-            </View>
+        {/* Center: Info */}
+        <View style={s.infoSection}>
+          <Text style={s.discountTitle} numberOfLines={1}>
+            {formatDiscount()}
+            {coupon.is_exclusive && <Text style={s.exclusiveTag}> ★ VIP</Text>}
+          </Text>
 
-            {/* Título */}
-            {coupon.title && (
-              <Text style={[dynamicStyles.title, { color: colors.text }]} numberOfLines={2}>
-                {coupon.title}
+          {coupon.title && (
+            <Text style={s.subtitle} numberOfLines={1}>
+              {coupon.title}
+            </Text>
+          )}
+
+          <View style={s.conditionsRow}>
+            {coupon.min_purchase > 0 && (
+              <Text style={s.conditionText}>
+                Mín. R${coupon.min_purchase.toFixed(0)}
               </Text>
             )}
-
-            {/* Condições */}
-            <View style={dynamicStyles.conditions}>
-              {coupon.min_purchase > 0 && (
-                <View style={dynamicStyles.conditionItem}>
-                  <Ionicons name="cash-outline" size={14} color={colors.textMuted} />
-                  <Text style={[dynamicStyles.conditionText, { color: colors.textMuted }]}>
-                    Mín. R$ {coupon.min_purchase.toFixed(0)}
-                  </Text>
-                </View>
-              )}
-              {coupon.code && (
-                <View style={dynamicStyles.conditionItem}>
-                  <Ionicons name="ticket-outline" size={14} color={platformColor} />
-                  <Text style={[dynamicStyles.codeText, { color: platformColor }]}>
-                    {coupon.code}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Botão de ação */}
-            <TouchableOpacity
-              style={[
-                dynamicStyles.actionButton,
-                { backgroundColor: platformColor },
-                coupon.is_out_of_stock && dynamicStyles.actionButtonDisabled
-              ]}
-              disabled={coupon.is_out_of_stock}
-            >
-              <Text style={dynamicStyles.actionButtonText}>
-                {coupon.is_out_of_stock ? 'Indisponível' : 'Ver oferta'}
-              </Text>
-              {!coupon.is_out_of_stock && (
-                <Ionicons name="arrow-forward" size={16} color="#fff" />
-              )}
-            </TouchableOpacity>
+            {coupon.code && (
+              <View style={[s.codeBadge, { backgroundColor: platformColor + '10' }]}>
+                <Text style={[s.codeText, { color: platformColor }]}>{coupon.code}</Text>
+              </View>
+            )}
           </View>
+
+          <View style={s.bottomRow}>
+            {expiry && (
+              <Text style={[s.expiryText, expiry.urgent && { color: colors.warning }]}>
+                {expiry.text}
+              </Text>
+            )}
+            {coupon.is_out_of_stock && (
+              <Text style={s.outOfStockText}>Esgotado</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Right: Action button */}
+        <View style={s.actionContainer}>
+          {coupon.code ? (
+            <TouchableOpacity
+              style={[s.actionButton, { backgroundColor: copied ? colors.success : platformColor }]}
+              onPress={handleCopy}
+            >
+              <Text style={s.actionButtonText}>
+                {copied ? 'Copiado!' : 'Pegar'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[s.actionButton, { borderColor: platformColor, borderWidth: 1, backgroundColor: 'transparent' }]}
+              onPress={onPress}
+            >
+              <Text style={[s.actionButtonText, { color: platformColor }]}>Ver</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-const createDynamicStyles = (colors, platformColor) => StyleSheet.create({
+const createStyles = (colors, platformColor) => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: 20,
-    marginHorizontal: 16,
-    marginVertical: 8,
+    borderRadius: 8,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    height: 100, // Fixed height for ticket look
     overflow: 'hidden',
-    borderWidth: 1.5,
+    borderWidth: 1, // Subtle border
     borderColor: colors.border,
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+      boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
     } : {
-      elevation: 4,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
+      elevation: 2,
     }),
   },
   outOfStockCard: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
-  content: {
-    flexDirection: 'row',
-    padding: 16,
-    minHeight: 140,
-  },
-  discountSection: {
+  leftSection: {
+    width: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingRight: 16,
+    position: 'relative',
+    borderRightWidth: 0,
   },
-  discountCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+  platformCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    zIndex: 2,
   },
-  discountValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  offText: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: -4,
-  },
-  badgesContainer: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  exclusiveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#000',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    gap: 4,
-  },
-  exclusiveText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFD700',
-  },
-  expiryBadge: {
-    backgroundColor: colors.infoLight || '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  expiryUrgent: {
-    backgroundColor: '#FEF3C7',
-  },
-  expiryText: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  expiryTextUrgent: {
-    color: '#92400E',
-  },
-  outOfStockBadge: {
-    backgroundColor: colors.error,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  outOfStockText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  dividerContainer: {
+  dottedLineContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 10,
+    bottom: 10,
+    justifyContent: 'space-between',
     width: 1,
-    justifyContent: 'center',
-    paddingVertical: 8,
+    zIndex: 1,
   },
-  divider: {
+  dot: {
     width: 1,
-    height: '100%',
-    opacity: 0.3,
+    height: 4,
+    borderRadius: 1,
+  },
+  circleCutout: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    right: -8,
+    zIndex: 3,
+    borderWidth: 1, // Optional: verify if border looks good on cutout
+    borderColor: 'transparent', // Usually handled by parent background, but here we hardcoded #EBEBEB to match screen bg
+  },
+  cutoutTop: {
+    top: -8,
+  },
+  cutoutBottom: {
+    bottom: -8,
   },
   infoSection: {
     flex: 1,
-    paddingLeft: 16,
-    justifyContent: 'space-between',
-  },
-  platformHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  platformIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16, // Extra padding because of cutouts
     justifyContent: 'center',
   },
-  platformName: {
-    fontSize: 11,
+  discountTitle: {
+    fontSize: 16,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: colors.text,
+    marginBottom: 4,
   },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-    marginBottom: 8,
+  exclusiveTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFB800',
   },
-  conditions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+  subtitle: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginBottom: 6,
   },
-  conditionItem: {
+  conditionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
+    marginBottom: 6,
   },
   conditionText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  codeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   codeText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
-  actionButton: {
+  bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    gap: 6,
+    gap: 8,
   },
-  actionButtonDisabled: {
-    backgroundColor: colors.border,
+  expiryText: {
+    fontSize: 10,
+    color: colors.textMuted,
+  },
+  outOfStockText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.error,
+  },
+  actionContainer: {
+    width: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingRight: 12,
+  },
+  actionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    minWidth: 70,
+    alignItems: 'center',
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#fff',
   },

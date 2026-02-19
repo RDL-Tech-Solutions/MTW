@@ -20,6 +20,7 @@ import scheduledPostRoutes from './scheduledPostRoutes.js';
 import healthRoutes from './healthRoutes.js';
 import serverRoutes from './serverRoutes.js';
 import imageRoutes from './imageRoutes.js';
+import appCardRoutes from './appCardRoutes.js';
 
 const router = express.Router();
 
@@ -48,5 +49,6 @@ router.use('/cron', cronRoutes); // Rotas para Vercel Cron
 router.use('/ai', aiRoutes);
 router.use('/scheduled-posts', scheduledPostRoutes);
 router.use('/images', imageRoutes); // Rotas para conversão de imagens
+router.use('/app-cards', appCardRoutes); // Cards promocionais do app
 
 export default router;

@@ -85,15 +85,10 @@ export const deletePostByCommand = async (ctx, commandText) => {
         const idFragment = commandText.replace('/del_', '').trim();
         if (!idFragment) return;
 
-        // Buscar ID completo via fragmento
-        // Usando filter com cast para garantir busca parcial em UUID
-        const { data: post, error } = await supabase
-            .from('scheduled_posts')
-            .select('id')
-            .filter('id::text', 'ilike', `${idFragment}%`)
-            .maybeSingle();
+        // Buscar via Model com suporte a short ID
+        const post = await ScheduledPost.findByShortId(idFragment);
 
-        if (error || !post) {
+        if (!post) {
             return ctx.reply('❌ Agendamento não encontrado.');
         }
 
@@ -103,7 +98,7 @@ export const deletePostByCommand = async (ctx, commandText) => {
         // await showScheduledPostsMenu(ctx);
     } catch (error) {
         logger.error(`Erro ao deletar post ${commandText}:`, error);
-        await ctx.reply('❌ Erro ao cancelar. Verifique se o ID está correto.');
+        await ctx.reply('❌ Erro ao cancelar.');
     }
 };
 
@@ -115,28 +110,10 @@ export const forcePublishPost = async (ctx, commandText) => {
         const idFragment = commandText.replace('/pub_', '').trim();
         if (!idFragment) return;
 
-        // Buscar post completo via fragmento
-        // Usando filter com cast para garantir busca parcial em UUID
-        const { data: post, error } = await supabase
-            .from('scheduled_posts')
-            .select('*, products:product_id(*)')
-            .filter('id::text', 'ilike', `${idFragment}%`)
-            .maybeSingle();
+        // Buscar via Model com suporte a short ID
+        const post = await ScheduledPost.findByShortId(idFragment);
 
-        if (error || !post) {
-            // Fallback: tentar busca exata se o fragmento parecer um UUID completo (raro aqui, mas possível)
-            if (idFragment.length === 36) {
-                const { data: exactPost, error: exactError } = await supabase
-                    .from('scheduled_posts')
-                    .select('*, products:product_id(*)')
-                    .eq('id', idFragment)
-                    .maybeSingle();
-
-                if (exactError || !exactPost) return ctx.reply('❌ Agendamento não encontrado.');
-                // Se achou, segue com exactPost (atribuindo a post, mas aqui teria que refatorar. Vamos manter simples).
-                // Como não posso reatribuir const, vou retornar erro mesmo.
-                return ctx.reply('❌ Agendamento não encontrado.');
-            }
+        if (!post) {
             return ctx.reply('❌ Agendamento não encontrado.');
         }
 

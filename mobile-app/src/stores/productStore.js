@@ -6,6 +6,7 @@ export const useProductStore = create((set, get) => ({
   products: [],
   categories: [],
   favorites: [],
+  appCards: [],
   isLoading: false,
   error: null,
 
@@ -20,19 +21,19 @@ export const useProductStore = create((set, get) => ({
           params.append(key, filters[key]);
         }
       });
-      
+
       const queryString = params.toString();
       const url = `/products${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
-      
+
       // A API retorna { products: [...], total, page, limit, totalPages }
       const data = response.data.data || {};
       const newProducts = data.products || [];
-      
+
       // Se for página 1, substituir produtos. Se for página > 1, adicionar aos existentes
       const currentPage = filters.page || 1;
       const currentProducts = get().products;
-      
+
       let updatedProducts;
       if (currentPage === 1) {
         updatedProducts = newProducts;
@@ -42,10 +43,10 @@ export const useProductStore = create((set, get) => ({
         const uniqueNewProducts = newProducts.filter(p => !existingIds.has(p.id));
         updatedProducts = [...currentProducts, ...uniqueNewProducts];
       }
-      
+
       set({ products: updatedProducts, isLoading: false });
-      return { 
-        success: true, 
+      return {
+        success: true,
         products: updatedProducts,
         pagination: {
           total: data.total || 0,
@@ -79,7 +80,7 @@ export const useProductStore = create((set, get) => ({
     try {
       const response = await api.get('/categories');
       const categories = response.data.data || [];
-      
+
       set({ categories });
       return { success: true, categories };
     } catch (error) {
@@ -94,15 +95,15 @@ export const useProductStore = create((set, get) => ({
     try {
       const response = await api.get('/favorites');
       const favorites = response.data.data || [];
-      
+
       // Salvar no cache local
       await storage.setFavorites(favorites);
-      
+
       set({ favorites, isLoading: false });
       return { success: true, favorites };
     } catch (error) {
       console.error('Erro ao buscar favoritos:', error);
-      
+
       // Tentar carregar do cache local
       try {
         const cachedFavorites = await storage.getFavorites();
@@ -119,33 +120,33 @@ export const useProductStore = create((set, get) => ({
   addFavorite: async (productId) => {
     try {
       await api.post(`/favorites/${productId}`);
-      
+
       // Buscar produto completo se não estiver na lista
       let product = get().products.find(p => p.id === productId);
-      
+
       if (!product) {
         const productResult = await get().fetchProductById(productId);
         if (productResult.success) {
           product = productResult.product;
         }
       }
-      
+
       // Atualizar lista local
       const favorites = get().favorites;
       if (product && !favorites.find(f => f.id === productId)) {
         const updatedFavorites = [...favorites, product];
         set({ favorites: updatedFavorites });
-        
+
         // Salvar no cache
         await storage.setFavorites(updatedFavorites);
       }
-      
+
       return { success: true };
     } catch (error) {
       console.error('Erro ao adicionar favorito:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || error.message || 'Erro ao adicionar favorito' 
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Erro ao adicionar favorito'
       };
     }
   },
@@ -154,25 +155,25 @@ export const useProductStore = create((set, get) => ({
   removeFavorite: async (productId) => {
     try {
       await api.delete(`/favorites/${productId}`);
-      
+
       // Atualizar lista local
       const favorites = get().favorites.filter(f => f.id !== productId);
       set({ favorites });
-      
+
       // Salvar no cache
       await storage.setFavorites(favorites);
-      
+
       return { success: true };
     } catch (error) {
       console.error('Erro ao remover favorito:', error);
-      
+
       // Remover localmente mesmo se a API falhar
       const favorites = get().favorites.filter(f => f.id !== productId);
       set({ favorites });
-      
-      return { 
-        success: false, 
-        error: error.response?.data?.error || error.message || 'Erro ao remover favorito' 
+
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Erro ao remover favorito'
       };
     }
   },
@@ -194,7 +195,7 @@ export const useProductStore = create((set, get) => ({
       console.error('Erro ao registrar clique:', error);
     }
   },
-  
+
   // Buscar cupons
   fetchCoupons: async (filters = {}) => {
     try {
@@ -204,24 +205,24 @@ export const useProductStore = create((set, get) => ({
           params.append(key, filters[key]);
         }
       });
-      
+
       const queryString = params.toString();
       const url = `/coupons${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
-      
+
       const data = response.data.data || {};
       const coupons = Array.isArray(data) ? data : (data.coupons || []);
-      
+
       return { success: true, coupons };
     } catch (error) {
       console.error('Erro ao buscar cupons:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || error.message || 'Erro ao buscar cupons' 
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Erro ao buscar cupons'
       };
     }
   },
-  
+
   // Buscar cupom por ID
   fetchCouponById: async (id) => {
     try {
@@ -229,10 +230,23 @@ export const useProductStore = create((set, get) => ({
       return { success: true, coupon: response.data.data };
     } catch (error) {
       console.error('Erro ao buscar cupom:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || error.message || 'Erro ao buscar cupom' 
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Erro ao buscar cupom'
       };
+    }
+  },
+
+  // Buscar cards do app
+  fetchAppCards: async () => {
+    try {
+      const response = await api.get('/app-cards');
+      const cards = response.data.data || [];
+      set({ appCards: cards });
+      return { success: true, cards };
+    } catch (error) {
+      console.error('Erro ao buscar cards:', error);
+      return { success: false, error: error.message };
     }
   },
 }));
