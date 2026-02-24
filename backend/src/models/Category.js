@@ -19,9 +19,9 @@ class Category {
 
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ 
-        name, 
-        slug: finalSlug, 
+      .insert([{
+        name,
+        slug: finalSlug,
         icon: icon || '📦',
         description: description || null,
         is_active: is_active !== false
@@ -115,6 +115,7 @@ class Category {
       .select('*', { count: 'exact', head: true })
       .eq('category_id', id)
       .eq('is_active', true)
+      .in('status', ['approved', 'created', 'published'])
       .not('category_id', 'is', null);
 
     if (error) {
@@ -128,13 +129,14 @@ class Category {
   static async findAllWithCount() {
     try {
       const categories = await this.findAll();
-      
+
       // Buscar contagem de produtos por categoria usando uma query agregada
       // Isso é mais eficiente que buscar todos os produtos
       const { data: productCounts, error: countError } = await supabase
         .from('products')
         .select('category_id, id')
         .eq('is_active', true)
+        .in('status', ['approved', 'created', 'published'])
         .not('category_id', 'is', null);
 
       if (countError) {
@@ -164,9 +166,9 @@ class Category {
         // Converter ID da categoria para string para comparação
         const catIdStr = String(category.id);
         const count = countMap[catIdStr] || 0;
-        
+
         logger.info(`Categoria ${category.name} (ID: ${category.id}): ${count} produtos`);
-        
+
         return {
           ...category,
           product_count: count

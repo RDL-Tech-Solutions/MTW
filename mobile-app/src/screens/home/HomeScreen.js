@@ -79,7 +79,7 @@ export default function HomeScreen({ navigation, route }) {
     loadProducts(true);
   }, [searchQuery, selectedCategory, selectedPlatform]);
 
-  const loadProducts = async (reset = false) => {
+  const loadProducts = async (reset = false, nextPage = null) => {
     if (reset) {
       setLoading(true);
       setPagination(prev => ({ ...prev, page: 1, hasMore: true }));
@@ -88,7 +88,7 @@ export default function HomeScreen({ navigation, route }) {
     }
 
     try {
-      const currentPage = reset ? 1 : pagination.page;
+      const currentPage = reset ? 1 : (nextPage || pagination.page);
       const filters = {
         page: currentPage,
         limit: pagination.limit,
@@ -132,8 +132,9 @@ export default function HomeScreen({ navigation, route }) {
 
   const loadMore = () => {
     if (!loadingMore && pagination.hasMore) {
-      setPagination(prev => ({ ...prev, page: prev.page + 1 }));
-      loadProducts(false);
+      const nextPage = pagination.page + 1;
+      setPagination(prev => ({ ...prev, page: nextPage }));
+      loadProducts(false, nextPage);
     }
   };
 

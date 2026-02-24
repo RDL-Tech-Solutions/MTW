@@ -278,33 +278,6 @@ class LinkAnalyzer {
 
     let urlToCheck = url;
 
-    // Se for link encurtado, fazer requisição GET para pegar URL real (HEAD não retorna responseUrl corretamente)
-    if (url.includes('s.shopee.com.br') || url.includes('shp.ee')) {
-      try {
-        const response = await axios.get(url, {
-          maxRedirects: 10,
-          validateStatus: () => true,
-          timeout: 12000,
-          maxContentLength: 50000, // Limitar tamanho para não baixar HTML completo
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
-          }
-        });
-
-        // Pegar URL final do redirecionamento
-        const expandedUrl = response.request?.res?.responseUrl || response.request?.responseURL;
-        if (expandedUrl && expandedUrl !== url) {
-          urlToCheck = expandedUrl;
-          console.log(`   🔄 Link encurtado expandido: ${urlToCheck.substring(0, 100)}`);
-        }
-      } catch (e) {
-        console.log(`   ⚠️ Erro ao expandir link encurtado: ${e.message}`);
-        // Continuar com URL original
-      }
-    }
-
 
     // Padrão 1: URL padrão com shop_name
     let match = urlToCheck.match(/shopee\.com(?:\.br)?\/[^/]+\/(\d+)\/(\d+)/);
@@ -568,29 +541,27 @@ class LinkAnalyzer {
         console.log('🔗 URL Shopee original:', url);
         let finalUrl = url;
 
-        // ESTRATÉGIA MELHORADA: Para links encurtados, tentar API PRIMEIRO
-        // porque followRedirects pode levar para unsupported.html
+        // ESTRATÉGIA MELHORADA: Seguir redirecionamentos agressivamente (até 5 tentativas)
+        // Isso cobre o pedido do usuário de até 3 redirecionamentos para links de afiliado.
         const isShortLink = url.includes('s.shopee.com.br') || url.includes('shp.ee');
 
         if (isShortLink) {
-          console.log('   🔗 Link encurtado detectado, tentando API primeiro...');
-
-          // Tentar seguir redirecionamento apenas para pegar IDs
+          console.log('   🔗 Link encurtado detectado, seguindo redirecionamentos...');
           try {
-            const tempUrl = await this.followRedirects(url, 3);
-            if (tempUrl && !tempUrl.includes('unsupported.html')) {
-              finalUrl = tempUrl;
-              console.log('   ✅ URL expandida:', finalUrl);
+            const redirectedUrl = await this.followRedirects(url, 5);
+            if (redirectedUrl && !redirectedUrl.includes('unsupported.html')) {
+              finalUrl = redirectedUrl;
+              console.log('   ✅ URL expandida final:', finalUrl);
             } else {
-              console.log('   ⚠️ Redirecionamento levou para unsupported.html, usando URL original');
+              console.log('   ⚠️ Redirecionamento levou para unsupported.html ou falhou, mantendo original');
               finalUrl = url;
             }
           } catch (e) {
-            console.log('   ⚠️ Erro ao seguir redirecionamento:', e.message);
+            console.log('   ⚠️ Erro no processo de redirecionamento:', e.message);
             finalUrl = url;
           }
 
-          // TENTAR API OFICIAL DA SHOPEE PRIMEIRO
+          // TENTAR API OFICIAL DA SHOPEE
           try {
             const ids = await this.extractShopeeIds(finalUrl);
             if (ids && ids.itemId) {
@@ -598,6 +569,8 @@ class LinkAnalyzer {
               const apiData = await this.extractShopeeFromAPI(finalUrl);
               if (apiData && apiData.name && apiData.currentPrice > 0) {
                 console.log('   ✅ Dados obtidos via API da Shopee!');
+                // IMPORTANTE: Manter o link original de afiliado
+                apiData.affiliateLink = url;
                 return apiData;
               }
             }
@@ -605,16 +578,18 @@ class LinkAnalyzer {
             console.log('   ⚠️ API da Shopee falhou:', apiError.message);
           }
         } else {
-          // Para links normais, seguir redirecionamentos normalmente
+          // Para links normais
           console.log('   🔄 Seguindo redirecionamentos para obter URL final...');
           finalUrl = await this.followRedirects(url, 5);
           console.log('   ✅ URL final após redirecionamento(s):', finalUrl);
 
-          // TENTAR API DA SHOPEE PRIMEIRO (mais confiável)
+          // TENTAR API DA SHOPEE
           try {
             const shopeeApiData = await this.extractShopeeFromAPI(finalUrl);
             if (shopeeApiData && shopeeApiData.name && shopeeApiData.currentPrice > 0) {
               console.log('✅ Dados obtidos via API da Shopee!');
+              // IMPORTANTE: Manter o link original
+              shopeeApiData.affiliateLink = url;
               return shopeeApiData;
             }
           } catch (apiError) {
@@ -1774,7 +1749,7 @@ class LinkAnalyzer {
           currentPrice: currentPrice || 0,
           oldPrice: oldPrice || 0,
           platform: 'shopee',
-          affiliateLink: finalUrl,
+          affiliateLink: url,
           productId: (await this.extractShopeeIds(finalUrl))?.itemId || null
         };
 
@@ -4025,7 +4000,7 @@ class LinkAnalyzer {
         result = {
           error: `Erro ao extrair informações da Shopee: ${shopeeError.message}`,
           platform: 'shopee',
-          affiliateLink: finalUrl
+          affiliateLink: originalUrl
         };
       }
     } else if (platform === 'mercadolivre') {
@@ -4036,7 +4011,7 @@ class LinkAnalyzer {
         result = {
           error: `Erro ao extrair informações do Mercado Livre: ${meliError.message}`,
           platform: 'mercadolivre',
-          affiliateLink: finalUrl
+          affiliateLink: originalUrl
         };
       }
     } else if (platform === 'amazon') {
@@ -4101,7 +4076,7 @@ class LinkAnalyzer {
     } else {
       result = {
         platform: 'unknown',
-        affiliateLink: finalUrl,
+        affiliateLink: originalUrl,
         error: 'Plataforma não suportada. Use links da Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza ou Pichau.'
       };
     }
