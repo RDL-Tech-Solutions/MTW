@@ -169,8 +169,12 @@ export const handleMessage = async (client, msg) => {
                 return;
             }
 
-            // 2. Edição e Aprovação (EDIT_*, REPUBLISH_*, PUBLISH_WIZARD_*)
-            if (interaction.step.startsWith('EDIT_') || interaction.step.startsWith('REPUBLISH_') || interaction.step.startsWith('PUBLISH_WIZARD_')) {
+            // 2. Edição e Aprovação (EDIT_*, REPUBLISH_*, PUBLISH_WIZARD_*, SCHEDULE_*)
+            // Coupon-specific EDIT_ steps (handled in legacy block below, NOT in handleEditFlow)
+            const COUPON_EDIT_STEPS = ['EDIT_CODE', 'EDIT_DISCOUNT', 'EDIT_PLATFORM', 'EDIT_TYPE', 'EDIT_MIN', 'EDIT_EXPIRY'];
+            const isCouponEditStep = COUPON_EDIT_STEPS.includes(interaction.step);
+
+            if (!isCouponEditStep && (interaction.step.startsWith('EDIT_') || interaction.step.startsWith('REPUBLISH_') || interaction.step.startsWith('PUBLISH_WIZARD_') || interaction.step.startsWith('SCHEDULE_'))) {
                 const newState = await handleEditFlow(client, msg, interaction, body);
                 if (newState.step === 'IDLE') {
                     pendingInteractions.delete(chatId);
@@ -235,15 +239,46 @@ export const handleMessage = async (client, msg) => {
                     if (field === 'name') interaction.data.name = body;
                     if (field === 'price') interaction.data.currentPrice = parseFloat(body.replace(',', '.').replace(/[^\d.]/g, '')) || interaction.data.currentPrice;
                 } else if (interaction.type === 'coupon') {
-                    if (field === 'code') interaction.data.code = body.toUpperCase();
+                    if (field === 'code') interaction.data.code = body.toUpperCase().trim();
                     if (field === 'discount') {
-                        // Tentar detectar se é % ou R$
                         if (body.includes('%')) {
                             interaction.data.discount_type = 'percentage';
                             interaction.data.discount_value = parseInt(body.replace(/\D/g, ''));
                         } else {
                             interaction.data.discount_type = 'fixed';
                             interaction.data.discount_value = parseFloat(body.replace(',', '.').replace(/[^\d.]/g, ''));
+                        }
+                    }
+                    if (field === 'platform') {
+                        // Mapear texto para plataforma
+                        const pb = body.toLowerCase();
+                        if (pb.includes('shopee')) interaction.data.platform = 'shopee';
+                        else if (pb.includes('mercado') || pb.includes('ml')) interaction.data.platform = 'mercadolivre';
+                        else if (pb.includes('amazon') || pb.includes('amzn')) interaction.data.platform = 'amazon';
+                        else if (pb.includes('magalu') || pb.includes('magazine')) interaction.data.platform = 'magazineluiza';
+                        else if (pb.includes('ali')) interaction.data.platform = 'aliexpress';
+                        else if (pb.includes('kabum')) interaction.data.platform = 'kabum';
+                        else if (pb.includes('pichau')) interaction.data.platform = 'pichau';
+                        else interaction.data.platform = pb.trim() || 'general';
+                    }
+                    if (field === 'type') {
+                        if (body.includes('%') || body === '1') interaction.data.discount_type = 'percentage';
+                        else interaction.data.discount_type = 'fixed';
+                    }
+                    if (field === 'min') {
+                        const v = parseFloat(body.replace(',', '.').replace(/[^\d.]/g, ''));
+                        interaction.data.min_purchase = isNaN(v) ? 0 : v;
+                    }
+                    if (field === 'expiry') {
+                        if (body === '0' || body.toLowerCase() === 'nao' || body.toLowerCase() === 'não') {
+                            interaction.data.valid_until = null;
+                        } else {
+                            const parts = body.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+                            if (parts) {
+                                const year = parts[3] ? (parts[3].length === 2 ? '20' + parts[3] : parts[3]) : new Date().getFullYear();
+                                const dt = new Date(`${year}-${parts[2]}-${parts[1]}T23:59:59`);
+                                if (!isNaN(dt.getTime())) interaction.data.valid_until = dt.toISOString();
+                            }
                         }
                     }
                 }
@@ -257,7 +292,7 @@ export const handleMessage = async (client, msg) => {
                     ? formatProductPreview(interaction.data)
                     : formatCouponPreview(interaction.data);
 
-                await msg.reply(`✅ *Dado Atualizado! Confirme abaixo:*\n\n${preview}`);
+                await msg.reply(`✅ *Dado Atualizado!*\n\n${preview}`);
                 return;
             }
 
@@ -311,7 +346,23 @@ export const handleMessage = async (client, msg) => {
                         await msg.reply('🎟️ *Digite o novo Código do cupom:*');
                     } else if (body === '3') {
                         interaction.step = 'EDIT_DISCOUNT';
-                        await msg.reply('💰 *Digite o novo Desconto (ex: 10% ou 50.00):*');
+                        await msg.reply('💰 *Digite o novo Desconto (ex: 10% ou R$50.00):*');
+                    } else if (body === '4') {
+                        interaction.step = 'EDIT_PLATFORM';
+                        await msg.reply('🏪 *Digite a Plataforma:*\n`shopee` | `mercadolivre` | `amazon` | `aliexpress` | `magazineluiza` | `kabum` | `pichau` | `general`');
+                    } else if (body === '5') {
+                        interaction.step = 'EDIT_TYPE';
+                        await msg.reply('📊 *Tipo de Desconto:*\n`1` → Porcentagem (%)\n`2` → Valor Fixo (R$)');
+                    } else if (body === '6') {
+                        interaction.step = 'EDIT_MIN';
+                        await msg.reply('🛒 *Mínimo de compra (R$):*\nDigite o valor mínimo ou `0` para sem mínimo.');
+                    } else if (body === '7') {
+                        interaction.step = 'EDIT_EXPIRY';
+                        await msg.reply('📅 *Data de validade (DD/MM/AAAA):*\nDigite `0` para sem data de expiração.');
+                    } else if (body === '8') {
+                        pendingInteractions.delete(chatId);
+                        await msg.reply('❌ Operação cancelada.');
+                        return;
                     }
                 }
                 pendingInteractions.set(chatId, interaction);

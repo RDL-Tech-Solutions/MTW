@@ -18,7 +18,8 @@ class LinkAnalyzer {
       urlLower.includes('mercadolibre.com') ||
       urlLower.includes('mercadol') ||
       urlLower.includes('mlb') ||
-      urlLower.includes('produto.mercadolivre')) {
+      urlLower.includes('produto.mercadolivre') ||
+      urlLower.includes('meli.la')) {
       return 'mercadolivre';
     }
     if (urlLower.includes('amazon.com.br') || urlLower.includes('amzn.to')) {
@@ -277,30 +278,33 @@ class LinkAnalyzer {
 
     let urlToCheck = url;
 
-    // Se for link encurtado, fazer requisição HEAD para pegar URL real
+    // Se for link encurtado, fazer requisição GET para pegar URL real (HEAD não retorna responseUrl corretamente)
     if (url.includes('s.shopee.com.br') || url.includes('shp.ee')) {
       try {
-        const response = await axios.head(url, {
-          maxRedirects: 5,
+        const response = await axios.get(url, {
+          maxRedirects: 10,
           validateStatus: () => true,
-          timeout: 10000,
+          timeout: 12000,
+          maxContentLength: 50000, // Limitar tamanho para não baixar HTML completo
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
           }
         });
 
         // Pegar URL final do redirecionamento
-        if (response.request && response.request.res && response.request.res.responseUrl) {
-          urlToCheck = response.request.res.responseUrl;
-          console.log(`   🔄 Link encurtado expandido: ${urlToCheck.substring(0, 80)}...`);
+        const expandedUrl = response.request?.res?.responseUrl || response.request?.responseURL;
+        if (expandedUrl && expandedUrl !== url) {
+          urlToCheck = expandedUrl;
+          console.log(`   🔄 Link encurtado expandido: ${urlToCheck.substring(0, 100)}`);
         }
       } catch (e) {
         console.log(`   ⚠️ Erro ao expandir link encurtado: ${e.message}`);
         // Continuar com URL original
       }
     }
+
 
     // Padrão 1: URL padrão com shop_name
     let match = urlToCheck.match(/shopee\.com(?:\.br)?\/[^/]+\/(\d+)\/(\d+)/);
@@ -339,6 +343,28 @@ class LinkAnalyzer {
         itemId: match[1]
       };
     }
+
+    // Padrão 5: Links de afiliado MMP (s.shopee.com.br com ?mmp)
+    // Estes links redirecionam para URLs com ?mmp&pid=an&uls_trackid=...
+    // O uls_trackid pode conter o itemId: ex 550oi9va01r0 onde o itemId pode estar nos dígitos
+    // Melhor estratégia: extrair o último segmento da URL path antes dos ? que seja um número
+    try {
+      const urlObj = new URL(urlToCheck);
+      // Verificar path segments por números que possam ser itemId
+      const segments = urlObj.pathname.split('/').filter(Boolean);
+      const numericSegments = segments.filter(s => /^\d{8,}$/.test(s)); // IDs da Shopee têm 8+ dígitos
+      if (numericSegments.length >= 2) {
+        return { shopId: numericSegments[numericSegments.length - 2], itemId: numericSegments[numericSegments.length - 1] };
+      } else if (numericSegments.length === 1) {
+        return { shopId: '0', itemId: numericSegments[0] };
+      }
+      // Verificar parâmetros que possam ter itemId em links de afiliado
+      const pidParam = urlObj.searchParams.get('uls_trackid') || '';
+      const trackDigits = pidParam.match(/\d{10,}/);
+      if (trackDigits) {
+        return { shopId: '0', itemId: trackDigits[0] };
+      }
+    } catch (e) { /* URL inválida */ }
 
     return null;
   }
@@ -3946,6 +3972,7 @@ class LinkAnalyzer {
         url.includes('aliexpress.com/e/_') ||
         url.includes('tidd.ly') ||
         url.includes('bit.ly') ||
+        url.includes('meli.la') ||
         url.includes('divulgador.magalu.com');
 
       // IMPORTANTE: Para Shopee, NÃO seguir redirecionamentos aqui
@@ -4083,8 +4110,8 @@ class LinkAnalyzer {
     // especialmente se for um link já afiliado (ajuda muito na automação)
     if (result && !result.error) {
       // Se o link original parece mais "completo" ou é o que o usuário quer preservar
-      // Para ML, se tiver matt_word ou for link encurtado /sec/, com certeza é o que queremos
-      const isMeliAffiliate = originalUrl.includes('mercadolivre.com') && (originalUrl.includes('matt_word=') || originalUrl.includes('/sec/'));
+      // Para ML, se tiver matt_word, /sec/, ou for link curto meli.la, com certeza é o que queremos
+      const isMeliAffiliate = (originalUrl.includes('mercadolivre.com') && (originalUrl.includes('matt_word=') || originalUrl.includes('/sec/'))) || originalUrl.includes('meli.la');
       const isShopeeAffiliate = originalUrl.includes('shopee.com') && (originalUrl.includes('utm_') || originalUrl.includes('aff_click_id') || originalUrl.includes('s.shopee.com.br'));
 
       // Link encurtado genérico (tidd.ly, bit.ly, magalu) também deve ser preservado se possível

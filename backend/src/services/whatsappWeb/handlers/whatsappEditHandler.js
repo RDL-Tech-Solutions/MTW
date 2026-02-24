@@ -4,6 +4,7 @@ import Category from '../../../models/Category.js';
 import PublishService from '../../autoSync/publishService.js';
 import schedulerService from '../../autoSync/schedulerService.js';
 import { extractCouponData, formatCouponPreview } from './whatsappCouponHandler.js';
+import logger from '../../../config/logger.js';
 
 // State keys:
 // EDIT_MENU:{productId}
@@ -336,6 +337,17 @@ export const startScheduleFlow = async (msg, product) => {
 async function _schedule(msg, product) {
     await msg.reply('⏳ *Solicitando agendamento à IA...*');
     await schedulerService.scheduleProduct(product);
+
+    // Atualizar status para 'approved' para que o produto apareça no app
+    if (product.id) {
+        try {
+            await Product.update(product.id, { status: 'approved' });
+            logger.info(`✅ [WhatsApp] Produto ${product.id} agendado e marcado como 'approved'`);
+        } catch (updateError) {
+            logger.warn(`⚠️ [WhatsApp] Não foi possível atualizar status do produto ${product.id}: ${updateError.message}`);
+        }
+    }
+
     await msg.reply('✅ *Agendamento Solicitado!*\n\nA IA definiu o melhor horário para publicação com base na categoria.');
     return { step: 'IDLE' };
 }
@@ -420,4 +432,20 @@ async function _publish(msg, product, couponId) {
     }
     const res = await PublishService.publishAll(productToPublish, { manual: true });
     await msg.reply(res.success ? '✅ *Sucesso!*' : `❌ Erro: ${res.reason}`);
+
+    // Atualizar status do produto no banco após publicação
+    if (product.id) {
+        try {
+            if (res.success) {
+                await Product.update(product.id, { status: 'published' });
+                logger.info(`✅ [WhatsApp] Status do produto ${product.id} atualizado para 'published'`);
+            } else {
+                // Publicação falhou, mas produto foi aprovado — marcar como approved para aparecer no app
+                await Product.update(product.id, { status: 'approved' });
+                logger.warn(`⚠️ [WhatsApp] Publicação falhou, produto ${product.id} marcado como 'approved'`);
+            }
+        } catch (updateError) {
+            logger.warn(`⚠️ [WhatsApp] Não foi possível atualizar status do produto ${product.id}: ${updateError.message}`);
+        }
+    }
 }

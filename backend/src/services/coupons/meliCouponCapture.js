@@ -437,6 +437,12 @@ class MeliCouponCapture {
         await this.loadSettings();
       }
 
+      // Se já for um link meli.la (novo formato de afiliado), preservá-lo diretamente
+      if (originalUrl.includes('meli.la')) {
+        logger.debug(`✅ Link meli.la preservado: ${originalUrl}`);
+        return originalUrl;
+      }
+
       // Extrair ID MLB- do link
       const productId = this.extractMeliProductId(originalUrl);
 

@@ -51,7 +51,7 @@ class PushNotificationService {
         }
       });
 
-      if (response.data.data && response.data.data[0].status === 'error') {
+      if (response.data.data && response.data.data[0] && response.data.data[0].status === 'error') {
         logger.error(`Erro ao enviar push: ${response.data.data[0].message}`);
         return false;
       }
@@ -99,7 +99,7 @@ class PushNotificationService {
 
   // Notificação de novo cupom
   async notifyNewCoupon(users, coupon) {
-    const messages = users.map(user => 
+    const messages = users.map(user =>
       this.createMessage(
         user.push_token,
         '🎉 Novo Cupom Disponível!',
@@ -114,7 +114,7 @@ class PushNotificationService {
   // Notificação de queda de preço
   async notifyPriceDrop(users, product, oldPrice, newPrice) {
     const discount = Math.round(((oldPrice - newPrice) / oldPrice) * 100);
-    
+
     const messages = users.map(user =>
       this.createMessage(
         user.push_token,

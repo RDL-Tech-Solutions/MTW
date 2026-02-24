@@ -841,6 +841,8 @@ class AliExpressSync {
             newCount++;
             if (config.aliexpress_auto_publish) {
               await SchedulerService.scheduleProduct(product);
+              // Marcar como 'approved' para aparecer no app
+              try { await Product.update(product.id, { status: 'approved' }); } catch (e) { }
             }
           }
         } catch (err) {

@@ -1899,6 +1899,14 @@ Responda com o JSON da ação a ser tomada.
             // Chamar Scheduler Service
             await schedulerService.scheduleProduct(product);
 
+            // Atualizar status para 'approved' para que o produto apareça no app
+            try {
+                await Product.update(product.id, { status: 'approved' });
+                logger.info(`✅ [BotAI] Produto ${product.id} agendado e marcado como 'approved'`);
+            } catch (updateError) {
+                logger.warn(`⚠️ [BotAI] Não foi possível atualizar status do produto ${product.id}: ${updateError.message}`);
+            }
+
             if (ctx.reply) await ctx.reply('✅ *Agendamento Solicitado com Sucesso!*\n\nO produto foi colocado na fila e a IA decidirá o momento ideal para publicar nas próximas horas (ou amanhã).', { parse_mode: 'Markdown' });
 
             // Tentar remover botões da mensagem original para evitar duplo clique

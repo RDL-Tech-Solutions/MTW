@@ -47,7 +47,7 @@ class MeliCouponCaptureV2 {
       if (!this.settingsLoaded) {
         await this.loadSettings();
       }
-      
+
       if (needsAuth && this.accessToken) {
         config.headers = {
           'Authorization': `Bearer ${this.accessToken}`
@@ -157,7 +157,7 @@ class MeliCouponCaptureV2 {
               // Verificar se tem desconto
               if (item.original_price && item.price < item.original_price) {
                 const discount = ((item.original_price - item.price) / item.original_price) * 100;
-                
+
                 // Apenas descontos > 10%
                 if (discount >= 10) {
                   const coupon = await this.createCouponFromProduct(item, discount);
@@ -233,7 +233,7 @@ class MeliCouponCaptureV2 {
             for (const item of results.data.results) {
               if (item.original_price && item.price < item.original_price) {
                 const discount = ((item.original_price - item.price) / item.original_price) * 100;
-                
+
                 if (discount >= 15) { // Trending: apenas descontos maiores
                   const coupon = await this.createCouponFromProduct(item, discount, 'trending');
                   if (coupon) {
@@ -292,7 +292,7 @@ class MeliCouponCaptureV2 {
             for (const item of results.data.results) {
               if (item.original_price && item.price < item.original_price) {
                 const discount = ((item.original_price - item.price) / item.original_price) * 100;
-                
+
                 if (discount >= 10) {
                   const coupon = await this.createCouponFromProduct(item, discount, cat.name);
                   if (coupon) {
@@ -418,9 +418,15 @@ class MeliCouponCaptureV2 {
         return '';
       }
 
+      // Se já for um link meli.la (novo formato de afiliado), preservá-lo diretamente
+      if (productUrl.includes('meli.la')) {
+        logger.debug(`✅ Link meli.la preservado: ${productUrl}`);
+        return productUrl;
+      }
+
       // Extrair ID MLB- do link
       const productId = this.extractMeliProductId(productUrl);
-      
+
       if (!productId) {
         logger.warn(`⚠️ Não foi possível extrair ID MLB- do link: ${productUrl.substring(0, 100)}`);
         return '';
@@ -453,7 +459,7 @@ class MeliCouponCaptureV2 {
     try {
       // Buscar produto pelo ID extraído do código
       const productId = coupon.code.replace('MELI-', '');
-      
+
       // IMPORTANTE: Sempre tentar enviar token mesmo em endpoints públicos
       let token = this.accessToken;
       if (!token) {
@@ -481,8 +487,8 @@ class MeliCouponCaptureV2 {
 
       if (product.data) {
         // Verificar se ainda tem desconto
-        const hasDiscount = product.data.original_price && 
-                           product.data.price < product.data.original_price;
+        const hasDiscount = product.data.original_price &&
+          product.data.price < product.data.original_price;
 
         return {
           is_valid: hasDiscount && product.data.status === 'active',

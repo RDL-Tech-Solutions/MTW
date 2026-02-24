@@ -928,6 +928,13 @@ class MeliSync {
 
       // Tentar extrair ID do link original
       const originalLink = product.affiliate_link || product.link || '';
+
+      // Se já tiver um link meli.la (novo formato de afiliado), retorná-lo diretamente
+      if (originalLink && originalLink.includes('meli.la')) {
+        logger.info(`✅ Link meli.la já existente preservado: ${originalLink}`);
+        return originalLink;
+      }
+
       if (originalLink) {
         productId = this.extractMeliProductId(originalLink);
         if (productId) {
@@ -1014,15 +1021,17 @@ class MeliSync {
 
       if (existing) {
         // Preservar link original se já existir e for válido
-        // Só atualizar se o link atual estiver vazio ou inválido
-        if (!existing.affiliate_link || !existing.affiliate_link.includes('mercadolivre')) {
+        // Aceitar links mercadolivre.com E os novos links curtos meli.la
+        const hasValidLink = existing.affiliate_link &&
+          (existing.affiliate_link.includes('mercadolivre') || existing.affiliate_link.includes('meli.la'));
+        if (!hasValidLink) {
           const newAffiliateLink = await this.generateMeliAffiliateLink(product);
           if (newAffiliateLink && newAffiliateLink !== existing.affiliate_link) {
             await Product.update(existing.id, { affiliate_link: newAffiliateLink });
             logger.info(`🔄 Link atualizado: ${product.name}`);
           }
         } else {
-          // Se já tem link válido, preservar o original
+          // Se já tem link válido (mercadolivre.com ou meli.la), preservar o original
           logger.debug(`✅ Link original preservado para: ${product.name}`);
         }
 
@@ -1168,6 +1177,8 @@ class MeliSync {
             newCount++;
             if (config.mercadolivre_auto_publish) {
               await SchedulerService.scheduleProduct(product);
+              // Marcar como 'approved' para aparecer no app
+              try { await Product.update(product.id, { status: 'approved' }); } catch (e) { }
             }
           }
         } catch (err) { }

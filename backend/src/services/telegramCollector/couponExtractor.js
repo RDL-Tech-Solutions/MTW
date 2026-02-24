@@ -346,7 +346,7 @@ class CouponExtractor {
     const validPlatforms = {
       'mercadolivre': [
         'mercado livre', 'meli', 'mercadolivre', 'mercadolivre.com',
-        'mercadolivre.com.br', 'mercadolivre.com/sec'
+        'mercadolivre.com.br', 'mercadolivre.com/sec', 'meli.la'
       ],
       'shopee': [
         'shopee', 'shopee.com', 'shopee.com.br', 's.shopee.com.br'
@@ -385,7 +385,7 @@ class CouponExtractor {
 
     // Verificar por URLs/links de plataformas válidas
     const urlPatterns = {
-      'mercadolivre': /mercadolivre\.com/i,
+      'mercadolivre': /(mercadolivre\.com|meli\.la)/i,
       'shopee': /shopee\.com/i,
       'amazon': /(amzn\.to|amzlink\.to|amazon\.com)/i,
       'aliexpress': /aliexpress\.com/i

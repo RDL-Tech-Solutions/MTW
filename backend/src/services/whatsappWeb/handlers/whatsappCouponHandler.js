@@ -1,9 +1,39 @@
 import Coupon from '../../../models/Coupon.js';
 import notificationDispatcher from '../../bots/notificationDispatcher.js';
 import logger from '../../../config/logger.js';
+import openrouterClient from '../../../ai/openrouterClient.js';
 
 /**
- * 1. Extração de Dados
+ * 1a. Extração via IA (identical to Telegram couponHandler)
+ */
+const extractCouponDataWithAI = async (text) => {
+    const aiPrompt = `Extraia os detalhes do cupom desta mensagem de oferta.
+    Seja preciso com o código, valor e plataforma.
+    Procure especialmente por códigos entre aspas simples como 'CUPOM10'.
+
+    Mensagem: "${text}"
+
+    Retorne APENAS um JSON:
+    {
+      "code": "CÓDIGO",
+      "discount_value": 10,
+      "discount_type": "percentage|fixed",
+      "platform": "shopee|mercadolivre|amazon|aliexpress|magazineluiza|kabum|pichau|general",
+      "min_purchase": 0,
+      "max_discount_value": null,
+      "is_general": true
+    }`;
+
+    const aiData = await openrouterClient.makeRequest(aiPrompt);
+    if (aiData && aiData.code) {
+        logger.info(`🤖 [WhatsApp IA] Cupom extraído: ${JSON.stringify(aiData)}`);
+        return aiData;
+    }
+    return null;
+};
+
+/**
+ * 1b. Extração via Regex (fallback)
  */
 export const extractCouponData = (text) => {
     return parseMessage(text);
@@ -13,20 +43,34 @@ export const extractCouponData = (text) => {
  * 2. Gerar Visualização (Preview)
  */
 export const formatCouponPreview = (data) => {
+    const discountType = data.discount_type === 'percentage' ? '%' : 'R$';
     const discount = data.discount_type === 'percentage'
-        ? `${data.discount_value}% OFF`
-        : `R$ ${data.discount_value} OFF`;
+        ? `${data.discount_value || 0}% OFF`
+        : `R$ ${(data.discount_value || 0).toFixed(2)} OFF`;
 
-    return `🎟️ *CONFIRMAÇÃO DE CUPOM*\n\n` +
-        `🔖 *Código:* ${data.code}\n` +
-        `💰 *Desconto:* ${discount}\n` +
-        `🏪 *Loja:* ${data.platform || 'Geral'}\n` +
-        `🔗 *Link:* ${data.link || 'N/A'}\n\n` +
-        `👇 *O que deseja fazer?*\n` +
-        `1️⃣ *Publicar Agora*\n` +
-        `2️⃣ *Editar Código*\n` +
-        `3️⃣ *Editar Desconto*\n` +
-        `4️⃣ *Cancelar*`;
+    let preview = `🎟️ *CONFIRMAÇÃO DE CUPOM*\n\n`;
+    preview += `🏪 *Plataforma:* ${data.platform || 'general'}\n`;
+    preview += `🔖 *Código:* \`${data.code || '?'}\`\n`;
+    preview += `💰 *Desconto:* ${discount} (${discountType})\n`;
+    if (data.min_purchase && data.min_purchase > 0) {
+        preview += `🛒 *Mínimo:* R$ ${Number(data.min_purchase).toFixed(2)}\n`;
+    }
+    if (data.max_discount_value) {
+        preview += `📉 *Limite:* R$ ${Number(data.max_discount_value).toFixed(2)}\n`;
+    }
+    if (data.valid_until) {
+        preview += `📅 *Validade:* ${new Date(data.valid_until).toLocaleDateString('pt-BR')}\n`;
+    }
+    preview += `\n👇 *O que deseja fazer?*\n`;
+    preview += `1️⃣ *Publicar Agora*\n`;
+    preview += `2️⃣ *Editar Código*\n`;
+    preview += `3️⃣ *Editar Desconto*\n`;
+    preview += `4️⃣ *Editar Plataforma*\n`;
+    preview += `5️⃣ *Editar Tipo* (% ou R$)\n`;
+    preview += `6️⃣ *Editar Mínimo*\n`;
+    preview += `7️⃣ *Editar Validade*\n`;
+    preview += `8️⃣ *Cancelar*`;
+    return preview;
 };
 
 /**
@@ -159,20 +203,46 @@ async function publishCoupon(coupon) {
 }
 
 /**
- * 4. Executar fluxo de captura (New)
+ * 4. Executar fluxo de captura com IA
  */
 export const executeCouponCapture = async (client, msg, text, chatId) => {
     try {
-        // 1. Extrair
-        const data = extractCouponData(text);
+        // 1. Tentar extração via IA
+        await msg.reply('🤖 *Analisando mensagem com IA...*');
 
-        // 2. Gerar Preview
+        let data = null;
+        try {
+            data = await extractCouponDataWithAI(text);
+        } catch (aiError) {
+            logger.warn(`⚠️ [WhatsApp] IA falhou, usando regex: ${aiError.message}`);
+        }
+
+        // 2. Fallback para regex se a IA não retornou código válido
+        if (!data || !data.code) {
+            logger.info('🔄 [WhatsApp] Usando extração regex como fallback');
+            data = parseMessage(text);
+        }
+
+        // 3. Validar que um código foi detectado
+        if (!data.code) {
+            await msg.reply(
+                '❌ *Não foi possível identificar um código de cupom no texto.*\n\n' +
+                'Certifique-se de que o texto contém o código do cupom. Exemplos:\n' +
+                '• `Cupom: SHOPEE20`\n' +
+                '• `Use o código PROMO10`\n' +
+                '• Código entre aspas simples: `\'MELI30\'`\n\n' +
+                'Reencaminhe o texto do cupom novamente.'
+            );
+            return null;
+        }
+
+        // 4. Gerar Preview
         const preview = formatCouponPreview(data);
 
-        // 3. Enviar
+        // 5. Enviar
         await msg.reply(preview);
 
-        // 4. Retornar Estado Inicial para Review
+        // 6. Retornar Estado para Review
         return {
             type: 'coupon',
             data: data,

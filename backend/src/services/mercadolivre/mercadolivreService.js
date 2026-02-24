@@ -187,6 +187,8 @@ class MercadoLivreService {
   }
 
   // Gerar link de afiliado (se configurado)
+  // Nota: o novo formato do programa de afiliados do ML usa links curtos meli.la/XXXXX
+  // gerados pelo portal de afiliados. O formato antigo ?matt_word=CODE ainda é suportado.
   async createAffiliateLink(itemId) {
     // Obter affiliate tag do banco primeiro, depois .env como fallback
     let affiliateTag = '';
