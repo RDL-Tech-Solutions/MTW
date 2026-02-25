@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "PreçoCerto",
-    "slug": "precocerto",
+    "slug": "mtw-promo",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#DC2626"
