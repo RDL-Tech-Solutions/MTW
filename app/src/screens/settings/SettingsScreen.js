@@ -114,19 +114,11 @@ export default function SettingsScreen({ navigation }) {
             value={preferences?.enable_push || false}
             onToggle={() => handleToggle('enable_push')}
           />
-          <ToggleRow
-            icon="mail"
-            iconBg="#6366F1"
-            title="E-mail"
-            subtitle="Receber ofertas por e-mail"
-            value={preferences?.enable_email || false}
-            onToggle={() => handleToggle('enable_email')}
-          />
           <NavRow
             icon="options"
             iconBg="#0EA5E9"
             title="Preferências detalhadas"
-            subtitle="Filtros e horários"
+            subtitle="Categorias e palavras-chave"
             onPress={() => navigation.navigate(SCREEN_NAMES.NOTIFICATION_SETTINGS)}
             isLast
           />
@@ -184,13 +176,6 @@ export default function SettingsScreen({ navigation }) {
             title="Perfil"
             subtitle="Ver e editar informações"
             onPress={() => navigation.navigate(SCREEN_NAMES.PROFILE)}
-          />
-          <NavRow
-            icon="shield-checkmark"
-            iconBg="#10B981"
-            title="Privacidade"
-            subtitle="Configurações de privacidade"
-            onPress={() => Alert.alert('Em Breve', 'Configurações de privacidade em desenvolvimento')}
             isLast
           />
         </View>
@@ -207,10 +192,24 @@ export default function SettingsScreen({ navigation }) {
           />
           <NavRow
             icon="document-text"
-            iconBg="#9CA3AF"
+            iconBg="#3B82F6"
             title="Termos de Uso"
-            subtitle="Política de privacidade"
-            onPress={() => Alert.alert('Em Breve', 'Termos de uso em desenvolvimento')}
+            subtitle="Condições de utilização"
+            onPress={() => navigation.navigate(SCREEN_NAMES.TERMS)}
+          />
+          <NavRow
+            icon="shield-checkmark"
+            iconBg="#10B981"
+            title="Política de Privacidade"
+            subtitle="Como protegemos seus dados"
+            onPress={() => navigation.navigate(SCREEN_NAMES.PRIVACY_POLICY)}
+          />
+          <NavRow
+            icon="finger-print"
+            iconBg="#F59E0B"
+            title="Política de Cookies"
+            subtitle="Uso de cookies no app"
+            onPress={() => navigation.navigate(SCREEN_NAMES.COOKIE_POLICY)}
             isLast
           />
         </View>

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert,
@@ -23,7 +23,7 @@ export default function LoginScreen({ navigation }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState({ google: false, facebook: false });
-  
+
   const { login, loginWithGoogle, loginWithFacebook } = useAuthStore();
 
   const validate = () => {
@@ -78,16 +78,16 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Logo width={64} height={64} style={styles.logo} />
+          <Logo width={100} height={100} style={styles.logo} />
           <Text style={styles.title}>PreçoCerto</Text>
           <Text style={styles.subtitle}>As melhores ofertas em um só lugar</Text>
         </View>

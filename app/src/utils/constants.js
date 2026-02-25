@@ -78,6 +78,7 @@ export const SCREEN_NAMES = {
   PRODUCT_DETAILS: 'ProductDetails',
   COUPON_DETAILS: 'CouponDetails',
   COUPON_PRODUCTS: 'CouponProducts',
+  LINKED_PRODUCTS: 'LinkedProducts',
   EDIT_PROFILE: 'EditProfile',
   PRODUCT_LIST: 'ProductList',
   COUPON_LIST: 'CouponList',
@@ -85,6 +86,9 @@ export const SCREEN_NAMES = {
   NOTIFICATION_SETTINGS: 'NotificationSettings',
   HOME_FILTERS: 'HomeFilters',
   ABOUT: 'About',
+  TERMS: 'Terms',
+  PRIVACY_POLICY: 'PrivacyPolicy',
+  COOKIE_POLICY: 'CookiePolicy',
 };
 
 export const API_ENDPOINTS = {

@@ -57,6 +57,32 @@ class CouponController {
     }
   }
 
+  // Obter produtos vinculados a um cupom
+  static async getProducts(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      // Importante: verificar se o cupom existe primeiro (opcional mas recomendado)
+      const coupon = await Coupon.findById(id);
+      if (!coupon) {
+        return res.status(404).json(
+          errorResponse(ERROR_MESSAGES.NOT_FOUND, ERROR_CODES.NOT_FOUND)
+        );
+      }
+
+      // Reutiliza o Product.findAll passando o coupon_id nos filtros
+      const Product = (await import('../models/Product.js')).default;
+      const result = await Product.findAll({
+        ...req.query,
+        coupon_id: id
+      });
+
+      res.json(successResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Buscar cupom por código (para auto-preenchimento)
   static async getByCode(req, res, next) {
     try {

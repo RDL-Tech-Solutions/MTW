@@ -237,6 +237,34 @@ export const useProductStore = create((set, get) => ({
     }
   },
 
+  // Verificar se há produtos vinculados e retornar a quantidade
+  checkLinkedProductsCount: async (couponId) => {
+    try {
+      const response = await api.get(`/coupons/${couponId}/products?limit=1`);
+      const total = response.data?.data?.total || 0;
+      return { success: true, total };
+    } catch (error) {
+      console.error('Erro ao verificar produtos do cupom:', error);
+      return { success: false, total: 0 };
+    }
+  },
+
+  // Buscar produtos vinculados a um cupom com paginação
+  getProductsByCouponId: async (couponId, page = 1) => {
+    try {
+      const response = await api.get(`/coupons/${couponId}/products?page=${page}&limit=20`);
+      return {
+        success: true,
+        products: response.data?.data?.products || [],
+        total: response.data?.data?.total || 0,
+        totalPages: response.data?.data?.totalPages || 1
+      };
+    } catch (error) {
+      console.error('Erro ao buscar produtos vinculados:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Buscar cards do app
   fetchAppCards: async () => {
     try {

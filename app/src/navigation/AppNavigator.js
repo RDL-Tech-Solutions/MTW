@@ -7,11 +7,15 @@ import TabNavigator from './TabNavigator';
 import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
 import CouponDetailsScreen from '../screens/coupon/CouponDetailsScreen';
 import CouponProductsScreen from '../screens/coupon/CouponProductsScreen';
+import LinkedProductsScreen from '../screens/coupon/LinkedProductsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
 import HomeFiltersScreen from '../screens/settings/HomeFiltersScreen';
 import AboutScreen from '../screens/about/AboutScreen';
+import TermsScreen from '../screens/legal/TermsScreen';
+import PrivacyPolicyScreen from '../screens/legal/PrivacyPolicyScreen';
+import CookiePolicyScreen from '../screens/legal/CookiePolicyScreen';
 import { SCREEN_NAMES } from '../utils/constants';
 import { ActivityIndicator, View } from 'react-native';
 import { useThemeStore } from '../theme/theme';
@@ -58,6 +62,11 @@ export default function AppNavigator() {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name={SCREEN_NAMES.LINKED_PRODUCTS}
+              component={LinkedProductsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name={SCREEN_NAMES.EDIT_PROFILE}
               component={EditProfileScreen}
               options={{
@@ -87,6 +96,21 @@ export default function AppNavigator() {
             <Stack.Screen
               name={SCREEN_NAMES.ABOUT}
               component={AboutScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name={SCREEN_NAMES.TERMS}
+              component={TermsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name={SCREEN_NAMES.PRIVACY_POLICY}
+              component={PrivacyPolicyScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name={SCREEN_NAMES.COOKIE_POLICY}
+              component={CookiePolicyScreen}
               options={{ headerShown: false }}
             />
           </>

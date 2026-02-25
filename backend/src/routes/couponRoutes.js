@@ -76,6 +76,7 @@ router.get('/code/:code', CouponController.getByCode);
 router.get('/pending', authenticateToken, requireAdmin, CouponController.listPending);
 router.get('/export', authenticateToken, requireAdmin, CouponController.export);
 router.get('/:id', CouponController.getById);
+router.get('/:id/products', CouponController.getProducts);
 
 // Rotas protegidas
 router.post('/:id/use', authenticateToken, CouponController.use);

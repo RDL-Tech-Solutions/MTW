@@ -108,14 +108,19 @@ export default function ProfileScreen({ navigation }) {
           />
 
           <MenuCard
-            icon="help-circle-outline"
+            icon="document-text-outline"
             iconColor={colors.info}
-            title="Ajuda e Suporte"
-            subtitle="Central de ajuda"
-            onPress={() => {
-              // TODO: Implementar ajuda
-              Alert.alert('Em breve', 'Central de ajuda em desenvolvimento');
-            }}
+            title="Termos de Uso"
+            subtitle="Condições de utilização"
+            onPress={() => navigation.navigate(SCREEN_NAMES.TERMS)}
+          />
+
+          <MenuCard
+            icon="shield-checkmark-outline"
+            iconColor={colors.success}
+            title="Política de Privacidade"
+            subtitle="Como protegemos seus dados"
+            onPress={() => navigation.navigate(SCREEN_NAMES.PRIVACY_POLICY)}
           />
         </View>
 
@@ -132,7 +137,7 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Footer */}
         <View style={dynamicStyles.footer}>
-          <Text style={dynamicStyles.footerText}>PreçoCerto © 2024</Text>
+          <Text style={dynamicStyles.footerText}>PreçoCerto © 2025</Text>
           <Text style={dynamicStyles.footerSubtext}>
             Feito com ❤️ para você economizar
           </Text>

@@ -27,14 +27,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function CouponDetailsScreen({ route, navigation }) {
   const { coupon: initialCoupon } = route.params || {};
-  const { fetchCouponById, fetchProductById } = useProductStore();
+  const { fetchCouponById, checkLinkedProductsCount } = useProductStore();
   const { colors } = useThemeStore();
   const [coupon, setCoupon] = useState(initialCoupon);
   const [loading, setLoading] = useState(!initialCoupon);
   const [codeCopied, setCodeCopied] = useState(false);
-  const [linkedProducts, setLinkedProducts] = useState([]);
+  const [linkedProductsCount, setLinkedProductsCount] = useState(0);
   const [loadingProducts, setLoadingProducts] = useState(false);
-  const [showProducts, setShowProducts] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -43,7 +42,7 @@ export default function CouponDetailsScreen({ route, navigation }) {
     if (!initialCoupon || !initialCoupon?.id) {
       loadCoupon();
     } else {
-      loadLinkedProducts(initialCoupon);
+      checkProducts(initialCoupon);
     }
 
     Animated.parallel([
@@ -68,34 +67,23 @@ export default function CouponDetailsScreen({ route, navigation }) {
     setLoading(false);
     if (result.success) {
       setCoupon(result.coupon);
-      loadLinkedProducts(result.coupon);
+      checkProducts(result.coupon);
     } else {
       Alert.alert('Erro', 'Não foi possível carregar os detalhes do cupom');
       navigation.goBack();
     }
   };
 
-  const loadLinkedProducts = async (couponData) => {
-    if (!couponData) return;
-
-    // Check if coupon has applicable_products (array of product IDs)
-    const productIds = couponData.applicable_products;
-    if (!Array.isArray(productIds) || productIds.length === 0) {
-      setLoadingProducts(false);
-      return;
-    }
-
+  const checkProducts = async (couponData) => {
+    if (!couponData || !couponData.id) return;
     setLoadingProducts(true);
     try {
-      const results = await Promise.allSettled(
-        productIds.slice(0, 10).map(id => fetchProductById(id))
-      );
-      const products = results
-        .filter(r => r.status === 'fulfilled' && r.value.success)
-        .map(r => r.value.product);
-      setLinkedProducts(products);
+      const result = await checkLinkedProductsCount(couponData.id);
+      if (result.success) {
+        setLinkedProductsCount(result.total);
+      }
     } catch (e) {
-      console.log('Error loading linked products:', e);
+      console.log('Error checking linked products count:', e);
     }
     setLoadingProducts(false);
   };
@@ -172,34 +160,7 @@ export default function CouponDetailsScreen({ route, navigation }) {
   }
 
   const expiry = getExpiryInfo();
-  const hasProducts = linkedProducts.length > 0;
-
-  // ── Mini Product Card for linked products ──
-  const renderProductItem = ({ item }) => (
-    <TouchableOpacity
-      style={s.productCard}
-      onPress={() => handleProductPress(item)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={{ uri: item.image_url }}
-        style={s.productImage}
-        resizeMode="contain"
-      />
-      <View style={s.productInfo}>
-        <Text style={s.productName} numberOfLines={2}>{item.name}</Text>
-        <View style={s.productPriceRow}>
-          {item.old_price > item.current_price && (
-            <Text style={s.productOldPrice}>
-              {formatPrice(item.old_price)}
-            </Text>
-          )}
-          <Text style={s.productPrice}>{formatPrice(item.current_price)}</Text>
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="#C4C4C4" />
-    </TouchableOpacity>
-  );
+  const hasProducts = linkedProductsCount > 0;
 
   const s = createStyles(colors, platformColor);
 
@@ -324,50 +285,17 @@ export default function CouponDetailsScreen({ route, navigation }) {
               <ActivityIndicator size="small" color={platformColor} />
             </View>
           ) : hasProducts ? (
-            <View style={s.productsSection}>
+            <View style={[s.productsSection, { padding: 16 }]}>
               <TouchableOpacity
-                style={s.productsHeader}
-                onPress={() => setShowProducts(!showProducts)}
-                activeOpacity={0.7}
+                style={[s.viewProductsBtn, { borderColor: platformColor, backgroundColor: platformColor, marginBottom: 0, marginTop: 0 }]}
+                onPress={() => navigation.navigate(SCREEN_NAMES.LINKED_PRODUCTS, { couponId: coupon.id, platformColor })}
+                activeOpacity={0.8}
               >
-                <View style={s.productsHeaderLeft}>
-                  <Ionicons name="bag-handle-outline" size={20} color={platformColor} />
-                  <Text style={s.productsTitle}>Produtos com este cupom</Text>
-                </View>
-                <View style={s.productsCountBadge}>
-                  <Text style={[s.productsCountText, { color: platformColor }]}>
-                    {linkedProducts.length}
-                  </Text>
-                </View>
-                <Ionicons
-                  name={showProducts ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  color="#9CA3AF"
-                />
+                <Ionicons name="bag-handle-outline" size={20} color="#fff" />
+                <Text style={[s.viewProductsBtnText, { color: '#fff' }]}>
+                  Ver {linkedProductsCount} {linkedProductsCount === 1 ? 'produto vinculado' : 'produtos vinculados'}
+                </Text>
               </TouchableOpacity>
-
-              {showProducts && (
-                <View style={s.productsList}>
-                  {linkedProducts.map((product) => (
-                    <View key={product.id}>
-                      {renderProductItem({ item: product })}
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {!showProducts && (
-                <TouchableOpacity
-                  style={[s.viewProductsBtn, { borderColor: platformColor }]}
-                  onPress={() => setShowProducts(true)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="grid-outline" size={18} color={platformColor} />
-                  <Text style={[s.viewProductsBtnText, { color: platformColor }]}>
-                    Ver {linkedProducts.length} {linkedProducts.length === 1 ? 'produto' : 'produtos'}
-                  </Text>
-                </TouchableOpacity>
-              )}
             </View>
           ) : null}
 

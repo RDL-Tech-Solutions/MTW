@@ -32,6 +32,7 @@ export default function NotificationSettingsScreen({ navigation }) {
   });
   const [newKeyword, setNewKeyword] = useState('');
   const [newProductName, setNewProductName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (preferences) {
@@ -41,7 +42,9 @@ export default function NotificationSettingsScreen({ navigation }) {
   }, [preferences]);
 
   const handleSave = async () => {
+    setSaving(true);
     const result = await updatePreferences(localPreferences);
+    setSaving(false);
     if (result.success) {
       Alert.alert('Sucesso', 'Preferências salvas com sucesso!');
     } else {
@@ -110,24 +113,17 @@ export default function NotificationSettingsScreen({ navigation }) {
         colors={['#3B82F6', '#2563EB']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{
-          paddingTop: Platform.OS === 'ios' ? 54 : StatusBar.currentHeight + 12,
-          paddingBottom: 18,
-          paddingHorizontal: 16,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-        }}
+        style={styles.headerGradient}
       >
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
+          style={styles.headerBackBtn}
         >
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>Notificações</Text>
-          <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>Preferências detalhadas</Text>
+          <Text style={styles.headerTitle}>Notificações</Text>
+          <Text style={styles.headerSubtitle}>Preferências detalhadas</Text>
         </View>
       </LinearGradient>
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
@@ -250,8 +246,9 @@ export default function NotificationSettingsScreen({ navigation }) {
 
         {/* Botão Salvar */}
         <Button
-          title="Salvar Preferências"
+          title={saving ? "Salvando..." : "Salvar Preferências"}
           onPress={handleSave}
+          loading={saving}
           style={styles.saveButton}
           size="large"
         />
@@ -263,6 +260,32 @@ export default function NotificationSettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerGradient: {
+    paddingTop: Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 24) + 12,
+    paddingBottom: 18,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 1,
   },
   content: {
     padding: 16,

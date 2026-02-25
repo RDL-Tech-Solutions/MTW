@@ -202,6 +202,7 @@ class Product {
       min_discount,
       search,
       status,
+      coupon_id,
       sort = 'created_at',
       order = 'desc'
     } = filters;
@@ -217,6 +218,7 @@ class Product {
     // Aplicar filtros
     if (category) query = query.eq('category_id', category);
     if (platform) query = query.eq('platform', platform);
+    if (coupon_id) query = query.eq('coupon_id', coupon_id);
     if (min_price) query = query.gte('current_price', min_price);
     if (max_price) query = query.lte('current_price', max_price);
     if (min_discount) query = query.gte('discount_percentage', min_discount);

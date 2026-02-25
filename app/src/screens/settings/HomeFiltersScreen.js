@@ -9,6 +9,7 @@ import {
   Platform,
   StatusBar,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,6 +32,7 @@ export default function HomeFiltersScreen({ navigation }) {
   });
   const [minDiscount, setMinDiscount] = useState(String(filters.min_discount || 0));
   const [maxPrice, setMaxPrice] = useState(filters.max_price ? String(filters.max_price) : '');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -42,6 +44,7 @@ export default function HomeFiltersScreen({ navigation }) {
   }, [preferences]);
 
   const handleSave = async () => {
+    setSaving(true);
     const updatedFilters = {
       ...filters,
       min_discount: parseFloat(minDiscount) || 0,
@@ -53,8 +56,12 @@ export default function HomeFiltersScreen({ navigation }) {
       home_filters: updatedFilters,
     });
 
+    setSaving(false);
     if (result.success) {
+      Alert.alert('Sucesso', 'Filtros salvos com sucesso!');
       navigation.goBack();
+    } else {
+      Alert.alert('Erro', 'Não foi possível salvar os filtros');
     }
   };
 
@@ -81,24 +88,17 @@ export default function HomeFiltersScreen({ navigation }) {
         colors={['#10B981', '#059669']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{
-          paddingTop: Platform.OS === 'ios' ? 54 : StatusBar.currentHeight + 12,
-          paddingBottom: 18,
-          paddingHorizontal: 16,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-        }}
+        style={styles.headerGradient}
       >
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
+          style={styles.headerBackBtn}
         >
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>Filtros da Home</Text>
-          <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>Personalizar produtos exibidos</Text>
+          <Text style={styles.headerTitle}>Filtros da Home</Text>
+          <Text style={styles.headerSubtitle}>Personalizar produtos exibidos</Text>
         </View>
       </LinearGradient>
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
@@ -109,7 +109,7 @@ export default function HomeFiltersScreen({ navigation }) {
             Selecione as plataformas para exibir na tela inicial
           </Text>
           <View style={styles.platformsContainer}>
-            {[PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => {
+            {[PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS, PLATFORMS.KABUM, PLATFORMS.MAGAZINELUIZA, PLATFORMS.PICHAU].map((platform) => {
               const isSelected = filters.platforms?.includes(platform);
               return (
                 <TouchableOpacity
@@ -210,8 +210,9 @@ export default function HomeFiltersScreen({ navigation }) {
         </View>
 
         <Button
-          title="Salvar Filtros"
+          title={saving ? "Salvando..." : "Salvar Filtros"}
           onPress={handleSave}
+          loading={saving}
           style={styles.saveButton}
           size="large"
         />
@@ -223,6 +224,32 @@ export default function HomeFiltersScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerGradient: {
+    paddingTop: Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 24) + 12,
+    paddingBottom: 18,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 1,
   },
   content: {
     padding: 16,
