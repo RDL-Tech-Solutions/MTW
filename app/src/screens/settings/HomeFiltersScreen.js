@@ -7,9 +7,11 @@ import {
   Switch,
   TouchableOpacity,
   Platform,
+  StatusBar,
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useProductStore } from '../../stores/productStore';
 import { useThemeStore } from '../../theme/theme';
@@ -45,12 +47,12 @@ export default function HomeFiltersScreen({ navigation }) {
       min_discount: parseFloat(minDiscount) || 0,
       max_price: maxPrice ? parseFloat(maxPrice) : null,
     };
-    
+
     const result = await updatePreferences({
       ...preferences,
       home_filters: updatedFilters,
     });
-    
+
     if (result.success) {
       navigation.goBack();
     }
@@ -73,121 +75,148 @@ export default function HomeFiltersScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
-      {/* Plataformas */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Plataformas</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Selecione as plataformas para exibir na tela inicial
-        </Text>
-        <View style={styles.platformsContainer}>
-          {[PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => {
-            const isSelected = filters.platforms?.includes(platform);
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient
+        colors={['#10B981', '#059669']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          paddingTop: Platform.OS === 'ios' ? 54 : StatusBar.currentHeight + 12,
+          paddingBottom: 18,
+          paddingHorizontal: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>Filtros da Home</Text>
+          <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>Personalizar produtos exibidos</Text>
+        </View>
+      </LinearGradient>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+        {/* Plataformas */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Plataformas</Text>
+          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
+            Selecione as plataformas para exibir na tela inicial
+          </Text>
+          <View style={styles.platformsContainer}>
+            {[PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON, PLATFORMS.ALIEXPRESS].map((platform) => {
+              const isSelected = filters.platforms?.includes(platform);
+              return (
+                <TouchableOpacity
+                  key={platform}
+                  style={[
+                    styles.platformChip,
+                    isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    { borderColor: colors.border }
+                  ]}
+                  onPress={() => togglePlatform(platform)}
+                >
+                  <Text style={[
+                    styles.platformChipText,
+                    { color: isSelected ? colors.white : colors.text }
+                  ]}>
+                    {PLATFORM_LABELS[platform]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Categorias */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Categorias</Text>
+          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
+            Selecione as categorias para exibir na tela inicial
+          </Text>
+          {categories.map((category) => {
+            const isSelected = filters.categories?.includes(category.id);
             return (
               <TouchableOpacity
-                key={platform}
-                style={[
-                  styles.platformChip,
-                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                  { borderColor: colors.border }
-                ]}
-                onPress={() => togglePlatform(platform)}
+                key={category.id}
+                style={[styles.categoryItem, { borderColor: colors.border }]}
+                onPress={() => toggleCategory(category.id)}
               >
-                <Text style={[
-                  styles.platformChipText,
-                  { color: isSelected ? colors.white : colors.text }
-                ]}>
-                  {PLATFORM_LABELS[platform]}
-                </Text>
+                <View style={styles.categoryLeft}>
+                  <Ionicons name={category.icon || 'pricetag'} size={20} color={isSelected ? colors.primary : colors.textMuted} />
+                  <Text style={[styles.categoryName, { color: colors.text }]}>{category.name}</Text>
+                </View>
+                <Switch
+                  value={isSelected}
+                  onValueChange={() => toggleCategory(category.id)}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.white}
+                />
               </TouchableOpacity>
             );
           })}
         </View>
-      </View>
 
-      {/* Categorias */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Categorias</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Selecione as categorias para exibir na tela inicial
-        </Text>
-        {categories.map((category) => {
-          const isSelected = filters.categories?.includes(category.id);
-          return (
-            <TouchableOpacity
-              key={category.id}
-              style={[styles.categoryItem, { borderColor: colors.border }]}
-              onPress={() => toggleCategory(category.id)}
-            >
-              <View style={styles.categoryLeft}>
-                <Ionicons name={category.icon || 'pricetag'} size={20} color={isSelected ? colors.primary : colors.textMuted} />
-                <Text style={[styles.categoryName, { color: colors.text }]}>{category.name}</Text>
-              </View>
-              <Switch
-                value={isSelected}
-                onValueChange={() => toggleCategory(category.id)}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.white}
-              />
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+        {/* Filtros de Preço e Desconto */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Filtros Adicionais</Text>
 
-      {/* Filtros de Preço e Desconto */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Filtros Adicionais</Text>
-        
-        <View style={styles.inputGroup}>
-          <Text style={[styles.inputLabel, { color: colors.text }]}>Desconto Mínimo (%)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-            value={minDiscount}
-            onChangeText={setMinDiscount}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={[styles.inputLabel, { color: colors.text }]}>Preço Máximo (R$)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-            placeholder="Sem limite"
-            placeholderTextColor={colors.textMuted}
-            value={maxPrice}
-            onChangeText={setMaxPrice}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <View style={styles.switchRow}>
-          <View style={styles.switchLabel}>
-            <Ionicons name="ticket" size={24} color={colors.primary} />
-            <View style={styles.switchText}>
-              <Text style={[styles.switchTitle, { color: colors.text }]}>Apenas com Cupom</Text>
-              <Text style={[styles.switchSubtitle, { color: colors.textMuted }]}>
-                Mostrar apenas produtos com cupom disponível
-              </Text>
-            </View>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Desconto Mínimo (%)</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+              value={minDiscount}
+              onChangeText={setMinDiscount}
+              keyboardType="numeric"
+            />
           </View>
-          <Switch
-            value={filters.only_with_coupon}
-            onValueChange={(value) => setFilters({ ...filters, only_with_coupon: value })}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.white}
-          />
-        </View>
-      </View>
 
-      <Button
-        title="Salvar Filtros"
-        onPress={handleSave}
-        style={styles.saveButton}
-        size="large"
-      />
-    </ScrollView>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Preço Máximo (R$)</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+              placeholder="Sem limite"
+              placeholderTextColor={colors.textMuted}
+              value={maxPrice}
+              onChangeText={setMaxPrice}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Ionicons name="ticket" size={24} color={colors.primary} />
+              <View style={styles.switchText}>
+                <Text style={[styles.switchTitle, { color: colors.text }]}>Apenas com Cupom</Text>
+                <Text style={[styles.switchSubtitle, { color: colors.textMuted }]}>
+                  Mostrar apenas produtos com cupom disponível
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={filters.only_with_coupon}
+              onValueChange={(value) => setFilters({ ...filters, only_with_coupon: value })}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.white}
+            />
+          </View>
+        </View>
+
+        <Button
+          title="Salvar Filtros"
+          onPress={handleSave}
+          style={styles.saveButton}
+          size="large"
+        />
+      </ScrollView>
+    </View>
   );
 }
 

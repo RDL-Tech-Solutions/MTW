@@ -37,10 +37,10 @@ export default function TabNavigator() {
           return <Ionicons name={iconName} size={22} color={color} />;
         },
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#999',
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E5E7EB',
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           height: Platform.OS === 'ios' ? 85 : 60,
           paddingBottom: Platform.OS === 'ios' ? 24 : 8,

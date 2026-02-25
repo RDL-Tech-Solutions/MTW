@@ -9,9 +9,11 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  StatusBar,
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useProductStore } from '../../stores/productStore';
 import { useThemeStore } from '../../theme/theme';
@@ -56,7 +58,7 @@ export default function NotificationSettingsScreen({ navigation }) {
     const updatedCategories = isSelected
       ? localPreferences.category_preferences.filter(id => id !== categoryId)
       : [...(localPreferences.category_preferences || []), categoryId];
-    
+
     setLocalPreferences({
       ...localPreferences,
       category_preferences: updatedCategories,
@@ -102,132 +104,159 @@ export default function NotificationSettingsScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
-      {/* Notificações Push */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificações Push</Text>
-        <View style={styles.switchRow}>
-          <View style={styles.switchLabel}>
-            <Ionicons name="notifications" size={24} color={colors.primary} />
-            <View style={styles.switchText}>
-              <Text style={[styles.switchTitle, { color: colors.text }]}>Ativar Notificações</Text>
-              <Text style={[styles.switchSubtitle, { color: colors.textMuted }]}>
-                Receba alertas sobre novas promoções
-              </Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient
+        colors={['#3B82F6', '#2563EB']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          paddingTop: Platform.OS === 'ios' ? 54 : StatusBar.currentHeight + 12,
+          paddingBottom: 18,
+          paddingHorizontal: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>Notificações</Text>
+          <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>Preferências detalhadas</Text>
+        </View>
+      </LinearGradient>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+        {/* Notificações Push */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificações Push</Text>
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Ionicons name="notifications" size={24} color={colors.primary} />
+              <View style={styles.switchText}>
+                <Text style={[styles.switchTitle, { color: colors.text }]}>Ativar Notificações</Text>
+                <Text style={[styles.switchSubtitle, { color: colors.textMuted }]}>
+                  Receba alertas sobre novas promoções
+                </Text>
+              </View>
             </View>
+            <Switch
+              value={localPreferences.push_enabled}
+              onValueChange={handleTogglePush}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.white}
+            />
           </View>
-          <Switch
-            value={localPreferences.push_enabled}
-            onValueChange={handleTogglePush}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.white}
-          />
         </View>
-      </View>
 
-      {/* Categorias */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Categoria</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Selecione as categorias de produtos para receber notificações
-        </Text>
-        {categories.map((category) => {
-          const isSelected = localPreferences.category_preferences?.includes(category.id);
-          return (
-            <TouchableOpacity
-              key={category.id}
-              style={[styles.categoryItem, { borderColor: colors.border }]}
-              onPress={() => handleToggleCategory(category.id)}
-            >
-              <View style={styles.categoryLeft}>
-                <Ionicons name={category.icon || 'pricetag'} size={20} color={isSelected ? colors.primary : colors.textMuted} />
-                <Text style={[styles.categoryName, { color: colors.text }]}>{category.name}</Text>
-              </View>
-              <Switch
-                value={isSelected}
-                onValueChange={() => handleToggleCategory(category.id)}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.white}
-              />
+        {/* Categorias */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Categoria</Text>
+          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
+            Selecione as categorias de produtos para receber notificações
+          </Text>
+          {categories.map((category) => {
+            const isSelected = localPreferences.category_preferences?.includes(category.id);
+            return (
+              <TouchableOpacity
+                key={category.id}
+                style={[styles.categoryItem, { borderColor: colors.border }]}
+                onPress={() => handleToggleCategory(category.id)}
+              >
+                <View style={styles.categoryLeft}>
+                  <Ionicons name={category.icon || 'pricetag'} size={20} color={isSelected ? colors.primary : colors.textMuted} />
+                  <Text style={[styles.categoryName, { color: colors.text }]}>{category.name}</Text>
+                </View>
+                <Switch
+                  value={isSelected}
+                  onValueChange={() => handleToggleCategory(category.id)}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.white}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Palavras-chave */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Palavra-chave</Text>
+          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
+            Adicione palavras-chave para receber notificações quando produtos relacionados forem publicados
+          </Text>
+          <View style={[styles.inputContainer, { borderColor: colors.border }]}>
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Digite uma palavra-chave..."
+              placeholderTextColor={colors.textMuted}
+              value={newKeyword}
+              onChangeText={setNewKeyword}
+              onSubmitEditing={handleAddKeyword}
+            />
+            <TouchableOpacity onPress={handleAddKeyword} style={styles.addButton}>
+              <Ionicons name="add" size={24} color={colors.primary} />
             </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Palavras-chave */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Palavra-chave</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Adicione palavras-chave para receber notificações quando produtos relacionados forem publicados
-        </Text>
-        <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-          <TextInput
-            style={[styles.input, { color: colors.text }]}
-            placeholder="Digite uma palavra-chave..."
-            placeholderTextColor={colors.textMuted}
-            value={newKeyword}
-            onChangeText={setNewKeyword}
-            onSubmitEditing={handleAddKeyword}
-          />
-          <TouchableOpacity onPress={handleAddKeyword} style={styles.addButton}>
-            <Ionicons name="add" size={24} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-        {localPreferences.keyword_preferences?.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {localPreferences.keyword_preferences.map((keyword, index) => (
-              <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
-                <Text style={[styles.tagText, { color: colors.primary }]}>{keyword}</Text>
-                <TouchableOpacity onPress={() => handleRemoveKeyword(keyword)}>
-                  <Ionicons name="close-circle" size={18} color={colors.primary} />
-                </TouchableOpacity>
-              </View>
-            ))}
           </View>
-        )}
-      </View>
-
-      {/* Nomes de Produtos */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Nome de Produto</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Adicione nomes específicos de produtos para receber notificações
-        </Text>
-        <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-          <TextInput
-            style={[styles.input, { color: colors.text }]}
-            placeholder="Digite o nome do produto..."
-            placeholderTextColor={colors.textMuted}
-            value={newProductName}
-            onChangeText={setNewProductName}
-            onSubmitEditing={handleAddProductName}
-          />
-          <TouchableOpacity onPress={handleAddProductName} style={styles.addButton}>
-            <Ionicons name="add" size={24} color={colors.primary} />
-          </TouchableOpacity>
+          {localPreferences.keyword_preferences?.length > 0 && (
+            <View style={styles.tagsContainer}>
+              {localPreferences.keyword_preferences.map((keyword, index) => (
+                <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
+                  <Text style={[styles.tagText, { color: colors.primary }]}>{keyword}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveKeyword(keyword)}>
+                    <Ionicons name="close-circle" size={18} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
-        {localPreferences.product_name_preferences?.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {localPreferences.product_name_preferences.map((productName, index) => (
-              <View key={index} style={[styles.tag, { backgroundColor: colors.infoLight }]}>
-                <Text style={[styles.tagText, { color: colors.info }]}>{productName}</Text>
-                <TouchableOpacity onPress={() => handleRemoveProductName(productName)}>
-                  <Ionicons name="close-circle" size={18} color={colors.info} />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
 
-      {/* Botão Salvar */}
-      <Button
-        title="Salvar Preferências"
-        onPress={handleSave}
-        style={styles.saveButton}
-        size="large"
-      />
-    </ScrollView>
+        {/* Nomes de Produtos */}
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Nome de Produto</Text>
+          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
+            Adicione nomes específicos de produtos para receber notificações
+          </Text>
+          <View style={[styles.inputContainer, { borderColor: colors.border }]}>
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Digite o nome do produto..."
+              placeholderTextColor={colors.textMuted}
+              value={newProductName}
+              onChangeText={setNewProductName}
+              onSubmitEditing={handleAddProductName}
+            />
+            <TouchableOpacity onPress={handleAddProductName} style={styles.addButton}>
+              <Ionicons name="add" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          {localPreferences.product_name_preferences?.length > 0 && (
+            <View style={styles.tagsContainer}>
+              {localPreferences.product_name_preferences.map((productName, index) => (
+                <View key={index} style={[styles.tag, { backgroundColor: colors.infoLight }]}>
+                  <Text style={[styles.tagText, { color: colors.info }]}>{productName}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveProductName(productName)}>
+                    <Ionicons name="close-circle" size={18} color={colors.info} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Botão Salvar */}
+        <Button
+          title="Salvar Preferências"
+          onPress={handleSave}
+          style={styles.saveButton}
+          size="large"
+        />
+      </ScrollView>
+    </View>
   );
 }
 

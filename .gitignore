@@ -32,3 +32,9 @@ yarn-error.log*
 
 # Vercel
 .vercel
+
+# Backend Cache / Ignore for EAS
+backend/.wwebjs_auth
+backend/node_modules
+database/**/*.sqlite
+database/**/*.db

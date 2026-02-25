@@ -33,7 +33,7 @@ const GRID_PADDING = 12;
 // ── Platform shortcuts for the icon row ──
 const PLATFORM_SHORTCUTS = [
   { key: 'all', label: 'Todas', color: '#666' },
-  { key: PLATFORMS.MERCADOLIVRE, label: 'Mercado Livre', color: '#FFE600' },
+  { key: PLATFORMS.MERCADOLIVRE, label: 'Mercado Livre', color: '#FFF159' },
   { key: PLATFORMS.SHOPEE, label: 'Shopee', color: '#EE4D2D' },
   { key: PLATFORMS.AMAZON, label: 'Amazon', color: '#FF9900' },
   { key: PLATFORMS.ALIEXPRESS, label: 'AliExpress', color: '#FF4747' },

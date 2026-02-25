@@ -6,6 +6,7 @@ import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
 import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
 import CouponDetailsScreen from '../screens/coupon/CouponDetailsScreen';
+import CouponProductsScreen from '../screens/coupon/CouponProductsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
@@ -52,6 +53,11 @@ export default function AppNavigator() {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name={SCREEN_NAMES.COUPON_PRODUCTS}
+              component={CouponProductsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name={SCREEN_NAMES.EDIT_PROFILE}
               component={EditProfileScreen}
               options={{
@@ -66,50 +72,22 @@ export default function AppNavigator() {
             <Stack.Screen
               name={SCREEN_NAMES.SETTINGS}
               component={SettingsScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Configurações',
-                headerStyle: {
-                  backgroundColor: colors.card,
-                },
-                headerTintColor: colors.text,
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name={SCREEN_NAMES.NOTIFICATION_SETTINGS}
               component={NotificationSettingsScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Notificações',
-                headerStyle: {
-                  backgroundColor: colors.card,
-                },
-                headerTintColor: colors.text,
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name={SCREEN_NAMES.HOME_FILTERS}
               component={HomeFiltersScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Filtros da Tela Inicial',
-                headerStyle: {
-                  backgroundColor: colors.card,
-                },
-                headerTintColor: colors.text,
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name={SCREEN_NAMES.ABOUT}
               component={AboutScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Sobre',
-                headerStyle: {
-                  backgroundColor: colors.card,
-                },
-                headerTintColor: colors.text,
-              }}
+              options={{ headerShown: false }}
             />
           </>
         )}

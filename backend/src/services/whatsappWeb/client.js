@@ -306,34 +306,8 @@ class WhatsAppClient {
             // Save QR for retrieval via API
             this.lastQr = qr;
 
-            // Se já solicitamos código, ignorar QR log
-            if (config.pairingNumber && !this.pairingCodeRequested) {
-                logger.info('📱 QR Code received. Attempting to switch to Pairing Code...');
-                this.pairingCodeRequested = true;
-                try {
-                    // Pequeno delay para garantir que o socket está pronto
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-
-                    const cleanNumber = config.pairingNumber.replace(/\D/g, '');
-                    const code = await this.client.requestPairingCode(cleanNumber);
-
-                    logger.info('===================================================');
-                    logger.info(`🔑 CÓDIGO DE PAREAMENTO WHATSAPP: ${code}`);
-                    logger.info('👉 No WhatsApp do celular:');
-                    logger.info('1. Configurações > Aparelhos conectados > Conectar aparelho');
-                    logger.info('2. Toque em "Conectar com número de telefone"');
-                    logger.info(`3. Digite o código: ${code}`);
-                    logger.info('===================================================');
-
-                    // TODO: Enviar este código para o Bot Telegram do Admin se disponível
-                } catch (err) {
-                    logger.error('❌ Failed to request Pairing Code:', err);
-                    logger.info('⚠️ Falling back to QR Code logging if needed.');
-                }
-            } else if (!config.pairingNumber) {
-                logger.info('📱 QR Code received. Waiting for scan...');
-                // qrcode.generate(qr, { small: true }); // Descomentar se quiser QR no terminal
-            }
+            logger.info('📱 QR Code received. Waiting for scan...');
+            // qrcode.generate(qr, { small: true }); // Descomentar se quiser QR no terminal
         });
 
         this.client.on('ready', () => {

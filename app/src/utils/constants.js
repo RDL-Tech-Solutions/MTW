@@ -22,7 +22,7 @@ export const PLATFORM_LABELS = {
 
 export const PLATFORM_COLORS = {
   [PLATFORMS.SHOPEE]: '#EE4D2D',
-  [PLATFORMS.MERCADOLIVRE]: '#FFE600',
+  [PLATFORMS.MERCADOLIVRE]: '#FFF159',
   [PLATFORMS.AMAZON]: '#FF9900',
   [PLATFORMS.ALIEXPRESS]: '#FF4747',
   [PLATFORMS.KABUM]: '#FF6500',
@@ -77,6 +77,7 @@ export const SCREEN_NAMES = {
   // Stack
   PRODUCT_DETAILS: 'ProductDetails',
   COUPON_DETAILS: 'CouponDetails',
+  COUPON_PRODUCTS: 'CouponProducts',
   EDIT_PROFILE: 'EditProfile',
   PRODUCT_LIST: 'ProductList',
   COUPON_LIST: 'CouponList',

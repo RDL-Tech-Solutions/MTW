@@ -42,7 +42,7 @@ export const loginSchema = Joi.object({
 export const createProductSchema = Joi.object({
   name: Joi.string().min(3).max(500).required(),
   image_url: Joi.string().uri().required(),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general').required(),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau', 'general').required(),
   current_price: Joi.number().positive().required(),
   old_price: Joi.number().positive().allow(null),
   discount_percentage: Joi.number().min(0).max(100).allow(null),
@@ -57,7 +57,7 @@ export const createProductSchema = Joi.object({
 export const updateProductSchema = Joi.object({
   name: Joi.string().min(3).max(500),
   image_url: Joi.string().uri(),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau', 'general'),
   current_price: Joi.number().positive(),
   old_price: Joi.number().positive().allow(null),
   discount_percentage: Joi.number().min(0).max(100).allow(null),
@@ -72,7 +72,7 @@ export const updateProductSchema = Joi.object({
 // Coupons
 export const createCouponSchema = Joi.object({
   code: Joi.string().min(3).max(100).required(),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general').required(),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau', 'general').required(),
   discount_type: Joi.string().valid('percentage', 'fixed').required(),
   discount_value: Joi.number().positive().required(),
   min_purchase: Joi.number().min(0).allow(null, '').default(0),
@@ -110,7 +110,7 @@ export const createCouponSchema = Joi.object({
 
 export const updateCouponSchema = Joi.object({
   code: Joi.string().min(3).max(100),
-  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'),
+  platform: Joi.string().valid('shopee', 'mercadolivre', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau', 'general'),
   discount_type: Joi.string().valid('percentage', 'fixed'),
   discount_value: Joi.number().positive(),
   min_purchase: Joi.number().min(0).allow(null, ''),

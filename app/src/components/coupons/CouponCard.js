@@ -92,8 +92,8 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
             ))}
           </View>
           {/* Circle Cutouts */}
-          <View style={[s.circleCutout, s.cutoutTop, { backgroundColor: '#EBEBEB' }]} />
-          <View style={[s.circleCutout, s.cutoutBottom, { backgroundColor: '#EBEBEB' }]} />
+          <View style={[s.circleCutout, s.cutoutTop, { backgroundColor: colors.background }]} />
+          <View style={[s.circleCutout, s.cutoutBottom, { backgroundColor: colors.background }]} />
         </View>
 
         {/* Center: Info */}

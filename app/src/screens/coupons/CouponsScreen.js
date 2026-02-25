@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,12 @@ import {
   Platform,
   StatusBar,
   ScrollView,
+  Modal,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import CouponCard from '../../components/coupons/CouponCard';
 import EmptyState from '../../components/common/EmptyState';
@@ -18,6 +23,9 @@ import SearchBar from '../../components/common/SearchBar';
 import { useThemeStore } from '../../theme/theme';
 import api from '../../services/api';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
+import { getPlatformColor, getPlatformName, PlatformIcon } from '../../utils/platformIcons';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const FILTER_TABS = [
   { key: 'all', label: 'Todos' },
@@ -25,6 +33,170 @@ const FILTER_TABS = [
   { key: 'exclusive', label: 'Exclusivos' },
 ];
 
+function formatPrice(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '';
+  return `R$ ${n.toFixed(2).replace('.', ',')}`;
+}
+
+// ── Bottom-sheet modal card for a single coupon ──────────────────────────────
+function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setCodeCopied(false);
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 10, tension: 60 }),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }),
+        Animated.timing(backdropAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible]);
+
+  if (!coupon) return null;
+
+  const platformColor = getPlatformColor(coupon.platform);
+  const hasProducts = Array.isArray(coupon.applicable_products) && coupon.applicable_products.length > 0;
+  const scope = hasProducts ? 'Produtos selecionados' : 'Todos os produtos';
+
+  const handleCopyCode = async () => {
+    if (coupon.code) {
+      await Clipboard.setStringAsync(coupon.code);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2500);
+    }
+  };
+
+  const handleSeeProducts = () => {
+    onClose();
+    setTimeout(() => {
+      navigation.navigate(SCREEN_NAMES.COUPON_PRODUCTS, { coupon });
+    }, 300);
+  };
+
+  const formatDiscount = () => {
+    if (coupon.discount_type === 'percentage') return `${coupon.discount_value}% OFF`;
+    return `R$ ${coupon.discount_value} OFF`;
+  };
+
+  const s = modalStyles(colors, platformColor);
+
+  return (
+    <Modal transparent visible={visible} animationType="none" statusBarTranslucent onRequestClose={onClose}>
+      {/* Backdrop */}
+      <TouchableWithoutFeedback onPress={onClose}>
+        <Animated.View style={[s.backdrop, { opacity: backdropAnim }]} />
+      </TouchableWithoutFeedback>
+
+      {/* Sheet */}
+      <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
+        {/* Handle */}
+        <View style={s.handleContainer}>
+          <View style={s.handle} />
+        </View>
+
+        {/* Platform header strip */}
+        <View style={[s.platformStrip, { backgroundColor: platformColor + '12' }]}>
+          <PlatformIcon platform={coupon.platform} size={22} />
+          <Text style={[s.platformName, { color: platformColor }]}>
+            {getPlatformName(coupon.platform)}
+          </Text>
+          {coupon.is_exclusive && (
+            <View style={s.exclusiveBadge}>
+              <Ionicons name="star" size={9} color="#B45309" />
+              <Text style={s.exclusiveText}>VIP</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }} />
+          <View style={[s.discountPill, { backgroundColor: platformColor }]}>
+            <Text style={s.discountPillText}>{formatDiscount()}</Text>
+          </View>
+        </View>
+
+        {/* Title */}
+        {coupon.title && (
+          <Text style={s.couponTitle}>{coupon.title}</Text>
+        )}
+
+        {/* Info rows */}
+        <View style={s.infoSection}>
+          <InfoRow icon="bag-handle-outline" label="Escopo" value={scope} colors={colors} />
+          {coupon.min_purchase > 0 && (
+            <InfoRow icon="wallet-outline" label="Compra mínima" value={formatPrice(coupon.min_purchase)} colors={colors} />
+          )}
+          {(coupon.max_uses || coupon.usage_limit) && (
+            <InfoRow icon="people-outline" label="Limite" value={`${coupon.max_uses || coupon.usage_limit} usos`} colors={colors} />
+          )}
+          {coupon.valid_until && (
+            <InfoRow icon="calendar-outline" label="Válido até" value={new Date(coupon.valid_until).toLocaleDateString('pt-BR')} colors={colors} />
+          )}
+        </View>
+
+        {/* Code Section */}
+        {coupon.code ? (
+          <View style={s.codeSection}>
+            <Text style={s.codeLabel}>CÓDIGO DO CUPOM</Text>
+            <View style={s.codeBox}>
+              <Ionicons name="ticket-outline" size={18} color={platformColor} />
+              <Text style={s.codeText}>{coupon.code}</Text>
+            </View>
+            <TouchableOpacity
+              style={[s.copyBtn, { backgroundColor: codeCopied ? '#16A34A' : platformColor }]}
+              onPress={handleCopyCode}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={codeCopied ? 'checkmark-circle' : 'copy-outline'} size={18} color="#fff" />
+              <Text style={s.copyBtnText}>{codeCopied ? 'Código Copiado!' : 'Copiar Código'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={s.codeSection}>
+            <View style={[s.noCodeBox, { backgroundColor: platformColor + '10' }]}>
+              <Ionicons name="link-outline" size={20} color={platformColor} />
+              <Text style={[s.noCodeText, { color: colors.textMuted }]}>
+                Desconto aplicado automaticamente pelo link
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* See Products Button */}
+        {hasProducts && (
+          <TouchableOpacity
+            style={[s.productsBtn, { borderColor: platformColor }]}
+            onPress={handleSeeProducts}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="grid-outline" size={18} color={platformColor} />
+            <Text style={[s.productsBtnText, { color: platformColor }]}>
+              Ver {coupon.applicable_products.length} produto{coupon.applicable_products.length !== 1 ? 's' : ''} vinculado{coupon.applicable_products.length !== 1 ? 's' : ''}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={platformColor} />
+          </TouchableOpacity>
+        )}
+
+        <View style={s.bottomSpacer} />
+      </Animated.View>
+    </Modal>
+  );
+}
+
+const InfoRow = ({ icon, label, value, colors }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 }}>
+    <Ionicons name={icon} size={16} color={colors.textMuted} />
+    <Text style={{ fontSize: 13, color: colors.textMuted, fontWeight: '500', minWidth: 100 }}>{label}</Text>
+    <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600', flex: 1, textAlign: 'right' }}>{value}</Text>
+  </View>
+);
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 export default function CouponsScreen({ navigation }) {
   const { colors } = useThemeStore();
   const [coupons, setCoupons] = useState([]);
@@ -33,6 +205,8 @@ export default function CouponsScreen({ navigation }) {
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCoupon, setSelectedCoupon] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     loadCoupons();
@@ -41,33 +215,18 @@ export default function CouponsScreen({ navigation }) {
   const loadCoupons = async () => {
     try {
       setLoading(true);
-      const params = {
-        page: 1,
-        limit: 50,
-        is_active: true,
-      };
-
+      const params = { page: 1, limit: 50, is_active: true };
       if (selectedPlatform && selectedPlatform !== 'all') {
         params.platform = selectedPlatform;
       }
-
       const response = await api.get('/coupons', { params });
       const data = response.data.data;
-
-      let couponsList = [];
-      if (Array.isArray(data)) {
-        couponsList = data;
-      } else if (data.coupons) {
-        couponsList = data.coupons;
-      }
-
-      // Sort: exclusive first, then by expiry
+      let couponsList = Array.isArray(data) ? data : data?.coupons || [];
       couponsList.sort((a, b) => {
         if (a.is_exclusive && !b.is_exclusive) return -1;
         if (!a.is_exclusive && b.is_exclusive) return 1;
         return 0;
       });
-
       setCoupons(couponsList);
     } catch (error) {
       console.error('Erro ao carregar cupons:', error);
@@ -84,13 +243,15 @@ export default function CouponsScreen({ navigation }) {
   };
 
   const handleCouponPress = (coupon) => {
-    // Navigate to details (or just copy, handled by card)
-    navigation.navigate(SCREEN_NAMES.COUPON_DETAILS, { coupon });
+    setSelectedCoupon(coupon);
+    setModalVisible(true);
   };
 
-  // Apply tab filter & search
+  const handleCloseModal = () => {
+    setModalVisible(false);
+  };
+
   const filteredCoupons = coupons.filter(c => {
-    // Tab filtering
     let tabMatch = true;
     if (activeTab === 'expiring') {
       if (!c.valid_until) tabMatch = false;
@@ -101,8 +262,6 @@ export default function CouponsScreen({ navigation }) {
     } else if (activeTab === 'exclusive') {
       tabMatch = c.is_exclusive;
     }
-
-    // Search filtering
     let searchMatch = true;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -112,7 +271,6 @@ export default function CouponsScreen({ navigation }) {
         (c.store_name && c.store_name.toLowerCase().includes(q)) ||
         (PLATFORM_LABELS[c.platform] && PLATFORM_LABELS[c.platform].toLowerCase().includes(q));
     }
-
     return tabMatch && searchMatch;
   });
 
@@ -131,13 +289,10 @@ export default function CouponsScreen({ navigation }) {
     />
   );
 
-  // ─── HEADER ────────────────────────────────────────────
   const renderHeader = () => (
     <View>
-      {/* Top bar with Search */}
       <View style={s.headerBar}>
         <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-
         <View style={s.headerTopRow}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -153,14 +308,12 @@ export default function CouponsScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Info bar */}
       <View style={s.infoBar}>
         <Text style={s.infoText}>
           {filteredCoupons.length} {filteredCoupons.length === 1 ? 'Cupom' : 'Cupons'} encontrados
         </Text>
       </View>
 
-      {/* Filter tabs */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -178,7 +331,6 @@ export default function CouponsScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         ))}
-        {/* Platform filter chips */}
         <View style={s.tabDivider} />
         {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON].map(platform => {
           const isActive = selectedPlatform === platform;
@@ -230,17 +382,200 @@ export default function CouponsScreen({ navigation }) {
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
       />
+
+      <CouponDetailModal
+        coupon={selectedCoupon}
+        visible={modalVisible}
+        onClose={handleCloseModal}
+        navigation={navigation}
+        colors={colors}
+      />
     </View>
   );
 }
 
+// ── Modal Styles ──────────────────────────────────────────────────────────────
+const modalStyles = (colors, platformColor) => StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 -4px 24px rgba(0,0,0,0.18)',
+    } : {
+      elevation: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+    }),
+  },
+  handleContainer: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+  },
+  platformStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+    marginHorizontal: 16,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  platformName: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  exclusiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 3,
+  },
+  exclusiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  discountPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  discountPillText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  couponTitle: {
+    fontSize: 14,
+    color: colors.textMuted,
+    paddingHorizontal: 20,
+    marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  infoSection: {
+    marginHorizontal: 20,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: 4,
+  },
+  codeSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  codeLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  codeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: platformColor + '50',
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
+  codeText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.text,
+    letterSpacing: 2,
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    height: 52,
+    gap: 8,
+    ...(Platform.OS === 'web' ? {} : {
+      elevation: 3,
+      shadowColor: platformColor,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+    }),
+  },
+  copyBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  noCodeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 12,
+    padding: 16,
+  },
+  noCodeText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  productsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  productsBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+  },
+  bottomSpacer: {
+    height: Platform.OS === 'ios' ? 36 : 20,
+  },
+});
+
+// ── Screen Styles ─────────────────────────────────────────────────────────────
 const dynamicStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EBEBEB',
+    backgroundColor: colors.background,
   },
-
-  // ─── Header bar ────────────────────────────────────────
   headerBar: {
     backgroundColor: colors.primary,
     paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight + 8,
@@ -262,12 +597,10 @@ const dynamicStyles = (colors) => StyleSheet.create({
     flex: 1,
   },
   searchBarOverride: {
-    height: 38, // Slightly smaller for header
+    height: 38,
     backgroundColor: '#fff',
     borderRadius: 19,
   },
-
-  // ─── Info bar ──────────────────────────────────────────
   infoBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -283,8 +616,6 @@ const dynamicStyles = (colors) => StyleSheet.create({
     color: colors.textMuted,
     fontWeight: '500',
   },
-
-  // ─── Filter tabs ──────────────────────────────────────
   tabContainer: {
     backgroundColor: colors.card,
     borderBottomWidth: 1,
@@ -305,7 +636,7 @@ const dynamicStyles = (colors) => StyleSheet.create({
   },
   tabChipActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary + '10',
+    backgroundColor: colors.primary + '12',
   },
   tabChipText: {
     fontSize: 12,
@@ -323,18 +654,13 @@ const dynamicStyles = (colors) => StyleSheet.create({
     alignSelf: 'center',
     marginHorizontal: 4,
   },
-
-  // ─── List ─────────────────────────────────────────────
   listContent: {
     paddingBottom: 24,
   },
-
-  // ─── Loading ──────────────────────────────────────────
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#EBEBEB',
   },
   loadingText: {
     marginTop: 12,
