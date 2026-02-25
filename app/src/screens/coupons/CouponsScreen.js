@@ -598,7 +598,7 @@ const dynamicStyles = (colors) => StyleSheet.create({
   },
   searchBarOverride: {
     height: 38,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 19,
   },
   infoBar: {

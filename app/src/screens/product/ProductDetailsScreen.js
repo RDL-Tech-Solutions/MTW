@@ -405,7 +405,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     paddingBottom: 100,
@@ -414,7 +414,7 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.background,
   },
   loadingText: {
     marginTop: 12,
@@ -424,7 +424,7 @@ const createStyles = (colors) => StyleSheet.create({
 
   // ── Image Section ──
   imageSection: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0,
   },
   imageNav: {
@@ -438,7 +438,7 @@ const createStyles = (colors) => StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -449,7 +449,7 @@ const createStyles = (colors) => StyleSheet.create({
   productImage: {
     width: SCREEN_WIDTH,
     height: SCREEN_WIDTH * 0.75,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   discountBadge: {
     position: 'absolute',
@@ -468,7 +468,7 @@ const createStyles = (colors) => StyleSheet.create({
 
   // ── Content Card ──
   contentCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     marginTop: 8,
     paddingHorizontal: 16,
     paddingVertical: 20,
@@ -497,7 +497,7 @@ const createStyles = (colors) => StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   oldPrice: {
     fontSize: 14,
@@ -584,7 +584,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   couponCodeBox: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -642,7 +642,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   infoItem: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderRadius: 10,
     padding: 14,
     alignItems: 'center',
@@ -664,11 +664,11 @@ const createStyles = (colors) => StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     padding: 16,
     paddingBottom: Platform.OS === 'ios' ? 34 : 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   buyButton: {
     height: 54,

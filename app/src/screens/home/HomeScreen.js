@@ -445,7 +445,7 @@ const dynamicStyles = (colors) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#EBEBEB',
+      backgroundColor: colors.background,
     },
 
     // ─── Sticky Header ───────────────────────────────────
@@ -550,7 +550,7 @@ const dynamicStyles = (colors) =>
 
     // ─── Platform Icons ──────────────────────────────────
     platformSection: {
-      backgroundColor: '#fff',
+      backgroundColor: colors.card,
       marginTop: 8,
       marginHorizontal: 4,
       borderRadius: 10,
@@ -573,7 +573,7 @@ const dynamicStyles = (colors) =>
       width: 52,
       height: 52,
       borderRadius: 26,
-      backgroundColor: '#F3F4F6',
+      backgroundColor: colors.background,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 6,
@@ -642,7 +642,7 @@ const dynamicStyles = (colors) =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: '#EBEBEB',
+      backgroundColor: colors.background,
     },
     loadingText: {
       marginTop: 12,

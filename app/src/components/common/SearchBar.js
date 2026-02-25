@@ -5,16 +5,17 @@ import { useThemeStore } from '../../theme/theme';
 
 export default function SearchBar({ value, onChangeText, placeholder = 'Buscar produtos...', onFocus, onBlur, containerStyle }) {
   const { colors } = useThemeStore();
+  const s = dynamicStyles(colors);
 
   return (
-    <View style={[styles.container, containerStyle]}>
-      <Ionicons name="search-outline" size={18} color="#999" style={styles.icon} />
+    <View style={[s.container, containerStyle]}>
+      <Ionicons name="search-outline" size={18} color={colors.textMuted} style={s.icon} />
       <TextInput
-        style={styles.input}
+        style={s.input}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.textMuted}
         onFocus={onFocus}
         onBlur={onBlur}
         returnKeyType="search"
@@ -23,8 +24,8 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Buscar p
         <Ionicons
           name="close-circle"
           size={18}
-          color="#999"
-          style={styles.clearIcon}
+          color={colors.textMuted}
+          style={s.clearIcon}
           onPress={() => onChangeText('')}
         />
       )}
@@ -32,12 +33,12 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Buscar p
   );
 }
 
-const styles = StyleSheet.create({
+const dynamicStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 20,
     paddingHorizontal: 14,
     height: 40,
@@ -48,7 +49,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: colors.text,
     padding: 0,
   },
   clearIcon: {

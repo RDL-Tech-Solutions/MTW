@@ -471,7 +471,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
 
   // Main Card
   mainCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
     marginTop: -16,
@@ -494,7 +494,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   platformName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.text,
     flex: 1,
   },
   exclusiveBadge: {
@@ -513,7 +513,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   },
   couponTitle: {
     fontSize: 15,
-    color: '#4B5563',
+    color: colors.text,
     lineHeight: 22,
     marginBottom: 12,
   },
@@ -521,7 +521,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
@@ -532,7 +532,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   },
   validityText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textMuted,
     fontWeight: '500',
   },
   validityTextUrgent: {
@@ -548,13 +548,13 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   conditionText: {
     flex: 1,
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textMuted,
     lineHeight: 19,
   },
 
   // Code Card
   codeCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
     marginTop: 12,
@@ -577,10 +577,10 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     textAlign: 'center',
   },
   codeBox: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
     padding: 16,
     marginBottom: 16,
@@ -594,7 +594,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   codeText: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#111827',
+    color: colors.text,
     letterSpacing: 2,
   },
   copyButton: {
@@ -628,13 +628,13 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
   },
   noCodeText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textMuted,
     fontWeight: '500',
     flex: 1,
   },
@@ -645,7 +645,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     alignItems: 'center',
   },
   productsSection: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 16,
     marginTop: 12,
     overflow: 'hidden',
@@ -674,7 +674,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   productsTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.text,
   },
   productsCountBadge: {
     backgroundColor: platformColor + '15',
@@ -710,7 +710,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   productCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 10,
     marginBottom: 8,
@@ -720,7 +720,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 8,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   productInfo: {
     flex: 1,
@@ -728,7 +728,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   productName: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#374151',
+    color: colors.text,
     lineHeight: 18,
     marginBottom: 4,
   },
@@ -745,7 +745,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
   productPrice: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
   },
 
   // Footer
@@ -754,12 +754,12 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 30 : 16,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: colors.border,
     ...(Platform.OS === 'web' ? {
       boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
     } : {

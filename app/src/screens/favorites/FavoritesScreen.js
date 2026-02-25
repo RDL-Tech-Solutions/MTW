@@ -154,7 +154,7 @@ export default function FavoritesScreen({ navigation }) {
 const dynamicStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EBEBEB',
+    backgroundColor: colors.background,
   },
   headerBar: {
     backgroundColor: colors.primary,
@@ -192,7 +192,7 @@ const dynamicStyles = (colors) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#EBEBEB',
+    backgroundColor: colors.background,
   },
   loadingText: {
     marginTop: 12,
