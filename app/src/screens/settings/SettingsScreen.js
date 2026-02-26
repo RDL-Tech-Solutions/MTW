@@ -138,35 +138,6 @@ export default function SettingsScreen({ navigation }) {
           />
         </View>
 
-        {/* ── Produtos ─────────────────────────────────────── */}
-        <SectionLabel label="PRODUTOS" />
-        <View style={s.card}>
-          <NavRow
-            icon="filter"
-            iconBg="#10B981"
-            title="Filtros da Home"
-            subtitle="Personalizar produtos exibidos"
-            onPress={() => navigation.navigate(SCREEN_NAMES.HOME_FILTERS)}
-          />
-          <ToggleRow
-            icon="pricetag"
-            iconBg="#F59E0B"
-            title="Apenas com Desconto"
-            subtitle="Mostrar só produtos em promoção"
-            value={preferences?.home_filters?.min_discount > 0 || false}
-            onToggle={() => {
-              const currentMin = preferences?.home_filters?.min_discount || 0;
-              updatePreferences({
-                home_filters: {
-                  ...preferences?.home_filters,
-                  min_discount: currentMin > 0 ? 0 : 10,
-                },
-              });
-            }}
-            isLast
-          />
-        </View>
-
         {/* ── Conta ─────────────────────────────────────────── */}
         <SectionLabel label="CONTA" />
         <View style={s.card}>

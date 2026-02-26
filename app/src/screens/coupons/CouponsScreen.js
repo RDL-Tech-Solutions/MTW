@@ -523,7 +523,16 @@ export default function CouponsScreen({ navigation }) {
               );
             })}
             <View style={s.tabDivider} />
-            {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON].map((platform, index) => {
+            {[
+              'all', 
+              PLATFORMS.MERCADOLIVRE, 
+              PLATFORMS.SHOPEE, 
+              PLATFORMS.AMAZON,
+              PLATFORMS.ALIEXPRESS,
+              PLATFORMS.KABUM,
+              PLATFORMS.MAGAZINELUIZA,
+              PLATFORMS.PICHAU
+            ].map((platform, index) => {
               const isActive = selectedPlatform === platform;
               return (
                 <TouchableOpacity

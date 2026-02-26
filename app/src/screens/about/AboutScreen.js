@@ -39,16 +39,7 @@ export default function AboutScreen({ navigation }) {
     ]).start();
   }, []);
 
-  const contactInfo = [
-    {
-      icon: 'mail-outline',
-      label: 'Email',
-      value: 'contato@mtwpromo.com',
-      action: () => {
-        const { Linking } = require('react-native');
-        Linking.openURL('mailto:contato@mtwpromo.com').catch(() => { });
-      },
-    },
+  const socialInfo = [
     {
       icon: 'globe-outline',
       label: 'Website',
@@ -65,6 +56,15 @@ export default function AboutScreen({ navigation }) {
       action: () => {
         const { Linking } = require('react-native');
         Linking.openURL('https://instagram.com/mtwpromo').catch(() => { });
+      },
+    },
+    {
+      icon: 'logo-tiktok',
+      label: 'TikTok',
+      value: '@mtwpromo',
+      action: () => {
+        const { Linking } = require('react-native');
+        Linking.openURL('https://www.tiktok.com/@mtwpromo').catch(() => { });
       },
     },
   ];
@@ -121,10 +121,10 @@ export default function AboutScreen({ navigation }) {
           <Text style={s.versionDate}>Lançado em 2025</Text>
         </View>
 
-        {/* Contato */}
+        {/* Social */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Contato</Text>
-          {contactInfo.map((item, index) => (
+          <Text style={s.sectionTitle}>Social</Text>
+          {socialInfo.map((item, index) => (
             <TouchableOpacity
               key={index}
               style={s.contactItem}
