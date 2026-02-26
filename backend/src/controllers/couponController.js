@@ -8,6 +8,7 @@ import { cacheSet, cacheGet, cacheDel, cacheDelByPattern } from '../utils/cache.
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
 import couponNotificationService from '../services/coupons/couponNotificationService.js';
 import couponApiService from '../services/coupons/couponApiService.js';
+import pushNotificationService from '../services/pushNotification.js';
 
 class CouponController {
   // Listar cupons ativos
@@ -57,6 +58,23 @@ class CouponController {
     }
   }
 
+  // Registrar visualização do cupom pelo usuário logado
+  static async view(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id; // Autenticação required via middleware
+
+      if (!userId) {
+        return res.status(401).json(errorResponse('Não autorizado', 'UNAUTHORIZED'));
+      }
+
+      await Coupon.registerView(id, userId);
+      res.json(successResponse(null, 'Visualização registrada com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Obter produtos vinculados a um cupom
   static async getProducts(req, res, next) {
     try {
@@ -74,13 +92,20 @@ class CouponController {
       const Product = (await import('../models/Product.js')).default;
 
       const filters = {
-        ...req.query,
-        coupon_id: id
+        ...req.query
       };
 
-      // Adicionar os applicable_products do cupom, se existirem
-      if (coupon.applicable_products && Array.isArray(coupon.applicable_products) && coupon.applicable_products.length > 0) {
-        filters.applicable_product_ids = coupon.applicable_products;
+      if (coupon.is_general) {
+        // Se for cupom geral, ele se aplica a todos da plataforma
+        if (coupon.platform && coupon.platform !== 'general') {
+          filters.platform = coupon.platform;
+        }
+      } else {
+        filters.coupon_id = id;
+        // Adicionar os applicable_products do cupom, se existirem
+        if (coupon.applicable_products && Array.isArray(coupon.applicable_products) && coupon.applicable_products.length > 0) {
+          filters.applicable_product_ids = coupon.applicable_products;
+        }
       }
 
       const result = await Product.findAll(filters);
@@ -351,6 +376,26 @@ class CouponController {
       await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom marcado como esgotado: ${id} (${coupon.code})`);
+
+      // 🔔 Notificar usuários que visualizaram este cupom
+      try {
+        const users = await Coupon.getUsersWhoViewed(id);
+        if (users && users.length > 0) {
+          logger.info(`Enviando push notification para ${users.length} usuários que visualizaram o cupom esgotado ${coupon.code}.`);
+          const messages = users.map(user =>
+            pushNotificationService.createMessage(
+              user.push_token,
+              '❌ Cupom Esgotado!',
+              `O cupom "${coupon.code || coupon.title}" que você visualizou acabou de esgotar.`,
+              { type: 'coupon_out_of_stock', couponId: id }
+            )
+          );
+          await pushNotificationService.sendToMultiple(messages);
+        }
+      } catch (notifyError) {
+        logger.error(`Erro ao notificar usuários sobre cupom esgotado ${id}: ${notifyError.message}`);
+      }
+
       res.json(successResponse(updatedCoupon, 'Cupom marcado como esgotado'));
     } catch (error) {
       next(error);

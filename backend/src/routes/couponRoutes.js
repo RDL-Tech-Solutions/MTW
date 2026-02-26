@@ -80,6 +80,7 @@ router.get('/:id/products', CouponController.getProducts);
 
 // Rotas protegidas
 router.post('/:id/use', authenticateToken, CouponController.use);
+router.post('/:id/view', authenticateToken, CouponController.view);
 
 // Rotas admin
 router.get('/admin/all', authenticateToken, requireAdmin, CouponController.listAll);

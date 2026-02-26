@@ -46,8 +46,14 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
   const [codeCopied, setCodeCopied] = useState(false);
 
   useEffect(() => {
-    if (visible) {
+    if (visible && coupon) {
       setCodeCopied(false);
+
+      // Registrar visualização do cupom (silenciosamente)
+      if (coupon.id) {
+        api.post(`/coupons/${coupon.id}/view`).catch(e => console.log('Erro ao registrar view do cupom:', e.message));
+      }
+
       Animated.parallel([
         Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 10, tension: 60 }),
         Animated.timing(backdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
@@ -58,7 +64,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
         Animated.timing(backdropAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
-  }, [visible]);
+  }, [visible, coupon]);
 
   if (!coupon) return null;
 
@@ -144,16 +150,28 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
           <View style={s.codeSection}>
             <Text style={s.codeLabel}>CÓDIGO DO CUPOM</Text>
             <View style={s.codeBox}>
-              <Ionicons name="ticket-outline" size={18} color={platformColor} />
-              <Text style={s.codeText}>{coupon.code}</Text>
+              <Ionicons name="ticket-outline" size={18} color={coupon.is_out_of_stock ? colors.textMuted : platformColor} />
+              <Text style={[s.codeText, coupon.is_out_of_stock && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
+                {coupon.code}
+              </Text>
             </View>
             <TouchableOpacity
-              style={[s.copyBtn, { backgroundColor: codeCopied ? '#16A34A' : platformColor }]}
-              onPress={handleCopyCode}
+              style={[
+                s.copyBtn,
+                { backgroundColor: coupon.is_out_of_stock ? colors.border : (codeCopied ? '#16A34A' : platformColor) }
+              ]}
+              onPress={coupon.is_out_of_stock ? null : handleCopyCode}
               activeOpacity={0.85}
+              disabled={coupon.is_out_of_stock}
             >
-              <Ionicons name={codeCopied ? 'checkmark-circle' : 'copy-outline'} size={18} color="#fff" />
-              <Text style={s.copyBtnText}>{codeCopied ? 'Código Copiado!' : 'Copiar Código'}</Text>
+              <Ionicons
+                name={coupon.is_out_of_stock ? 'close-circle-outline' : (codeCopied ? 'checkmark-circle' : 'copy-outline')}
+                size={18}
+                color={coupon.is_out_of_stock ? colors.textMuted : '#fff'}
+              />
+              <Text style={[s.copyBtnText, coupon.is_out_of_stock && { color: colors.textMuted }]}>
+                {coupon.is_out_of_stock ? 'Cupom Esgotado' : (codeCopied ? 'Código Copiado!' : 'Copiar Código')}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (

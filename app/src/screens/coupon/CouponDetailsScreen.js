@@ -22,6 +22,7 @@ import { useProductStore } from '../../stores/productStore';
 import { useThemeStore } from '../../theme/theme';
 import { PlatformIcon, getPlatformColor, getPlatformName } from '../../utils/platformIcons';
 import { SCREEN_NAMES } from '../../utils/constants';
+import api from '../../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -43,6 +44,8 @@ export default function CouponDetailsScreen({ route, navigation }) {
       loadCoupon();
     } else {
       checkProducts(initialCoupon);
+      // Registrar visualização silenciosamente
+      api.post(`/coupons/${initialCoupon.id}/view`).catch(e => console.log('Erro ao registrar view:', e.message));
     }
 
     Animated.parallel([
@@ -68,6 +71,8 @@ export default function CouponDetailsScreen({ route, navigation }) {
     if (result.success) {
       setCoupon(result.coupon);
       checkProducts(result.coupon);
+      // Registrar visualização silenciosamente
+      api.post(`/coupons/${result.coupon.id}/view`).catch(e => console.log('Erro ao registrar view:', e.message));
     } else {
       Alert.alert('Erro', 'Não foi possível carregar os detalhes do cupom');
       navigation.goBack();

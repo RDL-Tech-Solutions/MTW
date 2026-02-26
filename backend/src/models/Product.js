@@ -182,7 +182,8 @@ class Product {
           data.final_price = parseFloat(bestFinalPrice.toFixed(2));
           data.price_with_coupon = parseFloat(bestFinalPrice.toFixed(2));
         } else {
-          // Fallback if no valid coupons but legacy data still existed
+          // Nenhum cupom ativamente aplicável (esgotado, inativo, pendente, expirado)
+          // O preço deve ser o current_price sem descontos adicionais
           data.final_price = currentPrice;
           data.price_with_coupon = currentPrice;
         }
@@ -334,22 +335,14 @@ class Product {
         if (applicableCoupons.length > 0) {
           enrichedProduct.final_price = parseFloat(bestFinalPrice.toFixed(2));
           enrichedProduct.price_with_coupon = parseFloat(bestFinalPrice.toFixed(2));
-        } else if (product.coupon_id && product.coupon_discount_type && product.coupon_discount_value) {
-          // Fallback legacy (apenas se nenhum cupom dinâmico for encontrado mas o banco ainda diz q tem)
-          try {
-            let finalPrice = product.current_price;
-            const discountValue = parseFloat(product.coupon_discount_value) || 0;
-            if (product.coupon_discount_type === 'percentage') {
-              finalPrice = currentPrice - (currentPrice * (discountValue / 100));
-            } else {
-              finalPrice = Math.max(0, currentPrice - discountValue);
-            }
-            enrichedProduct.final_price = parseFloat(finalPrice.toFixed(2));
-            enrichedProduct.price_with_coupon = parseFloat(finalPrice.toFixed(2));
-          } catch (e) { }
         } else {
+          // Nenhum cupom ativamente vinculável, garantir que o preço volte ao original
           enrichedProduct.final_price = currentPrice;
           enrichedProduct.price_with_coupon = currentPrice;
+          // Se o produto possuía um cupom desativado, esconder seus detalhes legados
+          enrichedProduct.coupon_id = null;
+          enrichedProduct.coupon_discount_value = null;
+          enrichedProduct.coupon_discount_type = null;
         }
 
         return enrichedProduct;

@@ -270,6 +270,38 @@ class Coupon {
     return data;
   }
 
+  // Registrar visualização de cupom
+  static async registerView(couponId, userId) {
+    const { error } = await supabase
+      .from('user_coupon_views')
+      .upsert({ user_id: userId, coupon_id: couponId, viewed_at: new Date().toISOString() }, { onConflict: 'user_id, coupon_id' });
+
+    if (error) throw error;
+    return true;
+  }
+
+  // Buscar tokens de push de usuários que visualizaram
+  static async getUsersWhoViewed(couponId) {
+    const { data: views, error: viewError } = await supabase
+      .from('user_coupon_views')
+      .select('user_id')
+      .eq('coupon_id', couponId);
+
+    if (viewError) throw viewError;
+    if (!views || views.length === 0) return [];
+
+    const userIds = views.map(v => v.user_id);
+
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, push_token')
+      .in('id', userIds)
+      .not('push_token', 'is', null);
+
+    if (userError) throw userError;
+    return users || [];
+  }
+
   // Listar cupons ativos
   static async findActive(filters = {}) {
     const {
@@ -290,7 +322,6 @@ class Coupon {
       .select('*', { count: 'exact' })
       .eq('is_active', true)
       .eq('is_pending_approval', false) // NOVO: Excluir cupons pendentes de aprovação
-      .eq('is_out_of_stock', false) // Excluir cupons esgotados
       .lte('valid_from', now)
       .or(`valid_until.is.null,valid_until.gte.${now}`); // Permitir NULL ou data futura
 
