@@ -88,6 +88,11 @@ class WhatsAppClient {
 
             logger.info(`🚀 Initializing WhatsApp Web Client with session at: ${absoluteSessionPath}`);
 
+            // Criar user agent customizado
+            const customUserAgent = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ${config.deviceName}/${config.systemVersion} Chrome/120.0.0.0 Safari/537.36`;
+            
+            logger.info(`📱 Device name: ${config.deviceName} v${config.systemVersion}`);
+
             this.client = new Client({
                 authStrategy: new LocalAuth({
                     dataPath: absoluteSessionPath,
@@ -112,7 +117,8 @@ class WhatsAppClient {
                         '--disable-domain-reliability',
                         '--disable-features=AudioServiceOutOfProcess',
                         '--disable-web-security',
-                        '--single-process' // Útil em containers/VPS com pouca RAM
+                        '--single-process', // Útil em containers/VPS com pouca RAM
+                        `--user-agent=${customUserAgent}`
                     ],
                     ...config.puppeteer,
                     protocolTimeout: 300000
@@ -120,6 +126,11 @@ class WhatsAppClient {
                 webVersionCache: {
                     type: 'remote',
                     remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+                },
+                // Informações do cliente personalizadas
+                clientInfo: {
+                    platform: 'PreçoCerto Bot',
+                    version: '1.0.0'
                 }
             });
 
@@ -327,10 +338,25 @@ class WhatsAppClient {
             // qrcode.generate(qr, { small: true }); // Descomentar se quiser QR no terminal
         });
 
-        this.client.on('ready', () => {
+        this.client.on('ready', async () => {
             this.isReady = true;
             this.lastQr = null; // Limpar QR code após conexão
             logger.info('✅ WhatsApp Client is READY!');
+
+            // Tentar definir nome customizado do dispositivo
+            try {
+                if (this.client.pupPage) {
+                    await this.client.pupPage.evaluate(() => {
+                        // Tentar modificar o user agent exibido
+                        if (window.Store && window.Store.Conn) {
+                            window.Store.Conn.platform = 'PreçoCerto Bot';
+                        }
+                    });
+                    logger.info('✅ Device name customized to "PreçoCerto Bot"');
+                }
+            } catch (err) {
+                logger.warn('⚠️ Could not customize device name:', err.message);
+            }
         });
 
         this.client.on('authenticated', () => {

@@ -17,6 +17,12 @@ export const config = {
         : path.resolve(projectRoot, '.wwebjs_auth'),
     pairingNumber: process.env.WHATSAPP_PAIRING_NUMBER, // Número para gerar código (apenas dígitos)
     adminNumbers: (process.env.WHATSAPP_ADMIN_NUMBERS || '').split(',').map(n => n.trim()).filter(Boolean),
+    
+    // Nome do dispositivo que aparece no WhatsApp
+    deviceName: process.env.WHATSAPP_DEVICE_NAME || 'PreçoCerto Bot',
+    
+    // Versão do sistema
+    systemVersion: process.env.WHATSAPP_SYSTEM_VERSION || '1.0.0',
 
     // Métodos para atualizar config dinamicamente (vindo do DB)
     update(newConfig) {
