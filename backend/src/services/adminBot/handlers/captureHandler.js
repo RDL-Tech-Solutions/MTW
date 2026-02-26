@@ -85,7 +85,7 @@ export const captureLinkHandler = async (ctx, url) => {
                 old_price: productData.oldPrice || 0,
                 original_link: productData.url || productData.originalLink || url, // Link resolvido
                 affiliate_link: finalAffiliateLink, // Link curto preservado
-                status: 'pending',
+                status: 'created', // Aparece no app mas não foi publicado
                 external_id: productData.externalId || generateUniqueId(),
                 capture_source: 'admin_bot',
                 is_active: true
@@ -121,7 +121,7 @@ export const captureLinkHandler = async (ctx, url) => {
             `💰 *${price}* ${oldPrice ? `~~${oldPrice}~~` : ''} \n` +
             `${discountLabel ? `🏷️ ${discountLabel}\n` : ''} \n` +
             `🔗 [Link Oficial](${product.original_link || url}) \n` +
-            `_Status: Pendente (Salvo no Banco)_`;
+            `_Status: Salvo (Aparece no App)_`;
 
         // Keyboard atualizado
         // Keyboard atualizado

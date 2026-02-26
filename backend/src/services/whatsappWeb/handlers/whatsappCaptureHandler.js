@@ -80,7 +80,7 @@ export const handleCaptureLink = async (client, msg, url, chatId) => {
                 old_price: productData.oldPrice || 0,
                 original_link: productData.url || url,
                 affiliate_link: productData.affiliateLink,
-                status: 'pending',
+                status: 'created', // Aparece no app mas não foi publicado
                 external_id: productData.externalId || generateUniqueId(),
                 capture_source: 'whatsapp_admin',
                 is_active: true
@@ -129,7 +129,7 @@ export const handleCaptureFlow = async (client, msg, userState, body) => {
             old_price: userState.data.oldPrice || userState.data.old_price || 0,
             original_link: userState.data.originalLink || userState.data.original_link || null,
             affiliate_link: userState.data.affiliateLink || userState.data.affiliate_link,
-            status: 'pending',
+            status: 'created', // Aparece no app mas não foi publicado
             external_id: generateUniqueId(),
             capture_source: 'whatsapp_admin',
             is_active: true
@@ -167,8 +167,8 @@ export const handleCaptureFlow = async (client, msg, userState, body) => {
         return await startScheduleFlow(msg, product);
     }
 
-    if (body === '0') { // Cancelar / Manter Pendente
-        await msg.reply('✅ Mantido como pendente.');
+    if (body === '0') { // Cancelar / Manter Salvo
+        await msg.reply('✅ Produto salvo! Ele já aparece no app.');
         return { step: 'IDLE' };
     }
 
@@ -195,7 +195,7 @@ async function showCaptureMenu(client, msg, product) {
         `1️⃣ 🚀 *Publicar Agora*\n` +
         `2️⃣ ✏️ *Editar e Publicar*\n` +
         `3️⃣ 📅 *Agendar (IA)*\n` +
-        `0️⃣ *Manter Pendente*`;
+        `0️⃣ *Manter Salvo* (já aparece no app)`;
 
     if (product.image_url) {
         // Tentar enviar imagem e texto junto
