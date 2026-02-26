@@ -206,6 +206,9 @@ export const useProductStore = create((set, get) => ({
         }
       });
 
+      // Adiciona um timestamp para forçar dados recentes (evitar cache da API ou CDN)
+      params.append('_t', Date.now());
+
       const queryString = params.toString();
       const url = `/coupons${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);

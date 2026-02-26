@@ -219,6 +219,12 @@ export default function CouponsScreen({ navigation }) {
       if (selectedPlatform && selectedPlatform !== 'all') {
         params.platform = selectedPlatform;
       }
+
+      // Adiciona um timestamp para forçar atualização no pull-to-refresh
+      if (refreshing) {
+        params._t = Date.now();
+      }
+
       const response = await api.get('/coupons', { params });
       const data = response.data.data;
       let couponsList = Array.isArray(data) ? data : data?.coupons || [];

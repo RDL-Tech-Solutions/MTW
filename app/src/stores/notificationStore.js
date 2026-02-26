@@ -7,7 +7,7 @@ import * as Notifications from 'expo-notifications';
 // ProjectId do app.json - usar diretamente para evitar problemas com expo-constants
 // Este valor está em app.json -> extra -> eas -> projectId
 // IMPORTANTE: Não usar expo-constants aqui para evitar erros de PlatformConstants
-const PROJECT_ID = '967ccc1a-3521-4c83-91a4-851bed949c45';
+const PROJECT_ID = 'e04af0c1-090d-4315-8448-626e0b84834e';
 
 // Configurar handler de notificações
 Notifications.setNotificationHandler({

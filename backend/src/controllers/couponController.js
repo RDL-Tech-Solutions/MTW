@@ -72,10 +72,18 @@ class CouponController {
 
       // Reutiliza o Product.findAll passando o coupon_id nos filtros
       const Product = (await import('../models/Product.js')).default;
-      const result = await Product.findAll({
+
+      const filters = {
         ...req.query,
         coupon_id: id
-      });
+      };
+
+      // Adicionar os applicable_products do cupom, se existirem
+      if (coupon.applicable_products && Array.isArray(coupon.applicable_products) && coupon.applicable_products.length > 0) {
+        filters.applicable_product_ids = coupon.applicable_products;
+      }
+
+      const result = await Product.findAll(filters);
 
       res.json(successResponse(result));
     } catch (error) {
@@ -152,7 +160,7 @@ class CouponController {
       }
 
       const coupon = await Coupon.create(req.body);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`✅ Cupom criado com sucesso: ${coupon.code} (ID: ${coupon.id})`);
       logger.debug(`   Dados do cupom criado: ${JSON.stringify(coupon, null, 2)}`);
@@ -190,7 +198,7 @@ class CouponController {
     try {
       const { id } = req.params;
       const coupon = await Coupon.update(id, req.body);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom atualizado: ${id}`);
       res.json(successResponse(coupon, 'Cupom atualizado com sucesso'));
@@ -204,7 +212,7 @@ class CouponController {
     try {
       const { id } = req.params;
       await Coupon.delete(id);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom deletado: ${id}`);
       res.json(successResponse(null, 'Cupom deletado com sucesso'));
@@ -225,7 +233,7 @@ class CouponController {
       }
 
       await Coupon.deleteMany(ids);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupons deletados em lote: ${ids.length} itens`);
       res.json(successResponse(null, `${ids.length} cupons deletados com sucesso`));
@@ -247,7 +255,7 @@ class CouponController {
       }
 
       const coupon = await Coupon.incrementUse(id);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom usado: ${id}`);
       res.json(successResponse(coupon, 'Uso registrado'));
@@ -340,7 +348,7 @@ class CouponController {
       }
 
       const updatedCoupon = await Coupon.markAsOutOfStock(id);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom marcado como esgotado: ${id} (${coupon.code})`);
       res.json(successResponse(updatedCoupon, 'Cupom marcado como esgotado'));
@@ -362,7 +370,7 @@ class CouponController {
       }
 
       const updatedCoupon = await Coupon.markAsAvailable(id);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom marcado como disponível: ${id} (${coupon.code})`);
       res.json(successResponse(updatedCoupon, 'Cupom marcado como disponível'));
@@ -416,7 +424,7 @@ class CouponController {
       logger.debug(`   Status atual: is_pending_approval=${existingCoupon.is_pending_approval}, is_active=${existingCoupon.is_active}`);
 
       const coupon = await Coupon.approve(id, updates);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`✅ Cupom aprovado com sucesso: ${coupon.code} (ID: ${coupon.id})`);
       logger.debug(`   Novo status: is_pending_approval=${coupon.is_pending_approval}, is_active=${coupon.is_active}`);
@@ -467,7 +475,7 @@ class CouponController {
       const { reason } = req.body;
 
       const coupon = await Coupon.reject(id, reason);
-      await cacheDel('coupons:*');
+      await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom rejeitado: ${id} (${coupon.code})`);
       res.json(successResponse(coupon, 'Cupom rejeitado com sucesso'));
@@ -494,7 +502,7 @@ class CouponController {
         try {
           const coupon = await Coupon.approve(id, updates);
           approved.push(coupon);
-          await cacheDel('coupons:*');
+          await cacheDelByPattern('coupons:*');
 
           // Notificar sobre novo cupom aprovado
           try {
@@ -536,7 +544,7 @@ class CouponController {
         try {
           const coupon = await Coupon.reject(id, reason);
           rejected.push(coupon);
-          await cacheDel('coupons:*');
+          await cacheDelByPattern('coupons:*');
         } catch (error) {
           errors.push({ id, error: error.message });
         }

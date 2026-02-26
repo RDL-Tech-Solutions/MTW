@@ -218,7 +218,22 @@ class Product {
     // Aplicar filtros
     if (category) query = query.eq('category_id', category);
     if (platform) query = query.eq('platform', platform);
-    if (coupon_id) query = query.eq('coupon_id', coupon_id);
+
+    // Suporte para buscar produtos que estão vinculados de duas formas:
+    // 1. O produto tem o coupon_id definido (relação One-to-Many tradicional)
+    // 2. O cupom tem o produto na lista applicable_products (Arrays no PostgreSQL da tabela coupons)
+    if (filters.applicable_product_ids && filters.applicable_product_ids.length > 0) {
+      if (coupon_id) {
+        // Se ambos existirem, buscar os que tem coupon_id = X OU id está na lista
+        query = query.or(`coupon_id.eq.${coupon_id},id.in.(${filters.applicable_product_ids.join(',')})`);
+      } else {
+        // Apenas pela lista de IDs
+        query = query.in('id', filters.applicable_product_ids);
+      }
+    } else if (coupon_id) {
+      // Apenas pelo coupon_id tradicional
+      query = query.eq('coupon_id', coupon_id);
+    }
     if (min_price) query = query.gte('current_price', min_price);
     if (max_price) query = query.lte('current_price', max_price);
     if (min_discount) query = query.gte('discount_percentage', min_discount);

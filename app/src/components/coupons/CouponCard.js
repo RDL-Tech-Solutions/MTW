@@ -138,19 +138,29 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
         <View style={s.actionContainer}>
           {coupon.code ? (
             <TouchableOpacity
-              style={[s.actionButton, { backgroundColor: copied ? colors.success : platformColor }]}
-              onPress={handleCopy}
+              style={[
+                s.actionButton,
+                { backgroundColor: coupon.is_out_of_stock ? colors.border : (copied ? colors.success : platformColor) }
+              ]}
+              onPress={coupon.is_out_of_stock ? null : handleCopy}
+              disabled={coupon.is_out_of_stock}
             >
-              <Text style={s.actionButtonText}>
-                {copied ? 'Copiado!' : 'Pegar'}
+              <Text style={[s.actionButtonText, coupon.is_out_of_stock && { color: colors.textMuted }]}>
+                {coupon.is_out_of_stock ? 'Esgotado' : (copied ? 'Copiado!' : 'Pegar')}
               </Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[s.actionButton, { borderColor: platformColor, borderWidth: 1, backgroundColor: 'transparent' }]}
-              onPress={onPress}
+              style={[
+                s.actionButton,
+                { borderColor: coupon.is_out_of_stock ? colors.border : platformColor, borderWidth: 1, backgroundColor: 'transparent' }
+              ]}
+              onPress={coupon.is_out_of_stock ? null : onPress}
+              disabled={coupon.is_out_of_stock}
             >
-              <Text style={[s.actionButtonText, { color: platformColor }]}>Ver</Text>
+              <Text style={[s.actionButtonText, { color: coupon.is_out_of_stock ? colors.textMuted : platformColor }]}>
+                {coupon.is_out_of_stock ? 'Esgotado' : 'Ver'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>

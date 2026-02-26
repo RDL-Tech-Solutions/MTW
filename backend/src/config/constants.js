@@ -63,7 +63,7 @@ export const PAGINATION = {
 // Cache TTL (em segundos)
 export const CACHE_TTL = {
   PRODUCTS: 900, // 15 minutos
-  COUPONS: 600, // 10 minutos
+  COUPONS: 60, // 1 minuto (reduzido para sincronização mais rápida no app)
   CATEGORIES: 3600, // 1 hora
   ANALYTICS: 300, // 5 minutos
   LINK_ANALYSIS: 3600 // 1 hora

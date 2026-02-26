@@ -250,23 +250,27 @@ export default function CouponDetailsScreen({ route, navigation }) {
 
               <View style={s.codeBox}>
                 <View style={s.codeTextContainer}>
-                  <Ionicons name="ticket-outline" size={20} color={platformColor} />
-                  <Text style={s.codeText}>{coupon.code}</Text>
+                  <Ionicons name="ticket-outline" size={20} color={coupon.is_out_of_stock ? '#9CA3AF' : platformColor} />
+                  <Text style={[s.codeText, coupon.is_out_of_stock && { textDecorationLine: 'line-through', color: '#9CA3AF' }]}>{coupon.code}</Text>
                 </View>
               </View>
 
               <TouchableOpacity
-                style={[s.copyButton, codeCopied && s.copyButtonSuccess]}
-                onPress={handleCopyCode}
+                style={[
+                  s.copyButton,
+                  coupon.is_out_of_stock ? { backgroundColor: '#E5E7EB' } : (codeCopied && s.copyButtonSuccess)
+                ]}
+                onPress={coupon.is_out_of_stock ? null : handleCopyCode}
                 activeOpacity={0.8}
+                disabled={coupon.is_out_of_stock}
               >
                 <Ionicons
-                  name={codeCopied ? 'checkmark-circle' : 'copy-outline'}
+                  name={coupon.is_out_of_stock ? 'close-circle-outline' : (codeCopied ? 'checkmark-circle' : 'copy-outline')}
                   size={20}
-                  color="#fff"
+                  color={coupon.is_out_of_stock ? '#9CA3AF' : '#fff'}
                 />
-                <Text style={s.copyButtonText}>
-                  {codeCopied ? 'Código Copiado!' : 'Copiar Código'}
+                <Text style={[s.copyButtonText, coupon.is_out_of_stock && { color: '#9CA3AF' }]}>
+                  {coupon.is_out_of_stock ? 'Esgotado' : (codeCopied ? 'Código Copiado!' : 'Copiar Código')}
                 </Text>
               </TouchableOpacity>
             </View>
