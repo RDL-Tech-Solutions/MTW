@@ -26,13 +26,11 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function ProductDetailsScreen({ route, navigation }) {
   const { colors } = useThemeStore();
   const { product: initialProduct, productId } = route.params || {};
-  const { addFavorite, removeFavorite, isFavorite, fetchProductById, fetchCouponById } = useProductStore();
+  const { addFavorite, removeFavorite, isFavorite, fetchProductById } = useProductStore();
   const [product, setProduct] = useState(initialProduct);
-  const [coupon, setCoupon] = useState(null);
   const [loading, setLoading] = useState(!initialProduct && !!productId);
-  const [loadingCoupon, setLoadingCoupon] = useState(false);
   const [favorite, setFavorite] = useState(initialProduct?.id ? isFavorite(initialProduct.id) : false);
-  const [codeCopied, setCodeCopied] = useState(false);
+  const [copiedCouponId, setCopiedCouponId] = useState(null);
   const [showCopiedMessage, setShowCopiedMessage] = useState(false);
   const copiedAnimation = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -47,9 +45,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
       ]);
     } else if (initialProduct) {
       setFavorite(isFavorite(initialProduct.id));
-      if (initialProduct.coupon_id) {
-        loadCoupon(initialProduct.coupon_id);
-      }
     }
 
     Animated.parallel([
@@ -58,12 +53,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
     ]).start();
   }, []);
 
-  useEffect(() => {
-    if (product?.coupon_id && !coupon) {
-      loadCoupon(product.coupon_id);
-    }
-  }, [product]);
-
   const loadProduct = async () => {
     try {
       setLoading(true);
@@ -71,9 +60,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
       if (result.success && result.product) {
         setProduct(result.product);
         setFavorite(isFavorite(result.product.id));
-        if (result.product.coupon_id) {
-          loadCoupon(result.product.coupon_id);
-        }
       } else {
         Alert.alert('Erro', 'Produto não encontrado', [
           { text: 'OK', onPress: () => navigation.goBack() }
@@ -85,20 +71,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
       ]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadCoupon = async (couponId) => {
-    try {
-      setLoadingCoupon(true);
-      const result = await fetchCouponById(couponId);
-      if (result.success && result.coupon) {
-        setCoupon(result.coupon);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar cupom:', error);
-    } finally {
-      setLoadingCoupon(false);
     }
   };
 
@@ -159,8 +131,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const handleBuyNow = async () => {
     try {
-      if (coupon?.code) {
-        await Clipboard.setStringAsync(coupon.code);
+      const bestCoupon = product?.coupons?.length > 0 ? product.coupons[0] : null;
+
+      if (bestCoupon?.code) {
+        await Clipboard.setStringAsync(bestCoupon.code);
         animateCopied();
       }
 
@@ -180,9 +154,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
         } catch (error) {
           Alert.alert('Erro', 'Não foi possível abrir o link');
         }
-      }, coupon?.code ? 500 : 0);
+      }, bestCoupon?.code ? 500 : 0);
     } catch (error) {
-      console.error('Erro ao copiar cupom:', error);
+      console.error('Erro ao redirecionar com cupom:', error);
       try {
         const url = product.affiliate_link || product.link;
         if (url) {
@@ -197,13 +171,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   };
 
-  const handleCopyCoupon = async () => {
-    if (coupon?.code) {
+  const handleCopyCoupon = async (couponToCopy) => {
+    if (couponToCopy?.code) {
       try {
-        await Clipboard.setStringAsync(coupon.code);
-        setCodeCopied(true);
+        await Clipboard.setStringAsync(couponToCopy.code);
+        setCopiedCouponId(couponToCopy.id);
         animateCopied();
-        setTimeout(() => setCodeCopied(false), 2000);
+        setTimeout(() => setCopiedCouponId(null), 2000);
       } catch (error) {
         Alert.alert('Erro', 'Não foi possível copiar o código');
       }
@@ -308,38 +282,45 @@ export default function ProductDetailsScreen({ route, navigation }) {
             )}
 
             {/* ── Coupon Section ── */}
-            {coupon && coupon.code && (
-              <View style={s.couponCard}>
-                <View style={s.couponHeader}>
-                  <Ionicons name="ticket" size={20} color={colors.success} />
-                  <Text style={s.couponTitle}>Cupom disponível</Text>
-                </View>
-                <TouchableOpacity
-                  style={s.couponCodeRow}
-                  onPress={handleCopyCoupon}
-                  activeOpacity={0.8}
-                >
-                  <View style={s.couponCodeBox}>
-                    <Text style={s.couponCodeText}>{coupon.code}</Text>
+            {product?.coupons && product.coupons.length > 0 && (
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>
+                  {product.coupons.length > 1 ? `${product.coupons.length} Cupons disponíveis` : 'Cupom disponível'}
+                </Text>
+                {product.coupons.map((c) => (
+                  <View key={c.id} style={s.couponCard}>
+                    <View style={s.couponHeader}>
+                      <Ionicons name="ticket" size={20} color={colors.success} />
+                      <Text style={s.couponTitle}>{c.title || 'Desconto extra!'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={s.couponCodeRow}
+                      onPress={() => handleCopyCoupon(c)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={s.couponCodeBox}>
+                        <Text style={s.couponCodeText}>{c.code}</Text>
+                      </View>
+                      <View style={[s.couponCopyBtn, copiedCouponId === c.id && { backgroundColor: colors.success }]}>
+                        <Ionicons
+                          name={copiedCouponId === c.id ? 'checkmark' : 'copy-outline'}
+                          size={18}
+                          color="#fff"
+                        />
+                        <Text style={s.couponCopyText}>
+                          {copiedCouponId === c.id ? 'Copiado' : 'Copiar'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    {c.discount_value && (
+                      <Text style={s.couponDiscount}>
+                        {c.discount_type === 'percentage'
+                          ? `${c.discount_value}% OFF`
+                          : `R$ ${c.discount_value.toFixed(2)} OFF`}
+                      </Text>
+                    )}
                   </View>
-                  <View style={[s.couponCopyBtn, codeCopied && { backgroundColor: colors.success }]}>
-                    <Ionicons
-                      name={codeCopied ? 'checkmark' : 'copy-outline'}
-                      size={18}
-                      color="#fff"
-                    />
-                    <Text style={s.couponCopyText}>
-                      {codeCopied ? 'Copiado' : 'Copiar'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                {coupon.discount_value && (
-                  <Text style={s.couponDiscount}>
-                    {coupon.discount_type === 'percentage'
-                      ? `${coupon.discount_value}% OFF`
-                      : `R$ ${coupon.discount_value.toFixed(2)} OFF`}
-                  </Text>
-                )}
+                ))}
               </View>
             )}
 
@@ -380,7 +361,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           activeOpacity={0.9}
         >
           <Text style={s.buyButtonText}>
-            {coupon?.code ? 'Comprar agora' : 'Ver oferta'}
+            {product?.coupons?.length > 0 ? 'Comprar agora' : 'Ver oferta'}
           </Text>
           <Ionicons name="arrow-forward-circle" size={24} color="#fff" />
         </TouchableOpacity>

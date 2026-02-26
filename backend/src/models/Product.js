@@ -132,39 +132,63 @@ class Product {
 
     if (error) throw error;
 
-    // Calcular preço final com cupom se houver
-    if (data && data.coupon_id && data.coupon_discount_type && data.coupon_discount_value) {
+    if (data) {
       try {
-        let finalPrice = data.current_price;
         const currentPrice = parseFloat(data.current_price) || 0;
-        const discountValue = parseFloat(data.coupon_discount_value) || 0;
+        let bestFinalPrice = currentPrice;
+        let applicableCoupons = [];
 
-        if (data.coupon_discount_type === 'percentage') {
-          // Desconto percentual
-          finalPrice = currentPrice - (currentPrice * (discountValue / 100));
-        } else {
-          // Desconto fixo
-          finalPrice = Math.max(0, currentPrice - discountValue);
-        }
+        // Fetch all active, in-stock coupons
+        const Coupon = (await import('./Coupon.js')).default;
+        const allCoupons = await Coupon.findActiveApplicable();
 
-        // Aplicar limite máximo de desconto se existir
-        try {
-          const Coupon = (await import('./Coupon.js')).default;
-          const coupon = await Coupon.findById(data.coupon_id);
-          if (coupon && coupon.max_discount_value && coupon.max_discount_value > 0) {
-            const discountAmount = currentPrice - finalPrice;
-            if (discountAmount > coupon.max_discount_value) {
-              finalPrice = currentPrice - coupon.max_discount_value;
+        // Check which coupons apply to this product
+        for (const coupon of allCoupons) {
+          const isDirectlyLinked = data.coupon_id === coupon.id;
+          const isListedInApplicable = coupon.applicable_products && coupon.applicable_products.includes(data.id);
+          const isGeneralPlatform = coupon.is_general === true && (coupon.platform === 'general' || coupon.platform === data.platform);
+
+          if (isDirectlyLinked || isListedInApplicable || isGeneralPlatform) {
+            applicableCoupons.push(coupon);
+
+            // Calculate discount for this coupon
+            const discountValue = parseFloat(coupon.discount_value) || 0;
+            let tempFinalPrice = currentPrice;
+
+            if (coupon.discount_type === 'percentage') {
+              tempFinalPrice = currentPrice - (currentPrice * (discountValue / 100));
+            } else {
+              tempFinalPrice = Math.max(0, currentPrice - discountValue);
+            }
+
+            // Apply max discount limit if it exists
+            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+              const discountAmount = currentPrice - tempFinalPrice;
+              if (discountAmount > coupon.max_discount_value) {
+                tempFinalPrice = currentPrice - coupon.max_discount_value;
+              }
+            }
+
+            // Keep track of the best price
+            if (tempFinalPrice < bestFinalPrice) {
+              bestFinalPrice = tempFinalPrice;
             }
           }
-        } catch (e) {
-          // Ignorar erro ao buscar cupom
         }
 
-        data.final_price = parseFloat(finalPrice.toFixed(2));
-        data.price_with_coupon = parseFloat(finalPrice.toFixed(2));
+        data.coupons = applicableCoupons;
+
+        if (applicableCoupons.length > 0) {
+          data.final_price = parseFloat(bestFinalPrice.toFixed(2));
+          data.price_with_coupon = parseFloat(bestFinalPrice.toFixed(2));
+        } else {
+          // Fallback if no valid coupons but legacy data still existed
+          data.final_price = currentPrice;
+          data.price_with_coupon = currentPrice;
+        }
+
       } catch (e) {
-        logger.warn(`Erro ao calcular preço final para produto ${id}: ${e.message}`);
+        logger.warn(`Erro ao calcular cupons para produto ${id}: ${e.message}`);
       }
     }
 
@@ -260,47 +284,75 @@ class Product {
     if (error) throw error;
 
     // Calcular preço final com cupom para cada produto
+    // Novo comportamento dinâmico de múltiplos cupons
+    let allCoupons = [];
+    try {
+      const Coupon = (await import('./Coupon.js')).default;
+      allCoupons = await Coupon.findActiveApplicable();
+    } catch (e) {
+      logger.warn(`Erro ao buscar cupons para calcular precos dinâmicos: ${e.message}`);
+    }
+
     const productsWithFinalPrice = await Promise.all(
       (data || []).map(async (product) => {
-        if (product.coupon_id && product.coupon_discount_type && product.coupon_discount_value) {
-          try {
-            let finalPrice = product.current_price;
-            const currentPrice = parseFloat(product.current_price) || 0;
-            const discountValue = parseFloat(product.coupon_discount_value) || 0;
+        let applicableCoupons = [];
+        const currentPrice = parseFloat(product.current_price) || 0;
+        let bestFinalPrice = currentPrice;
 
-            if (product.coupon_discount_type === 'percentage') {
-              // Desconto percentual
-              finalPrice = currentPrice - (currentPrice * (discountValue / 100));
+        for (const coupon of allCoupons) {
+          const isDirectlyLinked = product.coupon_id === coupon.id;
+          const isListedInApplicable = coupon.applicable_products && coupon.applicable_products.includes(product.id);
+          const isGeneralPlatform = coupon.is_general === true && (coupon.platform === 'general' || coupon.platform === product.platform);
+
+          if (isDirectlyLinked || isListedInApplicable || isGeneralPlatform) {
+            applicableCoupons.push(coupon);
+
+            const discountValue = parseFloat(coupon.discount_value) || 0;
+            let tempFinalPrice = currentPrice;
+
+            if (coupon.discount_type === 'percentage') {
+              tempFinalPrice = currentPrice - (currentPrice * (discountValue / 100));
             } else {
-              // Desconto fixo
-              finalPrice = Math.max(0, currentPrice - discountValue);
+              tempFinalPrice = Math.max(0, currentPrice - discountValue);
             }
 
-            // Aplicar limite máximo de desconto se existir (buscar cupom completo)
-            try {
-              const Coupon = (await import('./Coupon.js')).default;
-              const coupon = await Coupon.findById(product.coupon_id);
-              if (coupon && coupon.max_discount_value && coupon.max_discount_value > 0) {
-                const discountAmount = currentPrice - finalPrice;
-                if (discountAmount > coupon.max_discount_value) {
-                  finalPrice = currentPrice - coupon.max_discount_value;
-                }
+            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+              const discountAmount = currentPrice - tempFinalPrice;
+              if (discountAmount > coupon.max_discount_value) {
+                tempFinalPrice = currentPrice - coupon.max_discount_value;
               }
-            } catch (e) {
-              // Ignorar erro ao buscar cupom
             }
 
-            return {
-              ...product,
-              final_price: parseFloat(finalPrice.toFixed(2)),
-              price_with_coupon: parseFloat(finalPrice.toFixed(2))
-            };
-          } catch (e) {
-            logger.warn(`Erro ao calcular preço final para produto ${product.id}: ${e.message}`);
-            return product;
+            if (tempFinalPrice < bestFinalPrice) {
+              bestFinalPrice = tempFinalPrice;
+            }
           }
         }
-        return product;
+
+        const enrichedProduct = { ...product, coupons: applicableCoupons };
+
+        if (applicableCoupons.length > 0) {
+          enrichedProduct.final_price = parseFloat(bestFinalPrice.toFixed(2));
+          enrichedProduct.price_with_coupon = parseFloat(bestFinalPrice.toFixed(2));
+        } else if (product.coupon_id && product.coupon_discount_type && product.coupon_discount_value) {
+          // Fallback legacy (apenas se nenhum cupom dinâmico for encontrado mas o banco ainda diz q tem)
+          try {
+            let finalPrice = product.current_price;
+            const discountValue = parseFloat(product.coupon_discount_value) || 0;
+            if (product.coupon_discount_type === 'percentage') {
+              finalPrice = currentPrice - (currentPrice * (discountValue / 100));
+            } else {
+              finalPrice = Math.max(0, currentPrice - discountValue);
+            }
+            enrichedProduct.final_price = parseFloat(finalPrice.toFixed(2));
+            enrichedProduct.price_with_coupon = parseFloat(finalPrice.toFixed(2));
+          } catch (e) { }
+        } else {
+          enrichedProduct.final_price = currentPrice;
+          enrichedProduct.price_with_coupon = currentPrice;
+        }
+
+        return enrichedProduct;
       })
     );
 

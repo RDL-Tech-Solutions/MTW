@@ -620,6 +620,23 @@ class Coupon {
     return data;
   }
 
+  // Buscar todos os cupons ativamente aplicáveis (em estoque, aprovados, não expirados)
+  static async findActiveApplicable() {
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('is_active', true)
+      .eq('is_pending_approval', false)
+      .eq('is_out_of_stock', false)
+      .lte('valid_from', now)
+      .or(`valid_until.is.null,valid_until.gte.${now}`);
+
+    if (error) throw error;
+    return data || [];
+  }
+
   // Contar cupons ativos
   static async countActive() {
     const now = new Date().toISOString();
