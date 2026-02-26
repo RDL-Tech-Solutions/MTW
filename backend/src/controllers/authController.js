@@ -611,9 +611,6 @@ class AuthController {
       next(error);
     }
   }
-}
-
-export default AuthController;
 
   // Solicitar recuperação de senha
   static async forgotPassword(req, res, next) {
@@ -717,3 +714,6 @@ export default AuthController;
       next(error);
     }
   }
+}
+
+export default AuthController;
