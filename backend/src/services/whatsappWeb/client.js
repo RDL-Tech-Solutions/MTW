@@ -56,9 +56,25 @@ class WhatsAppClient {
 
             this.isInitializing = true;
 
-            // Tentar limpar lockfile se existir (pode estar travado de uma sessão anterior que caiu)
             // Usar caminho absoluto para evitar problemas de contexto
             const absoluteSessionPath = path.resolve(config.sessionPath);
+            
+            // Criar diretório de sessão se não existir
+            if (!fs.existsSync(absoluteSessionPath)) {
+                logger.info(`📁 Creating session directory: ${absoluteSessionPath}`);
+                fs.mkdirSync(absoluteSessionPath, { recursive: true });
+            }
+
+            // Verificar permissões de escrita
+            try {
+                fs.accessSync(absoluteSessionPath, fs.constants.W_OK);
+                logger.info(`✅ Session directory is writable: ${absoluteSessionPath}`);
+            } catch (permErr) {
+                logger.error(`❌ Session directory is not writable: ${absoluteSessionPath}`);
+                throw new Error(`Session directory is not writable: ${absoluteSessionPath}`);
+            }
+
+            // Tentar limpar lockfile se existir (pode estar travado de uma sessão anterior que caiu)
             const lockPath = path.join(absoluteSessionPath, 'lockfile');
 
             try {
@@ -74,7 +90,8 @@ class WhatsAppClient {
 
             this.client = new Client({
                 authStrategy: new LocalAuth({
-                    dataPath: absoluteSessionPath
+                    dataPath: absoluteSessionPath,
+                    clientId: 'whatsapp-bot' // ID único para esta instância
                 }),
                 takeoverOnConflict: true,
                 takeoverTimeoutMs: 3000,
