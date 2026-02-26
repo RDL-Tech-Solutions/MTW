@@ -232,6 +232,13 @@ export const initAdminBot = async () => {
             await ctx.reply('Menu Principal:', { reply_markup: adminMainMenu });
         });
 
+        // Comando para gerenciar cupons
+        bot.command('cupons', async (ctx) => {
+            if (!authService.isAuthenticated(ctx)) return ctx.reply('Faça login primeiro: /login');
+            const couponManagementHandler = (await import('./handlers/couponManagementHandler.js'));
+            await couponManagementHandler.listActiveCoupons(ctx);
+        });
+
         // Handler de Texto Geral
         bot.on('message:text', async (ctx) => {
             const text = ctx.message.text;
@@ -492,6 +499,32 @@ export const initAdminBot = async () => {
                 if (data.startsWith('coupon:create:')) {
                     await couponHandler.startCreateCoupon(ctx);
                     await ctx.answerCallbackQuery();
+                }
+
+                // Gerenciamento de cupons (marcar como esgotado)
+                if (data.startsWith('coupon_outofstock:')) {
+                    const couponManagementHandler = (await import('./handlers/couponManagementHandler.js'));
+                    await couponManagementHandler.confirmOutOfStock(ctx);
+                }
+
+                if (data.startsWith('coupon_confirm_outofstock:')) {
+                    const couponManagementHandler = (await import('./handlers/couponManagementHandler.js'));
+                    await couponManagementHandler.markCouponAsOutOfStock(ctx);
+                }
+
+                if (data === 'coupon_cancel') {
+                    const couponManagementHandler = (await import('./handlers/couponManagementHandler.js'));
+                    await couponManagementHandler.cancelAction(ctx);
+                }
+
+                if (data.startsWith('coupon_details:')) {
+                    const couponManagementHandler = (await import('./handlers/couponManagementHandler.js'));
+                    await couponManagementHandler.showCouponDetails(ctx);
+                }
+
+                if (data.startsWith('coupon_back:')) {
+                    const couponManagementHandler = (await import('./handlers/couponManagementHandler.js'));
+                    await couponManagementHandler.backToCouponCard(ctx);
                 }
 
             } catch (e) {

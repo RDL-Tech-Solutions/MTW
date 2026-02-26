@@ -100,6 +100,10 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
   const scope = hasProducts ? 'Produtos selecionados' : 'Todos os produtos';
 
   const handleCopyCode = async () => {
+    if (coupon.is_out_of_stock) {
+      // Não permitir copiar código de cupom esgotado
+      return;
+    }
     if (coupon.code) {
       await Clipboard.setStringAsync(coupon.code);
       setCodeCopied(true);
@@ -351,7 +355,12 @@ export default function CouponsScreen({ navigation }) {
   const loadCoupons = async () => {
     try {
       setLoading(true);
-      const params = { page: 1, limit: 50, is_active: true };
+      const params = {
+        page,
+        limit: 50,
+        is_active: true,
+        is_out_of_stock: false // Filtrar cupons esgotados
+      };
       if (selectedPlatform && selectedPlatform !== 'all') {
         params.platform = selectedPlatform;
       }
@@ -394,7 +403,7 @@ export default function CouponsScreen({ navigation }) {
   };
 
   const filteredCoupons = coupons.filter(c => {
-    // Filtrar cupons esgotados (camada extra de segurança)
+    // Filtrar cupons esgotados - não exibir na lista
     if (c.is_out_of_stock) return false;
     
     let tabMatch = true;

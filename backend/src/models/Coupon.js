@@ -765,6 +765,142 @@ class Coupon {
       throw error;
     }
   }
+
+  /**
+   * Marcar cupom como esgotado
+   * @param {string} couponId - ID do cupom
+   * @returns {Promise<Object>} Cupom atualizado
+   */
+  static async markAsOutOfStock(couponId) {
+    try {
+      const { data, error } = await supabase
+        .from('coupons')
+        .update({
+          is_out_of_stock: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', couponId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      logger.info(`🚫 Cupom marcado como esgotado: ${data.code} (${couponId})`);
+      return data;
+    } catch (error) {
+      logger.error(`❌ Erro ao marcar cupom como esgotado: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Restaurar estoque do cupom
+   * @param {string} couponId - ID do cupom
+   * @returns {Promise<Object>} Cupom atualizado
+   */
+  static async restoreStock(couponId) {
+    try {
+      const { data, error } = await supabase
+        .from('coupons')
+        .update({
+          is_out_of_stock: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', couponId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      logger.info(`✅ Estoque do cupom restaurado: ${data.code} (${couponId})`);
+      return data;
+    } catch (error) {
+      logger.error(`❌ Erro ao restaurar estoque do cupom: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Buscar canais que receberam um cupom específico
+   * @param {string} couponId - ID do cupom
+   * @returns {Promise<Array>} Lista de canais
+   */
+  static async getChannelsWithCoupon(couponId) {
+    try {
+      const { data, error } = await supabase
+        .from('notification_logs')
+        .select('channel_id, platform, channel_name')
+        .eq('coupon_id', couponId)
+        .eq('status', 'sent')
+        .not('channel_id', 'is', null);
+
+      if (error) throw error;
+
+      // Remover duplicatas (mesmo canal pode ter recebido múltiplas vezes)
+      const uniqueChannels = [];
+      const channelIds = new Set();
+
+      for (const log of data || []) {
+        if (!channelIds.has(log.channel_id)) {
+          channelIds.add(log.channel_id);
+          uniqueChannels.push({
+            channel_id: log.channel_id,
+            platform: log.platform,
+            channel_name: log.channel_name
+          });
+        }
+      }
+
+      logger.info(`📋 Encontrados ${uniqueChannels.length} canais que receberam o cupom ${couponId}`);
+      return uniqueChannels;
+    } catch (error) {
+      logger.error(`❌ Erro ao buscar canais do cupom: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Listar cupons esgotados
+   * @param {Object} filters - Filtros de busca
+   * @returns {Promise<Object>} Lista de cupons esgotados
+   */
+  static async findOutOfStock(filters = {}) {
+    const {
+      page = 1,
+      limit = 20,
+      platform,
+      search
+    } = filters;
+
+    const offset = (page - 1) * limit;
+
+    let query = supabase
+      .from('coupons')
+      .select('*', { count: 'exact' })
+      .eq('is_out_of_stock', true)
+      .order('updated_at', { ascending: false });
+
+    // Aplicar filtros
+    if (platform) query = query.eq('platform', platform);
+    if (search) {
+      query = query.or(`code.ilike.%${search}%,description.ilike.%${search}%`);
+    }
+
+    // Paginação
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return {
+      coupons: data,
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit)
+    };
+  }
 }
 
 export default Coupon;

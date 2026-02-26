@@ -360,7 +360,7 @@ class CouponController {
     }
   }
 
-  // Marcar cupom como esgotado
+  // Marcar cupom como esgotado e notificar canais
   static async markAsOutOfStock(req, res, next) {
     try {
       const { id } = req.params;
@@ -372,38 +372,66 @@ class CouponController {
         );
       }
 
+      if (coupon.is_out_of_stock) {
+        return res.status(400).json(
+          errorResponse('Cupom já está marcado como esgotado', 'ALREADY_OUT_OF_STOCK')
+        );
+      }
+
+      // Marcar como esgotado
       const updatedCoupon = await Coupon.markAsOutOfStock(id);
       await cacheDelByPattern('coupons:*');
 
-      logger.info(`Cupom marcado como esgotado: ${id} (${coupon.code})`);
+      logger.info(`🚫 Cupom marcado como esgotado: ${id} (${coupon.code})`);
 
-      // 🔔 Notificar usuários que visualizaram este cupom
+      // Buscar canais que receberam este cupom
+      const channels = await Coupon.getChannelsWithCoupon(id);
+      logger.info(`📋 Encontrados ${channels.length} canais para notificar sobre cupom esgotado`);
+
+      // Notificar todos os canais sobre o cupom esgotado
+      if (channels.length > 0) {
+        try {
+          await notificationDispatcher.notifyCouponOutOfStock(updatedCoupon, channels);
+          logger.info(`✅ Notificações de cupom esgotado enviadas para ${channels.length} canais`);
+        } catch (notifyError) {
+          logger.error(`❌ Erro ao notificar canais sobre cupom esgotado: ${notifyError.message}`);
+          // Não falhar a operação se a notificação falhar
+        }
+      }
+
+      // Notificar usuários que visualizaram este cupom via push
       try {
         const users = await Coupon.getUsersWhoViewed(id);
         if (users && users.length > 0) {
-          logger.info(`Enviando push notification para ${users.length} usuários que visualizaram o cupom esgotado ${coupon.code}.`);
+          logger.info(`📱 Enviando push notification para ${users.length} usuários que visualizaram o cupom`);
           const messages = users.map(user =>
             pushNotificationService.createMessage(
               user.push_token,
-              '❌ Cupom Esgotado!',
+              '🚫 Cupom Esgotado!',
               `O cupom "${coupon.code || coupon.title}" que você visualizou acabou de esgotar.`,
-              { type: 'coupon_out_of_stock', couponId: id }
+              { type: 'coupon_out_of_stock', couponId: id },
+              { categoryId: 'coupon' }
             )
           );
           await pushNotificationService.sendToMultiple(messages);
+          logger.info(`✅ Push notifications enviadas para ${users.length} usuários`);
         }
-      } catch (notifyError) {
-        logger.error(`Erro ao notificar usuários sobre cupom esgotado ${id}: ${notifyError.message}`);
+      } catch (pushError) {
+        logger.error(`❌ Erro ao enviar push notifications: ${pushError.message}`);
       }
 
-      res.json(successResponse(updatedCoupon, 'Cupom marcado como esgotado'));
+      res.json(successResponse({
+        coupon: updatedCoupon,
+        channelsNotified: channels.length
+      }, `Cupom marcado como esgotado e ${channels.length} canais notificados`));
     } catch (error) {
+      logger.error(`❌ Erro ao marcar cupom como esgotado: ${error.message}`);
       next(error);
     }
   }
 
-  // Marcar cupom como disponível novamente
-  static async markAsAvailable(req, res, next) {
+  // Restaurar estoque do cupom
+  static async restoreStock(req, res, next) {
     try {
       const { id } = req.params;
       const coupon = await Coupon.findById(id);
@@ -414,14 +442,26 @@ class CouponController {
         );
       }
 
-      const updatedCoupon = await Coupon.markAsAvailable(id);
+      if (!coupon.is_out_of_stock) {
+        return res.status(400).json(
+          errorResponse('Cupom não está marcado como esgotado', 'NOT_OUT_OF_STOCK')
+        );
+      }
+
+      const updatedCoupon = await Coupon.restoreStock(id);
       await cacheDelByPattern('coupons:*');
 
-      logger.info(`Cupom marcado como disponível: ${id} (${coupon.code})`);
-      res.json(successResponse(updatedCoupon, 'Cupom marcado como disponível'));
+      logger.info(`✅ Estoque do cupom restaurado: ${id} (${coupon.code})`);
+      res.json(successResponse(updatedCoupon, 'Estoque do cupom restaurado com sucesso'));
     } catch (error) {
+      logger.error(`❌ Erro ao restaurar estoque: ${error.message}`);
       next(error);
     }
+  }
+
+  // Marcar cupom como disponível novamente (alias para restoreStock)
+  static async markAsAvailable(req, res, next) {
+    return CouponController.restoreStock(req, res, next);
   }
 
   // Listar cupons pendentes de aprovação

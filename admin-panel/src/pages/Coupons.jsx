@@ -312,14 +312,15 @@ export default function Coupons() {
   };
 
   const handleMarkAsOutOfStock = async (coupon) => {
-    if (!confirm(`Deseja marcar o cupom ${coupon.code} como esgotado?`)) return;
+    if (!confirm(`Deseja marcar o cupom ${coupon.code} como esgotado?\n\nIsso irá:\n• Remover o cupom do app mobile\n• Notificar todos os canais que receberam este cupom\n• Enviar notificação push para usuários que visualizaram`)) return;
 
     try {
-      await api.post(`/coupons/${coupon.id}/mark-out-of-stock`);
+      await api.put(`/coupons/${coupon.id}/out-of-stock`);
       fetchCoupons(pagination.page);
-      alert('Cupom marcado como esgotado!');
+      alert('Cupom marcado como esgotado com sucesso!\nNotificações enviadas aos canais.');
     } catch (error) {
-      alert('Erro ao marcar cupom como esgotado');
+      console.error('Erro ao marcar cupom como esgotado:', error);
+      alert('Erro ao marcar cupom como esgotado: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -327,11 +328,12 @@ export default function Coupons() {
     if (!confirm(`Deseja marcar o cupom ${coupon.code} como disponível novamente?`)) return;
 
     try {
-      await api.post(`/coupons/${coupon.id}/mark-available`);
+      await api.put(`/coupons/${coupon.id}/restore-stock`);
       fetchCoupons(pagination.page);
-      alert('Cupom marcado como disponível!');
+      alert('Cupom marcado como disponível novamente!');
     } catch (error) {
-      alert('Erro ao marcar cupom como disponível');
+      console.error('Erro ao restaurar cupom:', error);
+      alert('Erro ao restaurar cupom: ' + (error.response?.data?.message || error.message));
     }
   };
 

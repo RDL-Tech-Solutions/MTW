@@ -9,6 +9,7 @@ import { handlePendingFlow } from './whatsappPendingHandler.js';
 import { handleEditFlow, startApprovalFlow, startEditWizard } from './whatsappEditHandler.js';
 import { handleCaptureFlow, handleCaptureLink } from './whatsappCaptureHandler.js';
 import { handleAutoSyncMenu, handleConfigEdit, handleConfigMenu, handlePlatformDetail, handlePlatformsMenu, showAutoSyncMenu } from './whatsappAutoSyncHandler.js';
+import { handleCouponManagementFlow, listActiveCoupons } from './whatsappCouponManagementHandler.js';
 
 // Mapa de Estado para Interações (Review, Edição, etc.)
 // Key: chatId, Value: { type: 'product'|'coupon', data: Object, step: 'REVIEW'|'EDIT_NAME'|'EDIT_PRICE'|'EDIT_CODE'|'EDIT_DISCOUNT' }
@@ -222,6 +223,14 @@ export const handleMessage = async (client, msg) => {
             }
             if (interaction.step.startsWith('AUTOSYNC_EDIT_')) {
                 const newState = await handleConfigEdit(msg, body, interaction);
+                if (newState.step === 'IDLE') pendingInteractions.delete(chatId);
+                else pendingInteractions.set(chatId, { ...newState, lastUpdate: Date.now() });
+                return;
+            }
+
+            // 5. Fluxos de Gerenciamento de Cupons (Marcar como Esgotado)
+            if (interaction.step === 'COUPON_SELECT' || interaction.step === 'COUPON_ACTION' || interaction.step === 'COUPON_CONFIRM_OUTOFSTOCK') {
+                const newState = await handleCouponManagementFlow(msg, body, interaction);
                 if (newState.step === 'IDLE') pendingInteractions.delete(chatId);
                 else pendingInteractions.set(chatId, { ...newState, lastUpdate: Date.now() });
                 return;
@@ -466,6 +475,13 @@ export const handleMessage = async (client, msg) => {
         // COMANDO AUTO-SYNC
         if (body.toLowerCase() === '/autosync') {
             const newState = await showAutoSyncMenu(msg);
+            pendingInteractions.set(chatId, { ...newState, lastUpdate: Date.now() });
+            return;
+        }
+
+        // COMANDO CUPONS (Gerenciamento de Cupons)
+        if (body.toLowerCase() === 'cupons' || body.toLowerCase() === '/cupons') {
+            const newState = await listActiveCoupons(msg);
             pendingInteractions.set(chatId, { ...newState, lastUpdate: Date.now() });
             return;
         }

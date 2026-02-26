@@ -13,6 +13,11 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  // Não renderizar cupons esgotados
+  if (coupon.is_out_of_stock) {
+    return null;
+  }
+
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,

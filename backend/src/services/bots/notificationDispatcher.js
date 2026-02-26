@@ -734,6 +734,115 @@ class NotificationDispatcher {
   }
 
   /**
+   * Notificar sobre cupom esgotado para canais específicos
+   * @param {Object} coupon - Dados do cupom
+   * @param {Array} channels - Lista de canais que receberam o cupom
+   * @returns {Promise<Object>} Resultado das notificações
+   */
+  async notifyCouponOutOfStock(coupon, channels) {
+    try {
+      logger.info(`🚫 Notificando ${channels.length} canais sobre cupom esgotado: ${coupon.code}`);
+
+      const results = {
+        telegram: { sent: 0, failed: 0 },
+        whatsapp: { sent: 0, failed: 0 },
+        total: { sent: 0, failed: 0 }
+      };
+
+      // Agrupar canais por plataforma
+      const telegramChannels = channels.filter(c => c.platform === 'telegram');
+      const whatsappChannels = channels.filter(c => c.platform === 'whatsapp');
+
+      // Enviar para Telegram
+      if (telegramChannels.length > 0) {
+        for (const channel of telegramChannels) {
+          try {
+            await this.sendToTelegram(
+              this.formatCouponOutOfStockMessage(coupon),
+              'coupon_out_of_stock',
+              coupon,
+              { channelId: channel.channel_id }
+            );
+            results.telegram.sent++;
+            results.total.sent++;
+            logger.info(`✅ Notificação de cupom esgotado enviada para Telegram: ${channel.channel_name}`);
+          } catch (error) {
+            results.telegram.failed++;
+            results.total.failed++;
+            logger.error(`❌ Erro ao enviar para Telegram ${channel.channel_name}: ${error.message}`);
+          }
+        }
+      }
+
+      // Enviar para WhatsApp
+      if (whatsappChannels.length > 0) {
+        for (const channel of whatsappChannels) {
+          try {
+            await this.sendToWhatsApp(
+              this.formatCouponOutOfStockMessage(coupon),
+              'coupon_out_of_stock',
+              coupon,
+              { channelId: channel.channel_id }
+            );
+            results.whatsapp.sent++;
+            results.total.sent++;
+            logger.info(`✅ Notificação de cupom esgotado enviada para WhatsApp: ${channel.channel_name}`);
+          } catch (error) {
+            results.whatsapp.failed++;
+            results.total.failed++;
+            logger.error(`❌ Erro ao enviar para WhatsApp ${channel.channel_name}: ${error.message}`);
+          }
+        }
+      }
+
+      logger.info(`📊 Notificações de cupom esgotado: ${results.total.sent} enviadas, ${results.total.failed} falharam`);
+      return results;
+    } catch (error) {
+      logger.error(`❌ Erro ao notificar cupom esgotado: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Formatar mensagem de cupom esgotado
+   * @param {Object} coupon - Dados do cupom
+   * @returns {string} Mensagem formatada
+   */
+  formatCouponOutOfStockMessage(coupon) {
+    const platformName = this.getPlatformName(coupon.platform);
+    const discountText = coupon.discount_type === 'percentage'
+      ? `${coupon.discount_value}% OFF`
+      : `R$ ${coupon.discount_value} OFF`;
+
+    return `🚫 *CUPOM ESGOTADO*\n\n` +
+      `O cupom abaixo não está mais disponível:\n\n` +
+      `🎫 *Código:* ${coupon.code}\n` +
+      `🏪 *Loja:* ${platformName}\n` +
+      `💰 *Desconto:* ${discountText}\n\n` +
+      `❌ Este cupom esgotou e não pode mais ser utilizado.\n\n` +
+      `Fique atento aos nossos canais para novos cupons!`;
+  }
+
+  /**
+   * Obter nome da plataforma
+   * @param {string} platform - Código da plataforma
+   * @returns {string} Nome formatado
+   */
+  getPlatformName(platform) {
+    const names = {
+      'mercadolivre': 'Mercado Livre',
+      'shopee': 'Shopee',
+      'amazon': 'Amazon',
+      'aliexpress': 'AliExpress',
+      'kabum': 'Kabum',
+      'magazineluiza': 'Magazine Luiza',
+      'pichau': 'Pichau',
+      'general': 'Geral'
+    };
+    return names[platform?.toLowerCase()] || platform || 'Loja';
+  }
+
+  /**
    * Enviar mensagem com imagem para Telegram
    */
   async sendToTelegramWithImage(message, imagePath, eventType = 'general', data = null, options = {}) {
