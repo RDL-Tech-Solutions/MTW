@@ -164,7 +164,7 @@ export default function NotificationSettingsScreen({ navigation }) {
                 onPress={() => handleToggleCategory(category.id)}
               >
                 <View style={styles.categoryLeft}>
-                  <Ionicons name={category.icon || 'pricetag'} size={20} color={isSelected ? colors.primary : colors.textMuted} />
+                  <Text style={styles.categoryEmoji}>{category.icon || '📦'}</Text>
                   <Text style={[styles.categoryName, { color: colors.text }]}>{category.name}</Text>
                 </View>
                 <Switch
@@ -345,6 +345,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+  },
+  categoryEmoji: {
+    fontSize: 24,
+    marginRight: 4,
   },
   categoryName: {
     marginLeft: 12,

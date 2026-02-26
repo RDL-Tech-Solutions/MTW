@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Dimensions,
   Image,
   Linking,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,14 +22,16 @@ import { useNotificationStore } from '../../stores/notificationStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../theme/theme';
 import ProductCard from '../../components/common/ProductCard';
+import ProductCardSkeleton from '../../components/common/ProductCardSkeleton';
 import SearchBar from '../../components/common/SearchBar';
 import EmptyState from '../../components/common/EmptyState';
+import ModernLoading from '../../components/common/ModernLoading';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
 import { getPlatformColor, PlatformLogoBadge } from '../../utils/platformIcons';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 8;
-const GRID_PADDING = 12;
+const GRID_PADDING = 16;
 
 // ── Platform shortcuts for the icon row ──
 const PLATFORM_SHORTCUTS = [
@@ -60,6 +63,26 @@ export default function HomeScreen({ navigation, route }) {
     total: 0,
     hasMore: true,
   });
+
+  // Animações
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(headerAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // Load categories, cards, and favorites on mount
   useEffect(() => {
@@ -192,9 +215,22 @@ export default function HomeScreen({ navigation, route }) {
 
   const s = dynamicStyles(colors);
 
+  const headerTranslateY = headerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-50, 0],
+  });
+
   // ─── HEADER (sticky, primary-colored) ──────────────────
   const renderStickyHeader = () => (
-    <View style={s.headerBar}>
+    <Animated.View
+      style={[
+        s.headerBar,
+        {
+          opacity: headerAnim,
+          transform: [{ translateY: headerTranslateY }],
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       {/* Search row */}
       <View style={s.searchRow}>
@@ -237,7 +273,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
         ))}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 
   // ─── LIST HEADER (banner + platform icons + active filter) ───────
@@ -346,12 +382,15 @@ export default function HomeScreen({ navigation, route }) {
 
       {/* ── Section Title ── */}
       <View style={s.sectionTitleRow}>
-        <Text style={s.sectionTitle}>
-          {selectedPlatform !== 'all'
-            ? `Produtos ${PLATFORM_LABELS[selectedPlatform] || ''}`
-            : 'Produtos para você'}
-        </Text>
-        <Text style={s.sectionCount}>{filteredProducts.length} resultados</Text>
+        <View style={s.sectionTitleLeft}>
+          <Ionicons name="flame" size={20} color={colors.primary} />
+          <Text style={s.sectionTitle}>
+            {selectedPlatform !== 'all'
+              ? `Produtos ${PLATFORM_LABELS[selectedPlatform] || ''}`
+              : 'Ofertas em destaque'}
+          </Text>
+        </View>
+        <Text style={s.sectionCount}>{filteredProducts.length}</Text>
       </View>
     </View>
   );
@@ -374,25 +413,33 @@ export default function HomeScreen({ navigation, route }) {
     );
   };
 
-  const renderItem = ({ item, index }) => (
-    <ProductCard
-      product={item}
-      onPress={() => handleProductPress(item)}
-      onFavoritePress={() => handleFavorite(item.id)}
-      isFavorite={isFavorite(item.id)}
-      index={index}
-      isGrid={true}
-    />
-  );
+  const renderItem = ({ item, index }) => {
+    // Show skeleton for loading items
+    if (item.skeleton) {
+      return <ProductCardSkeleton />;
+    }
+    
+    return (
+      <ProductCard
+        product={item}
+        onPress={() => handleProductPress(item)}
+        onFavoritePress={() => handleFavorite(item.id)}
+        isFavorite={isFavorite(item.id)}
+        index={index}
+        isGrid={true}
+      />
+    );
+  };
 
   if (loading && !refreshing) {
     return (
       <View style={s.container}>
         {renderStickyHeader()}
-        <View style={s.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={s.loadingText}>Carregando produtos...</Text>
-        </View>
+        <ModernLoading
+          icon="pricetag"
+          title="Carregando produtos..."
+          subtitle="Buscando as melhores ofertas para você"
+        />
       </View>
     );
   }
@@ -496,18 +543,23 @@ const dynamicStyles = (colors) =>
     // ─── Banner ──────────────────────────────────────────
     bannerContainer: {
       marginHorizontal: 4,
-      marginTop: 10,
-      borderRadius: 12,
+      marginTop: 12,
+      marginBottom: 4,
+      borderRadius: 16,
       overflow: 'hidden',
       ...(Platform.OS === 'web' ? {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
       } : {
-        elevation: 3,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
       }),
     },
     bannerGradient: {
       paddingHorizontal: 20,
-      paddingVertical: 20,
+      paddingVertical: 24,
     },
     bannerContent: {
       flexDirection: 'row',
@@ -518,16 +570,17 @@ const dynamicStyles = (colors) =>
       flex: 1,
     },
     bannerTitle: {
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: '800',
       color: '#fff',
       letterSpacing: 0.5,
     },
     bannerSubtitle: {
-      fontSize: 22,
+      fontSize: 24,
       fontWeight: '900',
       color: '#fff',
       marginTop: 4,
+      letterSpacing: 0.3,
     },
     bannerIconArea: {
       width: 70,
@@ -537,28 +590,35 @@ const dynamicStyles = (colors) =>
     },
     cardImage: {
       width: '100%',
-      height: 140,
-      borderRadius: 12,
+      height: 160,
+      borderRadius: 16,
     },
     cardCarousel: {
-      marginTop: 10,
+      marginTop: 12,
+      marginBottom: 4,
     },
     cardCarouselScroll: {
       paddingHorizontal: 4,
-      gap: 10,
+      gap: 12,
     },
 
     // ─── Platform Icons ──────────────────────────────────
     platformSection: {
       backgroundColor: colors.card,
-      marginTop: 8,
+      marginTop: 12,
       marginHorizontal: 4,
-      borderRadius: 10,
-      paddingVertical: 14,
+      borderRadius: 12,
+      paddingVertical: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
       ...(Platform.OS === 'web' ? {
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
       } : {
-        elevation: 1,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
       }),
     },
     platformScroll: {
@@ -570,20 +630,29 @@ const dynamicStyles = (colors) =>
       marginHorizontal: 2,
     },
     platformIconCircle: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
       backgroundColor: colors.background,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 6,
-      borderWidth: 1.5,
+      borderWidth: 2,
       borderColor: 'transparent',
+      ...(Platform.OS === 'web' ? {
+        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+      } : {
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+      }),
     },
     platformLabel: {
       fontSize: 11,
       color: colors.textMuted,
-      fontWeight: '500',
+      fontWeight: '600',
       textAlign: 'center',
     },
 
@@ -614,14 +683,25 @@ const dynamicStyles = (colors) =>
       marginBottom: 4,
       marginHorizontal: 4,
     },
+    sectionTitleLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     sectionTitle: {
-      fontSize: 16,
-      fontWeight: '700',
+      fontSize: 17,
+      fontWeight: '800',
       color: colors.text,
+      letterSpacing: 0.3,
     },
     sectionCount: {
-      fontSize: 12,
+      fontSize: 13,
       color: colors.textMuted,
+      fontWeight: '600',
+      backgroundColor: colors.background,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
     },
 
     // ─── Product Grid ────────────────────────────────────
@@ -632,9 +712,10 @@ const dynamicStyles = (colors) =>
     },
     gridRow: {
       justifyContent: 'space-between',
+      marginBottom: 0,
     },
     listHeaderContent: {
-      marginBottom: 4,
+      marginBottom: 8,
     },
 
     // ─── Loading / Footer ────────────────────────────────

@@ -15,6 +15,8 @@ router.get('/social/callback', AuthController.socialAuthCallback);
 router.post('/social/callback', AuthController.socialAuthCallback);
 router.get('/meli/callback', AuthController.meliCallback); // Callback do Mercado Livre OAuth
 router.post('/refresh', AuthController.refreshToken);
+router.post('/forgot-password', authLimiter, AuthController.forgotPassword);
+router.post('/reset-password', authLimiter, AuthController.resetPassword);
 
 // Rotas protegidas
 router.get('/me', authenticateToken, AuthController.me);

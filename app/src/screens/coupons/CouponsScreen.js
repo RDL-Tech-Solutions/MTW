@@ -21,6 +21,7 @@ import CouponCard from '../../components/coupons/CouponCard';
 import EmptyState from '../../components/common/EmptyState';
 import SearchBar from '../../components/common/SearchBar';
 import { useThemeStore } from '../../theme/theme';
+import { useProductStore } from '../../stores/productStore';
 import api from '../../services/api';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
 import { getPlatformColor, getPlatformName, PlatformIcon } from '../../utils/platformIcons';
@@ -43,7 +44,11 @@ function formatPrice(val) {
 function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+  const contentFadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const [codeCopied, setCodeCopied] = useState(false);
+  const [linkedProductsCount, setLinkedProductsCount] = useState(0);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
     if (visible && coupon) {
@@ -54,22 +59,44 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
         api.post(`/coupons/${coupon.id}/view`).catch(e => console.log('Erro ao registrar view do cupom:', e.message));
       }
 
+      // Verificar produtos vinculados
+      checkLinkedProducts();
+
       Animated.parallel([
         Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 10, tension: 60 }),
         Animated.timing(backdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 8, tension: 40 }),
+        Animated.timing(contentFadeAnim, { toValue: 1, duration: 400, delay: 100, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
         Animated.timing(slideAnim, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }),
         Animated.timing(backdropAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.9, duration: 200, useNativeDriver: true }),
+        Animated.timing(contentFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
       ]).start();
     }
   }, [visible, coupon]);
+
+  const checkLinkedProducts = async () => {
+    if (!coupon?.id) return;
+    setLoadingProducts(true);
+    try {
+      const response = await api.get(`/coupons/${coupon.id}/products?limit=1`);
+      const total = response.data?.data?.total || 0;
+      setLinkedProductsCount(total);
+    } catch (error) {
+      console.log('Erro ao verificar produtos vinculados:', error);
+      setLinkedProductsCount(0);
+    }
+    setLoadingProducts(false);
+  };
 
   if (!coupon) return null;
 
   const platformColor = getPlatformColor(coupon.platform);
   const hasProducts = Array.isArray(coupon.applicable_products) && coupon.applicable_products.length > 0;
+  const hasLinkedProducts = linkedProductsCount > 0;
   const scope = hasProducts ? 'Produtos selecionados' : 'Todos os produtos';
 
   const handleCopyCode = async () => {
@@ -84,6 +111,16 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
     onClose();
     setTimeout(() => {
       navigation.navigate(SCREEN_NAMES.COUPON_PRODUCTS, { coupon });
+    }, 300);
+  };
+
+  const handleSeeLinkedProducts = () => {
+    onClose();
+    setTimeout(() => {
+      navigation.navigate(SCREEN_NAMES.LINKED_PRODUCTS, { 
+        couponId: coupon.id,
+        platformColor: platformColor
+      });
     }, 300);
   };
 
@@ -102,105 +139,133 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
       </TouchableWithoutFeedback>
 
       {/* Sheet */}
-      <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View 
+        style={[
+          s.sheet, 
+          { 
+            transform: [
+              { translateY: slideAnim },
+              { scale: scaleAnim }
+            ] 
+          }
+        ]}
+      >
         {/* Handle */}
         <View style={s.handleContainer}>
           <View style={s.handle} />
         </View>
 
-        {/* Platform header strip */}
-        <View style={[s.platformStrip, { backgroundColor: platformColor + '12' }]}>
-          <PlatformIcon platform={coupon.platform} size={22} />
-          <Text style={[s.platformName, { color: platformColor }]}>
-            {getPlatformName(coupon.platform)}
-          </Text>
-          {coupon.is_exclusive && (
-            <View style={s.exclusiveBadge}>
-              <Ionicons name="star" size={9} color="#B45309" />
-              <Text style={s.exclusiveText}>VIP</Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }} />
-          <View style={[s.discountPill, { backgroundColor: platformColor }]}>
-            <Text style={s.discountPillText}>{formatDiscount()}</Text>
-          </View>
-        </View>
-
-        {/* Title */}
-        {coupon.title && (
-          <Text style={s.couponTitle}>{coupon.title}</Text>
-        )}
-
-        {/* Info rows */}
-        <View style={s.infoSection}>
-          <InfoRow icon="bag-handle-outline" label="Escopo" value={scope} colors={colors} />
-          {coupon.min_purchase > 0 && (
-            <InfoRow icon="wallet-outline" label="Compra mínima" value={formatPrice(coupon.min_purchase)} colors={colors} />
-          )}
-          {(coupon.max_uses || coupon.usage_limit) && (
-            <InfoRow icon="people-outline" label="Limite" value={`${coupon.max_uses || coupon.usage_limit} usos`} colors={colors} />
-          )}
-          {coupon.valid_until && (
-            <InfoRow icon="calendar-outline" label="Válido até" value={new Date(coupon.valid_until).toLocaleDateString('pt-BR')} colors={colors} />
-          )}
-        </View>
-
-        {/* Code Section */}
-        {coupon.code ? (
-          <View style={s.codeSection}>
-            <Text style={s.codeLabel}>CÓDIGO DO CUPOM</Text>
-            <View style={s.codeBox}>
-              <Ionicons name="ticket-outline" size={18} color={coupon.is_out_of_stock ? colors.textMuted : platformColor} />
-              <Text style={[s.codeText, coupon.is_out_of_stock && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
-                {coupon.code}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                s.copyBtn,
-                { backgroundColor: coupon.is_out_of_stock ? colors.border : (codeCopied ? '#16A34A' : platformColor) }
-              ]}
-              onPress={coupon.is_out_of_stock ? null : handleCopyCode}
-              activeOpacity={0.85}
-              disabled={coupon.is_out_of_stock}
-            >
-              <Ionicons
-                name={coupon.is_out_of_stock ? 'close-circle-outline' : (codeCopied ? 'checkmark-circle' : 'copy-outline')}
-                size={18}
-                color={coupon.is_out_of_stock ? colors.textMuted : '#fff'}
-              />
-              <Text style={[s.copyBtnText, coupon.is_out_of_stock && { color: colors.textMuted }]}>
-                {coupon.is_out_of_stock ? 'Cupom Esgotado' : (codeCopied ? 'Código Copiado!' : 'Copiar Código')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={s.codeSection}>
-            <View style={[s.noCodeBox, { backgroundColor: platformColor + '10' }]}>
-              <Ionicons name="link-outline" size={20} color={platformColor} />
-              <Text style={[s.noCodeText, { color: colors.textMuted }]}>
-                Desconto aplicado automaticamente pelo link
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* See Products Button */}
-        {hasProducts && (
-          <TouchableOpacity
-            style={[s.productsBtn, { borderColor: platformColor }]}
-            onPress={handleSeeProducts}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="grid-outline" size={18} color={platformColor} />
-            <Text style={[s.productsBtnText, { color: platformColor }]}>
-              Ver {coupon.applicable_products.length} produto{coupon.applicable_products.length !== 1 ? 's' : ''} vinculado{coupon.applicable_products.length !== 1 ? 's' : ''}
+        <Animated.View style={{ opacity: contentFadeAnim }}>
+          {/* Platform header strip */}
+          <View style={[s.platformStrip, { backgroundColor: platformColor + '12' }]}>
+            <PlatformIcon platform={coupon.platform} size={22} />
+            <Text style={[s.platformName, { color: platformColor }]}>
+              {getPlatformName(coupon.platform)}
             </Text>
-            <Ionicons name="chevron-forward" size={16} color={platformColor} />
-          </TouchableOpacity>
-        )}
+            {coupon.is_exclusive && (
+              <View style={s.exclusiveBadge}>
+                <Ionicons name="star" size={9} color="#B45309" />
+                <Text style={s.exclusiveText}>VIP</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }} />
+            <View style={[s.discountPill, { backgroundColor: platformColor }]}>
+              <Text style={s.discountPillText}>{formatDiscount()}</Text>
+            </View>
+          </View>
 
-        <View style={s.bottomSpacer} />
+          {/* Title */}
+          {coupon.title && (
+            <Text style={s.couponTitle}>{coupon.title}</Text>
+          )}
+
+          {/* Info rows */}
+          <View style={s.infoSection}>
+            <InfoRow icon="bag-handle-outline" label="Escopo" value={scope} colors={colors} />
+            {coupon.min_purchase > 0 && (
+              <InfoRow icon="wallet-outline" label="Compra mínima" value={formatPrice(coupon.min_purchase)} colors={colors} />
+            )}
+            {(coupon.max_uses || coupon.usage_limit) && (
+              <InfoRow icon="people-outline" label="Limite" value={`${coupon.max_uses || coupon.usage_limit} usos`} colors={colors} />
+            )}
+            {coupon.valid_until && (
+              <InfoRow icon="calendar-outline" label="Válido até" value={new Date(coupon.valid_until).toLocaleDateString('pt-BR')} colors={colors} />
+            )}
+          </View>
+
+          {/* Code Section */}
+          {coupon.code ? (
+            <View style={s.codeSection}>
+              <Text style={s.codeLabel}>CÓDIGO DO CUPOM</Text>
+              <View style={s.codeBox}>
+                <Ionicons name="ticket-outline" size={18} color={coupon.is_out_of_stock ? colors.textMuted : platformColor} />
+                <Text style={[s.codeText, coupon.is_out_of_stock && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
+                  {coupon.code}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  s.copyBtn,
+                  { backgroundColor: coupon.is_out_of_stock ? colors.border : (codeCopied ? '#16A34A' : platformColor) }
+                ]}
+                onPress={coupon.is_out_of_stock ? null : handleCopyCode}
+                activeOpacity={0.85}
+                disabled={coupon.is_out_of_stock}
+              >
+                <Ionicons
+                  name={coupon.is_out_of_stock ? 'close-circle-outline' : (codeCopied ? 'checkmark-circle' : 'copy-outline')}
+                  size={18}
+                  color={coupon.is_out_of_stock ? colors.textMuted : '#fff'}
+                />
+                <Text style={[s.copyBtnText, coupon.is_out_of_stock && { color: colors.textMuted }]}>
+                  {coupon.is_out_of_stock ? 'Cupom Esgotado' : (codeCopied ? 'Código Copiado!' : 'Copiar Código')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.codeSection}>
+              <View style={[s.noCodeBox, { backgroundColor: platformColor + '10' }]}>
+                <Ionicons name="link-outline" size={20} color={platformColor} />
+                <Text style={[s.noCodeText, { color: colors.textMuted }]}>
+                  Desconto aplicado automaticamente pelo link
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* See Products Buttons */}
+          {hasProducts && (
+            <TouchableOpacity
+              style={[s.productsBtn, { borderColor: platformColor }]}
+              onPress={handleSeeProducts}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="grid-outline" size={18} color={platformColor} />
+              <Text style={[s.productsBtnText, { color: platformColor }]}>
+                Ver {coupon.applicable_products.length} produto{coupon.applicable_products.length !== 1 ? 's' : ''} vinculado{coupon.applicable_products.length !== 1 ? 's' : ''}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={platformColor} />
+            </TouchableOpacity>
+          )}
+
+          {/* Linked Products Button */}
+          {hasLinkedProducts && (
+            <TouchableOpacity
+              style={[s.productsBtn, { borderColor: platformColor, marginTop: hasProducts ? 8 : 0 }]}
+              onPress={handleSeeLinkedProducts}
+              activeOpacity={0.8}
+              disabled={loadingProducts}
+            >
+              <Ionicons name="pricetags-outline" size={18} color={platformColor} />
+              <Text style={[s.productsBtnText, { color: platformColor }]}>
+                {loadingProducts ? 'Verificando...' : `Ver ${linkedProductsCount} produto${linkedProductsCount !== 1 ? 's' : ''} com este cupom`}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={platformColor} />
+            </TouchableOpacity>
+          )}
+
+          <View style={s.bottomSpacer} />
+        </Animated.View>
       </Animated.View>
     </Modal>
   );
@@ -226,8 +291,61 @@ export default function CouponsScreen({ navigation }) {
   const [selectedCoupon, setSelectedCoupon] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
+  // Animações
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const floatingAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     loadCoupons();
+    
+    // Animação de entrada do header
+    Animated.spring(headerAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+
+    // Animação de fade in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+
+    // Animação de pulso contínua para badges
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.08,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Animação flutuante para ícones
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatingAnim, {
+          toValue: -8,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatingAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, [selectedPlatform]);
 
   const loadCoupons = async () => {
@@ -276,6 +394,9 @@ export default function CouponsScreen({ navigation }) {
   };
 
   const filteredCoupons = coupons.filter(c => {
+    // Filtrar cupons esgotados (camada extra de segurança)
+    if (c.is_out_of_stock) return false;
+    
     let tabMatch = true;
     if (activeTab === 'expiring') {
       if (!c.valid_until) tabMatch = false;
@@ -305,89 +426,161 @@ export default function CouponsScreen({ navigation }) {
   );
 
   const renderEmpty = () => (
-    <EmptyState
-      icon="ticket-outline"
-      title={searchQuery ? 'Nenhum cupom encontrado' : 'Nenhum cupom disponível'}
-      message={searchQuery ? 'Tente buscar por outro termo' : 'Novos cupons serão exibidos aqui'}
-      iconColor={colors.primary}
-    />
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: floatingAnim }] }}>
+      <EmptyState
+        icon="ticket-outline"
+        title={searchQuery ? 'Nenhum cupom encontrado' : 'Nenhum cupom disponível'}
+        message={searchQuery ? 'Tente buscar por outro termo' : 'Novos cupons serão exibidos aqui'}
+        iconColor={colors.primary}
+      />
+    </Animated.View>
   );
 
-  const renderHeader = () => (
-    <View>
-      <View style={s.headerBar}>
-        <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-        <View style={s.headerTopRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <View style={s.searchContainer}>
-            <SearchBar
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Buscar cupons, lojas..."
-              containerStyle={s.searchBarOverride}
-            />
-          </View>
-        </View>
-      </View>
+  const renderHeader = () => {
+    const headerTranslateY = headerAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-50, 0],
+    });
 
-      <View style={s.infoBar}>
-        <Text style={s.infoText}>
-          {filteredCoupons.length} {filteredCoupons.length === 1 ? 'Cupom' : 'Cupons'} encontrados
-        </Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.tabScroll}
-        style={s.tabContainer}
-      >
-        {FILTER_TABS.map(tab => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[s.tabChip, activeTab === tab.key && s.tabChipActive]}
-            onPress={() => setActiveTab(tab.key)}
-          >
-            <Text style={[s.tabChipText, activeTab === tab.key && s.tabChipTextActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <View style={s.tabDivider} />
-        {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON].map(platform => {
-          const isActive = selectedPlatform === platform;
-          return (
-            <TouchableOpacity
-              key={platform}
-              style={[s.tabChip, isActive && s.tabChipActive]}
-              onPress={() => setSelectedPlatform(platform)}
-            >
-              <Text style={[s.tabChipText, isActive && s.tabChipTextActive]}>
-                {platform === 'all' ? 'Todas lojas' : PLATFORM_LABELS[platform] || platform}
-              </Text>
+    return (
+      <View>
+        <Animated.View 
+          style={[
+            s.headerBar,
+            {
+              opacity: headerAnim,
+              transform: [{ translateY: headerTranslateY }],
+            }
+          ]}
+        >
+          <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+          <View style={s.headerTopRow}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
+            <View style={s.searchContainer}>
+              <SearchBar
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Buscar cupons, lojas..."
+                containerStyle={s.searchBarOverride}
+              />
+            </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[s.infoBar, { opacity: fadeAnim }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <Ionicons name="pricetags" size={16} color={colors.primary} />
+            </Animated.View>
+            <Text style={s.infoText}>
+              {filteredCoupons.length} {filteredCoupons.length === 1 ? 'Cupom' : 'Cupons'} encontrados
+            </Text>
+          </View>
+          {filteredCoupons.length > 0 && (
+            <Animated.View 
+              style={[
+                s.savingsBadge,
+                { transform: [{ scale: pulseAnim }] }
+              ]}
+            >
+              <Ionicons name="trending-down" size={12} color="#16A34A" />
+              <Text style={s.savingsText}>Economize agora!</Text>
+            </Animated.View>
+          )}
+        </Animated.View>
+
+        <Animated.View style={{ opacity: fadeAnim }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.tabScroll}
+            style={s.tabContainer}
+          >
+            {FILTER_TABS.map((tab, index) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[s.tabChip, isActive && s.tabChipActive]}
+                  onPress={() => setActiveTab(tab.key)}
+                  activeOpacity={0.7}
+                >
+                  {isActive && (
+                    <Animated.View 
+                      style={[
+                        StyleSheet.absoluteFill,
+                        s.tabChipActive,
+                        { transform: [{ scale: pulseAnim }] }
+                      ]}
+                    />
+                  )}
+                  <Text style={[s.tabChipText, isActive && s.tabChipTextActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <View style={s.tabDivider} />
+            {['all', PLATFORMS.MERCADOLIVRE, PLATFORMS.SHOPEE, PLATFORMS.AMAZON].map((platform, index) => {
+              const isActive = selectedPlatform === platform;
+              return (
+                <TouchableOpacity
+                  key={platform}
+                  style={[s.tabChip, isActive && s.tabChipActive]}
+                  onPress={() => setSelectedPlatform(platform)}
+                  activeOpacity={0.7}
+                >
+                  {isActive && (
+                    <Animated.View 
+                      style={[
+                        StyleSheet.absoluteFill,
+                        s.tabChipActive,
+                        { transform: [{ scale: pulseAnim }] }
+                      ]}
+                    />
+                  )}
+                  <Text style={[s.tabChipText, isActive && s.tabChipTextActive]}>
+                    {platform === 'all' ? 'Todas lojas' : PLATFORM_LABELS[platform] || platform}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </Animated.View>
+      </View>
+    );
+  };
 
   if (loading && !refreshing) {
     return (
       <View style={s.container}>
         {renderHeader()}
-        <View style={s.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <Animated.View 
+          style={[
+            s.loadingContainer,
+            { 
+              opacity: fadeAnim,
+              transform: [{ translateY: floatingAnim }]
+            }
+          ]}
+        >
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Ionicons name="ticket" size={64} color={colors.primary} />
+          </Animated.View>
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
           <Text style={s.loadingText}>Carregando cupons...</Text>
-        </View>
+          <Text style={[s.loadingText, { fontSize: 12, marginTop: 4 }]}>
+            Buscando as melhores ofertas para você
+          </Text>
+        </Animated.View>
       </View>
     );
   }
 
   return (
-    <View style={s.container}>
+    <Animated.View style={[s.container, { opacity: fadeAnim }]}>
       <FlatList
         data={filteredCoupons}
         renderItem={renderCoupon}
@@ -414,7 +607,7 @@ export default function CouponsScreen({ navigation }) {
         navigation={navigation}
         colors={colors}
       />
-    </View>
+    </Animated.View>
   );
 }
 
@@ -631,14 +824,28 @@ const dynamicStyles = (colors) => StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.card,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   infoText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontWeight: '500',
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  savingsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  savingsText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16A34A',
   },
   tabContainer: {
     backgroundColor: colors.card,
@@ -657,6 +864,7 @@ const dynamicStyles = (colors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
+    overflow: 'hidden',
   },
   tabChipActive: {
     borderColor: colors.primary,
@@ -685,11 +893,13 @@ const dynamicStyles = (colors) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textMuted,
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
   },
 });

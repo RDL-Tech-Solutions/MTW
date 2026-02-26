@@ -4,6 +4,7 @@
     "slug": "mtw-promo",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -15,19 +16,23 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.precocerto.app"
+      "bundleIdentifier": "com.precocerto.app",
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#DC2626"
       },
+      "icon": "./assets/icon.png",
       "package": "com.precocerto.app",
       "permissions": [
         "NOTIFICATIONS"
       ]
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       [

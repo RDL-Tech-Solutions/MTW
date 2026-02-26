@@ -149,6 +149,13 @@ class Product {
           const isGeneralPlatform = coupon.is_general === true && (coupon.platform === 'general' || coupon.platform === data.platform);
 
           if (isDirectlyLinked || isListedInApplicable || isGeneralPlatform) {
+            // IMPORTANTE: Verificar se o produto atende ao valor mínimo de compra do cupom
+            const minPurchase = parseFloat(coupon.min_purchase) || 0;
+            if (minPurchase > 0 && currentPrice < minPurchase) {
+              // Produto não atinge o valor mínimo, pular este cupom
+              continue;
+            }
+
             applicableCoupons.push(coupon);
 
             // Calculate discount for this coupon
@@ -305,7 +312,15 @@ class Product {
           const isListedInApplicable = coupon.applicable_products && coupon.applicable_products.includes(product.id);
           const isGeneralPlatform = coupon.is_general === true && (coupon.platform === 'general' || coupon.platform === product.platform);
 
+          // Verificar se o cupom é aplicável ao produto
           if (isDirectlyLinked || isListedInApplicable || isGeneralPlatform) {
+            // IMPORTANTE: Verificar se o produto atende ao valor mínimo de compra do cupom
+            const minPurchase = parseFloat(coupon.min_purchase) || 0;
+            if (minPurchase > 0 && currentPrice < minPurchase) {
+              // Produto não atinge o valor mínimo, pular este cupom
+              continue;
+            }
+
             applicableCoupons.push(coupon);
 
             const discountValue = parseFloat(coupon.discount_value) || 0;

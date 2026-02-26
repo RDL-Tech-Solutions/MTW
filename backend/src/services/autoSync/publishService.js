@@ -29,94 +29,116 @@ class PublishService {
    * Enviar notificação push usando preferências do usuário
    */
   async notifyPush(product) {
-    try {
-      const Notification = (await import('../../models/Notification.js')).default;
-      const NotificationPreference = (await import('../../models/NotificationPreference.js')).default;
-      const User = (await import('../../models/User.js')).default;
-      const pushNotificationService = (await import('../pushNotification.js')).default;
+      try {
+        const Notification = (await import('../../models/Notification.js')).default;
+        const NotificationPreference = (await import('../../models/NotificationPreference.js')).default;
+        const User = (await import('../../models/User.js')).default;
+        const pushNotificationService = (await import('../pushNotification.js')).default;
 
-      // Buscar usuários que devem receber notificação
-      const usersToNotify = [];
+        // Buscar usuários que devem receber notificação
+        const usersToNotify = new Set(); // Usar Set para evitar duplicatas
 
-      // 1. Usuários que têm a categoria nas preferências
-      if (product.category_id) {
-        const usersByCategory = await NotificationPreference.findUsersByCategory(product.category_id);
-        usersToNotify.push(...usersByCategory.map(u => u.user_id));
-      }
+        // 1. Usuários que têm a categoria nas preferências
+        if (product.category_id) {
+          const usersByCategory = await NotificationPreference.findUsersByCategory(product.category_id);
+          usersByCategory.forEach(u => usersToNotify.add(u.user_id));
+          logger.info(`   📂 ${usersByCategory.length} usuários por categoria`);
+        }
 
-      // 2. Usuários que têm palavra-chave nas preferências
-      const productNameLower = product.name.toLowerCase();
-      const words = productNameLower.split(/\s+/);
-      for (const word of words) {
-        if (word.length > 3) { // Ignorar palavras muito curtas
+        // 2. Usuários que têm palavra-chave nas preferências
+        // Buscar por palavras significativas (> 3 caracteres)
+        const productNameLower = product.name.toLowerCase();
+        const words = productNameLower.split(/\s+/).filter(w => w.length > 3);
+
+        for (const word of words) {
           const usersByKeyword = await NotificationPreference.findUsersByKeyword(word);
-          usersToNotify.push(...usersByKeyword.map(u => u.user_id));
+          usersByKeyword.forEach(u => usersToNotify.add(u.user_id));
         }
-      }
 
-      // 3. Usuários que têm o nome do produto nas preferências
-      const usersByProductName = await NotificationPreference.findUsersByProductName(product.name);
-      usersToNotify.push(...usersByProductName.map(u => u.user_id));
-
-      // Remover duplicatas
-      const uniqueUserIds = [...new Set(usersToNotify)];
-
-      if (uniqueUserIds.length === 0) {
-        logger.info(`🔔 Nenhum usuário para notificar sobre: ${product.name} `);
-        return true;
-      }
-
-      // Criar notificações para cada usuário
-      const notifications = [];
-      for (const userId of uniqueUserIds) {
-        try {
-          const user = await User.findById(userId);
-          if (user && user.push_token) {
-            notifications.push({
-              user_id: userId,
-              title: '🔥 Nova Promoção!',
-              message: `${product.name} - ${product.discount_percentage || 0}% OFF`,
-              type: 'new_product',
-              related_product_id: product.id,
-            });
-          }
-        } catch (error) {
-          logger.error(`Erro ao processar usuário ${userId}: ${error.message} `);
+        if (words.length > 0) {
+          logger.info(`   🔑 Buscando por ${words.length} palavras-chave: ${words.join(', ')}`);
         }
-      }
 
-      if (notifications.length === 0) {
-        logger.info(`🔔 Nenhuma notificação criada para: ${product.name} `);
-        return true;
-      }
+        // 3. Usuários que têm o nome do produto nas preferências
+        const usersByProductName = await NotificationPreference.findUsersByProductName(product.name);
+        usersByProductName.forEach(u => usersToNotify.add(u.user_id));
 
-      // Criar notificações no banco
-      const createdNotifications = await Notification.createBulk(notifications);
-
-      // Enviar push notifications
-      let sentCount = 0;
-      for (const createdNotification of createdNotifications) {
-        try {
-          const user = await User.findById(createdNotification.user_id);
-          if (user && user.push_token) {
-            const sent = await pushNotificationService.sendToUser(user.push_token, createdNotification);
-            if (sent) {
-              await Notification.markAsSent(createdNotification.id);
-              sentCount++;
-            }
-          }
-        } catch (error) {
-          logger.error(`Erro ao enviar push para usuário ${createdNotification.user_id}: ${error.message} `);
+        if (usersByProductName.length > 0) {
+          logger.info(`   📦 ${usersByProductName.length} usuários por nome de produto`);
         }
-      }
 
-      logger.info(`🔔 Push notifications: ${sentCount}/${notifications.length} enviadas para: ${product.name}`);
-      return sentCount > 0;
-    } catch (error) {
-      logger.error(`❌ Erro ao enviar push: ${error.message}`);
-      return false;
+        const uniqueUserIds = Array.from(usersToNotify);
+
+        if (uniqueUserIds.length === 0) {
+          logger.info(`🔔 Nenhum usuário para notificar sobre: ${product.name}`);
+          return true;
+        }
+
+        logger.info(`🔔 Total de ${uniqueUserIds.length} usuários únicos para notificar`);
+
+        // Buscar usuários com push_token em uma única query
+        const users = await Promise.all(
+          uniqueUserIds.map(userId => User.findById(userId))
+        );
+
+        // Filtrar usuários válidos com push_token
+        const validUsers = users.filter(user => user && user.push_token);
+
+        if (validUsers.length === 0) {
+          logger.info(`🔔 Nenhum usuário com push_token válido`);
+          return true;
+        }
+
+        // Criar notificações para cada usuário
+        const notifications = validUsers.map(user => ({
+          user_id: user.id,
+          title: '🔥 Nova Promoção!',
+          message: `${product.name}${product.discount_percentage ? ` - ${product.discount_percentage}% OFF` : ''}`,
+          type: 'new_product',
+          related_product_id: product.id,
+        }));
+
+        // Criar notificações no banco
+        const createdNotifications = await Notification.createBulk(notifications);
+        logger.info(`   💾 ${createdNotifications.length} notificações criadas no banco`);
+
+        // Enviar push notifications em batch
+        const messages = createdNotifications.map((notification, index) => {
+          const user = validUsers[index];
+          return pushNotificationService.createMessage(
+            user.push_token,
+            notification.title,
+            notification.message,
+            {
+              type: notification.type,
+              productId: notification.related_product_id,
+              screen: 'ProductDetails',
+            },
+            { categoryId: 'promo' }
+          );
+        });
+
+        // Enviar em batch
+        const result = await pushNotificationService.sendToMultiple(messages);
+
+        // Marcar notificações como enviadas
+        if (result.success > 0) {
+          await Promise.all(
+            createdNotifications.slice(0, result.success).map(n => 
+              Notification.markAsSent(n.id)
+            )
+          );
+        }
+
+        logger.info(`🔔 Push notifications: ${result.success}/${notifications.length} enviadas para: ${product.name}`);
+        return result.success > 0;
+      } catch (error) {
+        logger.error(`❌ Erro ao enviar push: ${error.message}`);
+        logger.error(error.stack);
+        return false;
+      }
     }
-  }
+
 
   /**
    * Enviar para Telegram Bot (com imagem se disponível, ou fallback para texto)

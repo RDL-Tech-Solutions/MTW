@@ -614,3 +614,106 @@ class AuthController {
 }
 
 export default AuthController;
+
+  // Solicitar recuperação de senha
+  static async forgotPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+
+      // Buscar usuário
+      const user = await User.findByEmail(email);
+      if (!user) {
+        // Por segurança, não revelar se o email existe ou não
+        return res.json(
+          successResponse(null, 'Se o email existir, você receberá instruções para redefinir sua senha')
+        );
+      }
+
+      // Gerar token de recuperação (válido por 1 hora)
+      const crypto = await import('crypto');
+      const resetToken = crypto.default.randomBytes(32).toString('hex');
+      const resetTokenHash = crypto.default.createHash('sha256').update(resetToken).digest('hex');
+      const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hora
+
+      // Salvar token no banco
+      await User.update(user.id, {
+        reset_token: resetTokenHash,
+        reset_token_expiry: resetTokenExpiry.toISOString(),
+      });
+
+      // Enviar email
+      const emailService = (await import('../services/emailService.js')).default;
+      const emailResult = await emailService.sendPasswordResetEmail(email, resetToken, user.name);
+
+      if (!emailResult.success) {
+        logger.error(`Erro ao enviar email de recuperação para ${email}: ${emailResult.error}`);
+        return res.status(500).json(
+          errorResponse('Erro ao enviar email. Tente novamente mais tarde.')
+        );
+      }
+
+      logger.info(`Email de recuperação enviado para: ${email}`);
+
+      res.json(
+        successResponse(null, 'Se o email existir, você receberá instruções para redefinir sua senha')
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Redefinir senha com token
+  static async resetPassword(req, res, next) {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json(
+          errorResponse('Token e nova senha são obrigatórios')
+        );
+      }
+
+      // Hash do token recebido
+      const crypto = await import('crypto');
+      const resetTokenHash = crypto.default.createHash('sha256').update(token).digest('hex');
+
+      // Buscar usuário com token válido
+      const supabase = (await import('../config/database.js')).default;
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('reset_token', resetTokenHash)
+        .gt('reset_token_expiry', new Date().toISOString())
+        .limit(1);
+
+      if (error || !users || users.length === 0) {
+        return res.status(400).json(
+          errorResponse('Token inválido ou expirado')
+        );
+      }
+
+      const user = users[0];
+
+      // Atualizar senha e limpar token
+      const { hashPassword } = await import('../utils/helpers.js');
+      const hashedPassword = await hashPassword(newPassword);
+      
+      await User.update(user.id, {
+        password: hashedPassword,
+        reset_token: null,
+        reset_token_expiry: null,
+      });
+
+      // Enviar email de confirmação
+      const emailService = (await import('../services/emailService.js')).default;
+      await emailService.sendPasswordChangedEmail(user.email, user.name);
+
+      logger.info(`Senha redefinida com sucesso para: ${user.email}`);
+
+      res.json(
+        successResponse(null, 'Senha redefinida com sucesso')
+      );
+    } catch (error) {
+      next(error);
+    }
+  }

@@ -13,7 +13,7 @@ const PLATFORM_CONFIG = {
     name: 'Mercado Livre',
     short: 'ML',
     color: '#2D3277',
-    bgColor: '#FFF159',
+    bgColor: '#FFE600',
     iconName: 'pricetag',
   },
   shopee: {

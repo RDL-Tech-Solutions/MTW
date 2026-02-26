@@ -131,7 +131,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const handleBuyNow = async () => {
     try {
-      const bestCoupon = product?.coupons?.length > 0 ? product.coupons[0] : null;
+      const availableCoupons = product?.coupons?.filter(c => !c.is_out_of_stock) || [];
+      const bestCoupon = availableCoupons.length > 0 ? availableCoupons[0] : null;
 
       if (bestCoupon?.code) {
         await Clipboard.setStringAsync(bestCoupon.code);
@@ -195,6 +196,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const finalPrice = product.final_price || product.current_price;
   const priceInt = Math.floor(finalPrice);
   const priceCents = ((finalPrice - priceInt) * 100).toFixed(0).padStart(2, '0');
+  
+  // ── Filter out out-of-stock coupons ──
+  const availableCoupons = product?.coupons?.filter(c => !c.is_out_of_stock) || [];
 
   return (
     <View style={s.container}>
@@ -282,12 +286,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
             )}
 
             {/* ── Coupon Section ── */}
-            {product?.coupons && product.coupons.length > 0 && (
+            {availableCoupons.length > 0 && (
               <View style={s.section}>
                 <Text style={s.sectionTitle}>
-                  {product.coupons.length > 1 ? `${product.coupons.length} Cupons disponíveis` : 'Cupom disponível'}
+                  {availableCoupons.length > 1 ? `${availableCoupons.length} Cupons disponíveis` : 'Cupom disponível'}
                 </Text>
-                {product.coupons.map((c) => (
+                {availableCoupons.map((c) => (
                   <View key={c.id} style={s.couponCard}>
                     <View style={s.couponHeader}>
                       <Ionicons name="ticket" size={20} color={colors.success} />

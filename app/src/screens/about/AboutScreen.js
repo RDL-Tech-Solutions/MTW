@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,15 +7,37 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
 import Logo from '../../components/common/Logo';
+import ModernHeader from '../../components/common/ModernHeader';
 import { SCREEN_NAMES } from '../../utils/constants';
 
 export default function AboutScreen({ navigation }) {
   const { colors } = useThemeStore();
   const s = createStyles(colors);
+
+  // Animações
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const contactInfo = [
     {
@@ -55,24 +77,32 @@ export default function AboutScreen({ navigation }) {
 
   return (
     <View style={s.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={s.headerBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={s.headerBarTitle}>Sobre o App</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ModernHeader
+        title="Sobre o App"
+        subtitle="Conheça o PreçoCerto"
+        icon="information-circle"
+        showBack
+        onBack={() => navigation.goBack()}
+      />
 
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView
+        contentContainerStyle={s.content}
+        showsVerticalScrollIndicator={false}
+        style={{ opacity: fadeAnim }}
+      >
         {/* Logo/Header */}
-        <View style={s.header}>
+        <Animated.View
+          style={[
+            s.header,
+            { transform: [{ scale: scaleAnim }] },
+          ]}
+        >
           <View style={s.logoContainer}>
-            <Logo width={100} height={100} color={colors.primary} />
+            <Logo width={140} height={140} color={colors.primary} />
           </View>
           <Text style={s.appName}>PreçoCerto</Text>
           <Text style={s.tagline}>As melhores ofertas em um só lugar</Text>
-        </View>
+        </Animated.View>
 
         {/* Sobre */}
         <View style={s.section}>
@@ -136,48 +166,61 @@ export default function AboutScreen({ navigation }) {
           <Text style={s.creditsText}>RDL Tech Solutions</Text>
           <Text style={s.creditsSubtext}>© 2025 Todos os direitos reservados</Text>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  headerBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    paddingTop: Platform.OS === 'ios' ? 54 : StatusBar.currentHeight + 12,
-    backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  headerBarTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   content: { padding: 20 },
   header: { alignItems: 'center', marginBottom: 32 },
   logoContainer: {
-    width: 160, height: 160, borderRadius: 80, backgroundColor: colors.primary + '15',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    width: 200, height: 200, borderRadius: 100, backgroundColor: colors.primary + '15',
+    alignItems: 'center', justifyContent: 'center', marginBottom: -20,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+    } : {
+      elevation: 6,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+    }),
   },
-  appName: { fontSize: 32, fontWeight: '700', color: colors.text, marginBottom: 8 },
-  tagline: { fontSize: 16, color: colors.textMuted, textAlign: 'center' },
+  appName: { fontSize: 32, fontWeight: '800', color: colors.text, marginBottom: 8, letterSpacing: 0.5 },
+  tagline: { fontSize: 16, color: colors.textMuted, textAlign: 'center', fontWeight: '500' },
   section: { marginBottom: 32 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 16, letterSpacing: 0.3 },
   description: { fontSize: 16, color: colors.textMuted, lineHeight: 24 },
-  versionText: { fontSize: 20, fontWeight: '600', color: colors.primary, marginBottom: 4 },
-  versionDate: { fontSize: 14, color: colors.textMuted },
+  versionText: { fontSize: 20, fontWeight: '700', color: colors.primary, marginBottom: 4 },
+  versionDate: { fontSize: 14, color: colors.textMuted, fontWeight: '500' },
   contactItem: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card,
-    padding: 16, borderRadius: 12, marginBottom: 12, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
+    padding: 16, borderRadius: 12, marginBottom: 12,
+    borderWidth: 1, borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+    } : {
+      elevation: 2,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
+    }),
   },
   contactInfo: { flex: 1, marginLeft: 16 },
-  contactLabel: { fontSize: 14, color: colors.textMuted, marginBottom: 4 },
+  contactLabel: { fontSize: 14, color: colors.textMuted, marginBottom: 4, fontWeight: '500' },
   contactValue: { fontSize: 16, fontWeight: '600', color: colors.text },
   legalItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.card, padding: 16, borderRadius: 12, marginBottom: 12, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
+    backgroundColor: colors.card, padding: 16, borderRadius: 12, marginBottom: 12,
+    borderWidth: 1, borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+    } : {
+      elevation: 2,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
+    }),
   },
-  legalText: { fontSize: 16, color: colors.text },
-  creditsText: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 8 },
-  creditsSubtext: { fontSize: 14, color: colors.textMuted },
+  legalText: { fontSize: 16, color: colors.text, fontWeight: '500' },
+  creditsText: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 8 },
+  creditsSubtext: { fontSize: 14, color: colors.textMuted, fontWeight: '500' },
 });

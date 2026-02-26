@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProductStore } from '../../stores/productStore';
@@ -30,8 +31,68 @@ export default function FavoritesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Animações
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const floatingAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
   useEffect(() => {
     loadFavorites();
+    
+    // Animações de entrada
+    Animated.parallel([
+      Animated.spring(headerAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Animação de pulso para o ícone de coração
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.15,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Animação flutuante
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatingAnim, {
+          toValue: -10,
+          duration: 2500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatingAnim, {
+          toValue: 0,
+          duration: 2500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, []);
 
   const loadFavorites = async () => {
@@ -79,20 +140,50 @@ export default function FavoritesScreen({ navigation }) {
   ), [favorites]);
 
   const renderEmpty = () => (
-    <EmptyState
-      icon="heart-outline"
-      title="Nenhum favorito ainda"
-      message="Adicione produtos aos favoritos para vê-los aqui"
-      iconColor={colors.error}
-    />
+    <Animated.View 
+      style={{ 
+        opacity: fadeAnim,
+        transform: [
+          { translateY: floatingAnim },
+          { scale: scaleAnim }
+        ]
+      }}
+    >
+      <EmptyState
+        icon="heart-outline"
+        title="Nenhum favorito ainda"
+        message="Adicione produtos aos favoritos para vê-los aqui"
+        iconColor={colors.error}
+      />
+    </Animated.View>
   );
 
   if (loading) {
     return (
       <View style={s.container}>
         {/* Header */}
-        <View style={s.headerBar}>
+        <Animated.View 
+          style={[
+            s.headerBar,
+            {
+              opacity: headerAnim,
+              transform: [{ translateY: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-50, 0],
+              })}]
+            }
+          ]}
+        >
           <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+          <View style={s.headerContent}>
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <Ionicons name="heart" size={28} color="#fff" />
+            </Animated.View>
+            <View style={s.headerTextContainer}>
+              <Text style={s.headerTitle}>Favoritos</Text>
+              <Text style={s.headerSubtitle}>Seus produtos salvos</Text>
+            </View>
+          </View>
           <View style={s.searchRow}>
             <SearchBar
               value={searchQuery}
@@ -100,20 +191,57 @@ export default function FavoritesScreen({ navigation }) {
               placeholder="Buscar nos favoritos..."
             />
           </View>
-        </View>
-        <View style={s.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        </Animated.View>
+        <Animated.View 
+          style={[
+            s.loadingContainer,
+            {
+              opacity: fadeAnim,
+              transform: [
+                { translateY: floatingAnim },
+                { scale: scaleAnim }
+              ]
+            }
+          ]}
+        >
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Ionicons name="heart" size={64} color={colors.error} />
+          </Animated.View>
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
           <Text style={s.loadingText}>Carregando favoritos...</Text>
-        </View>
+          <Text style={[s.loadingText, { fontSize: 12, marginTop: 4 }]}>
+            Buscando seus produtos salvos
+          </Text>
+        </Animated.View>
       </View>
     );
   }
 
   return (
-    <View style={s.container}>
+    <Animated.View style={[s.container, { opacity: fadeAnim }]}>
       {/* Sticky Header */}
-      <View style={s.headerBar}>
+      <Animated.View 
+        style={[
+          s.headerBar,
+          {
+            opacity: headerAnim,
+            transform: [{ translateY: headerAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-50, 0],
+            })}]
+          }
+        ]}
+      >
         <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+        <View style={s.headerContent}>
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Ionicons name="heart" size={28} color="#fff" />
+          </Animated.View>
+          <View style={s.headerTextContainer}>
+            <Text style={s.headerTitle}>Favoritos</Text>
+            <Text style={s.headerSubtitle}>Seus produtos salvos</Text>
+          </View>
+        </View>
         <View style={s.searchRow}>
           <SearchBar
             value={searchQuery}
@@ -121,13 +249,36 @@ export default function FavoritesScreen({ navigation }) {
             placeholder="Buscar nos favoritos..."
           />
         </View>
-        <View style={s.subtitleRow}>
-          <Ionicons name="heart" size={14} color="rgba(255,255,255,0.8)" />
-          <Text style={s.subtitleText}>
-            {filteredFavorites.length} {filteredFavorites.length === 1 ? 'produto salvo' : 'produtos salvos'}
-          </Text>
-        </View>
-      </View>
+        <Animated.View style={[s.statsCard, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+          <View style={s.statItem}>
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <View style={[s.statIconContainer, { backgroundColor: colors.error + '15' }]}>
+                <Ionicons name="heart" size={20} color={colors.error} />
+              </View>
+            </Animated.View>
+            <View style={s.statTextContainer}>
+              <Text style={s.statValue}>{filteredFavorites.length}</Text>
+              <Text style={s.statLabel}>Salvos</Text>
+            </View>
+          </View>
+          {filteredFavorites.length > 0 && (
+            <>
+              <View style={s.statDivider} />
+              <View style={s.statItem}>
+                <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                  <View style={[s.statIconContainer, { backgroundColor: '#DCFCE7' }]}>
+                    <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+                  </View>
+                </Animated.View>
+                <View style={s.statTextContainer}>
+                  <Text style={[s.statValue, { color: '#16A34A' }]}>Ativo</Text>
+                  <Text style={s.statLabel}>Disponível</Text>
+                </View>
+              </View>
+            </>
+          )}
+        </Animated.View>
+      </Animated.View>
 
       <FlatList
         data={filteredFavorites}
@@ -147,7 +298,7 @@ export default function FavoritesScreen({ navigation }) {
         }
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </Animated.View>
   );
 }
 
@@ -158,31 +309,96 @@ const dynamicStyles = (colors) => StyleSheet.create({
   },
   headerBar: {
     backgroundColor: colors.primary,
-    paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 8,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 12,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    ...(Platform.OS === 'web' ? {} : {
+      elevation: 8,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    }),
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
+    marginTop: 2,
   },
   searchRow: {
+    marginBottom: 12,
+  },
+  statsCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 16,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    } : {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+    }),
+  },
+  statItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
+    gap: 12,
   },
-  subtitleRow: {
-    flexDirection: 'row',
+  statIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 4,
-    marginTop: 4,
+    justifyContent: 'center',
   },
-  subtitleText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
+  statTextContainer: {
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: 0.3,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
     fontWeight: '500',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+    marginHorizontal: 8,
   },
   list: {
     paddingHorizontal: GRID_PADDING,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 24,
   },
   gridRow: {
@@ -193,10 +409,13 @@ const dynamicStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.background,
+    paddingHorizontal: 40,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: colors.textMuted,
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
   },
 });

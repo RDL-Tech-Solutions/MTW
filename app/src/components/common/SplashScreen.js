@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, TouchableWithoutFeedback, Text } from 'react-native';
 import { Video, ResizeMode, Audio } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
@@ -48,27 +48,38 @@ export default function SplashScreen({ onFinish }) {
     }
   };
 
+  const handleSkip = () => {
+    if (onFinish) {
+      onFinish();
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      <Video
-        ref={videoRef}
-        source={require('../../../assets/intro.mp4')}
-        style={styles.video}
-        resizeMode={ResizeMode.COVER}  // COVER preenche toda tela
-        shouldPlay={true}
-        isLooping={false}
-        isMuted={false}
-        volume={1.0}
-        rate={1.0}
-        useNativeControls={false}
-        onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-        onLoad={() => {
-          if (videoRef.current) {
-            videoRef.current.playAsync();
-          }
-        }}
-      />
-    </View>
+    <TouchableWithoutFeedback onPress={handleSkip}>
+      <View style={styles.container}>
+        <Video
+          ref={videoRef}
+          source={require('../../../assets/intro.mp4')}
+          style={styles.video}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={true}
+          isLooping={false}
+          isMuted={false}
+          volume={1.0}
+          rate={1.0}
+          useNativeControls={false}
+          onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+          onLoad={() => {
+            if (videoRef.current) {
+              videoRef.current.playAsync();
+            }
+          }}
+        />
+        <View style={styles.skipContainer}>
+          <Text style={styles.skipText}>Toque para pular</Text>
+        </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -87,5 +98,22 @@ const styles = StyleSheet.create({
     right: 0,
     width: '100%',
     height: '100%',
+  },
+  skipContainer: {
+    position: 'absolute',
+    bottom: 40,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  skipText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 });

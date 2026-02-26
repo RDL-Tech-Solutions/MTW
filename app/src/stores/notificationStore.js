@@ -4,18 +4,21 @@ import api from '../services/api';
 import storage from '../services/storage';
 import * as Notifications from 'expo-notifications';
 
-// ProjectId do app.json - usar diretamente para evitar problemas com expo-constants
-// Este valor está em app.json -> extra -> eas -> projectId
-// IMPORTANTE: Não usar expo-constants aqui para evitar erros de PlatformConstants
+// ProjectId do app.json
 const PROJECT_ID = 'e04af0c1-090d-4315-8448-626e0b84834e';
 
 // Configurar handler de notificações
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data;
+    
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      priority: data?.priority === 'high' ? Notifications.AndroidNotificationPriority.HIGH : Notifications.AndroidNotificationPriority.DEFAULT,
+    };
+  },
 });
 
 export const useNotificationStore = create((set, get) => ({
@@ -23,11 +26,13 @@ export const useNotificationStore = create((set, get) => ({
   isLoading: false,
   pushToken: null,
   isEnabled: true,
+  lastNotification: null,
+  notificationListener: null,
+  responseListener: null,
 
   // Inicializar
   initialize: async () => {
     try {
-      // Aguardar um pouco para garantir que os módulos nativos estejam prontos
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Carregar preferências do cache
@@ -43,12 +48,14 @@ export const useNotificationStore = create((set, get) => ({
         console.error('Erro ao buscar preferências:', error);
       }
 
-      // Solicitar permissão e registrar token (com delay adicional)
+      // Configurar listeners de notificações
+      get().setupNotificationListeners();
+
+      // Solicitar permissão e registrar token
       setTimeout(async () => {
         try {
           await get().registerForPushNotifications();
         } catch (error) {
-          // Silenciar erros de VAPID no web e PlatformConstants
           if (error.message?.includes('vapidPublicKey') || error.message?.includes('PlatformConstants')) {
             console.log('Push notifications não disponíveis nesta plataforma');
           } else {
@@ -58,6 +65,44 @@ export const useNotificationStore = create((set, get) => ({
       }, 500);
     } catch (error) {
       console.error('Erro ao inicializar notificações:', error);
+    }
+  },
+
+  // Configurar listeners de notificações
+  setupNotificationListeners: () => {
+    // Listener para notificações recebidas enquanto app está aberto
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('🔔 Notificação recebida:', notification);
+      set({ lastNotification: notification });
+    });
+
+    // Listener para quando usuário toca na notificação
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('👆 Usuário tocou na notificação:', response);
+      const data = response.notification.request.content.data;
+      
+      // Aqui você pode navegar para telas específicas baseado no tipo
+      if (data?.screen) {
+        console.log(`Navegar para: ${data.screen}`);
+        // TODO: Implementar navegação usando navigation ref
+      }
+      
+      set({ lastNotification: response.notification });
+    });
+
+    set({ notificationListener, responseListener });
+  },
+
+  // Limpar listeners
+  cleanup: () => {
+    const { notificationListener, responseListener } = get();
+    
+    if (notificationListener) {
+      Notifications.removeNotificationSubscription(notificationListener);
+    }
+    
+    if (responseListener) {
+      Notifications.removeNotificationSubscription(responseListener);
     }
   },
 
@@ -122,16 +167,11 @@ export const useNotificationStore = create((set, get) => ({
   // Registrar para push notifications
   registerForPushNotifications: async () => {
     try {
-      // Push notifications não são suportadas no web sem configuração VAPID
       if (Platform.OS === 'web') {
-        console.log('🔔 Push notifications não são suportadas no web sem configuração VAPID');
+        console.log('🔔 Push notifications não suportadas no web');
         set({ isEnabled: false });
         return null;
       }
-
-      // IMPORTANTE: Expo Go SDK 53+ não suporta remote push notifications
-      // Para testar notificações, use um development build: npx expo run:android ou npx expo run:ios
-      // Ou faça build com EAS: eas build --profile development --platform android
 
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -147,13 +187,10 @@ export const useNotificationStore = create((set, get) => ({
         return null;
       }
 
-      // Obter projectId de forma segura (sem depender de expo-constants durante o carregamento)
-      // Usar projectId diretamente do app.json (sem depender de expo-constants)
-      // Isso evita erros de PlatformConstants durante o carregamento do módulo
       const projectId = PROJECT_ID;
 
       if (!projectId) {
-        console.warn('⚠️ ProjectId não encontrado. Push notifications podem não funcionar.');
+        console.warn('⚠️ ProjectId não encontrado');
         set({ isEnabled: false });
         return null;
       }
@@ -172,33 +209,65 @@ export const useNotificationStore = create((set, get) => ({
         });
         console.log('✅ Token registrado no backend');
       } catch (error) {
-        console.error('❌ Erro ao registrar token no backend:', error);
+        console.error('❌ Erro ao registrar token:', error.response?.data || error.message);
+      }
+
+      // Configurar canal de notificação no Android
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Notificações Gerais',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#DC2626',
+          sound: 'default',
+        });
+
+        await Notifications.setNotificationChannelAsync('coupon', {
+          name: 'Cupons',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#10B981',
+          sound: 'default',
+        });
+
+        await Notifications.setNotificationChannelAsync('price_alert', {
+          name: 'Alertas de Preço',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#F59E0B',
+          sound: 'default',
+        });
+
+        await Notifications.setNotificationChannelAsync('promo', {
+          name: 'Promoções',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#DC2626',
+          sound: 'default',
+        });
+
+        console.log('✅ Canais de notificação configurados');
       }
 
       return token.data;
     } catch (error) {
-      // Silenciar erros conhecidos
       const errorMessage = error?.message || error?.toString() || '';
 
-      // Erro específico do Expo Go SDK 53+
       if (errorMessage.includes('removed from Expo Go') || errorMessage.includes('SDK 53')) {
-        console.log('⚠️ EXPO GO LIMITAÇÃO: Push Notifications remotas foram removidas do Expo Go no SDK 53.');
-        console.log('📱 Para testar notificações, use um development build:');
-        console.log('   - Android: npx expo run:android');
-        console.log('   - iOS: npx expo run:ios');
-        console.log('   - EAS Build: eas build --profile development');
+        console.log('⚠️ EXPO GO: Push Notifications remotas não disponíveis no SDK 53+');
+        console.log('📱 Use development build para testar notificações');
         set({ isEnabled: false });
         return null;
       }
 
       if (Platform.OS === 'web' && errorMessage.includes('vapidPublicKey')) {
-        console.log('🌐 Push notifications não configuradas para web (VAPID keys necessárias)');
+        console.log('🌐 Push notifications não configuradas para web');
         set({ isEnabled: false });
         return null;
       }
 
       if (errorMessage.includes('PlatformConstants') || errorMessage.includes('TurboModuleRegistry')) {
-        console.log('⚠️ Módulos nativos não disponíveis. Push notifications podem não funcionar.');
+        console.log('⚠️ Módulos nativos não disponíveis');
         set({ isEnabled: false });
         return null;
       }
@@ -206,6 +275,58 @@ export const useNotificationStore = create((set, get) => ({
       console.error('❌ Erro ao registrar push notifications:', error);
       set({ isEnabled: false });
       return null;
+    }
+  },
+
+  // Enviar notificação local de teste
+  sendTestNotification: async () => {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🧪 Notificação de Teste',
+          body: 'Esta é uma notificação local de teste!',
+          data: { type: 'test', screen: 'Home' },
+          sound: 'default',
+        },
+        trigger: null, // Enviar imediatamente
+      });
+      console.log('✅ Notificação de teste enviada');
+      return true;
+    } catch (error) {
+      console.error('❌ Erro ao enviar notificação de teste:', error);
+      return false;
+    }
+  },
+
+  // Limpar badge de notificações
+  clearBadge: async () => {
+    try {
+      await Notifications.setBadgeCountAsync(0);
+      console.log('✅ Badge limpo');
+    } catch (error) {
+      console.error('❌ Erro ao limpar badge:', error);
+    }
+  },
+
+  // Obter todas as notificações pendentes
+  getPendingNotifications: async () => {
+    try {
+      const notifications = await Notifications.getAllScheduledNotificationsAsync();
+      console.log(`📋 ${notifications.length} notificações pendentes`);
+      return notifications;
+    } catch (error) {
+      console.error('❌ Erro ao obter notificações pendentes:', error);
+      return [];
+    }
+  },
+
+  // Cancelar todas as notificações pendentes
+  cancelAllNotifications: async () => {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('✅ Todas as notificações canceladas');
+    } catch (error) {
+      console.error('❌ Erro ao cancelar notificações:', error);
     }
   },
 

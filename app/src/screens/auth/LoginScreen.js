@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
@@ -25,6 +26,33 @@ export default function LoginScreen({ navigation }) {
   const [socialLoading, setSocialLoading] = useState({ google: false, facebook: false });
 
   const { login, loginWithGoogle, loginWithFacebook } = useAuthStore();
+
+  // Animações
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const validate = () => {
     const newErrors = {};
@@ -86,13 +114,29 @@ export default function LoginScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <Logo width={100} height={100} style={styles.logo} />
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+            },
+          ]}
+        >
+          <Logo width={220} height={220} style={styles.logo} />
           <Text style={styles.title}>PreçoCerto</Text>
           <Text style={styles.subtitle}>As melhores ofertas em um só lugar</Text>
-        </View>
+        </Animated.View>
 
-        <View style={styles.form}>
+        <Animated.View
+          style={[
+            styles.form,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
           <Input
             label="Email"
             value={email}
@@ -172,7 +216,7 @@ export default function LoginScreen({ navigation }) {
             onPress={() => navigation.navigate(SCREEN_NAMES.REGISTER)}
             variant="outline"
           />
-        </View>
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -190,10 +234,10 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 40,
   },
   logo: {
-    marginBottom: 16,
+    marginBottom: -30,
   },
   title: {
     fontSize: 32,

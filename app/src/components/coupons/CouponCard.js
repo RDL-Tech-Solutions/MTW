@@ -41,7 +41,7 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   };
 
   const platformColor = getPlatformColor(coupon.platform);
-  const PlatformIconComponent = getPlatformIcon(coupon.platform, 24);
+  const PlatformIconComponent = getPlatformIcon(coupon.platform, 36);
 
   const formatDiscount = () => {
     if (coupon.discount_type === 'percentage') {
@@ -82,7 +82,7 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
       >
         {/* Left Section: Icon & Dotted Separator */}
         <View style={s.leftSection}>
-          <View style={[s.platformCircle, { backgroundColor: platformColor + '15' }]}>
+          <View style={[s.platformIconWrapper, { backgroundColor: platformColor }]}>
             {PlatformIconComponent}
           </View>
           {/* Vertical Dotted Line */}
@@ -172,139 +172,174 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
 const createStyles = (colors, platformColor) => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: 8,
-    marginHorizontal: 12,
-    marginBottom: 10,
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 16,
     flexDirection: 'row',
-    height: 100, // Fixed height for ticket look
+    minHeight: 130,
     overflow: 'hidden',
-    borderWidth: 1, // Subtle border
+    borderWidth: 1,
     borderColor: colors.border,
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+      boxShadow: '0 6px 16px rgba(0,0,0,0.1)',
     } : {
-      elevation: 2,
+      elevation: 6,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
     }),
   },
   outOfStockCard: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   leftSection: {
-    width: 60,
+    width: 90,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     borderRightWidth: 0,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
   },
-  platformCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  platformIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    } : {
+      elevation: 6,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+    }),
   },
   dottedLineContainer: {
     position: 'absolute',
     right: 0,
-    top: 10,
-    bottom: 10,
+    top: 20,
+    bottom: 20,
     justifyContent: 'space-between',
-    width: 1,
+    width: 3,
     zIndex: 1,
   },
   dot: {
-    width: 1,
-    height: 4,
-    borderRadius: 1,
+    width: 3,
+    height: 8,
+    borderRadius: 2,
   },
   circleCutout: {
     position: 'absolute',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    right: -12,
     zIndex: 3,
-    borderWidth: 1, // Optional: verify if border looks good on cutout
-    borderColor: 'transparent', // Usually handled by parent background, but here we hardcoded #EBEBEB to match screen bg
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   cutoutTop: {
-    top: -8,
+    top: -12,
   },
   cutoutBottom: {
-    bottom: -8,
+    bottom: -12,
   },
   infoSection: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16, // Extra padding because of cutouts
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     justifyContent: 'center',
   },
   discountTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: 0.5,
   },
   exclusiveTag: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
     color: '#FFB800',
   },
   subtitle: {
-    fontSize: 12,
-    color: colors.textLight,
-    marginBottom: 6,
+    fontSize: 13,
+    color: colors.textMuted,
+    marginBottom: 8,
+    fontWeight: '500',
+    lineHeight: 18,
   },
   conditionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 8,
+    flexWrap: 'wrap',
   },
   conditionText: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textMuted,
+    fontWeight: '600',
   },
   codeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: platformColor + '30',
   },
   codeText: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   expiryText: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textMuted,
+    fontWeight: '600',
   },
   outOfStockText: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
     color: colors.error,
+    letterSpacing: 0.3,
   },
   actionContainer: {
-    width: 80,
+    width: 90,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingRight: 12,
+    paddingRight: 16,
   },
   actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    minWidth: 70,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    minWidth: 80,
     alignItems: 'center',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    } : {
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+    }),
   },
   actionButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#fff',
+    letterSpacing: 0.3,
   },
 });
