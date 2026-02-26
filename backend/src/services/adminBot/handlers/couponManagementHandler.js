@@ -72,7 +72,6 @@ async function sendCouponCard(ctx, coupon) {
 
   const keyboard = new InlineKeyboard()
     .text('🚫 Marcar como Esgotado', `coupon_outofstock:${coupon.id}`)
-    .row()
     .text('📊 Ver Detalhes', `coupon_details:${coupon.id}`);
 
   await ctx.reply(message, {
@@ -290,7 +289,6 @@ export const backToCouponCard = async (ctx) => {
 
     const keyboard = new InlineKeyboard()
       .text('🚫 Marcar como Esgotado', `coupon_outofstock:${coupon.id}`)
-      .row()
       .text('📊 Ver Detalhes', `coupon_details:${coupon.id}`);
 
     await ctx.editMessageText(message, {
