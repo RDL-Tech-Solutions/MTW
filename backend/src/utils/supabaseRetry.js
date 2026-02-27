@@ -1,124 +1,220 @@
 /**
- * Utilitário para retry de requisições Supabase com backoff exponencial
+ * Wrapper para operações do Supabase com retry automático
+ * Lida com erros temporários como 502 Bad Gateway
  */
-import logger from '../config/logger.js';
+
+const DEFAULT_RETRY_CONFIG = {
+  maxAttempts: 3,
+  baseDelay: 1000, // 1 segundo
+  maxDelay: 10000, // 10 segundos
+  backoffMultiplier: 2,
+  retryableErrors: [
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'ECONNREFUSED',
+    'Bad gateway',
+    '502',
+    '503',
+    '504',
+    'Network error',
+    'fetch failed'
+  ]
+};
 
 /**
- * Executar função com retry automático
- * @param {Function} fn - Função assíncrona a ser executada
- * @param {Object} options - Opções de retry
- * @param {number} options.maxRetries - Número máximo de tentativas (padrão: 3)
- * @param {number} options.initialDelay - Delay inicial em ms (padrão: 1000)
- * @param {number} options.maxDelay - Delay máximo em ms (padrão: 10000)
- * @param {Function} options.shouldRetry - Função para determinar se deve tentar novamente (padrão: retry em 502, 503, 504, timeout)
- * @returns {Promise<any>} - Resultado da função
+ * Verifica se o erro é retryable
  */
-export async function withRetry(fn, options = {}) {
-  const {
-    maxRetries = 3,
-    initialDelay = 1000,
-    maxDelay = 10000,
-    shouldRetry = (error) => {
-      // Retry em erros de gateway, timeout e erros de rede
-      if (error?.code === 'PGRST301' || error?.code === 'PGRST302') {
-        return true; // Timeout
-      }
-      if (error?.message?.includes('502') || 
-          error?.message?.includes('503') || 
-          error?.message?.includes('504') ||
-          error?.message?.includes('Bad Gateway') ||
-          error?.message?.includes('Service Unavailable') ||
-          error?.message?.includes('Gateway Timeout')) {
-        return true;
-      }
-      if (error?.message?.includes('ECONNRESET') || 
-          error?.message?.includes('ETIMEDOUT') ||
-          error?.message?.includes('ENOTFOUND')) {
-        return true; // Erros de rede
-      }
-      return false;
-    }
-  } = options;
+function isRetryableError(error, config = DEFAULT_RETRY_CONFIG) {
+  if (!error) return false;
 
+  const errorMessage = error.message || error.toString();
+  const errorCode = error.code || error.status || '';
+
+  return config.retryableErrors.some(retryableError => {
+    return (
+      errorMessage.toLowerCase().includes(retryableError.toLowerCase()) ||
+      errorCode.toString().includes(retryableError)
+    );
+  });
+}
+
+/**
+ * Calcula o delay para o próximo retry com exponential backoff
+ */
+function calculateDelay(attempt, config = DEFAULT_RETRY_CONFIG) {
+  const delay = Math.min(
+    config.baseDelay * Math.pow(config.backoffMultiplier, attempt - 1),
+    config.maxDelay
+  );
+  
+  // Adiciona jitter (variação aleatória) para evitar thundering herd
+  const jitter = Math.random() * 0.3 * delay;
+  return delay + jitter;
+}
+
+/**
+ * Aguarda um período de tempo
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Executa uma operação do Supabase com retry automático
+ * 
+ * @param {Function} operation - Função que retorna uma Promise com a operação do Supabase
+ * @param {Object} options - Opções de configuração
+ * @param {number} options.maxAttempts - Número máximo de tentativas
+ * @param {number} options.baseDelay - Delay base em ms
+ * @param {string} options.operationName - Nome da operação para logs
+ * @returns {Promise} Resultado da operação
+ */
+export async function withRetry(operation, options = {}) {
+  const config = { ...DEFAULT_RETRY_CONFIG, ...options };
+  const operationName = options.operationName || 'Supabase operation';
+  
   let lastError;
-  let delay = initialDelay;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  
+  for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {
     try {
-      const result = await fn();
+      const result = await operation();
       
-      // Se foi uma tentativa de retry, logar sucesso
-      if (attempt > 0) {
-        logger.info(`✅ Requisição Supabase bem-sucedida após ${attempt} tentativa(s)`);
+      // Se chegou aqui, a operação foi bem-sucedida
+      if (attempt > 1) {
+        console.log(`✅ ${operationName} bem-sucedida na tentativa ${attempt}`);
       }
       
       return result;
     } catch (error) {
       lastError = error;
       
-      // Verificar se deve tentar novamente
-      if (attempt < maxRetries && shouldRetry(error)) {
-        const errorMsg = error?.message || String(error);
-        const isHtmlError = errorMsg.includes('<html>') || errorMsg.includes('Bad Gateway');
-        
-        logger.warn(`⚠️ Erro na requisição Supabase (tentativa ${attempt + 1}/${maxRetries + 1}): ${isHtmlError ? '502 Bad Gateway' : errorMsg.substring(0, 100)}`);
-        logger.warn(`   Aguardando ${delay}ms antes de tentar novamente...`);
-        
-        // Aguardar antes de tentar novamente (backoff exponencial)
-        await new Promise(resolve => setTimeout(resolve, delay));
-        
-        // Aumentar delay para próxima tentativa (backoff exponencial)
-        delay = Math.min(delay * 2, maxDelay);
-      } else {
-        // Não deve tentar novamente ou esgotou tentativas
-        break;
+      // Verifica se é um erro retryable
+      if (!isRetryableError(error, config)) {
+        console.error(`❌ ${operationName} falhou com erro não-retryable:`, error.message);
+        throw error;
       }
+      
+      // Se foi a última tentativa, lança o erro
+      if (attempt === config.maxAttempts) {
+        console.error(
+          `❌ ${operationName} falhou após ${config.maxAttempts} tentativas:`,
+          error.message
+        );
+        throw error;
+      }
+      
+      // Calcula o delay e aguarda
+      const delay = calculateDelay(attempt, config);
+      console.warn(
+        `⚠️ ${operationName} falhou (tentativa ${attempt}/${config.maxAttempts}): ${error.message}. ` +
+        `Tentando novamente em ${Math.round(delay)}ms...`
+      );
+      
+      await sleep(delay);
     }
   }
-
-  // Se chegou aqui, todas as tentativas falharam
-  const errorMsg = lastError?.message || String(lastError);
-  const isHtmlError = errorMsg.includes('<html>') || errorMsg.includes('Bad Gateway');
   
-  if (isHtmlError) {
-    logger.error(`❌ Erro 502 Bad Gateway do Supabase após ${maxRetries + 1} tentativa(s)`);
-    logger.error(`   Isso geralmente indica problemas temporários no Supabase/Cloudflare`);
-    logger.error(`   Verifique: 1) Status do Supabase, 2) Conexão de internet, 3) Firewall/proxy`);
-  } else {
-    logger.error(`❌ Erro na requisição Supabase após ${maxRetries + 1} tentativa(s): ${errorMsg.substring(0, 200)}`);
-  }
-  
+  // Nunca deve chegar aqui, mas por segurança
   throw lastError;
 }
 
 /**
- * Wrapper para operações Supabase com retry automático
- * @param {Function} supabaseOperationFn - Função que retorna a operação do Supabase
- * @param {Object} retryOptions - Opções de retry
- * @returns {Promise<{data: any, error: any}>} - Resultado da operação
+ * Wrapper para operações de SELECT do Supabase
  */
-export async function supabaseWithRetry(supabaseOperationFn, retryOptions = {}) {
-  return await withRetry(async () => {
-    const result = await supabaseOperationFn();
-    
-    // Se houver erro na resposta, lançar para que o retry funcione
-    if (result.error) {
-      const error = new Error(result.error.message || 'Erro do Supabase');
-      error.code = result.error.code;
-      error.details = result.error;
-      error.originalError = result.error;
-      throw error;
-    }
-    
-    return result;
-  }, retryOptions);
+export async function selectWithRetry(query, operationName = 'SELECT') {
+  return withRetry(
+    async () => {
+      const result = await query;
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Database error');
+      }
+      
+      return result;
+    },
+    { operationName }
+  );
 }
 
-export default { withRetry, supabaseWithRetry };
+/**
+ * Wrapper para operações de INSERT do Supabase
+ */
+export async function insertWithRetry(query, operationName = 'INSERT') {
+  return withRetry(
+    async () => {
+      const result = await query;
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Database error');
+      }
+      
+      return result;
+    },
+    { operationName }
+  );
+}
 
+/**
+ * Wrapper para operações de UPDATE do Supabase
+ */
+export async function updateWithRetry(query, operationName = 'UPDATE') {
+  return withRetry(
+    async () => {
+      const result = await query;
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Database error');
+      }
+      
+      return result;
+    },
+    { operationName }
+  );
+}
 
+/**
+ * Wrapper para operações de DELETE do Supabase
+ */
+export async function deleteWithRetry(query, operationName = 'DELETE') {
+  return withRetry(
+    async () => {
+      const result = await query;
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Database error');
+      }
+      
+      return result;
+    },
+    { operationName }
+  );
+}
 
+/**
+ * Wrapper para operações de RPC do Supabase
+ */
+export async function rpcWithRetry(query, operationName = 'RPC') {
+  return withRetry(
+    async () => {
+      const result = await query;
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Database error');
+      }
+      
+      return result;
+    },
+    { operationName }
+  );
+}
 
-
-
-
+export default {
+  withRetry,
+  selectWithRetry,
+  insertWithRetry,
+  updateWithRetry,
+  deleteWithRetry,
+  rpcWithRetry,
+  isRetryableError
+};

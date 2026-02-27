@@ -30,6 +30,7 @@ export default function FavoritesScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [removingItems, setRemovingItems] = useState(new Set());
 
   // Animações
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -37,6 +38,7 @@ export default function FavoritesScreen({ navigation }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatingAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const itemAnimations = useRef({}).current;
 
   useEffect(() => {
     loadFavorites();
@@ -109,7 +111,45 @@ export default function FavoritesScreen({ navigation }) {
 
   const handleFavorite = async (productId) => {
     if (isFavorite(productId)) {
-      await removeFavorite(productId);
+      // Adicionar à lista de itens sendo removidos
+      setRemovingItems(prev => new Set([...prev, productId]));
+      
+      // Criar animação para este item se não existir
+      if (!itemAnimations[productId]) {
+        itemAnimations[productId] = {
+          scale: new Animated.Value(1),
+          opacity: new Animated.Value(1),
+          translateX: new Animated.Value(0),
+        };
+      }
+      
+      // Animar remoção
+      Animated.parallel([
+        Animated.timing(itemAnimations[productId].scale, {
+          toValue: 0.8,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(itemAnimations[productId].opacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(itemAnimations[productId].translateX, {
+          toValue: -SCREEN_WIDTH,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(async () => {
+        // Remover do favoritos após animação
+        await removeFavorite(productId);
+        setRemovingItems(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(productId);
+          return newSet;
+        });
+        delete itemAnimations[productId];
+      });
     } else {
       await addFavorite(productId);
     }
@@ -128,16 +168,39 @@ export default function FavoritesScreen({ navigation }) {
 
   const s = dynamicStyles(colors);
 
-  const renderItem = useCallback(({ item, index }) => (
-    <ProductCard
-      product={item}
-      onPress={() => handleProductPress(item)}
-      onFavoritePress={() => handleFavorite(item.id)}
-      isFavorite={true}
-      index={index}
-      isGrid={true}
-    />
-  ), [favorites]);
+  const renderItem = useCallback(({ item, index }) => {
+    // Criar animação para o item se não existir
+    if (!itemAnimations[item.id]) {
+      itemAnimations[item.id] = {
+        scale: new Animated.Value(1),
+        opacity: new Animated.Value(1),
+        translateX: new Animated.Value(0),
+      };
+    }
+
+    const isRemoving = removingItems.has(item.id);
+    
+    return (
+      <Animated.View
+        style={{
+          transform: [
+            { scale: itemAnimations[item.id].scale },
+            { translateX: itemAnimations[item.id].translateX },
+          ],
+          opacity: itemAnimations[item.id].opacity,
+        }}
+      >
+        <ProductCard
+          product={item}
+          onPress={() => handleProductPress(item)}
+          onFavoritePress={() => handleFavorite(item.id)}
+          isFavorite={true}
+          index={index}
+          isGrid={true}
+        />
+      </Animated.View>
+    );
+  }, [favorites, removingItems, itemAnimations]);
 
   const renderEmpty = () => (
     <Animated.View 

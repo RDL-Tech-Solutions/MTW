@@ -12,7 +12,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 // Cliente Supabase com privilégios de admin
-// Configurações adicionais para melhorar confiabilidade
+// Configurações adicionais para melhorar confiabilidade e retry automático
 export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
@@ -24,6 +24,16 @@ export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   global: {
     headers: {
       'x-client-info': 'precocerto-backend'
+    },
+    fetch: (url, options = {}) => {
+      // Adiciona timeout de 30 segundos
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeoutId));
     }
   }
 });

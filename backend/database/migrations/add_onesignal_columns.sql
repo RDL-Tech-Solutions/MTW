@@ -29,8 +29,8 @@ COMMENT ON COLUMN app_settings.onesignal_enabled IS 'Se o OneSignal está habili
 
 -- Criar tabela de backup dos tokens Expo (opcional, para rollback)
 CREATE TABLE IF NOT EXISTS push_tokens_backup (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   push_token TEXT NOT NULL,
   backed_up_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   restored BOOLEAN DEFAULT FALSE,

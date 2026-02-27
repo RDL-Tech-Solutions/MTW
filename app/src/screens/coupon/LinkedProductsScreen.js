@@ -190,11 +190,13 @@ export default function LinkedProductsScreen({ route, navigation }) {
                         <Text style={s.productPrice}>{formatPrice(displayPrice)}</Text>
                     </View>
                     {bestCoupon && (
-                        <View style={s.couponBadge}>
-                            <Ionicons name="ticket-outline" size={12} color={platformColor || colors.success} />
-                            <Text style={[s.couponText, { color: platformColor || colors.success }]}>
-                                {bestCoupon.code}
-                            </Text>
+                        <View style={s.couponContainer}>
+                            <View style={s.couponBadge}>
+                                <View style={s.couponIconBox}>
+                                    <Ionicons name="ticket" size={10} color="#fff" />
+                                </View>
+                                <Text style={s.couponCode}>{bestCoupon.code}</Text>
+                            </View>
                         </View>
                     )}
                 </View>
@@ -484,22 +486,42 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
         color: platformColor || colors.primary,
         letterSpacing: 0.3,
     },
+    couponContainer: {
+        marginTop: 6,
+    },
     couponBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        backgroundColor: (platformColor || colors.success) + '15',
+        gap: 5,
+        backgroundColor: '#DC2626', // Vermelho
         paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingVertical: 5,
         borderRadius: 6,
         alignSelf: 'flex-start',
-        borderWidth: 1,
-        borderColor: (platformColor || colors.success) + '30',
+        ...(Platform.OS === 'web' ? {
+            boxShadow: '0 2px 6px rgba(220, 38, 38, 0.35)',
+        } : {
+            elevation: 2,
+            shadowColor: '#DC2626',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.35,
+            shadowRadius: 3,
+        }),
     },
-    couponText: {
-        fontSize: 11,
-        fontWeight: '800',
-        letterSpacing: 0.5,
+    couponIconBox: {
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    couponCode: {
+        fontSize: 9,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
     },
     arrowContainer: {
         marginLeft: 8,

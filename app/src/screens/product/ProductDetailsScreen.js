@@ -327,56 +327,89 @@ export default function ProductDetailsScreen({ route, navigation }) {
             {sortedCoupons.length > 0 && (
               <View style={s.section}>
                 <View style={s.sectionTitleRow}>
-                  <Text style={s.sectionTitle}>
-                    {sortedCoupons.length > 1 ? `${sortedCoupons.length} Cupons disponíveis` : 'Cupom disponível'}
-                  </Text>
+                  <View style={s.sectionTitleContainer}>
+                    <Ionicons name="gift" size={20} color={colors.primary} />
+                    <Text style={s.sectionTitle}>
+                      {sortedCoupons.length > 1 ? `${sortedCoupons.length} Cupons disponíveis` : 'Cupom disponível'}
+                    </Text>
+                  </View>
                   {sortedCoupons.length > 1 && (
                     <View style={s.bestBadge}>
-                      <Ionicons name="star" size={12} color="#FFD700" />
-                      <Text style={s.bestBadgeText}>Melhor primeiro</Text>
+                      <Ionicons name="trophy" size={12} color="#FFD700" />
+                      <Text style={s.bestBadgeText}>Melhor</Text>
                     </View>
                   )}
                 </View>
-                {sortedCoupons.map((c, index) => (
-                  <View key={c.id} style={[s.couponCard, index === 0 && sortedCoupons.length > 1 && s.bestCouponCard]}>
-                    {index === 0 && sortedCoupons.length > 1 && (
-                      <View style={s.recommendedBadge}>
-                        <Ionicons name="star" size={14} color="#FFD700" />
-                        <Text style={s.recommendedText}>RECOMENDADO</Text>
+                {sortedCoupons.map((c, index) => {
+                  const isBest = index === 0 && sortedCoupons.length > 1;
+                  const discountPercent = c.discount_type === 'percentage' 
+                    ? parseFloat(c.discount_value) 
+                    : ((parseFloat(c.discount_value) / parseFloat(product.current_price)) * 100);
+                  
+                  return (
+                    <View key={c.id} style={[s.couponCard, isBest && s.bestCouponCard]}>
+                      {isBest && (
+                        <View style={s.bestCouponHeader}>
+                          <View style={s.crownBadge}>
+                            <Ionicons name="trophy" size={16} color="#FFD700" />
+                            <Text style={s.crownText}>MELHOR OFERTA</Text>
+                          </View>
+                          <View style={s.savingsBadgeSmall}>
+                            <Text style={s.savingsTextSmall}>Economize {discountPercent.toFixed(0)}%</Text>
+                          </View>
+                        </View>
+                      )}
+                      
+                      <View style={s.couponContent}>
+                        <View style={s.couponLeft}>
+                          <View style={s.couponIconContainer}>
+                            <Ionicons name="ticket" size={32} color={isBest ? '#FFD700' : colors.primary} />
+                          </View>
+                          <View style={s.couponInfo}>
+                            <Text style={s.couponTitle} numberOfLines={1}>
+                              {c.title || 'Desconto especial'}
+                            </Text>
+                            <View style={s.discountRow}>
+                              <Text style={[s.discountValue, isBest && s.discountValueBest]}>
+                                {c.discount_type === 'percentage'
+                                  ? `${c.discount_value}%`
+                                  : `R$ ${parseFloat(c.discount_value).toFixed(2)}`}
+                              </Text>
+                              <Text style={s.discountLabel}>OFF</Text>
+                            </View>
+                          </View>
+                        </View>
+                        
+                        <TouchableOpacity
+                          style={[s.couponCodeContainer, isBest && s.couponCodeContainerBest]}
+                          onPress={() => handleCopyCoupon(c)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={s.dashedBorder}>
+                            <Text style={[s.couponCode, isBest && s.couponCodeBest]}>{c.code}</Text>
+                            <View style={[s.copyButton, copiedCouponId === c.id && s.copyButtonSuccess]}>
+                              <Ionicons
+                                name={copiedCouponId === c.id ? 'checkmark-circle' : 'copy'}
+                                size={16}
+                                color={copiedCouponId === c.id ? colors.success : (isBest ? '#FFD700' : colors.primary)}
+                              />
+                              <Text style={[s.copyButtonText, copiedCouponId === c.id && s.copyButtonTextSuccess]}>
+                                {copiedCouponId === c.id ? 'Copiado!' : 'Copiar'}
+                              </Text>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
                       </View>
-                    )}
-                    <View style={s.couponHeader}>
-                      <Ionicons name="ticket" size={20} color={colors.success} />
-                      <Text style={s.couponTitle}>{c.title || 'Desconto extra!'}</Text>
+                      
+                      {!isBest && index > 0 && (
+                        <View style={s.alternativeBadge}>
+                          <Ionicons name="information-circle" size={12} color={colors.textMuted} />
+                          <Text style={s.alternativeText}>Opção alternativa</Text>
+                        </View>
+                      )}
                     </View>
-                    <TouchableOpacity
-                      style={s.couponCodeRow}
-                      onPress={() => handleCopyCoupon(c)}
-                      activeOpacity={0.8}
-                    >
-                      <View style={s.couponCodeBox}>
-                        <Text style={s.couponCodeText}>{c.code}</Text>
-                      </View>
-                      <View style={[s.couponCopyBtn, copiedCouponId === c.id && { backgroundColor: colors.success }]}>
-                        <Ionicons
-                          name={copiedCouponId === c.id ? 'checkmark' : 'copy-outline'}
-                          size={18}
-                          color="#fff"
-                        />
-                        <Text style={s.couponCopyText}>
-                          {copiedCouponId === c.id ? 'Copiado' : 'Copiar'}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                    {c.discount_value && (
-                      <Text style={s.couponDiscount}>
-                        {c.discount_type === 'percentage'
-                          ? `${c.discount_value}% OFF`
-                          : `R$ ${c.discount_value.toFixed(2)} OFF`}
-                      </Text>
-                    )}
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
 
@@ -596,86 +629,179 @@ const createStyles = (colors) => StyleSheet.create({
 
   // ── Coupon ──
   couponCard: {
-    backgroundColor: colors.success + '08',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.success + '25',
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    } : {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+    }),
   },
   bestCouponCard: {
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FFD700',
-    backgroundColor: '#FFF9E6',
+    backgroundColor: '#FFFEF5',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 8px 24px rgba(255, 215, 0, 0.25)',
+    } : {
+      elevation: 8,
+      shadowColor: '#FFD700',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+    }),
   },
-  recommendedBadge: {
+  bestCouponHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 8,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFD70030',
   },
-  recommendedText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.5,
-  },
-  couponHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  couponTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.success,
-  },
-  couponCodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  couponCodeBox: {
-    flex: 1,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: colors.success + '30',
-    borderStyle: 'dashed',
-  },
-  couponCodeText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: 1,
-  },
-  couponCopyBtn: {
-    backgroundColor: colors.success,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+  crownBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  couponCopyText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
+  crownText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 0.8,
   },
-  couponDiscount: {
+  savingsBadgeSmall: {
+    backgroundColor: colors.success + '20',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  savingsTextSmall: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.success,
+    letterSpacing: 0.3,
+  },
+  couponContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  couponLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  couponIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponInfo: {
+    flex: 1,
+  },
+  couponTitle: {
     fontSize: 13,
     fontWeight: '600',
+    color: colors.textMuted,
+    marginBottom: 4,
+  },
+  discountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  discountValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: -0.5,
+  },
+  discountValueBest: {
+    color: '#FFD700',
+  },
+  discountLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  couponCodeContainer: {
+    minWidth: 100,
+  },
+  couponCodeContainerBest: {
+    // Estilo especial para o melhor cupom
+  },
+  dashedBorder: {
+    borderWidth: 2,
+    borderColor: colors.primary + '40',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+  },
+  couponCode: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  couponCodeBest: {
+    color: '#B8860B',
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.primary + '15',
+  },
+  copyButtonSuccess: {
+    backgroundColor: colors.success + '20',
+  },
+  copyButtonText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  copyButtonTextSuccess: {
     color: colors.success,
-    marginTop: 8,
+  },
+  alternativeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  alternativeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
   },
 
   // ── Sections ──
@@ -686,7 +812,12 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 16,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   sectionTitle: {
     fontSize: 16,
@@ -698,14 +829,17 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#FFF9E6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD70050',
   },
   bestBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#B8860B',
+    letterSpacing: 0.3,
   },
   descriptionText: {
     fontSize: 14,

@@ -358,8 +358,8 @@ export default function CouponsScreen({ navigation }) {
       const params = {
         page: 1,
         limit: 50,
-        is_active: true,
-        is_out_of_stock: false // Filtrar cupons esgotados
+        // Remover filtro is_active para mostrar todos os cupons
+        // Remover filtro is_out_of_stock para mostrar cupons esgotados também
       };
       if (selectedPlatform && selectedPlatform !== 'all') {
         params.platform = selectedPlatform;

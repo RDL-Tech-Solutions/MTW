@@ -14,6 +14,8 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
   const { colors } = useThemeStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const heartScaleAnim = useRef(new Animated.Value(1)).current;
+  const heartRotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -57,6 +59,42 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
     }).start();
   };
 
+  const handleFavoritePress = () => {
+    // Animação do coração
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(heartScaleAnim, {
+          toValue: 1.5,
+          friction: 3,
+          tension: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartRotateAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(heartScaleAnim, {
+          toValue: 1,
+          friction: 3,
+          tension: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartRotateAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    if (onFavoritePress) {
+      onFavoritePress(product.id);
+    }
+  };
+
   // Calcular desconto baseado no preço original vs preço atual
   const discount = product.discount_percentage ||
     (product.old_price && product.old_price > product.current_price
@@ -93,7 +131,7 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
   };
 
   const bestCoupon = getBestCoupon();
-  const couponCode = bestCoupon?.code || product.coupon_code;
+  const couponCode = bestCoupon?.code; // Remover fallback para product.coupon_code
 
   // Usar price_with_coupon se houver cupom, senão usar current_price
   const displayPrice = bestCoupon && product.price_with_coupon 
@@ -142,14 +180,28 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
           {onFavoritePress && (
             <TouchableOpacity
               style={s.favoriteBtn}
-              onPress={() => onFavoritePress(product.id)}
+              onPress={handleFavoritePress}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons
-                name={isFavorite ? 'heart' : 'heart-outline'}
-                size={isGrid ? 20 : 22}
-                color={isFavorite ? colors.error : '#fff'}
-              />
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: heartScaleAnim },
+                    { 
+                      rotate: heartRotateAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      })
+                    }
+                  ]
+                }}
+              >
+                <Ionicons
+                  name={isFavorite ? 'heart' : 'heart-outline'}
+                  size={isGrid ? 20 : 22}
+                  color={isFavorite ? colors.error : '#fff'}
+                />
+              </Animated.View>
             </TouchableOpacity>
           )}
           {/* Platform logo */}
@@ -184,14 +236,20 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             <Text style={s.priceCent}>{currentPrice.centPart}</Text>
           </View>
 
-          {/* Coupon - mostrar badge com desconto adicional */}
+          {/* Coupon - badge compacto vermelho */}
           {!!couponCode && (
-            <View style={s.couponBadge}>
-              <Ionicons name="ticket" size={12} color={colors.success} />
-              <Text style={s.couponText}>
-                {couponCode}
-                {couponDiscount > 0 && ` -${couponDiscount}%`}
-              </Text>
+            <View style={s.couponContainer}>
+              <View style={s.couponBadge}>
+                <View style={s.couponIconBox}>
+                  <Ionicons name="ticket" size={11} color="#fff" />
+                </View>
+                <View style={s.couponInfo}>
+                  <Text style={s.couponCode}>{couponCode}</Text>
+                  {couponDiscount > 0 && (
+                    <Text style={s.couponDiscount}>-{couponDiscount}%</Text>
+                  )}
+                </View>
+              </View>
             </View>
           )}
         </View>
@@ -348,34 +406,53 @@ const gridStyles = (colors) => StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.2,
   },
+  couponContainer: {
+    marginTop: 8,
+  },
   couponBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
-    backgroundColor: colors.success + '15',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    backgroundColor: '#DC2626', // Vermelho
     borderRadius: 6,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: colors.success + '40',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    gap: 6,
     ...(Platform.OS === 'web' ? {
-      boxShadow: `0 2px 6px ${colors.success}20`,
+      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.35)',
     } : {
       elevation: 2,
-      shadowColor: colors.success,
+      shadowColor: '#DC2626',
       shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.2,
+      shadowOpacity: 0.35,
       shadowRadius: 3,
     }),
   },
-  couponText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.success,
+  couponIconBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  couponCode: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#fff',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  couponDiscount: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
 });
 
@@ -483,20 +560,52 @@ const listStyles = (colors) => StyleSheet.create({
     color: colors.success,
     marginTop: 2,
   },
+  couponContainer: {
+    marginTop: 6,
+  },
   couponBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    marginTop: 4,
-    backgroundColor: colors.successLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: '#DC2626', // Vermelho
+    borderRadius: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    gap: 5,
     alignSelf: 'flex-start',
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)',
+    } : {
+      elevation: 2,
+      shadowColor: '#DC2626',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.3,
+      shadowRadius: 2,
+    }),
   },
-  couponText: {
+  couponIconBox: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  couponCode: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  couponDiscount: {
     fontSize: 10,
-    fontWeight: '600',
-    color: colors.success,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
 });
