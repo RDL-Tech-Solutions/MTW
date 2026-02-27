@@ -71,11 +71,9 @@ class EmailService {
   }
 
   /**
-   * Enviar email de recuperação de senha
+   * Enviar email de recuperação de senha (com código de 6 dígitos)
    */
-  async sendPasswordResetEmail(email, resetToken, userName) {
-    const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
-    
+  async sendPasswordResetEmail(email, verificationCode, userName) {
     const html = `
       <!DOCTYPE html>
       <html>
@@ -87,7 +85,8 @@ class EmailService {
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
           .header { background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
           .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; background: #DC2626; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
+          .code-box { background: white; border: 3px dashed #DC2626; padding: 30px; text-align: center; margin: 30px 0; border-radius: 10px; }
+          .code { font-size: 48px; font-weight: bold; color: #DC2626; letter-spacing: 8px; font-family: 'Courier New', monospace; }
           .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
           .warning { background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px; }
         </style>
@@ -102,21 +101,18 @@ class EmailService {
             
             <p>Recebemos uma solicitação para redefinir a senha da sua conta no <strong>PreçoCerto</strong>.</p>
             
-            <p>Para criar uma nova senha, clique no botão abaixo:</p>
+            <p>Use o código abaixo para redefinir sua senha:</p>
             
-            <div style="text-align: center;">
-              <a href="${resetUrl}" class="button">Redefinir Senha</a>
+            <div class="code-box">
+              <div class="code">${verificationCode}</div>
+              <p style="margin-top: 15px; color: #6b7280; font-size: 14px;">Código de Verificação</p>
             </div>
-            
-            <p>Ou copie e cole este link no seu navegador:</p>
-            <p style="background: #e5e7eb; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px;">
-              ${resetUrl}
-            </p>
             
             <div class="warning">
               <strong>⚠️ Importante:</strong>
               <ul style="margin: 10px 0;">
-                <li>Este link expira em <strong>1 hora</strong></li>
+                <li>Este código expira em <strong>15 minutos</strong></li>
+                <li>Digite o código no aplicativo para continuar</li>
                 <li>Se você não solicitou esta redefinição, ignore este email</li>
                 <li>Sua senha atual permanecerá inalterada</li>
               </ul>
@@ -137,7 +133,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: email,
-      subject: '🔐 Recuperação de Senha - PreçoCerto',
+      subject: '🔐 Código de Recuperação de Senha - PreçoCerto',
       html,
     });
   }

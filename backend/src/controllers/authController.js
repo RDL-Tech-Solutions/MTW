@@ -737,7 +737,7 @@ class AuthController {
     }
   }
 
-  // Solicitar recuperação de senha
+  // Solicitar recuperação de senha (envia código de 6 dígitos)
   static async forgotPassword(req, res, next) {
     try {
       const { email } = req.body;
@@ -764,7 +764,6 @@ class AuthController {
         user = await User.findByEmail(email);
       } catch (dbError) {
         logger.error(`❌ Erro ao buscar usuário no banco: ${dbError.message}`);
-        logger.error(`Stack: ${dbError.stack}`);
         return res.status(500).json(
           errorResponse('Erro no banco de dados. Tente novamente mais tarde.')
         );
@@ -774,38 +773,36 @@ class AuthController {
         logger.info(`⚠️ Email não encontrado: ${email}`);
         // Por segurança, não revelar se o email existe ou não
         return res.json(
-          successResponse(null, 'Se o email existir, você receberá instruções para redefinir sua senha')
+          successResponse(null, 'Se o email existir, você receberá um código de verificação')
         );
       }
 
       logger.info(`✅ Usuário encontrado: ${user.id}`);
 
-      // Gerar token de recuperação (válido por 1 hora)
-      const crypto = await import('crypto');
-      const resetToken = crypto.default.randomBytes(32).toString('hex');
-      const resetTokenHash = crypto.default.createHash('sha256').update(resetToken).digest('hex');
-      const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hora
+      // Gerar código de 6 dígitos
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const codeExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
-      logger.info(`🔑 Token gerado para ${email}`);
+      logger.info(`🔑 Código gerado para ${email}: ${verificationCode}`);
 
-      // Salvar token no banco
+      // Salvar código no banco
       try {
         await User.update(user.id, {
-          reset_token: resetTokenHash,
-          reset_token_expiry: resetTokenExpiry.toISOString(),
+          verification_code: verificationCode,
+          verification_code_expiry: codeExpiry.toISOString(),
         });
-        logger.info(`✅ Token salvo no banco para ${email}`);
+        logger.info(`✅ Código salvo no banco para ${email}`);
       } catch (updateError) {
-        logger.error(`❌ Erro ao salvar token no banco: ${updateError.message}`);
+        logger.error(`❌ Erro ao salvar código no banco: ${updateError.message}`);
         return res.status(500).json(
           errorResponse('Erro ao processar solicitação. Tente novamente mais tarde.')
         );
       }
 
-      // Enviar email
+      // Enviar email com código
       try {
-        const emailService = (await import('../services/emailService.js')).default;
-        const emailResult = await emailService.sendPasswordResetEmail(email, resetToken, user.name);
+        const emailServiceWrapper = (await import('../services/emailServiceWrapper.js')).default;
+        const emailResult = await emailServiceWrapper.sendPasswordResetEmail(email, verificationCode, user.name);
 
         if (!emailResult.success) {
           logger.error(`❌ Erro ao enviar email de recuperação para ${email}: ${emailResult.error}`);
@@ -814,74 +811,118 @@ class AuthController {
           );
         }
 
-        logger.info(`✅ Email de recuperação enviado para: ${email}`);
+        logger.info(`✅ Email com código enviado para: ${email}`);
       } catch (emailError) {
         logger.error(`❌ Exceção ao enviar email: ${emailError.message}`);
         // Mesmo com erro no email, não revelar se o usuário existe
       }
 
       res.json(
-        successResponse(null, 'Se o email existir, você receberá instruções para redefinir sua senha')
+        successResponse(null, 'Se o email existir, você receberá um código de verificação')
       );
     } catch (error) {
       logger.error(`❌ Erro geral em forgotPassword: ${error.message}`);
-      logger.error(`Stack: ${error.stack}`);
       next(error);
     }
   }
 
-  // Redefinir senha com token
-  static async resetPassword(req, res, next) {
+  // Verificar código de recuperação
+  static async verifyResetCode(req, res, next) {
     try {
-      const { token, newPassword } = req.body;
+      const { email, code } = req.body;
 
-      if (!token || !newPassword) {
+      if (!email || !code) {
         return res.status(400).json(
-          errorResponse('Token e nova senha são obrigatórios')
+          errorResponse('Email e código são obrigatórios')
         );
       }
 
-      // Hash do token recebido
-      const crypto = await import('crypto');
-      const resetTokenHash = crypto.default.createHash('sha256').update(token).digest('hex');
-
-      // Buscar usuário com token válido
+      // Buscar usuário com código válido
       const supabase = (await import('../config/database.js')).default;
       const { data: users, error } = await supabase
         .from('users')
         .select('*')
-        .eq('reset_token', resetTokenHash)
-        .gt('reset_token_expiry', new Date().toISOString())
+        .eq('email', email)
+        .eq('verification_code', code)
+        .gt('verification_code_expiry', new Date().toISOString())
         .limit(1);
 
       if (error || !users || users.length === 0) {
+        logger.warn(`❌ Código inválido ou expirado para: ${email}`);
         return res.status(400).json(
-          errorResponse('Token inválido ou expirado')
+          errorResponse('Código inválido ou expirado')
+        );
+      }
+
+      logger.info(`✅ Código verificado com sucesso para: ${email}`);
+
+      res.json(
+        successResponse({ valid: true }, 'Código verificado com sucesso')
+      );
+    } catch (error) {
+      logger.error(`❌ Erro ao verificar código: ${error.message}`);
+      next(error);
+    }
+  }
+
+  // Redefinir senha com código
+  static async resetPassword(req, res, next) {
+    try {
+      const { email, code, newPassword } = req.body;
+
+      if (!email || !code || !newPassword) {
+        return res.status(400).json(
+          errorResponse('Email, código e nova senha são obrigatórios')
+        );
+      }
+
+      // Validar senha
+      if (newPassword.length < 6) {
+        return res.status(400).json(
+          errorResponse('A senha deve ter no mínimo 6 caracteres')
+        );
+      }
+
+      // Buscar usuário com código válido
+      const supabase = (await import('../config/database.js')).default;
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('verification_code', code)
+        .gt('verification_code_expiry', new Date().toISOString())
+        .limit(1);
+
+      if (error || !users || users.length === 0) {
+        logger.warn(`❌ Código inválido ou expirado para: ${email}`);
+        return res.status(400).json(
+          errorResponse('Código inválido ou expirado')
         );
       }
 
       const user = users[0];
 
-      // Atualizar senha e limpar token
+      // Atualizar senha e limpar código
       const { hashPassword } = await import('../utils/helpers.js');
       const hashedPassword = await hashPassword(newPassword);
       
       await User.update(user.id, {
         password: hashedPassword,
-        reset_token: null,
-        reset_token_expiry: null,
+        verification_code: null,
+        verification_code_expiry: null,
       });
 
       // Enviar email de confirmação
-      const emailService = (await import('../services/emailService.js')).default;
-      await emailService.sendPasswordChangedEmail(user.email, user.name);
+      const emailServiceWrapper = (await import('../services/emailServiceWrapper.js')).default;
+      await emailServiceWrapper.sendPasswordChangedEmail(user.email, user.name);
 
-      logger.info(`Senha redefinida com sucesso para: ${user.email}`);
+      logger.info(`✅ Senha redefinida com sucesso para: ${user.email}`);
 
       res.json(
         successResponse(null, 'Senha redefinida com sucesso')
       );
     } catch (error) {
+      logger.error(`❌ Erro ao redefinir senha: ${error.message}`);
       next(error);
     }
   }

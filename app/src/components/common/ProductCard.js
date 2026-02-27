@@ -57,18 +57,55 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
     }).start();
   };
 
+  // Calcular desconto baseado no preço original vs preço atual
   const discount = product.discount_percentage ||
     (product.old_price && product.old_price > product.current_price
       ? Math.round(((product.old_price - product.current_price) / product.old_price) * 100)
       : 0);
 
-  const currentPrice = formatPrice(product.current_price);
+  // Selecionar o melhor cupom (maior desconto em %)
+  const getBestCoupon = () => {
+    if (!product.coupons || product.coupons.length === 0) return null;
+    
+    // Filtrar cupons não esgotados
+    const activeCoupons = product.coupons.filter(c => !c.is_out_of_stock);
+    if (activeCoupons.length === 0) return null;
 
-  // Pegar o primeiro cupom disponível (se houver)
-  const availableCoupon = product.coupons && product.coupons.length > 0 
-    ? product.coupons[0] 
-    : null;
-  const couponCode = availableCoupon?.code || product.coupon_code;
+    // Calcular desconto percentual de cada cupom
+    const couponsWithDiscount = activeCoupons.map(coupon => {
+      const currentPrice = parseFloat(product.current_price) || 0;
+      let discountPercent = 0;
+
+      if (coupon.discount_type === 'percentage') {
+        discountPercent = parseFloat(coupon.discount_value) || 0;
+      } else {
+        // Converter desconto fixo em percentual
+        const discountValue = parseFloat(coupon.discount_value) || 0;
+        discountPercent = currentPrice > 0 ? (discountValue / currentPrice) * 100 : 0;
+      }
+
+      return { ...coupon, discountPercent };
+    });
+
+    // Ordenar por maior desconto
+    couponsWithDiscount.sort((a, b) => b.discountPercent - a.discountPercent);
+    return couponsWithDiscount[0];
+  };
+
+  const bestCoupon = getBestCoupon();
+  const couponCode = bestCoupon?.code || product.coupon_code;
+
+  // Usar price_with_coupon se houver cupom, senão usar current_price
+  const displayPrice = bestCoupon && product.price_with_coupon 
+    ? product.price_with_coupon 
+    : product.current_price;
+  
+  const currentPrice = formatPrice(displayPrice);
+
+  // Calcular desconto adicional do cupom
+  const couponDiscount = bestCoupon && product.price_with_coupon
+    ? Math.round(((product.current_price - product.price_with_coupon) / product.current_price) * 100)
+    : 0;
 
   const s = isGrid ? gridStyles(colors) : listStyles(colors);
 
@@ -127,11 +164,17 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             {product.name}
           </Text>
 
-          {/* Old price */}
-          {!!product.old_price && product.old_price > product.current_price && (
+          {/* Old price - mostrar preço original se houver cupom, senão mostrar old_price */}
+          {bestCoupon && product.price_with_coupon ? (
             <Text style={s.oldPrice}>
-              R$ {parseFloat(product.old_price).toFixed(2).replace('.', ',')}
+              R$ {parseFloat(product.current_price).toFixed(2).replace('.', ',')}
             </Text>
+          ) : (
+            !!product.old_price && product.old_price > product.current_price && (
+              <Text style={s.oldPrice}>
+                R$ {parseFloat(product.old_price).toFixed(2).replace('.', ',')}
+              </Text>
+            )
           )}
 
           {/* Current price ML-style */}
@@ -141,11 +184,14 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             <Text style={s.priceCent}>{currentPrice.centPart}</Text>
           </View>
 
-          {/* Coupon */}
+          {/* Coupon - mostrar badge com desconto adicional */}
           {!!couponCode && (
             <View style={s.couponBadge}>
               <Ionicons name="ticket" size={12} color={colors.success} />
-              <Text style={s.couponText}>{couponCode}</Text>
+              <Text style={s.couponText}>
+                {couponCode}
+                {couponDiscount > 0 && ` -${couponDiscount}%`}
+              </Text>
             </View>
           )}
         </View>

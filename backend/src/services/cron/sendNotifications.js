@@ -1,6 +1,6 @@
 import Notification from '../../models/Notification.js';
 import User from '../../models/User.js';
-import pushNotificationService from '../pushNotification.js';
+import pushNotificationService from '../pushNotificationWrapper.js';
 import logger from '../../config/logger.js';
 
 export const sendNotifications = async () => {

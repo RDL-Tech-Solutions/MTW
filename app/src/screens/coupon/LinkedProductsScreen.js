@@ -114,9 +114,40 @@ export default function LinkedProductsScreen({ route, navigation }) {
     };
 
     const renderProductItem = ({ item, index }) => {
+        // Calcular desconto do preço original
         const discount = item.old_price && item.old_price > item.current_price
             ? Math.round(((item.old_price - item.current_price) / item.old_price) * 100)
             : 0;
+
+        // Selecionar o melhor cupom
+        const getBestCoupon = () => {
+            if (!item.coupons || item.coupons.length === 0) return null;
+            
+            const activeCoupons = item.coupons.filter(c => !c.is_out_of_stock);
+            if (activeCoupons.length === 0) return null;
+
+            const couponsWithDiscount = activeCoupons.map(coupon => {
+                const currentPrice = parseFloat(item.current_price) || 0;
+                let discountPercent = 0;
+
+                if (coupon.discount_type === 'percentage') {
+                    discountPercent = parseFloat(coupon.discount_value) || 0;
+                } else {
+                    const discountValue = parseFloat(coupon.discount_value) || 0;
+                    discountPercent = currentPrice > 0 ? (discountValue / currentPrice) * 100 : 0;
+                }
+
+                return { ...coupon, discountPercent };
+            });
+
+            couponsWithDiscount.sort((a, b) => b.discountPercent - a.discountPercent);
+            return couponsWithDiscount[0];
+        };
+
+        const bestCoupon = getBestCoupon();
+        const displayPrice = bestCoupon && item.price_with_coupon 
+            ? item.price_with_coupon 
+            : item.current_price;
 
         return (
             <TouchableOpacity
@@ -144,18 +175,25 @@ export default function LinkedProductsScreen({ route, navigation }) {
                 <View style={s.productInfo}>
                     <Text style={s.productName} numberOfLines={2}>{item.name}</Text>
                     <View style={s.productPriceRow}>
-                        {item.old_price > item.current_price && (
+                        {/* Mostrar preço original se houver cupom, senão mostrar old_price */}
+                        {bestCoupon && item.price_with_coupon ? (
                             <Text style={s.productOldPrice}>
-                                {formatPrice(item.old_price)}
+                                {formatPrice(item.current_price)}
                             </Text>
+                        ) : (
+                            item.old_price > item.current_price && (
+                                <Text style={s.productOldPrice}>
+                                    {formatPrice(item.old_price)}
+                                </Text>
+                            )
                         )}
-                        <Text style={s.productPrice}>{formatPrice(item.current_price)}</Text>
+                        <Text style={s.productPrice}>{formatPrice(displayPrice)}</Text>
                     </View>
-                    {item.coupon_code && (
+                    {bestCoupon && (
                         <View style={s.couponBadge}>
                             <Ionicons name="ticket-outline" size={12} color={platformColor || colors.success} />
                             <Text style={[s.couponText, { color: platformColor || colors.success }]}>
-                                {item.coupon_code}
+                                {bestCoupon.code}
                             </Text>
                         </View>
                     )}

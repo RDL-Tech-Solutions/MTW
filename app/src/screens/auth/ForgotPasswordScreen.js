@@ -13,15 +13,19 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import colors from '../../theme/colors';
 import { ERROR_MESSAGES } from '../../utils/constants';
-import api from '../../services/api';
 
 export default function ForgotPasswordScreen({ navigation }) {
+  const [step, setStep] = useState(1); // 1: email, 2: code + password
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
 
-  const validate = () => {
+  const { forgotPassword, resetPasswordWithCode } = useAuthStore();
+
+  const validateEmail = () => {
     const newErrors = {};
 
     if (!email) {
@@ -34,47 +38,123 @@ export default function ForgotPasswordScreen({ navigation }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSendResetLink = async () => {
-    if (!validate()) return;
+  const validateReset = () => {
+    const newErrors = {};
+
+    if (!code) {
+      newErrors.code = ERROR_MESSAGES.REQUIRED_FIELD;
+    } else if (code.length !== 6) {
+      newErrors.code = 'O código deve ter 6 dígitos';
+    }
+
+    if (!newPassword) {
+      newErrors.newPassword = ERROR_MESSAGES.REQUIRED_FIELD;
+    } else if (newPassword.length < 6) {
+      newErrors.newPassword = ERROR_MESSAGES.PASSWORD_TOO_SHORT;
+    }
+
+    if (!confirmPassword) {
+      newErrors.confirmPassword = ERROR_MESSAGES.REQUIRED_FIELD;
+    } else if (newPassword !== confirmPassword) {
+      newErrors.confirmPassword = 'As senhas não coincidem';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSendCode = async () => {
+    if (!validateEmail()) return;
 
     setLoading(true);
-    try {
-      // Aqui você pode integrar com o endpoint de recuperação de senha do backend
-      // Por enquanto, simula o envio
-      await api.post('/auth/forgot-password', { email });
-      
-      setEmailSent(true);
+    const result = await forgotPassword(email);
+    setLoading(false);
+
+    if (result.success) {
+      setStep(2);
       Alert.alert(
-        'Email Enviado',
-        'Verifique sua caixa de entrada para redefinir sua senha.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        'Código Enviado',
+        'Verifique seu email e digite o código de 6 dígitos recebido.'
       );
-    } catch (error) {
-      Alert.alert(
-        'Erro',
-        error.response?.data?.error || 'Não foi possível enviar o email. Tente novamente.'
-      );
-    } finally {
-      setLoading(false);
+    } else {
+      Alert.alert('Erro', result.error || 'Não foi possível enviar o código.');
     }
   };
 
-  if (emailSent) {
+  const handleResendCode = async () => {
+    setLoading(true);
+    const result = await forgotPassword(email);
+    setLoading(false);
+
+    if (result.success) {
+      Alert.alert('Código Reenviado', 'Um novo código foi enviado para seu email.');
+    } else {
+      Alert.alert('Erro', result.error || 'Não foi possível reenviar o código.');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!validateReset()) return;
+
+    setLoading(true);
+    const result = await resetPasswordWithCode(email, code, newPassword);
+    setLoading(false);
+
+    if (result.success) {
+      Alert.alert(
+        'Senha Redefinida',
+        'Sua senha foi alterada com sucesso!',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } else {
+      Alert.alert('Erro', result.error || 'Não foi possível redefinir a senha.');
+    }
+  };
+
+  if (step === 1) {
     return (
-      <View style={styles.container}>
-        <View style={styles.successContainer}>
-          <Text style={styles.successIcon}>✓</Text>
-          <Text style={styles.successTitle}>Email Enviado!</Text>
-          <Text style={styles.successText}>
-            Verifique sua caixa de entrada e siga as instruções para redefinir sua senha.
-          </Text>
-          <Button
-            title="Voltar ao Login"
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          />
-        </View>
-      </View>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Esqueceu sua senha?</Text>
+            <Text style={styles.subtitle}>
+              Digite seu email e enviaremos um código de verificação
+            </Text>
+          </View>
+
+          <View style={styles.form}>
+            <Input
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="seu@email.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              leftIcon="mail-outline"
+              error={errors.email}
+            />
+
+            <Button
+              title="Enviar Código"
+              onPress={handleSendCode}
+              loading={loading}
+              style={styles.submitButton}
+            />
+
+            <Button
+              title="Voltar ao Login"
+              onPress={() => navigation.goBack()}
+              variant="outline"
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -88,35 +168,62 @@ export default function ForgotPasswordScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Esqueceu sua senha?</Text>
+          <Text style={styles.title}>Digite o Código</Text>
           <Text style={styles.subtitle}>
-            Digite seu email e enviaremos um link para redefinir sua senha
+            Enviamos um código de 6 dígitos para {email}
           </Text>
         </View>
 
         <View style={styles.form}>
           <Input
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="seu@email.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            leftIcon="mail-outline"
-            error={errors.email}
+            label="Código de Verificação"
+            value={code}
+            onChangeText={setCode}
+            placeholder="000000"
+            keyboardType="number-pad"
+            maxLength={6}
+            leftIcon="key-outline"
+            error={errors.code}
+          />
+
+          <Input
+            label="Nova Senha"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="Mínimo 6 caracteres"
+            secureTextEntry
+            leftIcon="lock-closed-outline"
+            error={errors.newPassword}
+          />
+
+          <Input
+            label="Confirmar Nova Senha"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="Digite a senha novamente"
+            secureTextEntry
+            leftIcon="lock-closed-outline"
+            error={errors.confirmPassword}
           />
 
           <Button
-            title="Enviar Link de Redefinição"
-            onPress={handleSendResetLink}
+            title="Redefinir Senha"
+            onPress={handleResetPassword}
             loading={loading}
             style={styles.submitButton}
           />
 
           <Button
-            title="Voltar ao Login"
-            onPress={() => navigation.goBack()}
+            title="Reenviar Código"
+            onPress={handleResendCode}
             variant="outline"
+            style={styles.resendButton}
+          />
+
+          <Button
+            title="Voltar"
+            onPress={() => setStep(1)}
+            variant="text"
           />
         </View>
       </ScrollView>
@@ -155,32 +262,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
-  successContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  successIcon: {
-    fontSize: 80,
-    color: colors.success || '#10B981',
-    marginBottom: 24,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  successText: {
-    fontSize: 16,
-    color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  backButton: {
-    width: '100%',
+  resendButton: {
+    marginBottom: 8,
   },
 });
-

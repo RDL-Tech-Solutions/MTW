@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import Logo from '../../components/common/Logo';
 import Button from '../../components/common/Button';
@@ -25,9 +24,8 @@ export default function RegisterScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState({ google: false });
 
-  const { register, loginWithGoogle } = useAuthStore();
+  const { register } = useAuthStore();
 
   // Animações
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -94,16 +92,6 @@ export default function RegisterScreen({ navigation }) {
 
     if (!result.success) {
       Alert.alert('Erro', result.error || 'Erro ao criar conta');
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setSocialLoading({ ...socialLoading, google: true });
-    const result = await loginWithGoogle();
-    setSocialLoading({ ...socialLoading, google: false });
-
-    if (!result.success) {
-      Alert.alert('Erro', result.error || 'Erro ao fazer login com Google');
     }
   };
 
@@ -186,30 +174,6 @@ export default function RegisterScreen({ navigation }) {
             style={styles.registerButton}
           />
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Botão de Registro Social */}
-          <View style={styles.socialContainer}>
-            <TouchableOpacity
-              style={[styles.socialButton, styles.googleButton]}
-              onPress={handleGoogleLogin}
-              disabled={socialLoading.google || loading}
-            >
-              {socialLoading.google ? (
-                <Text style={styles.socialButtonText}>Carregando...</Text>
-              ) : (
-                <>
-                  <Ionicons name="logo-google" size={20} color={colors.white} />
-                  <Text style={styles.socialButtonText}>Continuar com Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
           <TouchableOpacity
             style={styles.loginLink}
             onPress={() => navigation.goBack()}
@@ -267,42 +231,6 @@ const styles = StyleSheet.create({
   },
   loginLinkBold: {
     color: colors.primary,
-    fontWeight: '600',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-  socialContainer: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  socialButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 12,
-  },
-  googleButton: {
-    backgroundColor: '#4285F4',
-  },
-  socialButtonText: {
-    color: colors.white,
-    fontSize: 16,
     fontWeight: '600',
   },
 });

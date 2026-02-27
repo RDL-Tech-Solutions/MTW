@@ -131,14 +131,36 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const handleBuyNow = async () => {
     try {
+      // Selecionar o melhor cupom (maior desconto)
       const availableCoupons = product?.coupons?.filter(c => !c.is_out_of_stock) || [];
-      const bestCoupon = availableCoupons.length > 0 ? availableCoupons[0] : null;
+      
+      let bestCoupon = null;
+      if (availableCoupons.length > 0) {
+        const couponsWithDiscount = availableCoupons.map(coupon => {
+          const currentPrice = parseFloat(product.current_price) || 0;
+          let discountPercent = 0;
 
+          if (coupon.discount_type === 'percentage') {
+            discountPercent = parseFloat(coupon.discount_value) || 0;
+          } else {
+            const discountValue = parseFloat(coupon.discount_value) || 0;
+            discountPercent = currentPrice > 0 ? (discountValue / currentPrice) * 100 : 0;
+          }
+
+          return { ...coupon, discountPercent };
+        });
+
+        couponsWithDiscount.sort((a, b) => b.discountPercent - a.discountPercent);
+        bestCoupon = couponsWithDiscount[0];
+      }
+
+      // Copiar o melhor cupom se existir
       if (bestCoupon?.code) {
         await Clipboard.setStringAsync(bestCoupon.code);
         animateCopied();
       }
 
+      // Aguardar um pouco para o usuário ver a mensagem de copiado
       setTimeout(async () => {
         try {
           const url = product.affiliate_link || product.link;
@@ -197,8 +219,24 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const priceInt = Math.floor(finalPrice);
   const priceCents = ((finalPrice - priceInt) * 100).toFixed(0).padStart(2, '0');
   
-  // ── Filter out out-of-stock coupons ──
+  // ── Filter out out-of-stock coupons and sort by best discount ──
   const availableCoupons = product?.coupons?.filter(c => !c.is_out_of_stock) || [];
+  
+  // Ordenar cupons por melhor desconto
+  const sortedCoupons = [...availableCoupons].sort((a, b) => {
+    const currentPrice = parseFloat(product.current_price) || 0;
+    
+    const getDiscountPercent = (coupon) => {
+      if (coupon.discount_type === 'percentage') {
+        return parseFloat(coupon.discount_value) || 0;
+      } else {
+        const discountValue = parseFloat(coupon.discount_value) || 0;
+        return currentPrice > 0 ? (discountValue / currentPrice) * 100 : 0;
+      }
+    };
+    
+    return getDiscountPercent(b) - getDiscountPercent(a);
+  });
 
   return (
     <View style={s.container}>
@@ -286,13 +324,27 @@ export default function ProductDetailsScreen({ route, navigation }) {
             )}
 
             {/* ── Coupon Section ── */}
-            {availableCoupons.length > 0 && (
+            {sortedCoupons.length > 0 && (
               <View style={s.section}>
-                <Text style={s.sectionTitle}>
-                  {availableCoupons.length > 1 ? `${availableCoupons.length} Cupons disponíveis` : 'Cupom disponível'}
-                </Text>
-                {availableCoupons.map((c) => (
-                  <View key={c.id} style={s.couponCard}>
+                <View style={s.sectionTitleRow}>
+                  <Text style={s.sectionTitle}>
+                    {sortedCoupons.length > 1 ? `${sortedCoupons.length} Cupons disponíveis` : 'Cupom disponível'}
+                  </Text>
+                  {sortedCoupons.length > 1 && (
+                    <View style={s.bestBadge}>
+                      <Ionicons name="star" size={12} color="#FFD700" />
+                      <Text style={s.bestBadgeText}>Melhor primeiro</Text>
+                    </View>
+                  )}
+                </View>
+                {sortedCoupons.map((c, index) => (
+                  <View key={c.id} style={[s.couponCard, index === 0 && sortedCoupons.length > 1 && s.bestCouponCard]}>
+                    {index === 0 && sortedCoupons.length > 1 && (
+                      <View style={s.recommendedBadge}>
+                        <Ionicons name="star" size={14} color="#FFD700" />
+                        <Text style={s.recommendedText}>RECOMENDADO</Text>
+                      </View>
+                    )}
                     <View style={s.couponHeader}>
                       <Ionicons name="ticket" size={20} color={colors.success} />
                       <Text style={s.couponTitle}>{c.title || 'Desconto extra!'}</Text>
@@ -365,7 +417,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           activeOpacity={0.9}
         >
           <Text style={s.buyButtonText}>
-            {product?.coupons?.length > 0 ? 'Comprar agora' : 'Ver oferta'}
+            {sortedCoupons.length > 0 ? 'Copiar cupom e comprar' : 'Ver oferta'}
           </Text>
           <Ionicons name="arrow-forward-circle" size={24} color="#fff" />
         </TouchableOpacity>
@@ -547,9 +599,31 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.success + '08',
     borderRadius: 10,
     padding: 14,
-    marginBottom: 20,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.success + '25',
+  },
+  bestCouponCard: {
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    backgroundColor: '#FFF9E6',
+  },
+  recommendedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  recommendedText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.5,
   },
   couponHeader: {
     flexDirection: 'row',
@@ -608,11 +682,30 @@ const createStyles = (colors) => StyleSheet.create({
   section: {
     marginBottom: 20,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 10,
+  },
+  bestBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFF9E6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  bestBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B8860B',
   },
   descriptionText: {
     fontSize: 14,

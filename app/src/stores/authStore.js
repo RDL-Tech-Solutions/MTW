@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import api from '../services/api';
 import storage from '../services/storage';
-import { processGoogleAuthResponse } from '../services/authSocial';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -68,23 +67,44 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Login com Google (processa resposta do Google Auth)
-  loginWithGoogle: async (googleResponse) => {
+  // Solicitar código de recuperação de senha
+  forgotPassword: async (email) => {
     try {
-      const result = await processGoogleAuthResponse(googleResponse);
-      if (result.success) {
-        set({ 
-          user: result.user, 
-          token: result.token, 
-          isAuthenticated: true 
-        });
-      }
-      return result;
+      const response = await api.post('/auth/forgot-password', { email });
+      return { success: true, message: response.data.message };
     } catch (error) {
-      console.error('Erro no login Google:', error);
+      console.error('Erro ao solicitar recuperação:', error);
       return {
         success: false,
-        error: error.message || 'Erro ao fazer login com Google',
+        error: error.response?.data?.error || 'Erro ao solicitar recuperação de senha',
+      };
+    }
+  },
+
+  // Verificar código de recuperação
+  verifyResetCode: async (email, code) => {
+    try {
+      const response = await api.post('/auth/verify-reset-code', { email, code });
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      console.error('Erro ao verificar código:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Código inválido ou expirado',
+      };
+    }
+  },
+
+  // Redefinir senha com código
+  resetPasswordWithCode: async (email, code, newPassword) => {
+    try {
+      const response = await api.post('/auth/reset-password', { email, code, newPassword });
+      return { success: true, message: response.data.message };
+    } catch (error) {
+      console.error('Erro ao redefinir senha:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Erro ao redefinir senha',
       };
     }
   },

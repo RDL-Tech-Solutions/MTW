@@ -10,9 +10,7 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
-import { useGoogleAuth } from '../../services/authSocial';
 import Logo from '../../components/common/Logo';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -24,12 +22,8 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState({ google: false });
 
-  const { login, loginWithGoogle } = useAuthStore();
-
-  // Google Auth Hook
-  const [request, response, promptAsync] = useGoogleAuth();
+  const { login } = useAuthStore();
 
   // Animações
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -57,13 +51,6 @@ export default function LoginScreen({ navigation }) {
       }),
     ]).start();
   }, []);
-
-  // Processar resposta do Google Auth
-  useEffect(() => {
-    if (response) {
-      handleGoogleResponse(response);
-    }
-  }, [response]);
 
   const validate = () => {
     const newErrors = {};
@@ -93,35 +80,6 @@ export default function LoginScreen({ navigation }) {
 
     if (!result.success) {
       Alert.alert('Erro', result.error || ERROR_MESSAGES.INVALID_CREDENTIALS);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    try {
-      setSocialLoading({ ...socialLoading, google: true });
-      await promptAsync();
-    } catch (error) {
-      console.error('Erro ao iniciar Google Auth:', error);
-      Alert.alert('Erro', 'Erro ao iniciar autenticação com Google');
-      setSocialLoading({ ...socialLoading, google: false });
-    }
-  };
-
-  const handleGoogleResponse = async (googleResponse) => {
-    try {
-      const result = await loginWithGoogle(googleResponse);
-      
-      if (!result.success) {
-        // Só mostrar erro se não foi cancelamento
-        if (result.error !== 'Autenticação cancelada') {
-          Alert.alert('Erro', result.error || 'Erro ao fazer login com Google');
-        }
-      }
-    } catch (error) {
-      console.error('Erro no handleGoogleResponse:', error);
-      Alert.alert('Erro', 'Erro inesperado ao fazer login com Google');
-    } finally {
-      setSocialLoading({ ...socialLoading, google: false });
     }
   };
 
@@ -192,34 +150,11 @@ export default function LoginScreen({ navigation }) {
             style={styles.loginButton}
           />
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Botão de Login Social */}
-          <View style={styles.socialContainer}>
-            <TouchableOpacity
-              style={[styles.socialButton, styles.googleButton]}
-              onPress={handleGoogleLogin}
-              disabled={socialLoading.google || loading}
-            >
-              {socialLoading.google ? (
-                <Text style={styles.socialButtonText}>Carregando...</Text>
-              ) : (
-                <>
-                  <Ionicons name="logo-google" size={20} color={colors.white} />
-                  <Text style={styles.socialButtonText}>Continuar com Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
           <Button
             title="Criar nova conta"
             onPress={() => navigation.navigate(SCREEN_NAMES.REGISTER)}
             variant="outline"
+            style={styles.registerButton}
           />
         </Animated.View>
       </ScrollView>
@@ -261,20 +196,8 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: 8,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: colors.textMuted,
-    fontSize: 14,
+  registerButton: {
+    marginTop: 16,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
@@ -285,26 +208,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
     fontWeight: '500',
-  },
-  socialContainer: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  socialButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 12,
-  },
-  googleButton: {
-    backgroundColor: '#4285F4',
-  },
-  socialButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
