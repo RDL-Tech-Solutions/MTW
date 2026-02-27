@@ -12,10 +12,14 @@ class ProductController {
   // Listar produtos
   static async list(req, res, next) {
     try {
+      logger.info(`📦 Buscando produtos - Página: ${req.query.page || 1}, Limit: ${req.query.limit || 20}`);
       // CACHE REMOVIDO: Direto ao banco
       const result = await Product.findAll(req.query);
+      logger.info(`✅ ${result.products?.length || 0} produtos encontrados`);
       res.json(successResponse(result));
     } catch (error) {
+      logger.error(`❌ Erro ao listar produtos: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
       next(error);
     }
   }

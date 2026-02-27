@@ -224,28 +224,31 @@ class Product {
 
   // Listar produtos com filtros
   static async findAll(filters = {}) {
-    const {
-      page = 1,
-      limit = 20,
-      category,
-      platform,
-      min_price,
-      max_price,
-      min_discount,
-      search,
-      status,
-      coupon_id,
-      sort = 'created_at',
-      order = 'desc'
-    } = filters;
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        category,
+        platform,
+        min_price,
+        max_price,
+        min_discount,
+        search,
+        status,
+        coupon_id,
+        sort = 'created_at',
+        order = 'desc'
+      } = filters;
 
-    const offset = (page - 1) * limit;
+      logger.debug(`🔍 Product.findAll - Filtros: ${JSON.stringify({ page, limit, category, platform, status })}`);
 
-    let query = supabase
-      .from('products_full')
-      .select('*', { count: 'exact' })
-      .eq('is_active', true)
-      .in('status', ['approved', 'created', 'published']); // Filtrar apenas produtos que devem aparecer no app
+      const offset = (page - 1) * limit;
+
+      let query = supabase
+        .from('products_full')
+        .select('*', { count: 'exact' })
+        .eq('is_active', true)
+        .in('status', ['approved', 'created', 'published']); // Filtrar apenas produtos que devem aparecer no app
 
     // Aplicar filtros
     if (category) query = query.eq('category_id', category);
@@ -289,7 +292,13 @@ class Product {
 
     const { data, error, count } = await query;
 
-    if (error) throw error;
+    if (error) {
+      logger.error(`❌ Erro na query do Supabase: ${error.message}`);
+      logger.error(`Detalhes: ${JSON.stringify(error)}`);
+      throw error;
+    }
+
+    logger.debug(`✅ Query executada - ${count} produtos encontrados`);
 
     // Calcular preço final com cupom para cada produto
     // Novo comportamento dinâmico de múltiplos cupons
@@ -297,70 +306,82 @@ class Product {
     try {
       const Coupon = (await import('./Coupon.js')).default;
       allCoupons = await Coupon.findActiveApplicable();
+      logger.debug(`📋 ${allCoupons.length} cupons ativos encontrados`);
     } catch (e) {
-      logger.warn(`Erro ao buscar cupons para calcular precos dinâmicos: ${e.message}`);
+      logger.warn(`⚠️ Erro ao buscar cupons para calcular precos dinâmicos: ${e.message}`);
     }
 
     const productsWithFinalPrice = await Promise.all(
       (data || []).map(async (product) => {
-        let applicableCoupons = [];
-        const currentPrice = parseFloat(product.current_price) || 0;
-        let bestFinalPrice = currentPrice;
+        try {
+          let applicableCoupons = [];
+          const currentPrice = parseFloat(product.current_price) || 0;
+          let bestFinalPrice = currentPrice;
 
-        for (const coupon of allCoupons) {
-          const isDirectlyLinked = product.coupon_id === coupon.id;
-          const isListedInApplicable = coupon.applicable_products && coupon.applicable_products.includes(product.id);
-          const isGeneralPlatform = coupon.is_general === true && (coupon.platform === 'general' || coupon.platform === product.platform);
+          for (const coupon of allCoupons) {
+            const isDirectlyLinked = product.coupon_id === coupon.id;
+            const isListedInApplicable = coupon.applicable_products && coupon.applicable_products.includes(product.id);
+            const isGeneralPlatform = coupon.is_general === true && (coupon.platform === 'general' || coupon.platform === product.platform);
 
-          // Verificar se o cupom é aplicável ao produto
-          if (isDirectlyLinked || isListedInApplicable || isGeneralPlatform) {
-            // IMPORTANTE: Verificar se o produto atende ao valor mínimo de compra do cupom
-            const minPurchase = parseFloat(coupon.min_purchase) || 0;
-            if (minPurchase > 0 && currentPrice < minPurchase) {
-              // Produto não atinge o valor mínimo, pular este cupom
-              continue;
-            }
+            // Verificar se o cupom é aplicável ao produto
+            if (isDirectlyLinked || isListedInApplicable || isGeneralPlatform) {
+              // IMPORTANTE: Verificar se o produto atende ao valor mínimo de compra do cupom
+              const minPurchase = parseFloat(coupon.min_purchase) || 0;
+              if (minPurchase > 0 && currentPrice < minPurchase) {
+                // Produto não atinge o valor mínimo, pular este cupom
+                continue;
+              }
 
-            applicableCoupons.push(coupon);
+              applicableCoupons.push(coupon);
 
-            const discountValue = parseFloat(coupon.discount_value) || 0;
-            let tempFinalPrice = currentPrice;
+              const discountValue = parseFloat(coupon.discount_value) || 0;
+              let tempFinalPrice = currentPrice;
 
-            if (coupon.discount_type === 'percentage') {
-              tempFinalPrice = currentPrice - (currentPrice * (discountValue / 100));
-            } else {
-              tempFinalPrice = Math.max(0, currentPrice - discountValue);
-            }
+              if (coupon.discount_type === 'percentage') {
+                tempFinalPrice = currentPrice - (currentPrice * (discountValue / 100));
+              } else {
+                tempFinalPrice = Math.max(0, currentPrice - discountValue);
+              }
 
-            if (coupon.max_discount_value && coupon.max_discount_value > 0) {
-              const discountAmount = currentPrice - tempFinalPrice;
-              if (discountAmount > coupon.max_discount_value) {
-                tempFinalPrice = currentPrice - coupon.max_discount_value;
+              if (coupon.max_discount_value && coupon.max_discount_value > 0) {
+                const discountAmount = currentPrice - tempFinalPrice;
+                if (discountAmount > coupon.max_discount_value) {
+                  tempFinalPrice = currentPrice - coupon.max_discount_value;
+                }
+              }
+
+              if (tempFinalPrice < bestFinalPrice) {
+                bestFinalPrice = tempFinalPrice;
               }
             }
-
-            if (tempFinalPrice < bestFinalPrice) {
-              bestFinalPrice = tempFinalPrice;
-            }
           }
+
+          const enrichedProduct = { ...product, coupons: applicableCoupons };
+
+          if (applicableCoupons.length > 0) {
+            enrichedProduct.final_price = parseFloat(bestFinalPrice.toFixed(2));
+            enrichedProduct.price_with_coupon = parseFloat(bestFinalPrice.toFixed(2));
+          } else {
+            // Nenhum cupom ativamente vinculável, garantir que o preço volte ao original
+            enrichedProduct.final_price = currentPrice;
+            enrichedProduct.price_with_coupon = currentPrice;
+            // Se o produto possuía um cupom desativado, esconder seus detalhes legados
+            enrichedProduct.coupon_id = null;
+            enrichedProduct.coupon_discount_value = null;
+            enrichedProduct.coupon_discount_type = null;
+          }
+
+          return enrichedProduct;
+        } catch (productError) {
+          logger.error(`❌ Erro ao processar produto ${product.id}: ${productError.message}`);
+          // Retornar produto sem processamento de cupom em caso de erro
+          return {
+            ...product,
+            coupons: [],
+            final_price: parseFloat(product.current_price) || 0,
+            price_with_coupon: parseFloat(product.current_price) || 0
+          };
         }
-
-        const enrichedProduct = { ...product, coupons: applicableCoupons };
-
-        if (applicableCoupons.length > 0) {
-          enrichedProduct.final_price = parseFloat(bestFinalPrice.toFixed(2));
-          enrichedProduct.price_with_coupon = parseFloat(bestFinalPrice.toFixed(2));
-        } else {
-          // Nenhum cupom ativamente vinculável, garantir que o preço volte ao original
-          enrichedProduct.final_price = currentPrice;
-          enrichedProduct.price_with_coupon = currentPrice;
-          // Se o produto possuía um cupom desativado, esconder seus detalhes legados
-          enrichedProduct.coupon_id = null;
-          enrichedProduct.coupon_discount_value = null;
-          enrichedProduct.coupon_discount_type = null;
-        }
-
-        return enrichedProduct;
       })
     );
 
@@ -371,7 +392,12 @@ class Product {
       limit,
       totalPages: Math.ceil(count / limit)
     };
+  } catch (error) {
+    logger.error(`❌ Erro crítico em Product.findAll: ${error.message}`);
+    logger.error(`Stack: ${error.stack}`);
+    throw error;
   }
+}
 
   // Atualizar produto
   static async update(id, updates) {
