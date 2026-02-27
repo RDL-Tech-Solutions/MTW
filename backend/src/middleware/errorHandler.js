@@ -4,13 +4,19 @@ import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
 // Middleware de tratamento de erros
 export const errorHandler = (err, req, res, next) => {
   // Log detalhado do erro
-  logger.error(`❌ Error: ${err.message}`);
+  const errorMessage = err.message || err.toString() || 'Erro desconhecido';
+  logger.error(`❌ Error: ${errorMessage}`);
   logger.error(`📍 URL: ${req.method} ${req.url}`);
-  logger.error(`🔍 Stack: ${err.stack}`);
+  logger.error(`🔍 Stack: ${err.stack || 'Sem stack trace'}`);
+  logger.error(`📦 Tipo: ${err.constructor?.name || typeof err}`);
   
   // Log adicional do objeto de erro completo em desenvolvimento
   if (process.env.NODE_ENV === 'development') {
-    logger.error(`📦 Erro completo: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`);
+    try {
+      logger.error(`📦 Erro completo: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`);
+    } catch (jsonError) {
+      logger.error(`⚠️ Não foi possível serializar o erro: ${jsonError.message}`);
+    }
   }
 
   // Erro de validação do Joi

@@ -293,9 +293,10 @@ class Product {
     const { data, error, count } = await query;
 
     if (error) {
-      logger.error(`❌ Erro na query do Supabase: ${error.message}`);
-      logger.error(`Detalhes: ${JSON.stringify(error)}`);
-      throw error;
+      logger.error(`❌ Erro na query do Supabase: ${error.message || 'Erro desconhecido'}`);
+      logger.error(`Código: ${error.code || 'N/A'}`);
+      logger.error(`Detalhes completos: ${JSON.stringify(error, null, 2)}`);
+      throw new Error(`Erro do Supabase: ${error.message || JSON.stringify(error)}`);
     }
 
     logger.debug(`✅ Query executada - ${count} produtos encontrados`);
@@ -393,8 +394,11 @@ class Product {
       totalPages: Math.ceil(count / limit)
     };
   } catch (error) {
-    logger.error(`❌ Erro crítico em Product.findAll: ${error.message}`);
-    logger.error(`Stack: ${error.stack}`);
+    logger.error(`❌ Erro crítico em Product.findAll`);
+    logger.error(`Mensagem: ${error.message || 'Sem mensagem'}`);
+    logger.error(`Tipo: ${error.constructor.name}`);
+    logger.error(`Stack: ${error.stack || 'Sem stack trace'}`);
+    logger.error(`Objeto completo: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`);
     throw error;
   }
 }

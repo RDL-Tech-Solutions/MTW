@@ -18,8 +18,10 @@ class ProductController {
       logger.info(`✅ ${result.products?.length || 0} produtos encontrados`);
       res.json(successResponse(result));
     } catch (error) {
-      logger.error(`❌ Erro ao listar produtos: ${error.message}`);
-      logger.error(`Stack: ${error.stack}`);
+      logger.error(`❌ Erro ao listar produtos`);
+      logger.error(`Mensagem: ${error.message || 'Sem mensagem'}`);
+      logger.error(`Tipo: ${error.constructor.name}`);
+      logger.error(`Stack: ${error.stack || 'Sem stack trace'}`);
       next(error);
     }
   }
