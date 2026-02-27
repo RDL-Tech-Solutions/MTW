@@ -293,3 +293,37 @@ function getPlatformName(platform) {
   return names[platform?.toLowerCase()] || platform || 'Loja';
 }
 
+
+/**
+ * Handler principal do fluxo de gerenciamento de cupons
+ * Coordena as diferentes etapas do fluxo
+ */
+export const handleCouponManagementFlow = async (msg, body, interaction) => {
+  try {
+    const step = interaction.step;
+
+    // Step 1: Seleção do cupom
+    if (step === 'COUPON_SELECT') {
+      return await selectCoupon(null, msg, interaction, body);
+    }
+
+    // Step 2: Ação no cupom
+    if (step === 'COUPON_ACTION') {
+      return await executeCouponAction(null, msg, interaction, body);
+    }
+
+    // Step 3: Confirmação de marcar como esgotado
+    if (step === 'COUPON_CONFIRM_OUTOFSTOCK') {
+      return await markCouponAsOutOfStock(null, msg, interaction, body);
+    }
+
+    // Step desconhecido
+    logger.warn(`Step desconhecido no fluxo de cupons: ${step}`);
+    return { step: 'IDLE' };
+
+  } catch (error) {
+    logger.error(`Erro no fluxo de gerenciamento de cupons: ${error.message}`);
+    await msg.reply('❌ Erro ao processar. Tente novamente.');
+    return { step: 'IDLE' };
+  }
+};

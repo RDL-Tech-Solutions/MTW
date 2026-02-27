@@ -67,57 +67,7 @@ export async function loginWithGoogle() {
   }
 }
 
-/**
- * Login com Facebook
- * Usa backend para OAuth - não expõe credenciais no app
- */
-export async function loginWithFacebook() {
-  try {
-    // Obter URL de OAuth do backend
-    const response = await api.post('/auth/social/url', {
-      provider: 'facebook',
-      redirect_url: redirectTo,
-    });
 
-    const { url: oauthUrl } = response.data.data;
-
-    if (!oauthUrl) {
-      throw new Error('URL de autenticação não retornada');
-    }
-
-    // Abrir URL de autenticação
-    if (Platform.OS === 'web') {
-      // Web: redirecionar
-      window.location.href = oauthUrl;
-      return { success: false, error: 'Redirecionando...' };
-    } else {
-      // Mobile: usar WebBrowser
-      const result = await WebBrowser.openAuthSessionAsync(
-        oauthUrl,
-        redirectTo
-      );
-
-      if (result.type === 'success') {
-        // Extrair código da URL
-        const url = new URL(result.url);
-        const code = url.searchParams.get('code');
-
-        if (code) {
-          // Enviar código para backend processar
-          return await processOAuthCallback(code, 'facebook');
-        }
-      }
-    }
-
-    throw new Error('Falha na autenticação Facebook');
-  } catch (error) {
-    console.error('Erro no login Facebook:', error);
-    return {
-      success: false,
-      error: error.response?.data?.error || error.message || 'Erro ao fazer login com Facebook',
-    };
-  }
-}
 
 /**
  * Processar callback OAuth

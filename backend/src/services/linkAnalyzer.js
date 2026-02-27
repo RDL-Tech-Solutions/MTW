@@ -50,6 +50,35 @@ class LinkAnalyzer {
     try {
       console.log(`   🔄 Seguindo redirecionamentos de: ${url}`);
 
+      // Para links encurtados da Amazon (amzn.to), usar uma abordagem diferente
+      if (url.includes('amzn.to')) {
+        console.log(`   🔗 Link encurtado da Amazon detectado, usando método alternativo...`);
+        try {
+          // Tentar com HEAD request primeiro (mais leve)
+          const headResponse = await axios.head(url, {
+            maxRedirects: 0, // Não seguir automaticamente
+            validateStatus: (status) => status >= 200 && status < 400,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'pt-BR,pt;q=0.9',
+            },
+            timeout: 10000
+          });
+          
+          // Pegar o Location header do redirecionamento
+          const location = headResponse.headers.location || headResponse.headers.Location;
+          if (location) {
+            const finalUrl = location.startsWith('http') ? location : new URL(location, url).toString();
+            console.log(`   ✅ URL final obtida via HEAD: ${finalUrl.substring(0, 100)}...`);
+            return finalUrl;
+          }
+        } catch (headError) {
+          // Se HEAD falhar, tentar com GET mas com timeout menor
+          console.log(`   ⚠️ HEAD request falhou, tentando GET...`);
+        }
+      }
+
       let currentUrl = url;
       let finalUrl = url;
       let productUrl = null; // Guardar URL de produto se detectada
@@ -243,7 +272,21 @@ class LinkAnalyzer {
           break;
 
         } catch (error) {
-          console.log(`   ⚠️ Erro na tentativa ${attempts}: ${error.message}`);
+          const errorMsg = error.response?.status 
+            ? `HTTP ${error.response.status}: ${error.response.statusText}` 
+            : error.message;
+          console.log(`   ⚠️ Erro na tentativa ${attempts}: ${errorMsg}`);
+          
+          // Se for erro de timeout ou rede, tentar novamente
+          if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+            console.log(`   🔄 Erro de rede/timeout, tentando novamente...`);
+          }
+          // Se for erro 403/429 (bloqueio), não adianta tentar novamente
+          else if (error.response?.status === 403 || error.response?.status === 429) {
+            console.log(`   🚫 Acesso bloqueado (${error.response.status}), parando tentativas`);
+            break;
+          }
+          
           if (attempts >= maxAttempts) {
             console.log(`   ⚠️ Máximo de tentativas atingido, usando última URL conhecida`);
             break;
@@ -260,10 +303,17 @@ class LinkAnalyzer {
       }
 
       console.log(`   ✅ URL final após ${attempts} tentativa(s): ${finalUrl.substring(0, 100)}...`);
+      
+      // Se a URL não mudou após todas as tentativas, avisar
+      if (finalUrl === url && attempts > 1) {
+        console.log(`   ⚠️ URL não mudou após seguir redirecionamentos`);
+      }
+      
       return finalUrl;
 
     } catch (error) {
       console.error(`   ❌ Erro ao seguir redirecionamentos: ${error.message}`);
+      console.error(`   📍 Stack: ${error.stack?.split('\n')[0]}`);
       return url; // Retornar URL original em caso de erro
     }
   }
@@ -3004,6 +3054,33 @@ class LinkAnalyzer {
             url = finalUrl;
           } else {
             console.log('   ⚠️ URL não mudou após seguir redirecionamentos');
+            
+            // Tentar método alternativo: fazer requisição e buscar ASIN no HTML
+            if (url.includes('amzn.to')) {
+              console.log('   🔍 Tentando extrair ASIN do HTML da página encurtada...');
+              try {
+                const response = await axios.get(url, {
+                  maxRedirects: 10,
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                  },
+                  timeout: 15000
+                });
+                
+                // Pegar URL final após redirecionamentos automáticos do axios
+                const redirectedUrl = response.request?.res?.responseUrl || 
+                                     response.request?.responseURL || 
+                                     response.config?.url;
+                
+                if (redirectedUrl && redirectedUrl !== url) {
+                  console.log(`   ✅ URL obtida via axios redirect: ${redirectedUrl}`);
+                  url = redirectedUrl;
+                }
+              } catch (altError) {
+                console.warn(`   ⚠️ Método alternativo falhou: ${altError.message}`);
+              }
+            }
           }
         } catch (e) {
           console.warn(`   ⚠️ Falha ao seguir redirecionamento: ${e.message}`);

@@ -23,9 +23,9 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState({ google: false, facebook: false });
+  const [socialLoading, setSocialLoading] = useState({ google: false });
 
-  const { login, loginWithGoogle, loginWithFacebook } = useAuthStore();
+  const { login, loginWithGoogle } = useAuthStore();
 
   // Animações
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -92,16 +92,6 @@ export default function LoginScreen({ navigation }) {
 
     if (!result.success) {
       Alert.alert('Erro', result.error || 'Erro ao fazer login com Google');
-    }
-  };
-
-  const handleFacebookLogin = async () => {
-    setSocialLoading({ ...socialLoading, facebook: true });
-    const result = await loginWithFacebook();
-    setSocialLoading({ ...socialLoading, facebook: false });
-
-    if (!result.success) {
-      Alert.alert('Erro', result.error || 'Erro ao fazer login com Facebook');
     }
   };
 
@@ -178,7 +168,7 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Botões de Login Social */}
+          {/* Botão de Login Social */}
           <View style={styles.socialContainer}>
             <TouchableOpacity
               style={[styles.socialButton, styles.googleButton]}
@@ -191,21 +181,6 @@ export default function LoginScreen({ navigation }) {
                 <>
                   <Ionicons name="logo-google" size={20} color={colors.white} />
                   <Text style={styles.socialButtonText}>Continuar com Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.socialButton, styles.facebookButton]}
-              onPress={handleFacebookLogin}
-              disabled={socialLoading.facebook || loading}
-            >
-              {socialLoading.facebook ? (
-                <Text style={styles.socialButtonText}>Carregando...</Text>
-              ) : (
-                <>
-                  <Ionicons name="logo-facebook" size={20} color={colors.white} />
-                  <Text style={styles.socialButtonText}>Continuar com Facebook</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -296,9 +271,6 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#4285F4',
-  },
-  facebookButton: {
-    backgroundColor: '#1877F2',
   },
   socialButtonText: {
     color: colors.white,

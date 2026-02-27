@@ -12,6 +12,7 @@ router.post('/pending/:id/approve', authenticateToken, requireAdmin, ProductCont
 router.post('/pending/:id/approve-schedule', authenticateToken, requireAdmin, ProductController.approveAndSchedule);
 router.post('/pending/:id/approve-only', authenticateToken, requireAdmin, ProductController.approveOnly); // NOVO: Aprovar sem publicar
 router.post('/pending/:id/reject', authenticateToken, requireAdmin, ProductController.reject);
+router.post('/batch-capture', authenticateToken, requireAdmin, createLimiterDefault, ProductController.batchCapture); // NOVO: Captura em lote
 
 // Estatísticas de produtos
 router.get('/stats', optionalAuth, ProductController.getStats);

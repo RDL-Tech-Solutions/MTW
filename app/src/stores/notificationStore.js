@@ -145,8 +145,17 @@ export const useNotificationStore = create((set, get) => ({
   // Atualizar preferências
   updatePreferences: async (updates) => {
     try {
+      console.log('🔄 Atualizando preferências...');
+      console.log('📍 URL Base:', api.defaults.baseURL);
+      console.log('📦 Dados:', JSON.stringify(updates, null, 2));
+      
       set({ isLoading: true });
+      
       const response = await api.put('/notification-preferences', updates);
+      
+      console.log('✅ Resposta recebida:', response.status);
+      console.log('📦 Dados da resposta:', JSON.stringify(response.data, null, 2));
+      
       const preferences = response.data.data;
 
       set({ preferences, isEnabled: preferences?.push_enabled ?? true });
@@ -154,7 +163,32 @@ export const useNotificationStore = create((set, get) => ({
 
       return { success: true };
     } catch (error) {
-      console.error('Erro ao atualizar preferências:', error);
+      console.error('❌ Erro ao atualizar preferências:', error);
+      console.error('📍 URL tentada:', error.config?.url);
+      console.error('📍 URL completa:', error.config?.baseURL + error.config?.url);
+      console.error('🔧 Código de erro:', error.code);
+      console.error('📡 Status HTTP:', error.response?.status);
+      console.error('📡 Dados da resposta:', error.response?.data);
+      console.error('🔑 Headers:', error.config?.headers);
+      
+      // Verificar se é erro de autenticação
+      if (error.response?.status === 401) {
+        console.error('🔐 Erro de autenticação - Token inválido ou expirado');
+      }
+      
+      // Verificar se é erro de rede
+      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+        console.error('⏱️ Timeout - Servidor demorou muito para responder');
+      }
+      
+      if (error.message === 'Network Error') {
+        console.error('🌐 Erro de rede - Verifique:');
+        console.error('   1. Backend está rodando?');
+        console.error('   2. URL está correta?', api.defaults.baseURL);
+        console.error('   3. Firewall bloqueando?');
+        console.error('   4. Certificado SSL válido?');
+      }
+      
       return {
         success: false,
         error: error.response?.data?.error || error.message

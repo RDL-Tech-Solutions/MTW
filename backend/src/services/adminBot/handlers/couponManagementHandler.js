@@ -85,7 +85,18 @@ async function sendCouponCard(ctx, coupon) {
  */
 export const confirmOutOfStock = async (ctx) => {
   try {
-    const couponId = ctx.match[1];
+    // Extrair couponId do callback data
+    const data = ctx.callbackQuery?.data || '';
+    const couponId = data.split(':')[1];
+
+    if (!couponId) {
+      await ctx.answerCallbackQuery({
+        text: '❌ ID do cupom não encontrado',
+        show_alert: true
+      });
+      return;
+    }
+
     const coupon = await Coupon.findById(couponId);
 
     if (!coupon) {
@@ -136,7 +147,17 @@ export const confirmOutOfStock = async (ctx) => {
  */
 export const markCouponAsOutOfStock = async (ctx) => {
   try {
-    const couponId = ctx.match[1];
+    // Extrair couponId do callback data
+    const data = ctx.callbackQuery?.data || '';
+    const couponId = data.split(':')[1];
+
+    if (!couponId) {
+      await ctx.answerCallbackQuery({
+        text: '❌ ID do cupom não encontrado',
+        show_alert: true
+      });
+      return;
+    }
 
     await ctx.answerCallbackQuery({
       text: '⏳ Processando...'

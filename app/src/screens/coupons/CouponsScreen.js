@@ -356,7 +356,7 @@ export default function CouponsScreen({ navigation }) {
     try {
       setLoading(true);
       const params = {
-        page,
+        page: 1,
         limit: 50,
         is_active: true,
         is_out_of_stock: false // Filtrar cupons esgotados

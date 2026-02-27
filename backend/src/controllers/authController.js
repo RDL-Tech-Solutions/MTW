@@ -269,9 +269,9 @@ class AuthController {
     try {
       const { provider, redirect_url } = req.body;
 
-      if (!provider || !['google', 'facebook'].includes(provider)) {
+      if (!provider || provider !== 'google') {
         return res.status(400).json(
-          errorResponse('Provider inválido. Use "google" ou "facebook"', 'INVALID_PROVIDER')
+          errorResponse('Provider inválido. Use "google"', 'INVALID_PROVIDER')
         );
       }
 
@@ -617,14 +617,43 @@ class AuthController {
     try {
       const { email } = req.body;
 
+      logger.info(`📧 Solicitação de recuperação de senha para: ${email}`);
+
+      if (!email || !email.trim()) {
+        return res.status(400).json(
+          errorResponse('Email é obrigatório')
+        );
+      }
+
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json(
+          errorResponse('Email inválido')
+        );
+      }
+
       // Buscar usuário
-      const user = await User.findByEmail(email);
+      let user;
+      try {
+        user = await User.findByEmail(email);
+      } catch (dbError) {
+        logger.error(`❌ Erro ao buscar usuário no banco: ${dbError.message}`);
+        logger.error(`Stack: ${dbError.stack}`);
+        return res.status(500).json(
+          errorResponse('Erro no banco de dados. Tente novamente mais tarde.')
+        );
+      }
+
       if (!user) {
+        logger.info(`⚠️ Email não encontrado: ${email}`);
         // Por segurança, não revelar se o email existe ou não
         return res.json(
           successResponse(null, 'Se o email existir, você receberá instruções para redefinir sua senha')
         );
       }
+
+      logger.info(`✅ Usuário encontrado: ${user.id}`);
 
       // Gerar token de recuperação (válido por 1 hora)
       const crypto = await import('crypto');
@@ -632,29 +661,46 @@ class AuthController {
       const resetTokenHash = crypto.default.createHash('sha256').update(resetToken).digest('hex');
       const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hora
 
+      logger.info(`🔑 Token gerado para ${email}`);
+
       // Salvar token no banco
-      await User.update(user.id, {
-        reset_token: resetTokenHash,
-        reset_token_expiry: resetTokenExpiry.toISOString(),
-      });
-
-      // Enviar email
-      const emailService = (await import('../services/emailService.js')).default;
-      const emailResult = await emailService.sendPasswordResetEmail(email, resetToken, user.name);
-
-      if (!emailResult.success) {
-        logger.error(`Erro ao enviar email de recuperação para ${email}: ${emailResult.error}`);
+      try {
+        await User.update(user.id, {
+          reset_token: resetTokenHash,
+          reset_token_expiry: resetTokenExpiry.toISOString(),
+        });
+        logger.info(`✅ Token salvo no banco para ${email}`);
+      } catch (updateError) {
+        logger.error(`❌ Erro ao salvar token no banco: ${updateError.message}`);
         return res.status(500).json(
-          errorResponse('Erro ao enviar email. Tente novamente mais tarde.')
+          errorResponse('Erro ao processar solicitação. Tente novamente mais tarde.')
         );
       }
 
-      logger.info(`Email de recuperação enviado para: ${email}`);
+      // Enviar email
+      try {
+        const emailService = (await import('../services/emailService.js')).default;
+        const emailResult = await emailService.sendPasswordResetEmail(email, resetToken, user.name);
+
+        if (!emailResult.success) {
+          logger.error(`❌ Erro ao enviar email de recuperação para ${email}: ${emailResult.error}`);
+          return res.status(500).json(
+            errorResponse('Erro ao enviar email. Tente novamente mais tarde.')
+          );
+        }
+
+        logger.info(`✅ Email de recuperação enviado para: ${email}`);
+      } catch (emailError) {
+        logger.error(`❌ Exceção ao enviar email: ${emailError.message}`);
+        // Mesmo com erro no email, não revelar se o usuário existe
+      }
 
       res.json(
         successResponse(null, 'Se o email existir, você receberá instruções para redefinir sua senha')
       );
     } catch (error) {
+      logger.error(`❌ Erro geral em forgotPassword: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
       next(error);
     }
   }

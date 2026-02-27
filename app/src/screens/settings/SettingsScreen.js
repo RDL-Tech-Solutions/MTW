@@ -111,8 +111,8 @@ export default function SettingsScreen({ navigation }) {
             iconBg="#3B82F6"
             title="Notificações Push"
             subtitle="Alertas de novas ofertas"
-            value={preferences?.enable_push || false}
-            onToggle={() => handleToggle('enable_push')}
+            value={preferences?.push_enabled || false}
+            onToggle={() => handleToggle('push_enabled')}
           />
           <NavRow
             icon="options"

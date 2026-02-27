@@ -937,6 +937,140 @@ class ProductController {
       next(error);
     }
   }
+
+  // Captura em lote de produtos (admin)
+  static async batchCapture(req, res, next) {
+    try {
+      const { urls } = req.body;
+
+      if (!urls || !Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json(
+          errorResponse('Lista de URLs é obrigatória', 'MISSING_URLS')
+        );
+      }
+
+      // Limitar quantidade de URLs por vez (máximo 50)
+      if (urls.length > 50) {
+        return res.status(400).json(
+          errorResponse('Máximo de 50 URLs por vez', 'TOO_MANY_URLS')
+        );
+      }
+
+      logger.info(`📦 Iniciando captura em lote de ${urls.length} produtos...`);
+
+      const results = [];
+      const linkAnalyzer = (await import('../services/linkAnalyzer.js')).default;
+
+      // Processar cada URL
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i].trim();
+        
+        if (!url) {
+          results.push({
+            url: url,
+            success: false,
+            error: 'URL vazia'
+          });
+          continue;
+        }
+
+        try {
+          logger.info(`📥 [${i + 1}/${urls.length}] Processando: ${url.substring(0, 80)}...`);
+
+          // Validar URL
+          try {
+            new URL(url);
+          } catch {
+            results.push({
+              url: url,
+              success: false,
+              error: 'URL inválida'
+            });
+            continue;
+          }
+
+          // Detectar plataforma
+          const platform = linkAnalyzer.detectPlatform(url);
+          
+          if (platform === 'unknown') {
+            results.push({
+              url: url,
+              success: false,
+              error: 'Plataforma não suportada'
+            });
+            continue;
+          }
+
+          logger.info(`   🏪 Plataforma detectada: ${platform}`);
+
+          // Extrair informações do produto usando analyzeLink
+          const productInfo = await linkAnalyzer.analyzeLink(url);
+
+          if (!productInfo || !productInfo.name) {
+            results.push({
+              url: url,
+              success: false,
+              error: 'Não foi possível extrair informações do produto'
+            });
+            continue;
+          }
+
+          // Criar produto com status 'pending'
+          const product = await Product.create({
+            name: productInfo.name,
+            description: productInfo.description || '',
+            current_price: productInfo.currentPrice || 0,
+            old_price: productInfo.oldPrice || 0,
+            discount_percentage: productInfo.discountPercentage || 0,
+            image_url: productInfo.imageUrl || '',
+            platform: productInfo.platform || platform,
+            original_link: url,
+            affiliate_link: productInfo.affiliateLink || url,
+            external_id: productInfo.productId || `batch_${Date.now()}_${i}`, // ID externo ou gerado
+            status: 'pending' // Salvar como pendente
+          });
+
+          logger.info(`   ✅ Produto capturado: ${product.name} (ID: ${product.id})`);
+
+          results.push({
+            url: url,
+            success: true,
+            product: {
+              id: product.id,
+              name: product.name,
+              platform: platform,
+              current_price: product.current_price
+            }
+          });
+
+        } catch (error) {
+          logger.error(`   ❌ Erro ao processar URL ${url}: ${error.message}`);
+          results.push({
+            url: url,
+            success: false,
+            error: error.message || 'Erro desconhecido'
+          });
+        }
+      }
+
+      // Contar sucessos e falhas
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      logger.info(`✅ Captura em lote concluída: ${successCount} sucessos, ${failureCount} falhas`);
+
+      res.json(successResponse({
+        total: urls.length,
+        success: successCount,
+        failed: failureCount,
+        results: results
+      }, `Captura concluída: ${successCount} produtos capturados, ${failureCount} falhas`));
+
+    } catch (error) {
+      logger.error(`❌ Erro na captura em lote: ${error.message}`);
+      next(error);
+    }
+  }
 }
 
 export default ProductController;

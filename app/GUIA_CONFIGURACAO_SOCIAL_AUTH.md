@@ -1,10 +1,13 @@
 # 🔐 Guia de Configuração - Autenticação Social
 
+## ⚠️ Nota Importante
+
+A autenticação com Facebook foi removida do sistema em 26/02/2026 para simplificar o processo de autenticação social. Apenas o Google OAuth está disponível.
+
 ## 📋 Pré-requisitos
 
 1. ✅ Supabase configurado
 2. ✅ Google Cloud Console (para Google OAuth)
-3. ✅ Facebook Developers (para Facebook OAuth)
 
 ---
 
@@ -38,35 +41,12 @@
 - Cole o Client ID e Client Secret
 - Salve
 
-### 1.3 Configurar Facebook
-
-1. Ative o toggle **Facebook**
-2. Você precisará de:
-   - **App ID**
-   - **App Secret**
-
-**Como obter**:
-1. Acesse: https://developers.facebook.com/
-2. Crie um app (tipo: **Consumer**)
-3. Adicione produto **Facebook Login**
-4. Vá em **Settings** > **Basic**
-5. Copie **App ID** e **App Secret**
-6. Em **Facebook Login** > **Settings**, adicione:
-   - **Valid OAuth Redirect URIs**: 
-     ```
-     https://rsulwtpvvjkysqqsbtlq.supabase.co/auth/v1/callback
-     ```
-
-**No Supabase**:
-- Cole o App ID e App Secret
-- Salve
-
-### 1.4 Configurar Redirect URLs no Supabase
+### 1.3 Configurar Redirect URLs no Supabase
 
 1. Vá em **Authentication** > **URL Configuration**
 2. Adicione em **Redirect URLs**:
    ```
-   mtwpromo://
+   precocerto://
    http://localhost:8081
    http://localhost:5173
    exp://localhost:8081
@@ -78,7 +58,7 @@
 
 ### 2.1 Adicionar Credenciais Supabase
 
-**Arquivo**: `mobile-app/app.json`
+**Arquivo**: `app/app.json`
 
 ```json
 {
@@ -86,7 +66,7 @@
     "supabaseUrl": "https://rsulwtpvvjkysqqsbtlq.supabase.co",
     "supabaseAnonKey": "SUA_ANON_KEY_AQUI"
   },
-  "scheme": "mtwpromo"
+  "scheme": "precocerto"
 }
 ```
 
@@ -98,7 +78,7 @@
 ### 2.2 Instalar Dependências
 
 ```bash
-cd mobile-app
+cd app
 npm install
 ```
 
@@ -115,9 +95,7 @@ npm install
 ### 3.1 No Supabase SQL Editor
 
 1. Acesse: https://supabase.com/dashboard/project/_/sql/new
-2. Execute o conteúdo de: `database/migrations/010_add_social_auth_fields.sql`
-
-**OU copie e cole**:
+2. Execute:
 
 ```sql
 -- Adicionar campos para autenticação social
@@ -137,13 +115,13 @@ CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider, provider_id)
 ### 4.1 Mobile App
 
 ```bash
-cd mobile-app
+cd app
 npx expo start --clear
 ```
 
 1. Abra o app
 2. Vá em Login/Registro
-3. Clique em "Continuar com Google" ou "Continuar com Facebook"
+3. Clique em "Continuar com Google"
 4. Autorize no navegador
 5. Deve redirecionar e fazer login
 
@@ -168,7 +146,7 @@ npm run dev
 
 ### Erro: "Redirect URI mismatch"
 - ✅ Verifique redirect URLs no Supabase
-- ✅ Verifique redirect URLs no Google/Facebook
+- ✅ Verifique redirect URLs no Google
 - ✅ Deve ser exatamente: `https://rsulwtpvvjkysqqsbtlq.supabase.co/auth/v1/callback`
 
 ### Erro: "Provider not enabled"
@@ -177,7 +155,6 @@ npm run dev
 
 ### Erro: "Invalid credentials"
 - ✅ Verifique Client ID e Secret
-- ✅ Verifique App ID e App Secret
 - ✅ Certifique-se de que copiou corretamente
 
 ---
@@ -185,17 +162,13 @@ npm run dev
 ## 📝 Checklist Final
 
 - [ ] Google OAuth configurado no Supabase
-- [ ] Facebook OAuth configurado no Supabase
 - [ ] Redirect URLs configuradas no Supabase
 - [ ] Redirect URLs configuradas no Google Cloud
-- [ ] Redirect URLs configuradas no Facebook
 - [ ] `supabaseAnonKey` adicionado no `app.json`
 - [ ] Migration executada no Supabase
 - [ ] Dependências instaladas no mobile app
 - [ ] Testado login Google
-- [ ] Testado login Facebook
 
 ---
 
 **Status**: ✅ Implementação completa - Configure OAuth para usar
-

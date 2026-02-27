@@ -51,6 +51,13 @@ export default function PendingProducts() {
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [editableCurrentPrice, setEditableCurrentPrice] = useState('');
   const [editableOldPrice, setEditableOldPrice] = useState('');
+  
+  // NOVO: Estados para captura em lote
+  const [isBatchCaptureDialogOpen, setIsBatchCaptureDialogOpen] = useState(false);
+  const [batchCaptureLinks, setBatchCaptureLinks] = useState('');
+  const [batchCapturing, setBatchCapturing] = useState(false);
+  const [batchCaptureProgress, setBatchCaptureProgress] = useState({ current: 0, total: 0 });
+  const [batchCaptureResults, setBatchCaptureResults] = useState(null);
 
   useEffect(() => {
     fetchPendingProducts(1);
@@ -353,6 +360,84 @@ export default function PendingProducts() {
     }
   };
 
+  // NOVO: Captura em lote
+  const handleBatchCapture = async () => {
+    if (!batchCaptureLinks.trim()) {
+      toast({
+        title: "Erro",
+        description: "Cole pelo menos um link de afiliado",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Extrair URLs (uma por linha)
+    const urls = batchCaptureLinks
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && line.startsWith('http'));
+
+    if (urls.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Nenhuma URL válida encontrada",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (urls.length > 50) {
+      toast({
+        title: "Erro",
+        description: "Máximo de 50 links por vez",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setBatchCapturing(true);
+    setBatchCaptureProgress({ current: 0, total: urls.length });
+    setBatchCaptureResults(null);
+
+    try {
+      toast({
+        title: "Iniciando captura...",
+        description: `Processando ${urls.length} links`,
+      });
+
+      const response = await api.post('/products/batch-capture', { urls });
+      const results = response.data.data;
+
+      setBatchCaptureResults(results);
+      setBatchCaptureProgress({ current: results.total, total: results.total });
+
+      toast({
+        title: "Captura concluída!",
+        description: `${results.success} produtos capturados, ${results.failed} falhas`,
+      });
+
+      // Recarregar lista de produtos pendentes
+      fetchPendingProducts(pagination.page);
+
+    } catch (error) {
+      console.error('Erro na captura em lote:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.error || "Falha na captura em lote",
+        variant: "destructive"
+      });
+    } finally {
+      setBatchCapturing(false);
+    }
+  };
+
+  const handleCloseBatchCaptureDialog = () => {
+    setIsBatchCaptureDialogOpen(false);
+    setBatchCaptureLinks('');
+    setBatchCaptureResults(null);
+    setBatchCaptureProgress({ current: 0, total: 0 });
+  };
+
   const handleApprove = async (shouldShorten = false) => {
     if (!affiliateLink || !affiliateLink.trim()) {
       toast({
@@ -644,6 +729,13 @@ export default function PendingProducts() {
             Aprove produtos capturados automaticamente antes de publicá-los
           </p>
         </div>
+        <Button
+          onClick={() => setIsBatchCaptureDialogOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Captura em Lote
+        </Button>
       </div>
 
       <Card>
@@ -1324,6 +1416,157 @@ export default function PendingProducts() {
                 'Confirmar Rejeição'
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Captura em Lote */}
+      <Dialog open={isBatchCaptureDialogOpen} onOpenChange={setIsBatchCaptureDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Captura em Lote de Produtos</DialogTitle>
+            <DialogDescription>
+              Cole múltiplos links de afiliado (um por linha) para capturar vários produtos de uma vez
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {!batchCaptureResults ? (
+              <>
+                <div>
+                  <Label htmlFor="batch_links">Links de Afiliado</Label>
+                  <textarea
+                    id="batch_links"
+                    value={batchCaptureLinks}
+                    onChange={(e) => setBatchCaptureLinks(e.target.value)}
+                    placeholder="Cole os links aqui, um por linha&#10;&#10;Exemplo:&#10;https://shopee.com.br/produto1&#10;https://mercadolivre.com.br/produto2&#10;https://amazon.com.br/produto3"
+                    className="w-full h-64 px-3 py-2 rounded-md border border-input bg-background resize-none font-mono text-sm"
+                    disabled={batchCapturing}
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Máximo de 50 links por vez. Plataformas suportadas: Shopee, Mercado Livre, Amazon, AliExpress, Kabum, Magazine Luiza, Pichau
+                  </p>
+                </div>
+
+                {batchCapturing && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                      <div className="flex-1">
+                        <p className="font-semibold text-blue-900 dark:text-blue-100">
+                          Capturando produtos...
+                        </p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          {batchCaptureProgress.current} de {batchCaptureProgress.total} processados
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md text-center">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {batchCaptureResults.total}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Total</div>
+                  </div>
+                  <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md text-center">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {batchCaptureResults.success}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Sucesso</div>
+                  </div>
+                  <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-center">
+                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                      {batchCaptureResults.failed}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Falhas</div>
+                  </div>
+                </div>
+
+                <div className="max-h-96 overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">Status</TableHead>
+                        <TableHead>URL</TableHead>
+                        <TableHead>Resultado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {batchCaptureResults.results.map((result, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            {result.success ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-600" />
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs max-w-xs truncate">
+                            {result.url}
+                          </TableCell>
+                          <TableCell>
+                            {result.success ? (
+                              <div className="text-sm">
+                                <div className="font-semibold text-green-600">
+                                  {result.product.name.substring(0, 50)}...
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {getPlatformName(result.product.platform)} • R$ {result.product.current_price.toFixed(2)}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-red-600">
+                                {result.error}
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            {!batchCaptureResults ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleCloseBatchCaptureDialog}
+                  disabled={batchCapturing}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleBatchCapture}
+                  disabled={batchCapturing || !batchCaptureLinks.trim()}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {batchCapturing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Capturando...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Iniciar Captura
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={handleCloseBatchCaptureDialog}>
+                Fechar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
