@@ -61,6 +61,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
     "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.8",
     "open": "^11.0.0",
     "puppeteer": "^24.36.0",
     "puppeteer-extra": "^3.3.6",
