@@ -9,7 +9,8 @@ const router = express.Router();
 // Rotas públicas
 router.post('/register', authLimiter, validate(registerSchema), AuthController.register);
 router.post('/login', authLimiter, validate(loginSchema), AuthController.login);
-router.post('/social', authLimiter, AuthController.socialAuth);
+router.post('/google', authLimiter, AuthController.googleAuth); // Nova rota Google direta
+router.post('/social', authLimiter, AuthController.socialAuth); // Manter para compatibilidade
 router.post('/social/url', authLimiter, AuthController.getOAuthUrl);
 router.get('/social/callback', AuthController.socialAuthCallback);
 router.post('/social/callback', AuthController.socialAuthCallback);

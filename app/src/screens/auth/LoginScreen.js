@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
+import { useGoogleAuth } from '../../services/authSocial';
 import Logo from '../../components/common/Logo';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -26,6 +27,9 @@ export default function LoginScreen({ navigation }) {
   const [socialLoading, setSocialLoading] = useState({ google: false });
 
   const { login, loginWithGoogle } = useAuthStore();
+
+  // Google Auth Hook
+  const [request, response, promptAsync] = useGoogleAuth();
 
   // Animações
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -53,6 +57,13 @@ export default function LoginScreen({ navigation }) {
       }),
     ]).start();
   }, []);
+
+  // Processar resposta do Google Auth
+  useEffect(() => {
+    if (response) {
+      handleGoogleResponse(response);
+    }
+  }, [response]);
 
   const validate = () => {
     const newErrors = {};
@@ -86,12 +97,31 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleGoogleLogin = async () => {
-    setSocialLoading({ ...socialLoading, google: true });
-    const result = await loginWithGoogle();
-    setSocialLoading({ ...socialLoading, google: false });
+    try {
+      setSocialLoading({ ...socialLoading, google: true });
+      await promptAsync();
+    } catch (error) {
+      console.error('Erro ao iniciar Google Auth:', error);
+      Alert.alert('Erro', 'Erro ao iniciar autenticação com Google');
+      setSocialLoading({ ...socialLoading, google: false });
+    }
+  };
 
-    if (!result.success) {
-      Alert.alert('Erro', result.error || 'Erro ao fazer login com Google');
+  const handleGoogleResponse = async (googleResponse) => {
+    try {
+      const result = await loginWithGoogle(googleResponse);
+      
+      if (!result.success) {
+        // Só mostrar erro se não foi cancelamento
+        if (result.error !== 'Autenticação cancelada') {
+          Alert.alert('Erro', result.error || 'Erro ao fazer login com Google');
+        }
+      }
+    } catch (error) {
+      console.error('Erro no handleGoogleResponse:', error);
+      Alert.alert('Erro', 'Erro inesperado ao fazer login com Google');
+    } finally {
+      setSocialLoading({ ...socialLoading, google: false });
     }
   };
 

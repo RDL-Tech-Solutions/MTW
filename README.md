@@ -1,273 +1,386 @@
 # 🎯 PreçoCerto - Plataforma Completa de Cupons e Promoções
 
-Sistema completo de cupons, promoções e afiliados com app mobile, painel administrativo e backend robusto.
+> Sistema completo de cupons, promoções e afiliados com app mobile, painel administrativo e backend robusto.
 
-## 📱 Módulos do Sistema
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![React Native](https://img.shields.io/badge/React%20Native-0.81-blue.svg)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-54-black.svg)](https://expo.dev/)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
-### 1. **Backend API** (Node.js + Express + Supabase)
-API REST completa com autenticação, integração com múltiplas plataformas, sistema de notificações, bots e automações.
+## 📋 Índice
 
-### 2. **Painel Admin** (React + Vite + Tailwind + shadcn/ui)
-Interface administrativa completa para gerenciar produtos, cupons, categorias, analytics, bots e configurações.
+- [Visão Geral](#-visão-geral)
+- [Módulos do Sistema](#-módulos-do-sistema)
+- [Quick Start](#-quick-start)
+- [Funcionalidades](#-funcionalidades)
+- [Stack Tecnológico](#-stack-tecnológico)
+- [Integrações](#-integrações)
+- [Documentação](#-documentação)
+- [Deploy](#-deploy)
+- [Changelog](#-changelog)
 
-### 3. **App Mobile** (React Native + Expo + NativeWind)
-Aplicativo para usuários finais com notificações push, favoritos, sistema VIP e mais.
+## 🎯 Visão Geral
+
+PreçoCerto é uma plataforma completa para gerenciamento de cupons e promoções, integrando múltiplas plataformas de e-commerce (Mercado Livre, Shopee, Amazon, AliExpress) com sistema de notificações via WhatsApp e Telegram.
+
+**Versão Atual:** 2.2.0 (Fevereiro 2026)
+
+### Novidades da v2.2.0 ⭐
+- ✅ Google OAuth direto (sem dependência do Supabase OAuth)
+- ✅ Sistema SMTP completo para envio de emails
+- ✅ Recuperação de senha via email
+- ✅ UI/UX melhorado no app mobile
+- ✅ Documentação expandida com novos guias
+- ✅ Troubleshooting para build Android
+
+### Principais Diferenciais
+
+- 🤖 **Sistema de IA Completo** - Análise inteligente de cupons com score de confiança
+- 📱 **App Mobile Nativo** - React Native + Expo com notificações push
+- 👨‍💼 **Painel Admin Moderno** - Interface completa para gerenciamento
+- 🔄 **Automações Inteligentes** - Captura e sincronização automática
+- 💬 **Bots WhatsApp & Telegram** - Notificações automáticas personalizadas
+- 📊 **Analytics Completo** - Dashboard com métricas em tempo real
+
+## 📦 Módulos do Sistema
+
+### 1. Backend API
+**Tecnologia:** Node.js + Express + Supabase  
+**Porta:** 3000
+
+API REST completa com:
+- Autenticação JWT com refresh tokens
+- Integração com múltiplas plataformas
+- Sistema de notificações push
+- Bots WhatsApp e Telegram
+- Cron jobs para automações
+- Sistema de IA para análise de cupons
+
+### 2. Painel Admin
+**Tecnologia:** React + Vite + Tailwind + shadcn/ui  
+**Porta:** 5173
+
+Interface administrativa com:
+- Dashboard com analytics
+- Gerenciamento de produtos e cupons
+- Configuração de bots e canais
+- Editor de produtos com IA
+- Templates de mensagens
+- Logs e estatísticas
+
+### 3. App Mobile
+**Tecnologia:** React Native + Expo SDK 54  
+**Plataformas:** Android e iOS
+
+Aplicativo para usuários com:
+- Visualização de promoções
+- Sistema de favoritos
+- Notificações push
+- Filtros por categoria
+- Histórico de preços
+- Modo VIP
 
 ## 🚀 Quick Start
 
-### Backend
+### Pré-requisitos
+
+- Node.js 18+
+- npm ou yarn
+- Conta no Supabase
+- (Opcional) Expo Go para desenvolvimento mobile
+
+### 1. Clone o Repositório
+
+```bash
+git clone https://github.com/seu-usuario/precocerto.git
+cd precocerto
+```
+
+### 2. Backend
+
 ```bash
 cd backend
 npm install
 cp .env.example .env
-# Configure as variáveis de ambiente (veja docs/02-setup-installation/environment.md)
+# Configure as variáveis de ambiente
 npm run dev
 ```
 
-### Painel Admin
+**Acesse:** http://localhost:3000
+
+### 3. Painel Admin
+
 ```bash
 cd admin-panel
 npm install
+cp .env.example .env
+# Configure VITE_API_URL
 npm run dev
-# Acesse http://localhost:5173
 ```
 
-### App Mobile
+**Acesse:** http://localhost:5173
+
+### 4. App Mobile
+
 ```bash
-cd mobile-app
+cd app
 npm install
-npx expo start
+cp .env.example .env
+# Configure API_URL
+npm start
 ```
 
-## 🗄️ Configuração do Banco de Dados
-
-1. Crie um projeto no [Supabase](https://supabase.com)
-2. Execute o script `database/schema.sql` no SQL Editor
-3. Execute as migrations em `database/migrations/` na ordem numérica
-4. Configure as credenciais no `.env` do backend
-
-**📖 Guia completo**: [docs/02-setup-installation/database.md](./docs/02-setup-installation/database.md)
-
-## 🔑 Variáveis de Ambiente
-
-**🎯 Recomendado**: Configure as APIs através do **Painel Admin** em `/settings`.
-
-As seguintes configurações podem ser gerenciadas via Admin:
-- ✅ Mercado Livre (Client ID, Secret, Tokens, Códigos de Afiliado)
-- ✅ Shopee (Partner ID, Partner Key)
-- ✅ Amazon (Access Key, Secret Key, Partner Tag)
-- ✅ Expo (Access Token para Push Notifications)
-- ✅ Telegram Collector (Rate Limits, Retries, Reconnect)
-- ✅ Backend (URL, API Key)
-
-**O que DEVE permanecer no .env:**
-- 🔒 Segurança: `JWT_SECRET`, `JWT_REFRESH_SECRET`
-- 🗄️ Infraestrutura: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`
-- 💾 Cache: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` (opcional)
-- ⚙️ Sistema: `NODE_ENV`, `PORT`, `HOST`, `API_URL`
-
-**📖 Guia completo**: [docs/02-setup-installation/environment.md](./docs/02-setup-installation/environment.md)
-
-## 📚 Documentação Completa
-
-Toda a documentação foi reorganizada e atualizada na pasta [`docs/`](./docs/).
-
-### 🚀 Início Rápido
-- [📖 Visão Geral](./docs/01-getting-started/README.md) - Entenda o sistema
-- [⚙️ Instalação](./docs/02-setup-installation/README.md) - Setup completo
-- [✅ Checklist](./docs/02-setup-installation/checklist.md) - Verificação
-- [⚡ Teste Rápido](./docs/02-setup-installation/quick-test.md) - Validar instalação
-
-### 📦 Módulos
-- [🚀 Backend API](./docs/03-modules/backend/README.md) - Documentação do backend
-- [👨‍💼 Admin Panel](./docs/03-modules/admin-panel/README.md) - Painel administrativo
-- [📱 Mobile App](./docs/03-modules/mobile-app/README.md) - Aplicativo mobile
-- [🎟️ Sistema de Cupons](./docs/03-modules/coupons/README.md) - Captura e gerenciamento
-- [🔄 Auto Sync](./docs/03-modules/auto-sync/README.md) - Sincronização automática
-
-### 🔌 Integrações
-- [🤖 Bots (WhatsApp & Telegram)](./docs/04-integrations/bots/README.md) - Sistema de bots
-- [🛒 Mercado Livre](./docs/04-integrations/mercadolivre/README.md) - Integração ML (100% funcional)
-- [🛍️ Shopee](./docs/04-integrations/shopee/README.md) - Integração Shopee (90% funcional)
-- [📡 Telegram Collector](./docs/04-integrations/telegram-collector/README.md) - Coletor de cupons (100% funcional)
-- [🛒 Amazon](./docs/04-integrations/amazon/README.md) - Integração Amazon (30% - em desenvolvimento)
-- [🛍️ AliExpress](./docs/04-integrations/aliexpress/README.md) - Integração AliExpress (30% - em desenvolvimento)
-
-### 📡 API Reference
-- [📡 API Reference](./docs/05-api-reference/README.md) - Documentação completa da API
-
-### 🆘 Troubleshooting
-- [🆘 Troubleshooting](./docs/06-troubleshooting/README.md) - Solução de problemas
-
-### 🏗️ Arquitetura
-- [🏗️ Arquitetura](./docs/07-architecture/README.md) - Arquitetura do sistema
-
-### 📂 Estrutura da Documentação
-```
-docs/
-├── 01-getting-started/        # Início rápido e visão geral
-├── 02-setup-installation/     # Instalação e configuração
-├── 03-modules/                # Documentação dos módulos
-│   ├── backend/               # Backend API
-│   ├── admin-panel/           # Painel Administrativo
-│   ├── mobile-app/            # Aplicativo Mobile
-│   ├── coupons/               # Sistema de Cupons
-│   └── auto-sync/             # Auto Sync
-├── 04-integrations/           # Integrações externas
-│   ├── bots/                  # Bots WhatsApp e Telegram
-│   ├── mercadolivre/          # Integração Mercado Livre
-│   ├── shopee/                # Integração Shopee
-│   ├── amazon/                # Integração Amazon
-│   ├── aliexpress/            # Integração AliExpress
-│   └── telegram-collector/    # Coletor de Cupons Telegram
-├── 05-api-reference/          # Referência da API
-├── 06-troubleshooting/         # Solução de problemas
-└── 07-architecture/           # Arquitetura do sistema
-```
+**Escaneie o QR code** com Expo Go
 
 ## ✨ Funcionalidades
 
-### Para Usuários
-- ✅ Visualizar promoções e cupons
-- ✅ Favoritar produtos
-- ✅ Receber notificações de preços
-- ✅ Filtrar por categoria
-- ✅ Copiar cupons automaticamente
-- ✅ Acesso VIP com recursos premium
-- ✅ Histórico de preços
+### Para Usuários (App Mobile)
 
-### Para Administradores
+- ✅ Visualizar promoções e cupons em tempo real
+- ✅ Favoritar produtos e receber alertas
+- ✅ Notificações push personalizadas
+- ✅ Filtrar por categoria e loja
+- ✅ Copiar cupons automaticamente
+- ✅ Histórico de preços
+- ✅ Modo VIP com recursos premium
+- ✅ Compartilhar ofertas
+
+### Para Administradores (Painel Admin)
+
 - ✅ Dashboard com analytics completo
-- ✅ Gerenciar produtos e cupons
-- ✅ Criar categorias personalizadas
-- ✅ Visualizar estatísticas de cliques
-- ✅ Monitorar conversões
-- ✅ Automações de preços
-- ✅ **Bots WhatsApp e Telegram** - Notificações automáticas
-- ✅ **Gerenciamento de canais** - Múltiplos grupos
-- ✅ **Logs e estatísticas** - Monitoramento completo
-- ✅ **Telegram Collector** - Captura automática de cupons de canais públicos
-- ✅ **Templates de mensagem** - Personalização de notificações
-- ✅ **🧠 Sistema de IA Completo**:
-  - Análise inteligente de cupons com score de confiança
-  - Editor de produtos com otimização automática de títulos e descrições
-  - Score de qualidade de ofertas baseado em múltiplos fatores
-  - Detecção automática de produtos duplicados
-  - Segmentação inteligente de bots por categoria, horário e score
-  - Templates IA ADVANCED - Geração dinâmica de mensagens promocionais
-  - Suporte a múltiplos modelos OpenRouter (gratuitos e pagos)
+- ✅ Gerenciar produtos, cupons e categorias
+- ✅ Visualizar estatísticas de cliques e conversões
+- ✅ Configurar bots WhatsApp e Telegram
+- ✅ Gerenciar múltiplos canais de notificação
+- ✅ Templates personalizados de mensagens
+- ✅ Editor de produtos com IA
+- ✅ Análise inteligente de cupons
+- ✅ Logs e monitoramento em tempo real
+- ✅ Configurações de APIs via interface
+
+### Sistema de IA
+
+- 🧠 **Análise Inteligente de Cupons**
+  - Score de confiança (0-1)
+  - Publicação automática quando confidence >= 0.90
+  - Detecção de duplicados
+  
+- ✍️ **Editor de Produtos com IA**
+  - Otimização automática de títulos
+  - Geração de descrições atrativas
+  - Sugestões de melhorias
+  
+- 📊 **Score de Qualidade**
+  - Baseado em desconto, histórico, popularidade
+  - CTR (Click-Through Rate)
+  - Confidence score da IA
+  
+- 🎯 **Segmentação Inteligente**
+  - Por categoria
+  - Por horário
+  - Por score mínimo
+  - Anti-duplicação automática
+  
+- 💬 **Templates IA ADVANCED**
+  - Geração dinâmica de mensagens
+  - Personalização por contexto
+  - Múltiplos modelos OpenRouter
 
 ## 🛠️ Stack Tecnológico
 
-**Backend:**
-- Node.js 18+ + Express
-- PostgreSQL (Supabase)
-- Redis (Cache - opcional)
-- JWT (Autenticação)
-- Cron Jobs (Automações)
-- Telegram (gramjs) - MTProto para coletor
+### Backend
+- **Runtime:** Node.js 18+
+- **Framework:** Express.js
+- **Database:** PostgreSQL (Supabase)
+- **Cache:** Redis (opcional)
+- **Auth:** JWT + bcrypt
+- **Automações:** node-cron
+- **Bots:** grammy (Telegram), whatsapp-web.js
+- **IA:** OpenRouter API
+- **Scraping:** Puppeteer + Cheerio
 
-**Frontend Admin:**
-- React 18
-- Vite
-- Tailwind CSS
-- shadcn/ui
-- Zustand
+### Frontend Admin
+- **Framework:** React 18
+- **Build Tool:** Vite
+- **Styling:** Tailwind CSS
+- **Components:** shadcn/ui + Radix UI
+- **State:** Zustand
+- **HTTP:** Axios
+- **Charts:** Recharts
+- **Router:** React Router v6
 
-**Mobile:**
-- React Native
-- Expo SDK 54
-- NativeWind
-- React Navigation
-- Expo Notifications
+### Mobile App
+- **Framework:** React Native 0.81
+- **Platform:** Expo SDK 54
+- **Styling:** NativeWind (Tailwind for RN)
+- **Navigation:** React Navigation v6
+- **State:** Zustand
+- **HTTP:** Axios
+- **Notifications:** Expo Notifications
+- **Auth:** expo-auth-session
 
-## 🔄 Integrações
+## 🔌 Integrações
 
-### Plataformas de Afiliados
-- **Mercado Livre** ✅ - Produtos e cupons (100% funcional)
-- **Shopee** ✅ - Produtos e cupons (90% funcional)
-- **Amazon** ⚠️ - Cupons (30% - estrutura criada, em desenvolvimento)
-- **AliExpress** ⚠️ - Cupons (30% - estrutura criada, em desenvolvimento)
+### Plataformas de E-commerce
 
-### Outras Integrações
-- **Expo Push Notifications** - Notificações em tempo real
-- **WhatsApp Cloud API** - Notificações via WhatsApp
-- **Telegram Bot API** - Notificações via Telegram
-- **Telegram MTProto** - Coletor de cupons de canais públicos (100% Node.js)
+| Plataforma | Status | Funcionalidades |
+|------------|--------|-----------------|
+| **Mercado Livre** | ✅ 100% | Produtos, cupons, afiliados |
+| **Shopee** | ✅ 90% | Produtos, cupons, afiliados |
+| **Amazon** | ⚠️ 30% | Estrutura criada, em desenvolvimento |
+| **AliExpress** | ⚠️ 30% | Estrutura criada, em desenvolvimento |
 
-## 📊 Automações
+### Notificações e Bots
 
-- **Captura automática de produtos** - Mercado Livre ✅, Shopee ✅
-- **Captura automática de cupons** - Mercado Livre ✅, Shopee ✅, Gatry ✅, Telegram Channels ✅
-- **Atualização de preços** - A cada 15 minutos
-- **Verificação de cupons expirados** - A cada 1 minuto
-- **Sincronização com APIs externas** - Automática
-- **Envio automático de notificações** - Via WhatsApp/Telegram
-- **Monitoramento de canais Telegram** - Tempo real
+- **Expo Push Notifications** ✅ - Notificações mobile em tempo real
+- **WhatsApp Cloud API** ✅ - Notificações via WhatsApp
+- **Telegram Bot API** ✅ - Notificações via Telegram
+- **Telegram MTProto** ✅ - Coletor de cupons de canais públicos
 
-## 🎨 Design
+### Serviços Externos
 
-- **Cores:** Vermelho (#DC2626) e Preto (#000000)
-- **Estilo:** Moderno, clean e minimalista
-- **UI/UX:** Responsivo e otimizado
+- **Supabase** - Database + Auth + Storage
+- **OpenRouter** - IA para análise de cupons
+- **Encurtador.dev** - Encurtamento de links
+- **Google OAuth** - Autenticação social
 
-## 🔐 Segurança
+## 📚 Documentação
 
-- Autenticação JWT com refresh tokens
-- Rate limiting
-- Validação de inputs
-- CORS configurado
-- Helmet.js
-- Row Level Security (RLS) no Supabase
+A documentação completa está organizada na pasta [`docs/`](./docs/):
 
-## 📈 Monetização
+### 🚀 Início Rápido
+- [📖 Visão Geral](./docs/01-getting-started/README.md)
+- [⚙️ Instalação](./docs/02-setup-installation/README.md)
+- [✅ Checklist](./docs/02-setup-installation/checklist.md)
+- [⚡ Teste Rápido](./docs/02-setup-installation/quick-test.md)
 
-- Links de afiliados (Shopee e Mercado Livre)
-- Plano VIP com recursos exclusivos
-- AdMob no app mobile (futuro)
-- Promoções patrocinadas
+### 📦 Módulos
+- [🚀 Backend API](./docs/03-modules/backend/README.md)
+- [👨‍💼 Admin Panel](./docs/03-modules/admin-panel/README.md)
+- [📱 Mobile App](./docs/03-modules/mobile-app/README.md)
+- [🎟️ Sistema de Cupons](./docs/03-modules/coupons/README.md)
+- [🔄 Auto Sync](./docs/03-modules/auto-sync/README.md)
+- [🧠 Sistema de IA](./docs/03-modules/ai-system/README.md)
+
+### 🔌 Integrações
+- [🤖 Bots](./docs/04-integrations/bots/README.md)
+- [🛒 Mercado Livre](./docs/04-integrations/mercadolivre/README.md)
+- [🛍️ Shopee](./docs/04-integrations/shopee/README.md)
+- [📡 Telegram Collector](./docs/04-integrations/telegram-collector/README.md)
+- [🛒 Amazon](./docs/04-integrations/amazon/README.md)
+- [🛍️ AliExpress](./docs/04-integrations/aliexpress/README.md)
+
+### 📡 Referências
+- [📡 API Reference](./docs/05-api-reference/README.md)
+- [🆘 Troubleshooting](./docs/06-troubleshooting/README.md)
+- [🏗️ Arquitetura](./docs/07-architecture/README.md)
 
 ## 🚀 Deploy
 
-### Backend
-- Railway, Render, Heroku, AWS, etc.
-- Configure variáveis de ambiente
-- Execute migrations
+### Backend (Recomendado: Railway/Render)
 
-### Admin Panel
-- Vercel, Netlify, etc.
-- Configure `VITE_API_URL`
+```bash
+# Configure variáveis de ambiente
+# Execute migrations
+npm run db:migrate
 
-### Mobile App
-- Expo EAS Build
-- Google Play Store
-- Apple App Store
+# Inicie com PM2
+npm run start:prod
+```
+
+### Admin Panel (Recomendado: Vercel)
+
+```bash
+# Build para produção
+npm run build
+
+# Deploy
+vercel --prod
+```
+
+### Mobile App (Expo EAS)
+
+```bash
+# Instalar EAS CLI
+npm install -g eas-cli
+
+# Configurar
+eas build:configure
+
+# Build
+eas build --platform android
+eas build --platform ios
+```
 
 ## 📝 Changelog
 
+### Versão 2.2.0 (Fevereiro 2026)
+
+#### 🔐 Autenticação
+- ✅ Removida autenticação com Facebook
+- ✅ Implementado Google OAuth direto (sem Supabase)
+- ✅ Sistema de recuperação de senha via email
+- ✅ SMTP configurado e testado
+
+#### 🎨 UI/UX
+- ✅ Navbar flutuante com efeito glassmorphism
+- ✅ Background circular animado nos ícones ativos
+- ✅ Header padronizado em todas as telas
+- ✅ Skeleton loaders para melhor UX
+
+#### 🐛 Correções
+- ✅ Corrigido erro de produtos não aparecendo (status 'created')
+- ✅ Melhorados logs de erro do Supabase
+- ✅ Corrigido toggle de notificações push
+- ✅ Corrigido sistema de cupom esgotado
+
+#### 📱 Mobile
+- ✅ Configuração de ícones e splash screen
+- ✅ Notificações push funcionando
+- ✅ Deep linking configurado
+- ⚠️ Build Android com problemas de NDK (usar Expo Go)
+
 ### Versão 2.1.0 (Dezembro 2024)
-- ✅ **Sistema de IA Completo**:
-  - Análise inteligente de cupons com score de confiança (0-1)
-  - Publicação automática quando confidence_score >= 0.90
-  - Editor de produtos com otimização automática de títulos e descrições
-  - Score de qualidade de ofertas (discount, price history, popularity, CTR, AI confidence)
-  - Detecção automática de produtos duplicados com normalização de nomes
-  - Segmentação inteligente de bots (categoria, horário, score mínimo, anti-duplicação)
-  - Templates IA ADVANCED - Geração dinâmica de mensagens promocionais
-  - Suporte a múltiplos modelos OpenRouter (gratuitos e pagos)
-  - Logs estruturados de decisões da IA para observabilidade
-- ✅ Melhorias no painel admin:
-  - Visualização de confidence_score e score de qualidade
-  - Histórico de edições da IA
-  - Botão "Forçar Publicação" para cupons pendentes
-  - Seletor de modelos OpenRouter com informações detalhadas
+
+#### 🧠 Sistema de IA
+- ✅ Análise inteligente de cupons com score de confiança
+- ✅ Publicação automática quando confidence >= 0.90
+- ✅ Editor de produtos com otimização de IA
+- ✅ Score de qualidade de ofertas
+- ✅ Detecção automática de duplicados
+- ✅ Segmentação inteligente de bots
+- ✅ Templates IA ADVANCED
+- ✅ Suporte a múltiplos modelos OpenRouter
+
+#### 👨‍💼 Painel Admin
+- ✅ Visualização de confidence_score
+- ✅ Histórico de edições da IA
+- ✅ Botão "Forçar Publicação"
+- ✅ Seletor de modelos OpenRouter
 
 ### Versão 2.0.0 (Dezembro 2024)
-- ✅ Migração completa do Telegram Collector para Node.js (sem Python)
+- ✅ Migração completa do Telegram Collector para Node.js
 - ✅ Sistema de bots completo (WhatsApp e Telegram)
-- ✅ Telegram Collector com MTProto (Node.js)
 - ✅ Configurações migradas para Admin Panel
 - ✅ Documentação completa reorganizada
+
+## 🔐 Segurança
+
+- ✅ Autenticação JWT com refresh tokens
+- ✅ Rate limiting em todas as rotas
+- ✅ Validação de inputs com Joi
+- ✅ CORS configurado
+- ✅ Helmet.js para headers de segurança
+- ✅ Row Level Security (RLS) no Supabase
+- ✅ Senhas hasheadas com bcrypt
+- ✅ Tokens de reset com expiração
+
+## 📈 Monetização
+
+- 💰 Links de afiliados (Shopee, Mercado Livre, Amazon)
+- 💎 Plano VIP com recursos exclusivos
+- 📱 AdMob no app mobile (futuro)
+- 🎯 Promoções patrocinadas
 
 ## 🤝 Contribuindo
 
@@ -275,13 +388,14 @@ Este é um projeto proprietário. Para contribuições, entre em contato.
 
 ## 📄 Licença
 
-Todos os direitos reservados © 2024 PreçoCerto
+Todos os direitos reservados © 2024-2026 PreçoCerto
 
 ## 📞 Suporte
 
 Para dúvidas e suporte:
 - 📖 Consulte a [Documentação Completa](./docs/README.md)
 - 🆘 Veja [Troubleshooting](./docs/06-troubleshooting/README.md)
+- 📧 Email: suporte@precocerto.com
 
 ---
 

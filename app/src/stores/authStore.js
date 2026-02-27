@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import api from '../services/api';
 import storage from '../services/storage';
-import { loginWithGoogle } from '../services/authSocial';
+import { processGoogleAuthResponse } from '../services/authSocial';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -68,10 +68,10 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Login com Google
-  loginWithGoogle: async () => {
+  // Login com Google (processa resposta do Google Auth)
+  loginWithGoogle: async (googleResponse) => {
     try {
-      const result = await loginWithGoogle();
+      const result = await processGoogleAuthResponse(googleResponse);
       if (result.success) {
         set({ 
           user: result.user, 

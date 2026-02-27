@@ -1,136 +1,191 @@
-# 📚 Documentação MTW Promo
+# 📚 Documentação PreçoCerto
 
-Bem-vindo à documentação completa da plataforma MTW Promo - Sistema de cupons, promoções e afiliados.
+Bem-vindo à documentação completa do PreçoCerto - Plataforma de Cupons e Promoções.
 
-## 🗂️ Estrutura da Documentação
+## 📋 Estrutura da Documentação
 
-```
-docs/
-├── 01-getting-started/        # Início rápido e visão geral
-├── 02-setup-installation/     # Instalação e configuração
-├── 03-modules/                # Documentação dos módulos
-│   ├── backend/              # Backend API
-│   ├── admin-panel/          # Painel Administrativo
-│   └── mobile-app/           # Aplicativo Mobile
-├── 04-integrations/           # Integrações externas
-│   ├── bots/                 # Bots WhatsApp e Telegram
-│   ├── mercadolivre/         # Integração Mercado Livre
-│   ├── shopee/               # Integração Shopee
-│   ├── amazon/               # Integração Amazon
-│   ├── aliexpress/           # Integração AliExpress
-│   └── telegram-collector/   # Coletor de Cupons Telegram
-├── 05-api-reference/          # Referência da API
-├── 06-troubleshooting/        # Solução de problemas
-└── 07-architecture/          # Arquitetura do sistema
-```
+### 🚀 [01 - Início Rápido](./01-getting-started/)
+Comece aqui para entender o sistema e suas funcionalidades.
 
-## 🚀 Início Rápido
+- [Visão Geral](./01-getting-started/index.md) - Introdução ao PreçoCerto
+- [Funcionalidades](./01-getting-started/features.md) - Lista completa de recursos
+- [Arquitetura](./01-getting-started/architecture.md) - Visão geral da arquitetura
+- [Stack Tecnológico](./01-getting-started/tech-stack.md) - Tecnologias utilizadas
+
+### ⚙️ [02 - Setup e Instalação](./02-setup-installation/)
+Guias completos para configurar o ambiente.
+
+- [Guia de Instalação](./02-setup-installation/README.md) - Passo a passo completo
+- [Variáveis de Ambiente](./02-setup-installation/environment.md) - Configuração do .env
+- [Banco de Dados](./02-setup-installation/database.md) - Setup do Supabase
+- [Checklist](./02-setup-installation/checklist.md) - Verificação de instalação
+- [Teste Rápido](./02-setup-installation/quick-test.md) - Validar instalação
+- [Deploy VPS](./02-setup-installation/VPS_SETUP_COMPLETO.md) - Deploy em servidor
+
+### 📦 [03 - Módulos](./03-modules/)
+Documentação detalhada de cada módulo do sistema.
+
+- [Backend API](./03-modules/backend/) - API REST completa
+- [Painel Admin](./03-modules/admin-panel/) - Interface administrativa
+- [App Mobile](./03-modules/mobile-app/) - Aplicativo React Native
+- [Sistema de Cupons](./03-modules/coupons/) - Captura e gerenciamento
+- [Auto Sync](./03-modules/auto-sync/) - Sincronização automática
+- [Sistema de IA](./03-modules/ai-system/) - Análise inteligente
+
+### 🔌 [04 - Integrações](./04-integrations/)
+Guias de integração com plataformas externas.
+
+- [Bots (WhatsApp & Telegram)](./04-integrations/bots/) - Sistema de notificações
+- [Mercado Livre](./04-integrations/mercadolivre/) - Integração ML (100%)
+- [Shopee](./04-integrations/shopee/) - Integração Shopee (90%)
+- [Telegram Collector](./04-integrations/telegram-collector/) - Coletor de cupons (100%)
+- [Amazon](./04-integrations/amazon/) - Integração Amazon (30%)
+- [AliExpress](./04-integrations/aliexpress/) - Integração AliExpress (30%)
+
+### 📡 [05 - API Reference](./05-api-reference/)
+Documentação completa da API REST.
+
+- [Endpoints](./05-api-reference/README.md) - Lista de todos os endpoints
+- [Autenticação](./05-api-reference/README.md#autenticação) - Sistema de auth
+- [Exemplos](./05-api-reference/README.md#exemplos) - Exemplos de uso
+
+### 🆘 [06 - Troubleshooting](./06-troubleshooting/)
+Solução de problemas comuns.
+
+- [Guia de Troubleshooting](./06-troubleshooting/README.md) - Problemas comuns
+- [Erro 403 Mercado Livre](./06-troubleshooting/SOLUCAO_ERRO_403_MERCADOLIVRE.md)
+- [Puppeteer VPS](./06-troubleshooting/FIX_PUPPETEER_VPS.md)
+- [Telegram Capture](./06-troubleshooting/TELEGRAM_CAPTURE_TROUBLESHOOTING.md)
+- [Alternativas Shopee](./06-troubleshooting/ALTERNATIVAS_SHOPEE.md)
+
+### 🏗️ [07 - Arquitetura](./07-architecture/)
+Documentação técnica da arquitetura do sistema.
+
+- [Visão Geral](./07-architecture/README.md) - Arquitetura completa
+- [Fluxo de Dados](./07-architecture/README.md#fluxo-de-dados)
+- [Segurança](./07-architecture/README.md#segurança)
+
+## 🎯 Guias Rápidos
 
 ### Para Desenvolvedores
 
-1. **[📖 Visão Geral](./01-getting-started/README.md)** - Entenda o sistema
-2. **[⚙️ Instalação](./02-setup-installation/README.md)** - Configure o ambiente
-3. **[🔌 Integrações](./04-integrations/README.md)** - Configure APIs externas
-4. **[📡 API Reference](./05-api-reference/README.md)** - Documentação da API
+1. **Primeiro Acesso**
+   - Leia [Visão Geral](./01-getting-started/index.md)
+   - Siga o [Guia de Instalação](./02-setup-installation/README.md)
+   - Execute o [Teste Rápido](./02-setup-installation/quick-test.md)
+
+2. **Desenvolvimento**
+   - Configure [Variáveis de Ambiente](./02-setup-installation/environment.md)
+   - Entenda a [Arquitetura](./01-getting-started/architecture.md)
+   - Consulte a [API Reference](./05-api-reference/README.md)
+
+3. **Integrações**
+   - Configure [Bots](./04-integrations/bots/)
+   - Integre [Mercado Livre](./04-integrations/mercadolivre/)
+   - Configure [Telegram Collector](./04-integrations/telegram-collector/)
 
 ### Para Administradores
 
-1. **[👨‍💼 Painel Admin](./03-modules/admin-panel/README.md)** - Guia do painel administrativo
-2. **[🤖 Bots](./04-integrations/bots/README.md)** - Configure notificações automáticas
-3. **[🛒 Mercado Livre](./04-integrations/mercadolivre/README.md)** - Configure afiliados ML
-4. **[📊 Analytics](./03-modules/admin-panel/analytics.md)** - Entenda as métricas
+1. **Setup Inicial**
+   - [Instalação Completa](./02-setup-installation/README.md)
+   - [Configuração do Banco](./02-setup-installation/database.md)
+   - [Deploy VPS](./02-setup-installation/VPS_SETUP_COMPLETO.md)
 
-### Para Usuários Finais
+2. **Configuração**
+   - [Painel Admin](./03-modules/admin-panel/)
+   - [Sistema de Bots](./04-integrations/bots/)
+   - [Integrações](./04-integrations/)
 
-1. **[📱 App Mobile](./03-modules/mobile-app/README.md)** - Guia do aplicativo
-2. **[🎟️ Cupons](./03-modules/coupons/README.md)** - Como usar cupons
+3. **Manutenção**
+   - [Troubleshooting](./06-troubleshooting/)
+   - [Logs e Monitoramento](./03-modules/backend/README.md#logs)
 
-## 📋 Índice Completo
+## 📖 Documentos Importantes
 
-### 01. Getting Started
-- [Visão Geral](./01-getting-started/README.md)
-- [Arquitetura do Sistema](./01-getting-started/architecture.md)
-- [Stack Tecnológico](./01-getting-started/tech-stack.md)
-- [Funcionalidades](./01-getting-started/features.md)
+### Configuração
+- [Variáveis de Ambiente](./02-setup-installation/environment.md) - **Essencial**
+- [Banco de Dados](./02-setup-installation/database.md) - **Essencial**
+- [Checklist de Setup](./02-setup-installation/checklist.md) - **Recomendado**
 
-### 02. Setup & Installation
-- [Instalação Completa](./02-setup-installation/README.md)
-- [Configuração do Banco de Dados](./02-setup-installation/database.md)
-- [Variáveis de Ambiente](./02-setup-installation/environment.md)
-- [Checklist de Setup](./02-setup-installation/checklist.md)
-- [Teste Rápido](./02-setup-installation/quick-test.md)
-- **[🚀 Setup Completo VPS](./VPS_SETUP_COMPLETO.md)** - **NOVO!**
-- **[🎯 Configuração de Captura](./CONFIGURACAO_CAPTURA.md)** - **NOVO!**
-- **[📋 Guia de Deploy](./DEPLOY_GUIDE.md)**
+### Funcionalidades
+- [Sistema de IA](./03-modules/ai-system/) - **Novo**
+- [Bots WhatsApp/Telegram](./04-integrations/bots/) - **Popular**
+- [Telegram Collector](./04-integrations/telegram-collector/) - **Popular**
 
-### 03. Módulos
-- [Backend API](./03-modules/backend/README.md)
-- [Painel Administrativo](./03-modules/admin-panel/README.md)
-- [App Mobile](./03-modules/mobile-app/README.md)
-- [Sistema de Cupons](./03-modules/coupons/README.md)
-- [Auto Sync](./03-modules/auto-sync/README.md)
-- [🧠 Sistema de IA](./03-modules/ai-system/README.md) - **NOVO!**
+### Integrações
+- [Mercado Livre](./04-integrations/mercadolivre/) - **100% Funcional**
+- [Shopee](./04-integrations/shopee/) - **90% Funcional**
+- [Amazon](./04-integrations/amazon/) - **Em Desenvolvimento**
 
-### 04. Integrações
-- [Bots (WhatsApp & Telegram)](./04-integrations/bots/README.md)
-- [Mercado Livre](./04-integrations/mercadolivre/README.md)
-- [Shopee](./04-integrations/shopee/README.md)
-- [Amazon](./04-integrations/amazon/README.md)
-- [AliExpress](./04-integrations/aliexpress/README.md)
-- [Telegram Collector](./04-integrations/telegram-collector/README.md)
+## 🔍 Busca Rápida
 
-### 05. API Reference
-- [Visão Geral](./05-api-reference/README.md)
-- [Autenticação](./05-api-reference/authentication.md)
-- [Produtos](./05-api-reference/products.md)
-- [Cupons](./05-api-reference/coupons.md)
-- [Categorias](./05-api-reference/categories.md)
-- [Analytics](./05-api-reference/analytics.md)
-- [Bots](./05-api-reference/bots.md)
+### Por Funcionalidade
 
-### 06. Troubleshooting
-- [Problemas Comuns](./06-troubleshooting/README.md)
-- [Erros de Conexão](./06-troubleshooting/connection-errors.md)
-- [Problemas de Autenticação](./06-troubleshooting/authentication.md)
-- [Problemas de Integração](./06-troubleshooting/integrations.md)
-- **[🔧 Correção Puppeteer VPS](./FIX_PUPPETEER_VPS.md)** - **NOVO!**
-- **[⚡ Solução Rápida Puppeteer](./QUICK_FIX_PUPPETEER.md)** - **NOVO!**
+- **Autenticação**: [Backend Auth](./03-modules/backend/README.md#autenticação)
+- **Notificações Push**: [Mobile App](./03-modules/mobile-app/README.md#notificações)
+- **Bots**: [Sistema de Bots](./04-integrations/bots/)
+- **IA**: [Sistema de IA](./03-modules/ai-system/)
+- **Cupons**: [Sistema de Cupons](./03-modules/coupons/)
 
-### 07. Architecture
-- [Arquitetura Geral](./07-architecture/README.md)
-- [Backend Architecture](./07-architecture/backend.md)
-- [Database Schema](./07-architecture/database.md)
-- [Security](./07-architecture/security.md)
+### Por Tecnologia
 
-## 🆘 Precisa de Ajuda?
+- **Node.js**: [Backend](./03-modules/backend/)
+- **React**: [Admin Panel](./03-modules/admin-panel/)
+- **React Native**: [Mobile App](./03-modules/mobile-app/)
+- **Supabase**: [Database](./02-setup-installation/database.md)
+- **Telegram**: [Telegram Collector](./04-integrations/telegram-collector/)
 
-- **Documentação não encontrada?** Verifique o [Índice Completo](./01-getting-started/index.md)
-- **Problema técnico?** Consulte [Troubleshooting](./06-troubleshooting/README.md)
-- **Dúvida sobre API?** Veja [API Reference](./05-api-reference/README.md)
+### Por Problema
 
-## 📝 Última Atualização
+- **Erro 403 ML**: [Solução](./06-troubleshooting/SOLUCAO_ERRO_403_MERCADOLIVRE.md)
+- **Puppeteer VPS**: [Fix](./06-troubleshooting/FIX_PUPPETEER_VPS.md)
+- **Build Android**: [Solução](../SOLUCAO_BUILD_ANDROID.md)
+- **SMTP**: [Teste](../RESUMO_TESTES_SMTP.md)
 
-**Data**: Janeiro 2026  
-**Versão**: 2.2.0  
-**Status**: ✅ Documentação Completa
+## 📊 Status das Integrações
 
-### Novidades na Versão 2.2.0
+| Integração | Status | Documentação |
+|------------|--------|--------------|
+| Mercado Livre | ✅ 100% | [Docs](./04-integrations/mercadolivre/) |
+| Shopee | ✅ 90% | [Docs](./04-integrations/shopee/) |
+| Telegram Collector | ✅ 100% | [Docs](./04-integrations/telegram-collector/) |
+| WhatsApp Bot | ✅ 100% | [Docs](./04-integrations/bots/) |
+| Telegram Bot | ✅ 100% | [Docs](./04-integrations/bots/) |
+| Amazon | ⚠️ 30% | [Docs](./04-integrations/amazon/) |
+| AliExpress | ⚠️ 30% | [Docs](./04-integrations/aliexpress/) |
+| Google OAuth | ✅ 100% | [Guia](../GUIA_GOOGLE_OAUTH_SETUP.md) |
+| SMTP Email | ✅ 100% | [Teste](../RESUMO_TESTES_SMTP.md) |
 
-- ✅ **Guia Completo VPS**: Setup detalhado para deploy em VPS
-- ✅ **Correção Puppeteer**: Solução completa para problemas de web scraping
-- ✅ **Configuração de Captura**: Guia passo a passo para configurar captura de produtos e cupons
-- ✅ **Scripts de Diagnóstico**: Ferramentas automáticas para troubleshooting
-- ✅ **Otimizações VPS**: Configurações específicas para ambientes de produção
+## 🆕 Últimas Atualizações
 
-### Novidades na Versão 2.1.0
+### Fevereiro 2026
+- ✅ Google OAuth direto (sem Supabase)
+- ✅ Sistema de recuperação de senha
+- ✅ SMTP configurado e testado
+- ✅ UI/UX melhorado (navbar flutuante, headers padronizados)
+- ✅ Correções de bugs (produtos, notificações, cupons)
 
-- ✅ **Sistema de IA Completo**: Documentação completa do sistema de Inteligência Artificial
-- ✅ **Análise Inteligente de Cupons**: Score de confiança e publicação automática
-- ✅ **Editor de Produtos**: Otimização automática de títulos e descrições
-- ✅ **Score de Qualidade**: Sistema de pontuação de ofertas
-- ✅ **Templates IA ADVANCED**: Geração dinâmica de mensagens promocionais
-- ✅ **Segmentação Inteligente de Bots**: Filtros avançados para bots
+### Dezembro 2024
+- ✅ Sistema de IA completo
+- ✅ Análise inteligente de cupons
+- ✅ Editor de produtos com IA
+- ✅ Templates IA ADVANCED
+- ✅ Migração Telegram Collector para Node.js
+
+## 📞 Suporte
+
+- 📖 Consulte esta documentação
+- 🆘 Veja [Troubleshooting](./06-troubleshooting/)
+- 📧 Email: suporte@precocerto.com
+
+## 🔗 Links Úteis
+
+- [README Principal](../README.md)
+- [Changelog](./CHANGELOG.md)
+- [Guia de Deploy VPS](./02-setup-installation/VPS_SETUP_COMPLETO.md)
+- [API Reference](./05-api-reference/README.md)
 
 ---
 
-**Desenvolvido com ❤️ pela equipe MTW Promo**
+**Última atualização:** Fevereiro 2026  
+**Versão:** 2.2.0

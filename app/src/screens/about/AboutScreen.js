@@ -41,30 +41,21 @@ export default function AboutScreen({ navigation }) {
 
   const socialInfo = [
     {
-      icon: 'globe-outline',
-      label: 'Website',
-      value: 'www.mtwpromo.com',
-      action: () => {
-        const { Linking } = require('react-native');
-        Linking.openURL('https://www.mtwpromo.com').catch(() => { });
-      },
-    },
-    {
       icon: 'logo-instagram',
       label: 'Instagram',
-      value: '@mtwpromo',
+      value: '@ofertasprecocerto',
       action: () => {
         const { Linking } = require('react-native');
-        Linking.openURL('https://instagram.com/mtwpromo').catch(() => { });
+        Linking.openURL('https://www.instagram.com/ofertasprecocerto').catch(() => { });
       },
     },
     {
       icon: 'logo-tiktok',
       label: 'TikTok',
-      value: '@mtwpromo',
+      value: '@vprecocerto',
       action: () => {
         const { Linking } = require('react-native');
-        Linking.openURL('https://www.tiktok.com/@mtwpromo').catch(() => { });
+        Linking.openURL('https://www.tiktok.com/@vprecocerto').catch(() => { });
       },
     },
   ];
@@ -164,7 +155,7 @@ export default function AboutScreen({ navigation }) {
         <View style={s.section}>
           <Text style={s.sectionTitle}>Desenvolvido por</Text>
           <Text style={s.creditsText}>RDL Tech Solutions</Text>
-          <Text style={s.creditsSubtext}>© 2025 Todos os direitos reservados</Text>
+          <Text style={s.creditsSubtext}>© 2026 Todos os direitos reservados</Text>
         </View>
       </Animated.ScrollView>
     </View>

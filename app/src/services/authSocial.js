@@ -1,90 +1,110 @@
-import * as AuthSession from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 import api from './api';
 import storage from './storage';
 import { Platform } from 'react-native';
 
 // Completar autenticação web
-if (Platform.OS === 'web') {
-  WebBrowser.maybeCompleteAuthSession();
-}
+WebBrowser.maybeCompleteAuthSession();
 
-// URL de redirect para OAuth
-const redirectTo = AuthSession.makeRedirectUri({
+// Web Client ID do Google Cloud Console (usado para validação no backend)
+const GOOGLE_WEB_CLIENT_ID = process.env.GOOGLE_WEB_CLIENT_ID || 'YOUR_WEB_CLIENT_ID';
+
+// Expo Client ID (gerado automaticamente pelo Expo)
+const GOOGLE_EXPO_CLIENT_ID = process.env.GOOGLE_EXPO_CLIENT_ID || GOOGLE_WEB_CLIENT_ID;
+
+const redirectUri = makeRedirectUri({
   scheme: 'precocerto',
-  useProxy: true,
+  path: 'auth/google',
 });
 
+console.log('🔗 [Google OAuth Config] Redirect URI:', redirectUri);
+console.log('🔗 [Google OAuth Config] Platform:', Platform.OS);
+
 /**
- * Login com Google
- * Usa backend para OAuth - não expõe credenciais no app
+ * Login com Google usando expo-auth-session
+ * Retorna um objeto com request, response e promptAsync para uso em componentes
  */
-export async function loginWithGoogle() {
+export function useGoogleAuth() {
+  return Google.useAuthRequest({
+    expoClientId: GOOGLE_EXPO_CLIENT_ID,
+    iosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    scopes: ['profile', 'email'],
+    redirectUri,
+  });
+}
+
+/**
+ * Processar resposta do Google Auth
+ */
+export async function processGoogleAuthResponse(response) {
   try {
-    // Obter URL de OAuth do backend
-    const response = await api.post('/auth/social/url', {
-      provider: 'google',
-      redirect_url: redirectTo,
-    });
+    console.log('📱 [App Google Auth] Processando resposta');
+    console.log('   Type:', response?.type);
 
-    const { url: oauthUrl } = response.data.data;
+    if (response?.type === 'success') {
+      console.log('✅ [App Google Auth] Autenticação bem-sucedida');
 
-    if (!oauthUrl) {
-      throw new Error('URL de autenticação não retornada');
-    }
+      const { authentication } = response;
+      const idToken = authentication?.idToken;
+      const accessToken = authentication?.accessToken;
 
-    // Abrir URL de autenticação
-    if (Platform.OS === 'web') {
-      // Web: redirecionar
-      window.location.href = oauthUrl;
-      return { success: false, error: 'Redirecionando...' };
-    } else {
-      // Mobile: usar WebBrowser
-      const result = await WebBrowser.openAuthSessionAsync(
-        oauthUrl,
-        redirectTo
-      );
-
-      if (result.type === 'success') {
-        // Extrair código da URL
-        const url = new URL(result.url);
-        const code = url.searchParams.get('code');
-
-        if (code) {
-          // Enviar código para backend processar
-          return await processOAuthCallback(code, 'google');
-        }
+      if (!idToken) {
+        throw new Error('Token ID não recebido do Google');
       }
+
+      console.log('🔑 [App Google Auth] Token ID recebido');
+
+      // Enviar token para backend verificar
+      return await processGoogleToken(idToken);
+    } else if (response?.type === 'cancel') {
+      console.log('⚠️ [App Google Auth] Usuário cancelou');
+      return {
+        success: false,
+        error: 'Autenticação cancelada',
+      };
+    } else if (response?.type === 'error') {
+      console.error('❌ [App Google Auth] Erro:', response.error);
+      throw new Error(response.error?.message || 'Erro na autenticação');
     }
 
-    throw new Error('Falha na autenticação Google');
-  } catch (error) {
-    console.error('Erro no login Google:', error);
     return {
       success: false,
-      error: error.response?.data?.error || error.message || 'Erro ao fazer login com Google',
+      error: 'Resposta inválida do Google',
+    };
+  } catch (error) {
+    console.error('❌ [App Google Auth] Erro:', error);
+    return {
+      success: false,
+      error: error.message || 'Erro ao processar autenticação',
     };
   }
 }
 
-
-
 /**
- * Processar callback OAuth
- * Envia código para backend que processa com Supabase
+ * Processar token do Google
+ * Envia token para backend verificar e criar/atualizar usuário
  */
-async function processOAuthCallback(code, provider) {
+async function processGoogleToken(idToken) {
   try {
-    // Backend processa o código e retorna tokens via POST
-    const response = await api.post('/auth/social/callback', {
-      code,
-      provider,
-      redirect_url: redirectTo,
+    console.log('🔄 [App Google Auth] Enviando token para backend');
+
+    const response = await api.post('/auth/google', {
+      idToken,
     });
 
-    // Backend retorna tokens diretamente
+    console.log('📦 [App Google Auth] Resposta do backend recebida');
+    console.log('   Success:', response.data.success);
+
     if (response.data.success && response.data.data) {
       const { user, token, refreshToken } = response.data.data;
+
+      console.log('✅ [App Google Auth] Tokens recebidos');
+      console.log('   User ID:', user.id);
+      console.log('   Email:', user.email);
 
       // Salvar tokens
       await storage.setToken(token);
@@ -94,6 +114,8 @@ async function processOAuthCallback(code, provider) {
       // Configurar header de autorização
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
+      console.log('✅ [App Google Auth] Login concluído com sucesso');
+
       return {
         success: true,
         user,
@@ -102,12 +124,16 @@ async function processOAuthCallback(code, provider) {
       };
     }
 
-    throw new Error('Falha ao processar callback OAuth');
+    console.error('❌ [App Google Auth] Resposta inválida do backend');
+    throw new Error('Falha ao processar autenticação');
   } catch (error) {
-    console.error('Erro ao processar callback:', error);
+    console.error('❌ [App Google Auth] Erro ao processar token:', error);
+    console.error('   Mensagem:', error.message);
+    console.error('   Response:', error.response?.data);
     return {
       success: false,
       error: error.response?.data?.error || error.message || 'Erro ao processar autenticação',
     };
   }
 }
+

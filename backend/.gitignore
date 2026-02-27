@@ -1,9 +1,25 @@
+# =====================================================
+# PreçoCerto Backend - .gitignore
+# =====================================================
+
 # Dependencies
 node_modules/
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
 
-
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+*.env
+!.env.example
+!.env.dev
 
 # Logs
 logs/
@@ -11,36 +27,88 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
+pino-*.log
 
 # OS
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+Desktop.ini
 
-# IDE
+# IDE / Editor
 .vscode/
 .idea/
 *.swp
 *.swo
+*.swn
 *~
+.project
+.classpath
+.settings/
 
 # Testing
 coverage/
 .nyc_output/
+test-results/
+*.test.js.snap
 
 # Build
 dist/
 build/
+out/
 
 # Temporary files
 tmp/
 temp/
+*.tmp
+*.bak
+*.backup
 
-# Telegram sessions (Node.js)
+# Telegram Sessions
 telegram_sessions/
 *.session
+*.session-journal
 
 # WhatsApp Web Sessions
 .wwebjs_auth/
 .wwebjs_auth_test/
 .wwebjs_cache/
+.wwebjs_auth_*/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# Certificates & Keys
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+ssl/
+
+# PM2
+.pm2/
+pm2.log
+ecosystem.config.js.backup
+
+# Cache
+.cache/
+.npm/
+.eslintcache
+
+# Uploads (se houver)
+uploads/
+public/uploads/
+
+# Misc
+.DS_Store
+*.pid
+*.seed
+*.pid.lock
 

@@ -463,43 +463,29 @@ export default function CouponsScreen({ navigation }) {
           ]}
         >
           <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-          <View style={s.headerTopRow}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <View style={s.searchContainer}>
-              <SearchBar
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Buscar cupons, lojas..."
-                containerStyle={s.searchBarOverride}
-              />
+          <View style={s.headerContent}>
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <Ionicons name="ticket" size={28} color="#fff" />
+            </Animated.View>
+            <View style={s.headerTextContainer}>
+              <Text style={s.headerTitle}>Cupons</Text>
+              <Text style={s.headerSubtitle}>
+                {filteredCoupons.length} {filteredCoupons.length === 1 ? 'cupom' : 'cupons'} disponíveis
+              </Text>
             </View>
           </View>
         </Animated.View>
 
-        <Animated.View style={[s.infoBar, { opacity: fadeAnim }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <Ionicons name="pricetags" size={16} color={colors.primary} />
-            </Animated.View>
-            <Text style={s.infoText}>
-              {filteredCoupons.length} {filteredCoupons.length === 1 ? 'Cupom' : 'Cupons'} encontrados
-            </Text>
-          </View>
-          {filteredCoupons.length > 0 && (
-            <Animated.View 
-              style={[
-                s.savingsBadge,
-                { transform: [{ scale: pulseAnim }] }
-              ]}
-            >
-              <Ionicons name="trending-down" size={12} color="#16A34A" />
-              <Text style={s.savingsText}>Economize agora!</Text>
-            </Animated.View>
-          )}
+        {/* Search Bar */}
+        <Animated.View style={[s.searchSection, { opacity: fadeAnim }]}>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Buscar cupons, lojas..."
+          />
         </Animated.View>
 
+        {/* Filter Tabs */}
         <Animated.View style={{ opacity: fadeAnim }}>
           <ScrollView
             horizontal
@@ -512,7 +498,11 @@ export default function CouponsScreen({ navigation }) {
               return (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[s.tabChip, isActive && s.tabChipActive]}
+                  style={[
+                    s.tabChip, 
+                    isActive && s.tabChipActive,
+                    isActive && { backgroundColor: colors.primary + '12' }
+                  ]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.7}
                 >
@@ -521,7 +511,10 @@ export default function CouponsScreen({ navigation }) {
                       style={[
                         StyleSheet.absoluteFill,
                         s.tabChipActive,
-                        { transform: [{ scale: pulseAnim }] }
+                        { 
+                          transform: [{ scale: pulseAnim }],
+                          backgroundColor: colors.primary + '12'
+                        }
                       ]}
                     />
                   )}
@@ -546,7 +539,11 @@ export default function CouponsScreen({ navigation }) {
               return (
                 <TouchableOpacity
                   key={platform}
-                  style={[s.tabChip, isActive && s.tabChipActive]}
+                  style={[
+                    s.tabChip, 
+                    isActive && s.tabChipActive,
+                    isActive && { backgroundColor: colors.primary + '12' }
+                  ]}
                   onPress={() => setSelectedPlatform(platform)}
                   activeOpacity={0.7}
                 >
@@ -555,7 +552,10 @@ export default function CouponsScreen({ navigation }) {
                       style={[
                         StyleSheet.absoluteFill,
                         s.tabChipActive,
-                        { transform: [{ scale: pulseAnim }] }
+                        { 
+                          transform: [{ scale: pulseAnim }],
+                          backgroundColor: colors.primary + '12'
+                        }
                       ]}
                     />
                   )}
@@ -813,62 +813,47 @@ const dynamicStyles = (colors) => StyleSheet.create({
   },
   headerBar: {
     backgroundColor: colors.primary,
-    paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight + 8,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 12,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    } : {
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
   },
-  headerTopRow: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  backBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchContainer: {
+  headerTextContainer: {
     flex: 1,
   },
-  searchBarOverride: {
-    height: 38,
-    backgroundColor: colors.card,
-    borderRadius: 19,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
   },
-  infoBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  infoText: {
+  headerSubtitle: {
     fontSize: 13,
-    color: colors.text,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
   },
-  savingsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  savingsText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#16A34A',
+  searchSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.background,
   },
   tabContainer: {
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.background,
   },
   tabScroll: {
     paddingHorizontal: 12,
@@ -886,7 +871,7 @@ const dynamicStyles = (colors) => StyleSheet.create({
   },
   tabChipActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary + '12',
+    // backgroundColor aplicado inline
   },
   tabChipText: {
     fontSize: 12,
@@ -905,7 +890,7 @@ const dynamicStyles = (colors) => StyleSheet.create({
     marginHorizontal: 4,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 100, // Espaço para navbar flutuante
   },
   loadingContainer: {
     flex: 1,

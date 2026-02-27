@@ -264,12 +264,108 @@ class AuthController {
     }
   }
 
+  // Login/Registro com Google (usando ID Token)
+  static async googleAuth(req, res, next) {
+    try {
+      const { idToken } = req.body;
+
+      logger.info('📱 [Google Auth] Solicitação de autenticação');
+
+      if (!idToken) {
+        logger.error('❌ [Google Auth] Token não fornecido');
+        return res.status(400).json(
+          errorResponse('Token do Google é obrigatório', 'MISSING_TOKEN')
+        );
+      }
+
+      // Verificar token com Google
+      const { verifyGoogleToken } = await import('../services/googleAuth.js');
+      const googleUser = await verifyGoogleToken(idToken);
+
+      logger.info('👤 [Google Auth] Dados do usuário extraídos');
+      logger.info(`   Email: ${googleUser.email}`);
+      logger.info(`   Name: ${googleUser.name}`);
+
+      // Buscar ou criar usuário
+      logger.info('🔍 [Google Auth] Buscando usuário...');
+      let user = await User.findByProviderId('google', googleUser.providerId);
+
+      if (!user) {
+        logger.info('   Não encontrado por provider_id, buscando por email...');
+        user = await User.findByEmail(googleUser.email);
+      }
+
+      if (user) {
+        logger.info(`✅ [Google Auth] Usuário encontrado: ${user.id}`);
+        // Usuário existe - atualizar dados
+        const updates = {};
+        if (!user.provider || user.provider !== 'google') {
+          updates.provider = 'google';
+          updates.provider_id = googleUser.providerId;
+        }
+        if (googleUser.picture && user.avatar_url !== googleUser.picture) {
+          updates.avatar_url = googleUser.picture;
+        }
+        if (googleUser.name && user.name !== googleUser.name) {
+          updates.name = googleUser.name;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          logger.info('   Atualizando dados do usuário...');
+          await User.update(user.id, updates);
+          user = await User.findById(user.id);
+        }
+      } else {
+        logger.info('   Usuário não existe, criando novo...');
+        // Criar novo usuário
+        user = await User.create({
+          name: googleUser.name,
+          email: googleUser.email,
+          provider: 'google',
+          provider_id: googleUser.providerId,
+          avatar_url: googleUser.picture,
+          password: null, // Login social não precisa de senha
+        });
+        logger.info(`✅ [Google Auth] Novo usuário criado: ${user.id}`);
+      }
+
+      // Remover senhas do retorno
+      delete user.password;
+      delete user.password_hash;
+
+      // Gerar tokens JWT
+      const token = generateToken({ id: user.id, email: user.email, role: user.role });
+      const refreshToken = generateRefreshToken({ id: user.id });
+
+      logger.info(`✅ [Google Auth] Login concluído: ${user.email}`);
+
+      res.json(
+        successResponse(
+          {
+            user,
+            token,
+            refreshToken
+          },
+          'Login com Google realizado com sucesso'
+        )
+      );
+    } catch (error) {
+      logger.error(`❌ [Google Auth] Erro: ${error.message}`);
+      next(error);
+    }
+  }
+
   // Obter URL de autenticação OAuth
   static async getOAuthUrl(req, res, next) {
     try {
       const { provider, redirect_url } = req.body;
 
+      logger.info('📱 [OAuth] Solicitação de URL de autenticação');
+      logger.info(`   Provider: ${provider}`);
+      logger.info(`   Redirect URL: ${redirect_url}`);
+
       if (!provider || provider !== 'google') {
+        logger.error('❌ [OAuth] Provider inválido');
         return res.status(400).json(
           errorResponse('Provider inválido. Use "google"', 'INVALID_PROVIDER')
         );
@@ -278,10 +374,13 @@ class AuthController {
       const { getOAuthUrl } = await import('../services/supabaseAuth.js');
       const oauthUrl = await getOAuthUrl(provider, redirect_url || req.headers.origin);
 
+      logger.info('✅ [OAuth] URL gerada com sucesso');
+
       res.json(
         successResponse({ url: oauthUrl }, 'URL de autenticação gerada')
       );
     } catch (error) {
+      logger.error(`❌ [OAuth] Erro ao gerar URL: ${error.message}`);
       next(error);
     }
   }
@@ -294,17 +393,30 @@ class AuthController {
       const provider = req.query.provider || req.body.provider;
       const redirectUrl = req.body.redirect_url || req.headers.origin || 'http://localhost:8081';
 
+      logger.info('🔄 [OAuth Callback] Processando callback');
+      logger.info(`   Method: ${req.method}`);
+      logger.info(`   Provider: ${provider}`);
+      logger.info(`   Code: ${code ? code.substring(0, 20) + '...' : 'AUSENTE'}`);
+      logger.info(`   Redirect URL: ${redirectUrl}`);
+
       if (!code) {
+        logger.error('❌ [OAuth Callback] Código não fornecido');
         return res.status(400).json(
           errorResponse('Código de autorização não fornecido', 'MISSING_CODE')
         );
       }
 
       // Trocar código por sessão Supabase
+      logger.info('🔄 [OAuth Callback] Trocando código por sessão...');
       const { exchangeCodeForSession } = await import('../services/supabaseAuth.js');
       const sessionData = await exchangeCodeForSession(code);
 
+      logger.info('📦 [OAuth Callback] Dados da sessão recebidos');
+      logger.info(`   Session exists: ${!!sessionData.session}`);
+      logger.info(`   User exists: ${!!sessionData.user}`);
+
       if (!sessionData.session || !sessionData.user) {
+        logger.error('❌ [OAuth Callback] Sessão ou usuário ausente');
         return res.status(400).json(
           errorResponse('Falha ao obter sessão do Supabase', 'SESSION_ERROR')
         );
@@ -320,20 +432,30 @@ class AuthController {
       const name = userMetadata.full_name || userMetadata.name || userMetadata.display_name || email?.split('@')[0] || 'Usuário';
       const avatarUrl = userMetadata.avatar_url || userMetadata.picture || userMetadata.photo_url;
 
+      logger.info('👤 [OAuth Callback] Dados do usuário extraídos');
+      logger.info(`   Provider: ${authProvider}`);
+      logger.info(`   Provider ID: ${providerId}`);
+      logger.info(`   Email: ${email}`);
+      logger.info(`   Name: ${name}`);
+
       if (!email) {
+        logger.error('❌ [OAuth Callback] Email não encontrado');
         return res.status(400).json(
           errorResponse('Email não encontrado na sessão', 'MISSING_EMAIL')
         );
       }
 
       // Buscar ou criar usuário
+      logger.info('🔍 [OAuth Callback] Buscando usuário...');
       let user = await User.findByProviderId(authProvider, providerId);
 
       if (!user) {
+        logger.info('   Não encontrado por provider_id, buscando por email...');
         user = await User.findByEmail(email);
       }
 
       if (user) {
+        logger.info(`✅ [OAuth Callback] Usuário encontrado: ${user.id}`);
         // Usuário existe - atualizar dados
         const updates = {};
         if (!user.provider || user.provider !== authProvider) {
@@ -348,10 +470,12 @@ class AuthController {
         }
 
         if (Object.keys(updates).length > 0) {
+          logger.info('   Atualizando dados do usuário...');
           await User.update(user.id, updates);
           user = await User.findById(user.id);
         }
       } else {
+        logger.info('   Usuário não existe, criando novo...');
         // Criar novo usuário
         user = await User.create({
           name,
@@ -361,6 +485,7 @@ class AuthController {
           avatar_url: avatarUrl,
           password: null, // Login social não precisa de senha
         });
+        logger.info(`✅ [OAuth Callback] Novo usuário criado: ${user.id}`);
       }
 
       // Remover senhas do retorno

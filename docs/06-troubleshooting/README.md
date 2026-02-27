@@ -91,6 +91,28 @@ Guia de solução de problemas comuns.
 - Confirme conexão com backend
 - Veja logs do Expo
 
+### Google OAuth não funciona
+- Verifique configuração do Google Cloud Console
+- Confirme Client IDs no `.env`
+- Veja [Guia Google OAuth](../02-setup-installation/google-oauth-setup.md)
+
+### Build Android falha
+- Use Expo Go para desenvolvimento
+- Use EAS Build para produção
+- Veja [Guia de Build Android](./android-build-issues.md)
+
+## 📧 Problemas de Email
+
+### Emails não são enviados
+- Verifique configuração SMTP no `.env`
+- Teste com `npm run test:smtp`
+- Veja [Guia SMTP](../02-setup-installation/smtp-setup.md)
+
+### Email vai para spam
+- Configure SPF, DKIM e DMARC
+- Use provedor profissional (SendGrid, AWS SES)
+- Verifique reputação do domínio
+
 ## 🆘 Ainda com Problemas?
 
 1. Verifique os logs:

@@ -96,6 +96,10 @@ Veja o guia completo: [Configuração do Backend](./backend-setup.md)
 - `JWT_SECRET` - Chave secreta para JWT
 - `REDIS_HOST` - Host do Redis (opcional)
 
+**Configurações Adicionais:**
+- [Google OAuth Setup](./google-oauth-setup.md) - Autenticação social
+- [SMTP Setup](./smtp-setup.md) - Envio de emails
+
 ### Admin Panel
 
 O admin panel se conecta automaticamente ao backend. Configure apenas:
@@ -133,7 +137,11 @@ Após a instalação, execute o [Teste Rápido](./quick-test.md) para validar.
 
 ## 🆘 Problemas?
 
-Consulte o [Guia de Troubleshooting](../06-troubleshooting/README.md)
+Consulte os guias de troubleshooting:
+- [Guia Geral de Troubleshooting](../06-troubleshooting/README.md)
+- [Problemas de Build Android](../06-troubleshooting/android-build-issues.md)
+- [Configuração Google OAuth](./google-oauth-setup.md)
+- [Configuração SMTP](./smtp-setup.md)
 
 ---
 

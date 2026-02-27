@@ -63,7 +63,10 @@ const TabBarButton = ({ focused, onPress, iconName, badge }) => {
       >
         <View style={[
           styles.iconWrapper,
-          focused && { backgroundColor: colors.primary + '15' },
+          focused && { 
+            backgroundColor: colors.primary + '15',
+            borderRadius: 26, // Garantir que sempre seja circular
+          },
         ]}>
           <Ionicons
             name={iconName}
@@ -110,7 +113,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <View style={[styles.tabBar, { backgroundColor: colors.card }]}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -144,9 +147,14 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     paddingTop: 8,
+    backgroundColor: 'transparent',
   },
   tabBar: {
     flexDirection: 'row',
@@ -183,6 +191,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    overflow: 'hidden', // Garantir que o background respeite o borderRadius
   },
   badge: {
     position: 'absolute',

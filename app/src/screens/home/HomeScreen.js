@@ -708,7 +708,7 @@ const dynamicStyles = (colors) =>
     list: {
       paddingHorizontal: GRID_PADDING,
       paddingTop: 0,
-      paddingBottom: 24,
+      paddingBottom: 100, // Espaço para navbar flutuante (64px navbar + padding)
     },
     gridRow: {
       justifyContent: 'space-between',

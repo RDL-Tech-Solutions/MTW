@@ -1,40 +1,113 @@
+# =====================================================
+# PreçoCerto Mobile App - .gitignore
+# =====================================================
+
 # Dependencies
 node_modules/
 .pnp
 .pnp.js
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Expo
 .expo/
+.expo-shared/
 web-build/
+dist/
 
-# Native
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+*.env
+!.env.example
+
+# Native builds (se usar prebuild)
+# Descomente se estiver usando bare workflow ou prebuild
+# ios/
+# android/
+
+# Android
+/android
+android/app/build/
+android/app/release/
+android/app/debug/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/*.iml
+android/*.hprof
+*.apk
+*.aab
+
+# iOS
 ios/
-android/
-# Note: If you have ejected or are using bare workflow, you might want to remove ios/ and android/ from here. 
-# But for managed expo (which this seems to be based on structure), it is often cleaner to ignore them if they are generated. 
-# However, usually with 'prebuild' they are committed. 
-# Given the user says "cache files", I will definitely ignore node_modules and .expo.
-# I'll keep ios/android commented out or standard. A standard "managed" project doesn't even have them.
-# If they exist, they are usually source.
-# Let's stick to cache files.
+ios/Pods/
+ios/build/
+ios/*.xcworkspace
+ios/*.xcuserdata
+ios/Podfile.lock
+*.ipa
+*.dSYM.zip
+*.dSYM
 
-# Cache
-.npm/
-.cache/
+# Keystores
+*.keystore
+*.jks
+!debug.keystore
+
+# Logs
+logs/
 *.log
-
-# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 
-# MacOS
+# OS
 .DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+
+# Cache
+.cache/
+.npm/
+.eslintcache
+*.js.map
 
 # Bundle artifacts
-*.js.map
 *.bundle
+*.jsbundle
 
-# Editor
-.vscode
-.idea
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# EAS
+.eas/
+eas-build-*.tar.gz
+
+# Misc
+.watchmanconfig
