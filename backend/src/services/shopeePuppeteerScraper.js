@@ -16,7 +16,6 @@ class ShopeePuppeteerScraper {
                 const isShortLink = url.includes('s.shopee') || url.includes('shp.ee');
 
                 if (isShortLink) {
-                    console.log('   📱 Detectado link curto/móvel - Emulando iPhone...');
                     const iPhone = {
                         name: 'iPhone 13 Pro',
                         userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
@@ -43,20 +42,17 @@ class ShopeePuppeteerScraper {
                 });
 
                 // Navegar para a página
-                console.log(`   🔄 Navegando para: ${url.substring(0, 80)}...`);
-
                 try {
                     const response = await page.goto(url, {
                         waitUntil: 'networkidle2',
                         timeout: 60000
                     });
                 } catch (e) {
-                    console.log('   ⚠️ Timeout ou erro na navegação inicial (pode ser normal em redirecionamentos)');
+                    // Timeout pode ser normal em redirecionamentos
                 }
 
                 // Aguardar redirecionamento explicitamente se for link curto
                 if (isShortLink) {
-                    console.log('   ⏳ Aguardando redirecionamento de link móvel...');
                     try {
                         await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }).catch(() => { });
                     } catch (e) { }
@@ -64,14 +60,12 @@ class ShopeePuppeteerScraper {
 
                 // Verificar URL final
                 const currentUrl = page.url();
-                console.log('   📍 URL atual:', currentUrl);
 
                 // Tentar esperar por um seletor de produto válido
                 try {
                     await page.waitForSelector('.product-briefing, .qaNIZv, .attM6y, .pdp-product-title, [class*="product-title"]', { timeout: 10000 });
-                    console.log('   ✅ Elemento de produto detectado!');
                 } catch (e) {
-                    console.log('   ⚠️ Nenhum elemento de produto detectado no timeout inicial.');
+                    // Elemento não encontrado no timeout
                 }
 
                 if (currentUrl.includes('shopee.com.br') && !currentUrl.includes('-i.') && currentUrl.length < 50) {
@@ -80,12 +74,6 @@ class ShopeePuppeteerScraper {
 
                 // Aguardar elementos carregarem
                 await new Promise(r => setTimeout(r, 5000));
-
-                // DEBUG: Salvar HTML para inspeção
-                const html = await page.content();
-                const fs = await import('fs');
-                fs.writeFileSync('shopee_debug.html', html);
-                console.log('   📸 HTML salvo em shopee_debug.html');
 
                 // Extrair dados da página
                 const data = await page.evaluate(() => {

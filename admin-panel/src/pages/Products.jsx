@@ -213,7 +213,6 @@ export default function Products() {
       categoriesData = categoriesData.filter(cat => cat.is_active !== false);
 
       setCategories(categoriesData);
-      console.log('✅ Categorias carregadas:', categoriesData.length, 'categorias', categoriesData);
     } catch (error) {
       console.error('❌ Erro ao carregar categorias:', error);
       console.error('Resposta completa:', error.response?.data);
@@ -349,21 +348,14 @@ export default function Products() {
       return;
     }
 
-    console.log('🔗 Iniciando análise do link:', formData.affiliate_url);
     setAnalyzingLink(true);
     setProcessingActions(prev => ({ ...prev, analyzing: true }));
     try {
-      console.log('📤 Enviando requisição para API...');
       const response = await api.post('/link-analyzer/analyze', {
         url: formData.affiliate_url
       });
 
-      console.log('📦 Resposta completa da API:', response);
-      console.log('📦 Dados da resposta:', response.data);
-
       const productInfo = response.data.data || response.data;
-
-      console.log('📦 Dados do produto extraídos:', productInfo);
 
       // Verificar se há erro na resposta
       if (productInfo.error) {
@@ -427,8 +419,6 @@ export default function Products() {
         platform: productInfo.platform || formData.platform || 'shopee',
         category_id: detectedCategory || formData.category_id || ''
       };
-
-      console.log('📝 Dados do formulário atualizados:', updatedFormData);
 
       setFormData(updatedFormData);
 

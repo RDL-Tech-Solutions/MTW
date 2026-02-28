@@ -72,18 +72,15 @@ export const useNotificationStore = create((set, get) => ({
   setupNotificationListeners: () => {
     // Listener para notificações recebidas enquanto app está aberto
     const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log('🔔 Notificação recebida:', notification);
       set({ lastNotification: notification });
     });
 
     // Listener para quando usuário toca na notificação
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('👆 Usuário tocou na notificação:', response);
       const data = response.notification.request.content.data;
       
       // Aqui você pode navegar para telas específicas baseado no tipo
       if (data?.screen) {
-        console.log(`Navegar para: ${data.screen}`);
         // TODO: Implementar navegação usando navigation ref
       }
       
@@ -145,16 +142,9 @@ export const useNotificationStore = create((set, get) => ({
   // Atualizar preferências
   updatePreferences: async (updates) => {
     try {
-      console.log('🔄 Atualizando preferências...');
-      console.log('📍 URL Base:', api.defaults.baseURL);
-      console.log('📦 Dados:', JSON.stringify(updates, null, 2));
-      
       set({ isLoading: true });
       
       const response = await api.put('/notification-preferences', updates);
-      
-      console.log('✅ Resposta recebida:', response.status);
-      console.log('📦 Dados da resposta:', JSON.stringify(response.data, null, 2));
       
       const preferences = response.data.data;
 
@@ -202,7 +192,6 @@ export const useNotificationStore = create((set, get) => ({
   registerForPushNotifications: async () => {
     try {
       if (Platform.OS === 'web') {
-        console.log('🔔 Push notifications não suportadas no web');
         set({ isEnabled: false });
         return null;
       }
@@ -216,7 +205,6 @@ export const useNotificationStore = create((set, get) => ({
       }
 
       if (finalStatus !== 'granted') {
-        console.log('❌ Permissão de notificação negada');
         set({ isEnabled: false });
         return null;
       }
@@ -233,7 +221,6 @@ export const useNotificationStore = create((set, get) => ({
         projectId: projectId,
       });
 
-      console.log('✅ Push token obtido:', token.data);
       set({ pushToken: token.data, isEnabled: true });
 
       // Registrar token no backend
@@ -280,7 +267,7 @@ export const useNotificationStore = create((set, get) => ({
           sound: 'default',
         });
 
-        console.log('✅ Canais de notificação configurados');
+        // Configuração concluída
       }
 
       return token.data;
@@ -324,7 +311,6 @@ export const useNotificationStore = create((set, get) => ({
         },
         trigger: null, // Enviar imediatamente
       });
-      console.log('✅ Notificação de teste enviada');
       return true;
     } catch (error) {
       console.error('❌ Erro ao enviar notificação de teste:', error);
@@ -336,7 +322,6 @@ export const useNotificationStore = create((set, get) => ({
   clearBadge: async () => {
     try {
       await Notifications.setBadgeCountAsync(0);
-      console.log('✅ Badge limpo');
     } catch (error) {
       console.error('❌ Erro ao limpar badge:', error);
     }
@@ -346,7 +331,6 @@ export const useNotificationStore = create((set, get) => ({
   getPendingNotifications: async () => {
     try {
       const notifications = await Notifications.getAllScheduledNotificationsAsync();
-      console.log(`📋 ${notifications.length} notificações pendentes`);
       return notifications;
     } catch (error) {
       console.error('❌ Erro ao obter notificações pendentes:', error);
@@ -358,7 +342,6 @@ export const useNotificationStore = create((set, get) => ({
   cancelAllNotifications: async () => {
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
-      console.log('✅ Todas as notificações canceladas');
     } catch (error) {
       console.error('❌ Erro ao cancelar notificações:', error);
     }

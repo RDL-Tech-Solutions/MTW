@@ -36,6 +36,7 @@ Documentação detalhada de cada módulo do sistema.
 Guias de integração com plataformas externas.
 
 - [Bots (WhatsApp & Telegram)](./04-integrations/bots/) - Sistema de notificações
+- [OneSignal](./04-integrations/onesignal/) - Push Notifications & Email
 - [Mercado Livre](./04-integrations/mercadolivre/) - Integração ML (100%)
 - [Shopee](./04-integrations/shopee/) - Integração Shopee (90%)
 - [Telegram Collector](./04-integrations/telegram-collector/) - Coletor de cupons (100%)
@@ -146,6 +147,7 @@ Documentação técnica da arquitetura do sistema.
 
 | Integração | Status | Documentação |
 |------------|--------|--------------|
+| OneSignal | ✅ 100% | [Docs](./04-integrations/onesignal/) |
 | Mercado Livre | ✅ 100% | [Docs](./04-integrations/mercadolivre/) |
 | Shopee | ✅ 90% | [Docs](./04-integrations/shopee/) |
 | Telegram Collector | ✅ 100% | [Docs](./04-integrations/telegram-collector/) |

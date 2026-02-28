@@ -50,7 +50,6 @@ export default function Categories() {
       }
 
       setCategories(categoriesData);
-      console.log('✅ Categorias carregadas:', categoriesData.length);
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
       setCategories([]);

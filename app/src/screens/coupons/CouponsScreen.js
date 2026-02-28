@@ -496,9 +496,7 @@ export default function CouponsScreen({ navigation }) {
         params._t = Date.now();
       }
 
-      console.log('🔄 Carregando cupons com params:', params);
       const response = await api.get('/coupons', { params });
-      console.log('📡 Resposta da API:', response.data);
       
       const data = response.data.data;
       let couponsList = Array.isArray(data) ? data : data?.coupons || [];

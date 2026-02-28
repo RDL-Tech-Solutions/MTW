@@ -294,13 +294,9 @@ export default function TelegramChannels() {
         return;
       }
 
-      console.log('📱 Enviando código para:', config.phone);
-
       const response = await api.post('/telegram-collector/auth/send-code', {
         phone: config.phone
       });
-
-      console.log('📥 Resposta recebida:', response.data);
 
       if (response.data.success) {
         setCodeSent(true);

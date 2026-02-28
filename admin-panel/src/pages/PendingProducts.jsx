@@ -490,14 +490,6 @@ export default function PendingProducts() {
         payload.old_price = parseFloat(editableOldPrice);
       }
 
-      console.log('📤 ========== ENVIANDO PAYLOAD ==========');
-      console.log('   Product ID:', selectedProduct?.id);
-      console.log('   Affiliate Link:', affiliateLink.substring(0, 80) + '...');
-      console.log('   shorten_link no payload:', payload.shorten_link, '(tipo:', typeof payload.shorten_link + ')');
-      console.log('   shouldShorten:', shouldShorten, '(tipo:', typeof shouldShorten + ')');
-      console.log('   Payload completo:', JSON.stringify(payload, null, 2));
-      console.log('==========================================');
-
       if (shouldShorten) {
         toast({
           title: "Encurtando link...",
@@ -506,18 +498,6 @@ export default function PendingProducts() {
       }
 
       const response = await api.post(`/products/pending/${selectedProduct.id}/approve`, payload);
-
-      console.log('✅ ========== RESPOSTA RECEBIDA ==========');
-      console.log('   Status:', response.status);
-      console.log('   Data:', JSON.stringify(response.data, null, 2));
-      if (response.data?.data?.product?.affiliate_link) {
-        const savedLink = response.data.data.product.affiliate_link;
-        console.log('   Link salvo no produto:', savedLink);
-        console.log('   Link é encurtado:', savedLink !== affiliateLink.trim() ? 'SIM ✅' : 'NÃO ❌');
-        console.log('   Link original:', affiliateLink.substring(0, 80) + '...');
-        console.log('   Link salvo:', savedLink.substring(0, 80) + '...');
-      }
-      console.log('==========================================');
 
       toast({
         title: "Sucesso",
@@ -643,11 +623,7 @@ export default function PendingProducts() {
         payload.old_price = parseFloat(editableOldPrice);
       }
 
-      console.log('📤 Aprovando sem publicar:', selectedProduct?.id);
-
       const response = await api.post(`/products/pending/${selectedProduct.id}/approve-only`, payload);
-
-      console.log('✅ Produto aprovado (não publicado):', response.data);
 
       toast({
         title: "Produto Aprovado! ✅",

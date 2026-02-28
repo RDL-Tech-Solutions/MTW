@@ -100,8 +100,6 @@ export default function BotTemplates() {
         return;
       }
 
-      console.log(`🔄 Salvando modo de template: ${field} = ${mode}`);
-
       const response = await api.put('/settings', { [field]: mode });
 
       // Atualizar estado local imediatamente

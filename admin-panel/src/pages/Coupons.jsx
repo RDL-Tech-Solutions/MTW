@@ -237,8 +237,6 @@ export default function Coupons() {
       const response = await api.get('/coupons/pending', { params });
       const data = response.data.data;
 
-      console.log('📋 Resposta de cupons pendentes:', data);
-
       if (Array.isArray(data)) {
         setPendingCoupons(data);
         setPendingPagination(prev => ({ ...prev, page, total: data.length }));

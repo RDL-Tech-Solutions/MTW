@@ -24,10 +24,6 @@ export const supabaseAuth = supabaseUrl && supabaseAnonKey
  * Gerar URL de autenticação OAuth
  */
 export async function getOAuthUrl(provider, redirectUrl) {
-  console.log('🔐 [OAuth] Gerando URL de autenticação');
-  console.log('   Provider:', provider);
-  console.log('   Redirect URL:', redirectUrl);
-  
   if (!supabaseAuth) {
     console.error('❌ [OAuth] Supabase não configurado');
     throw new Error('Supabase não configurado');
@@ -49,8 +45,6 @@ export async function getOAuthUrl(provider, redirectUrl) {
     throw error;
   }
   
-  console.log('✅ [OAuth] URL gerada com sucesso');
-  console.log('   URL:', data.url);
   return data.url;
 }
 
@@ -58,9 +52,6 @@ export async function getOAuthUrl(provider, redirectUrl) {
  * Trocar código de autorização por sessão
  */
 export async function exchangeCodeForSession(code) {
-  console.log('🔄 [OAuth] Trocando código por sessão');
-  console.log('   Code:', code?.substring(0, 20) + '...');
-  
   if (!supabaseAuth) {
     console.error('❌ [OAuth] Supabase não configurado');
     throw new Error('Supabase não configurado');
@@ -73,9 +64,6 @@ export async function exchangeCodeForSession(code) {
     throw error;
   }
   
-  console.log('✅ [OAuth] Código trocado com sucesso');
-  console.log('   User ID:', data.user?.id);
-  console.log('   Email:', data.user?.email);
   return data;
 }
 
