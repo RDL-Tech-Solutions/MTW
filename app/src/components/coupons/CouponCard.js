@@ -12,6 +12,8 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   const [copied, setCopied] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const vipPulseAnim = useRef(new Animated.Value(1)).current;
+  const vipGlowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -20,7 +22,42 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
       delay: Math.min(index * 40, 400),
       useNativeDriver: true,
     }).start();
-  }, [index]);
+
+    // Animação especial para cupons exclusivos
+    if (coupon.is_exclusive) {
+      // Pulse no badge VIP
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(vipPulseAnim, {
+            toValue: 1.15,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(vipPulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
+      // Glow effect
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(vipGlowAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(vipGlowAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
+  }, [index, coupon.is_exclusive]);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, { toValue: 0.98, useNativeDriver: true }).start();
@@ -100,7 +137,22 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
         <View style={s.infoSection}>
           <Text style={s.discountTitle} numberOfLines={1}>
             {formatDiscount()}
-            {coupon.is_exclusive && <Text style={s.exclusiveTag}> ★ VIP</Text>}
+            {coupon.is_exclusive && (
+              <Animated.Text 
+                style={[
+                  s.exclusiveTag, 
+                  { 
+                    transform: [{ scale: vipPulseAnim }],
+                    opacity: vipGlowAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.8, 1],
+                    }),
+                  }
+                ]}
+              >
+                {' '}★ VIP
+              </Animated.Text>
+            )}
           </Text>
 
           {coupon.title && (

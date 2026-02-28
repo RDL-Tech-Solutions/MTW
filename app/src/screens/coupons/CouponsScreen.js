@@ -407,11 +407,24 @@ export default function CouponsScreen({ navigation }) {
       
       couponsList = uniqueCoupons;
       
+      // Ordenar cupons: Exclusivos primeiro, depois por data de criação
       couponsList.sort((a, b) => {
+        // 1. Cupons exclusivos sempre no topo
         if (a.is_exclusive && !b.is_exclusive) return -1;
         if (!a.is_exclusive && b.is_exclusive) return 1;
-        return 0;
+        
+        // 2. Entre cupons do mesmo tipo, ordenar por data (mais recentes primeiro)
+        const dateA = new Date(a.created_at || 0);
+        const dateB = new Date(b.created_at || 0);
+        return dateB - dateA;
       });
+      
+      console.log('🎯 Cupons ordenados (Exclusivos primeiro):', couponsList.map(c => ({
+        code: c.code,
+        is_exclusive: c.is_exclusive,
+        created_at: c.created_at
+      })));
+      
       setCoupons(couponsList);
     } catch (error) {
       console.error('❌ Erro ao carregar cupons:', error);
