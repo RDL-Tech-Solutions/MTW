@@ -13,11 +13,6 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  // Não renderizar cupons esgotados
-  if (coupon.is_out_of_stock) {
-    return null;
-  }
-
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -145,12 +140,12 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
             <TouchableOpacity
               style={[
                 s.actionButton,
-                { backgroundColor: coupon.is_out_of_stock ? colors.border : (copied ? colors.success : platformColor) }
+                { backgroundColor: coupon.is_out_of_stock ? colors.error : (copied ? colors.success : platformColor) }
               ]}
               onPress={coupon.is_out_of_stock ? null : handleCopy}
               disabled={coupon.is_out_of_stock}
             >
-              <Text style={[s.actionButtonText, coupon.is_out_of_stock && { color: colors.textMuted }]}>
+              <Text style={s.actionButtonText}>
                 {coupon.is_out_of_stock ? 'Esgotado' : (copied ? 'Copiado!' : 'Pegar')}
               </Text>
             </TouchableOpacity>
@@ -158,17 +153,24 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
             <TouchableOpacity
               style={[
                 s.actionButton,
-                { borderColor: coupon.is_out_of_stock ? colors.border : platformColor, borderWidth: 1, backgroundColor: 'transparent' }
+                coupon.is_out_of_stock
+                  ? { backgroundColor: colors.error, borderWidth: 0 }
+                  : { borderColor: platformColor, borderWidth: 1, backgroundColor: 'transparent' }
               ]}
               onPress={coupon.is_out_of_stock ? null : onPress}
               disabled={coupon.is_out_of_stock}
             >
-              <Text style={[s.actionButtonText, { color: coupon.is_out_of_stock ? colors.textMuted : platformColor }]}>
+              <Text style={[s.actionButtonText, !coupon.is_out_of_stock && { color: platformColor }]}>
                 {coupon.is_out_of_stock ? 'Esgotado' : 'Ver'}
               </Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Overlay to dim the card and avoid shadow bleed bugs on Android */}
+        {coupon.is_out_of_stock && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.5)', zIndex: 10, borderRadius: 20 }]} pointerEvents="none" />
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -196,7 +198,7 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     }),
   },
   outOfStockCard: {
-    opacity: 0.5,
+    // Intentionally left blank: overlay is used instead of opacity
   },
   leftSection: {
     width: 90,
@@ -320,16 +322,16 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     letterSpacing: 0.3,
   },
   actionContainer: {
-    width: 90,
+    minWidth: 90,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingRight: 16,
+    paddingRight: 10,
   },
   actionButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    minWidth: 80,
+    minWidth: 90,
     alignItems: 'center',
     ...(Platform.OS === 'web' ? {
       boxShadow: '0 2px 8px rgba(0,0,0,0.15)',

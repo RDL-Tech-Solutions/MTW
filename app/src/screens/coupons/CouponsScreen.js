@@ -358,6 +358,7 @@ export default function CouponsScreen({ navigation }) {
       const params = {
         page: 1,
         limit: 50,
+        _t: Date.now(), // Force cache bypass
         // Remover filtro is_active para mostrar todos os cupons
         // Remover filtro is_out_of_stock para mostrar cupons esgotados também
       };
@@ -370,9 +371,42 @@ export default function CouponsScreen({ navigation }) {
         params._t = Date.now();
       }
 
+      console.log('🔄 Carregando cupons com params:', params);
       const response = await api.get('/coupons', { params });
+      console.log('📡 Resposta da API:', response.data);
+      
       const data = response.data.data;
       let couponsList = Array.isArray(data) ? data : data?.coupons || [];
+      
+      // Log para debug - ver cupons duplicados
+      console.log('📊 Total de cupons recebidos:', couponsList.length);
+      console.log('📋 Cupons completos:', JSON.stringify(couponsList.map(c => ({ 
+        id: c.id, 
+        code: c.code, 
+        title: c.title,
+        platform: c.platform,
+        discount_value: c.discount_value,
+        is_exclusive: c.is_exclusive,
+        is_out_of_stock: c.is_out_of_stock
+      })), null, 2));
+      
+      // Remover duplicatas por ID
+      const uniqueCoupons = [];
+      const seenIds = new Set();
+      
+      for (const coupon of couponsList) {
+        if (!seenIds.has(coupon.id)) {
+          seenIds.add(coupon.id);
+          uniqueCoupons.push(coupon);
+        } else {
+          console.warn('⚠️ Cupom duplicado removido:', coupon.id, coupon.code);
+        }
+      }
+      
+      console.log('✅ Cupons únicos após filtro:', uniqueCoupons.length);
+      
+      couponsList = uniqueCoupons;
+      
       couponsList.sort((a, b) => {
         if (a.is_exclusive && !b.is_exclusive) return -1;
         if (!a.is_exclusive && b.is_exclusive) return 1;
@@ -380,7 +414,8 @@ export default function CouponsScreen({ navigation }) {
       });
       setCoupons(couponsList);
     } catch (error) {
-      console.error('Erro ao carregar cupons:', error);
+      console.error('❌ Erro ao carregar cupons:', error);
+      console.error('Detalhes do erro:', error.response?.data || error.message);
       setCoupons([]);
     } finally {
       setLoading(false);
@@ -403,9 +438,6 @@ export default function CouponsScreen({ navigation }) {
   };
 
   const filteredCoupons = coupons.filter(c => {
-    // Filtrar cupons esgotados - não exibir na lista
-    if (c.is_out_of_stock) return false;
-    
     let tabMatch = true;
     if (activeTab === 'expiring') {
       if (!c.valid_until) tabMatch = false;
@@ -428,11 +460,37 @@ export default function CouponsScreen({ navigation }) {
     return tabMatch && searchMatch;
   });
 
+  // Separar cupons ativos e esgotados
+  const activeCoupons = filteredCoupons.filter(c => !c.is_out_of_stock);
+  const outOfStockCoupons = filteredCoupons.filter(c => c.is_out_of_stock);
+
+  // Criar lista combinada com divisor
+  const combinedList = [
+    ...activeCoupons,
+    ...(outOfStockCoupons.length > 0 ? [{ isDivider: true }] : []),
+    ...outOfStockCoupons
+  ];
+
   const s = dynamicStyles(colors);
 
-  const renderCoupon = ({ item, index }) => (
-    <CouponCard coupon={item} onPress={() => handleCouponPress(item)} index={index} />
-  );
+  const renderCoupon = ({ item, index }) => {
+    // Renderizar divisor
+    if (item.isDivider) {
+      return (
+        <View style={s.dividerContainer}>
+          <View style={s.dividerLine} />
+          <View style={s.dividerTextContainer}>
+            <Ionicons name="ban" size={16} color={colors.textMuted} />
+            <Text style={s.dividerText}>Cupons Esgotados</Text>
+          </View>
+          <View style={s.dividerLine} />
+        </View>
+      );
+    }
+    
+    // Renderizar cupom normal
+    return <CouponCard coupon={item} onPress={() => handleCouponPress(item)} index={index} />;
+  };
 
   const renderEmpty = () => (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: floatingAnim }] }}>
@@ -600,9 +658,9 @@ export default function CouponsScreen({ navigation }) {
   return (
     <Animated.View style={[s.container, { opacity: fadeAnim }]}>
       <FlatList
-        data={filteredCoupons}
+        data={combinedList}
         renderItem={renderCoupon}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.isDivider ? `divider-${index}` : item.id}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
         stickyHeaderIndices={[0]}
@@ -904,5 +962,36 @@ const dynamicStyles = (colors) => StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  // Divisor entre cupons ativos e esgotados
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    marginVertical: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dividerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
 });

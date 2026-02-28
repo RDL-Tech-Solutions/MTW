@@ -33,9 +33,22 @@ class CouponController {
   // Listar todos os cupons (admin)
   static async listAll(req, res, next) {
     try {
+      console.log('📥 Requisição listAll recebida:', {
+        query: req.query,
+        headers: req.headers['user-agent']
+      });
+      
       const result = await Coupon.findAll(req.query);
+      
+      console.log('📤 Retornando cupons:', {
+        total: result.total || result.length,
+        count: Array.isArray(result) ? result.length : result.coupons?.length || 0,
+        ids: (Array.isArray(result) ? result : result.coupons || []).map(c => ({ id: c.id, code: c.code }))
+      });
+      
       res.json(successResponse(result));
     } catch (error) {
+      console.error('❌ Erro em listAll:', error);
       next(error);
     }
   }
