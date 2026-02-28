@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
 import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 export default function Products() {
   const { toast } = useToast();
@@ -47,6 +48,10 @@ export default function Products() {
   const [republishFormData, setRepublishFormData] = useState({
     coupon_id: ''
   });
+
+  const isMobile = useIsMobile();
+  const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
+  const [selectedMobileProduct, setSelectedMobileProduct] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -1047,98 +1052,117 @@ export default function Products() {
             </div>
           ) : (
             <>
-              {/* Wrapper com scroll horizontal para mobile */}
-              <div className="overflow-x-auto -mx-0 sm:mx-0">
-                <Table className="min-w-[700px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10 sm:w-12">
-                        <input
-                          type="checkbox"
-                          className="translate-y-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded border-gray-300"
-                          checked={products.length > 0 && selectedIds.length === products.length}
-                          onChange={toggleSelectAll}
-                        />
-                      </TableHead>
-                      <TableHead className="text-xs sm:text-sm">Produto</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Plataforma</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Preço</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Desconto</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Score</TableHead>
-                      <TableHead className="text-right text-xs sm:text-sm">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {products.length === 0 ? (
+              {/* Wrapper com scroll horizontal para mobile OU lista de cards no mobile */}
+              {!isMobile ? (
+                <div className="overflow-x-auto -mx-0 sm:mx-0">
+                  <Table className="min-w-[700px]">
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">
-                          Nenhum produto encontrado
-                        </TableCell>
+                        <TableHead className="w-10 sm:w-12">
+                          <input
+                            type="checkbox"
+                            className="translate-y-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded border-gray-300"
+                            checked={products.length > 0 && selectedIds.length === products.length}
+                            onChange={toggleSelectAll}
+                          />
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">Produto</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Plataforma</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Preço</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Desconto</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Score</TableHead>
+                        <TableHead className="text-right text-xs sm:text-sm">Ações</TableHead>
                       </TableRow>
-                    ) : (
-                      products.map((product) => (
-                        <TableRow key={product.id}>
-                          <TableCell>
-                            <input
-                              type="checkbox"
-                              className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
-                              checked={selectedIds.includes(product.id)}
-                              onChange={() => toggleSelection(product.id)}
-                            />
+                    </TableHeader>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-muted-foreground">
+                            Nenhum produto encontrado
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              {product.image_url && (
-                                <img
-                                  src={product.image_url}
-                                  alt={product.name}
-                                  className="w-10 h-10 rounded object-cover"
-                                />
-                              )}
-                              <div>
-                                <div className="font-medium">
-                                  {product.ai_optimized_title || product.name}
+                        </TableRow>
+                      ) : (
+                        products.map((product) => (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
+                                checked={selectedIds.includes(product.id)}
+                                onChange={() => toggleSelection(product.id)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                {product.image_url && (
+                                  <img
+                                    src={product.image_url}
+                                    alt={product.name}
+                                    className="w-10 h-10 rounded object-cover"
+                                  />
+                                )}
+                                <div>
+                                  <div className="font-medium">
+                                    {product.ai_optimized_title || product.name}
+                                    {product.ai_optimized_title && (
+                                      <Badge variant="outline" className="ml-2 text-xs bg-purple-50 text-purple-700">
+                                        <Brain className="h-3 w-3 inline mr-1" />
+                                        IA
+                                      </Badge>
+                                    )}
+                                  </div>
                                   {product.ai_optimized_title && (
-                                    <Badge variant="outline" className="ml-2 text-xs bg-purple-50 text-purple-700">
-                                      <Brain className="h-3 w-3 inline mr-1" />
-                                      IA
+                                    <div className="text-xs text-muted-foreground line-through">
+                                      {product.name}
+                                    </div>
+                                  )}
+                                  {product.description && (
+                                    <div className="text-sm text-muted-foreground line-clamp-1">
+                                      {product.ai_generated_description || product.description}
+                                    </div>
+                                  )}
+                                  {product.offer_priority && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`mt-1 text-xs ${product.offer_priority === 'high' ? 'bg-red-100 text-red-800' :
+                                        product.offer_priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {product.offer_priority === 'high' ? '🔥 Alta' :
+                                        product.offer_priority === 'medium' ? '⚡ Média' :
+                                          '📌 Baixa'}
                                     </Badge>
                                   )}
                                 </div>
-                                {product.ai_optimized_title && (
-                                  <div className="text-xs text-muted-foreground line-through">
-                                    {product.name}
-                                  </div>
-                                )}
-                                {product.description && (
-                                  <div className="text-sm text-muted-foreground line-clamp-1">
-                                    {product.ai_generated_description || product.description}
-                                  </div>
-                                )}
-                                {product.offer_priority && (
-                                  <Badge
-                                    variant="outline"
-                                    className={`mt-1 text-xs ${product.offer_priority === 'high' ? 'bg-red-100 text-red-800' :
-                                      product.offer_priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}
-                                  >
-                                    {product.offer_priority === 'high' ? '🔥 Alta' :
-                                      product.offer_priority === 'medium' ? '⚡ Média' :
-                                        '📌 Baixa'}
-                                  </Badge>
-                                )}
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <PlatformLogo platform={product.platform} size={16} />
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {product.old_price && product.old_price > (product.final_price || product.current_price) ? (
-                                <>
-                                  <div className="font-medium text-green-600">
+                            </TableCell>
+                            <TableCell>
+                              <PlatformLogo platform={product.platform} size={16} />
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {product.old_price && product.old_price > (product.final_price || product.current_price) ? (
+                                  <>
+                                    <div className="font-medium text-green-600">
+                                      R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
+                                      {product.final_price && product.final_price < product.current_price && (
+                                        <Badge variant="outline" className="ml-2 text-xs">
+                                          Com cupom
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground line-through">
+                                      R$ {parseFloat(product.old_price).toFixed(2)}
+                                    </div>
+                                    {product.final_price && product.final_price < product.current_price && (
+                                      <div className="text-xs text-muted-foreground">
+                                        Sem cupom: R$ {parseFloat(product.current_price).toFixed(2)}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="font-medium">
                                     R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
                                     {product.final_price && product.final_price < product.current_price && (
                                       <Badge variant="outline" className="ml-2 text-xs">
@@ -1146,117 +1170,190 @@ export default function Products() {
                                       </Badge>
                                     )}
                                   </div>
-                                  <div className="text-sm text-muted-foreground line-through">
-                                    R$ {parseFloat(product.old_price).toFixed(2)}
-                                  </div>
-                                  {product.final_price && product.final_price < product.current_price && (
-                                    <div className="text-xs text-muted-foreground">
-                                      Sem cupom: R$ {parseFloat(product.current_price).toFixed(2)}
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <div className="font-medium">
-                                  R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
-                                  {product.final_price && product.final_price < product.current_price && (
-                                    <Badge variant="outline" className="ml-2 text-xs">
-                                      Com cupom
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {product.discount_percentage > 0 && (
-                              <Badge variant="success">
-                                -{product.discount_percentage}%
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {product.offer_score !== null && product.offer_score !== undefined ? (
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1">
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div
-                                      className={`h-2 rounded-full ${product.offer_score >= 70
-                                        ? 'bg-green-500'
-                                        : product.offer_score >= 50
-                                          ? 'bg-yellow-500'
-                                          : 'bg-red-500'
-                                        }`}
-                                      style={{ width: `${product.offer_score}%` }}
-                                    />
-                                  </div>
-                                </div>
-                                <span className="text-xs font-medium text-muted-foreground">
-                                  {product.offer_score.toFixed(0)}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">N/A</span>
-                            )}
-                            {product.is_featured_offer && (
-                              <Badge variant="default" className="mt-1 text-xs bg-yellow-500 hover:bg-yellow-600">
-                                ⭐ Oferta do Dia
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              {product.affiliate_url && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  asChild
-                                >
-                                  <a href={product.affiliate_url} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                              )}
-                              {(product.status === 'approved' || product.status === 'published') && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleRepublish(product)}
-                                  title="Republicar"
-                                  className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
-                                >
-                                  <Zap className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(product)}
-                                title="Editar"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDelete(product.id)}
-                                disabled={processingActions.deleting.has(product.id)}
-                                className="disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Deletar"
-                              >
-                                {processingActions.deleting.has(product.id) ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4 text-destructive" />
                                 )}
-                              </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {product.discount_percentage > 0 && (
+                                <Badge variant="success">
+                                  -{product.discount_percentage}%
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {product.offer_score !== null && product.offer_score !== undefined ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className={`h-2 rounded-full ${product.offer_score >= 70
+                                          ? 'bg-green-500'
+                                          : product.offer_score >= 50
+                                            ? 'bg-yellow-500'
+                                            : 'bg-red-500'
+                                          }`}
+                                        style={{ width: `${product.offer_score}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <span className="text-xs font-medium text-muted-foreground">
+                                    {product.offer_score.toFixed(0)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">N/A</span>
+                              )}
+                              {product.is_featured_offer && (
+                                <Badge variant="default" className="mt-1 text-xs bg-yellow-500 hover:bg-yellow-600">
+                                  ⭐ Oferta do Dia
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                {product.affiliate_url && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    asChild
+                                  >
+                                    <a href={product.affiliate_url} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                )}
+                                {(product.status === 'approved' || product.status === 'published') && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleRepublish(product)}
+                                    title="Republicar"
+                                    className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
+                                  >
+                                    <Zap className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(product)}
+                                  title="Editar"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(product.id)}
+                                  disabled={processingActions.deleting.has(product.id)}
+                                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Deletar"
+                                >
+                                  {processingActions.deleting.has(product.id) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  )}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-3 px-2">
+                  {/* Select All Checkbox for Mobile */}
+                  {products.length > 0 && (
+                    <div className="flex items-center gap-2 px-1 mb-1">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300"
+                        checked={selectedIds.length === products.length}
+                        onChange={toggleSelectAll}
+                        id="selectAllMobile"
+                      />
+                      <label htmlFor="selectAllMobile" className="text-xs font-medium">Selecionar Todos</label>
+                    </div>
+                  )}
+                  {products.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8 border rounded-lg bg-gray-50">
+                      Nenhum produto encontrado
+                    </div>
+                  ) : (
+                    products.map((product) => (
+                      <Card
+                        key={product.id}
+                        className={`overflow-hidden cursor-pointer transition-colors active:bg-gray-100 ${selectedIds.includes(product.id) ? 'border-primary ring-1 ring-primary' : ''}`}
+                        onClick={(e) => {
+                          // Prevent opening modal if clicking the checkbox
+                          if (e.target.type === 'checkbox') return;
+                          setSelectedMobileProduct(product);
+                          setIsMobileOptionsOpen(true);
+                        }}
+                      >
+                        <div className="p-3 flex gap-3">
+                          <div className="pt-1">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-gray-300"
+                              checked={selectedIds.includes(product.id)}
+                              onChange={() => toggleSelection(product.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          {product.image_url && (
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              className="w-16 h-16 rounded-md object-cover border border-gray-100 flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <div className="font-semibold text-sm line-clamp-2 leading-tight">
+                                {product.ai_optimized_title || product.name}
+                              </div>
+                              <PlatformLogo platform={product.platform} size={16} />
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+
+                            <div className="flex items-baseline gap-2 mb-1">
+                              <span className="font-bold text-green-600 text-sm">
+                                R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
+                              </span>
+                              {product.old_price && product.old_price > (product.final_price || product.current_price) && (
+                                <span className="text-xs text-muted-foreground line-through">
+                                  R$ {parseFloat(product.old_price).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {product.discount_percentage > 0 && (
+                                <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">
+                                  -{product.discount_percentage}%
+                                </Badge>
+                              )}
+                              {product.final_price && product.final_price < product.current_price && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-green-50 border-green-200">
+                                  Com cupom
+                                </Badge>
+                              )}
+                              {product.is_featured_offer && (
+                                <Badge variant="default" className="text-[10px] px-1 py-0 h-4 bg-yellow-500">
+                                  ⭐ Oferta
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              )}
 
               <Pagination
                 currentPage={pagination.page}
@@ -1324,6 +1421,80 @@ export default function Products() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+
+              {/* Mobile Options Modal */}
+              {isMobile && selectedMobileProduct && (
+                <Dialog open={isMobileOptionsOpen} onOpenChange={setIsMobileOptionsOpen}>
+                  <DialogContent className="w-[95vw] rounded-xl p-4 sm:max-w-md">
+                    <DialogHeader className="text-left mb-4">
+                      <DialogTitle className="text-base line-clamp-2 leading-tight">
+                        {selectedMobileProduct.ai_optimized_title || selectedMobileProduct.name}
+                      </DialogTitle>
+                      <DialogDescription className="text-xs">
+                        Escolha uma ação para este produto
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-3">
+                      {selectedMobileProduct.affiliate_url && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start h-12 text-black bg-gray-50 dark:bg-gray-900 dark:text-gray-100"
+                          asChild
+                        >
+                          <a href={selectedMobileProduct.affiliate_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="mr-3 h-5 w-5 text-gray-500" />
+                            Abrir Link na Loja
+                          </a>
+                        </Button>
+                      )}
+
+                      {(selectedMobileProduct.status === 'approved' || selectedMobileProduct.status === 'published') && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start h-12 text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200"
+                          onClick={() => {
+                            setIsMobileOptionsOpen(false);
+                            handleRepublish(selectedMobileProduct);
+                          }}
+                        >
+                          <Zap className="mr-3 h-5 w-5" />
+                          Republicar Oferta
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start h-12 text-blue-600 bg-blue-50 border-blue-200"
+                        onClick={() => {
+                          setIsMobileOptionsOpen(false);
+                          handleEdit(selectedMobileProduct);
+                        }}
+                      >
+                        <Edit className="mr-3 h-5 w-5" />
+                        Editar Produto
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start h-12 text-red-600 bg-red-50 border-red-200"
+                        onClick={() => {
+                          setIsMobileOptionsOpen(false);
+                          handleDelete(selectedMobileProduct.id);
+                        }}
+                        disabled={processingActions.deleting.has(selectedMobileProduct.id)}
+                      >
+                        {processingActions.deleting.has(selectedMobileProduct.id) ? (
+                          <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-3 h-5 w-5" />
+                        )}
+                        Excluir Produto
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
             </>
           )}
         </CardContent>

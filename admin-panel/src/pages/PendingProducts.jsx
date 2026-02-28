@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
 import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 export default function PendingProducts() {
   const { toast } = useToast();
@@ -51,13 +52,17 @@ export default function PendingProducts() {
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [editableCurrentPrice, setEditableCurrentPrice] = useState('');
   const [editableOldPrice, setEditableOldPrice] = useState('');
-  
+
   // NOVO: Estados para captura em lote
   const [isBatchCaptureDialogOpen, setIsBatchCaptureDialogOpen] = useState(false);
   const [batchCaptureLinks, setBatchCaptureLinks] = useState('');
   const [batchCapturing, setBatchCapturing] = useState(false);
   const [batchCaptureProgress, setBatchCaptureProgress] = useState({ current: 0, total: 0 });
   const [batchCaptureResults, setBatchCaptureResults] = useState(null);
+
+  const isMobile = useIsMobile();
+  const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
+  const [selectedMobileProduct, setSelectedMobileProduct] = useState(null);
 
   useEffect(() => {
     fetchPendingProducts(1);
@@ -858,136 +863,295 @@ export default function PendingProducts() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
+              {/* Mobile Options Modal */}
+              {isMobile && selectedMobileProduct && (
+                <Dialog open={isMobileOptionsOpen} onOpenChange={setIsMobileOptionsOpen}>
+                  <DialogContent className="w-[95vw] rounded-xl p-4 sm:max-w-md">
+                    <DialogHeader className="text-left mb-4">
+                      <DialogTitle className="text-base line-clamp-2 leading-tight">
+                        {selectedMobileProduct.ai_optimized_title || selectedMobileProduct.name}
+                      </DialogTitle>
+                      <DialogDescription className="text-xs">
+                        Escolha uma ação para este produto pendente
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-3">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start h-12 text-green-600 bg-green-50 border-green-200"
+                        onClick={() => {
+                          setIsMobileOptionsOpen(false);
+                          handleOpenApprovalDialog(selectedMobileProduct);
+                        }}
+                      >
+                        <CheckCircle className="mr-3 h-5 w-5" />
+                        Aprovar Produto
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start h-12 text-red-600 bg-red-50 border-red-200"
+                        onClick={() => {
+                          setIsMobileOptionsOpen(false);
+                          handleOpenRejectDialog(selectedMobileProduct);
+                        }}
+                      >
+                        <XCircle className="mr-3 h-5 w-5" />
+                        Rejeitar (Excluir)
+                      </Button>
+
+                      {selectedMobileProduct.platform_url && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start h-12 text-black bg-gray-50 dark:bg-gray-900 dark:text-gray-100"
+                          asChild
+                        >
+                          <a href={selectedMobileProduct.platform_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="mr-3 h-5 w-5 text-gray-500" />
+                            Abrir Link na Loja
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+
+              {/* Tabela de Produtos Pendentes para Desktop OU Lista de Cards para Mobile */}
+              {!isMobile ? (
+                <div className="overflow-x-auto -mx-0 sm:mx-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={toggleSelectAll}
+                            className={`h-8 w-8 p-0 ${selectedProducts.size === products.length && products.length > 0 ? 'text-primary' : 'text-muted-foreground'}`}
+                          >
+                            {selectedProducts.size === products.length && products.length > 0 ? (
+                              <CheckSquare className="h-4 w-4" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TableHead>
+                        <TableHead>Imagem</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Plataforma</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Preço</TableHead>
+                        <TableHead>Desconto</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.map((product) => (
+                        <TableRow key={product.id} className={selectedProducts.has(product.id) ? 'bg-muted/50' : ''}>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleProductSelection(product.id)}
+                              className={`h-8 w-8 p-0 ${selectedProducts.has(product.id) ? 'text-primary' : 'text-muted-foreground'}`}
+                            >
+                              {selectedProducts.has(product.id) ? (
+                                <CheckSquare className="h-4 w-4" />
+                              ) : (
+                                <Square className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <img
+                              src={product.image_url || 'https://via.placeholder.com/50'}
+                              alt={product.name}
+                              className="w-12 h-12 object-cover rounded"
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium max-w-[300px]">
+                            <div className="truncate" title={product.name}>
+                              {product.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <PlatformLogo platform={product.platform} size={16} />
+                          </TableCell>
+                          <TableCell>
+                            {product.category_name ? (
+                              <Badge variant="outline" className="text-xs">
+                                {product.category_icon && <span className="mr-1">{product.category_icon}</span>}
+                                {product.category_name}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Sem categoria</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-semibold">
+                                {formatPrice(product.final_price || product.current_price)}
+                                {product.final_price && product.final_price < product.current_price && (
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    Com cupom
+                                  </Badge>
+                                )}
+                              </div>
+                              {product.old_price && (
+                                <div className="text-sm text-muted-foreground line-through">
+                                  {formatPrice(product.old_price)}
+                                </div>
+                              )}
+                              {product.final_price && product.final_price < product.current_price && (
+                                <div className="text-xs text-muted-foreground">
+                                  Sem cupom: {formatPrice(product.current_price)}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {product.discount_percentage > 0 && (
+                              <Badge variant="destructive">
+                                {product.discount_percentage}% OFF
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {new Date(product.created_at).toLocaleDateString('pt-BR')}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(product.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenApprovalDialog(product)}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Aprovar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleOpenRejectDialog(product)}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Rejeitar
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-3 px-2">
+                  {/* Select All Checkbox for Mobile */}
+                  {products.length > 0 && (
+                    <div className="flex items-center gap-2 px-1 mb-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={toggleSelectAll}
-                        className="h-8 w-8 p-0"
+                        className={`p-1 h-auto text-xs flex gap-2 ${selectedProducts.size === products.length ? 'text-primary' : 'text-muted-foreground'}`}
                       >
                         {selectedProducts.size === products.length ? (
                           <CheckSquare className="h-4 w-4" />
                         ) : (
                           <Square className="h-4 w-4" />
                         )}
+                        Selecionar Todos
                       </Button>
-                    </TableHead>
-                    <TableHead>Imagem</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Plataforma</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Preço</TableHead>
-                    <TableHead>Desconto</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((product) => (
-                    <TableRow key={product.id} className={selectedProducts.has(product.id) ? 'bg-muted/50' : ''}>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleProductSelection(product.id)}
-                          className="h-8 w-8 p-0"
-                        >
-                          {selectedProducts.has(product.id) ? (
-                            <CheckSquare className="h-4 w-4" />
-                          ) : (
-                            <Square className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <img
-                          src={product.image_url || 'https://via.placeholder.com/50'}
-                          alt={product.name}
-                          className="w-12 h-12 object-cover rounded"
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium max-w-[300px]">
-                        <div className="truncate" title={product.name}>
-                          {product.name}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <PlatformLogo platform={product.platform} size={16} />
-                      </TableCell>
-                      <TableCell>
-                        {product.category_name ? (
-                          <Badge variant="outline" className="text-xs">
-                            {product.category_icon && <span className="mr-1">{product.category_icon}</span>}
-                            {product.category_name}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Sem categoria</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-semibold">
-                            {formatPrice(product.final_price || product.current_price)}
-                            {product.final_price && product.final_price < product.current_price && (
-                              <Badge variant="outline" className="ml-2 text-xs">
-                                Com cupom
-                              </Badge>
-                            )}
+                    </div>
+                  )}
+                  {products.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8 border rounded-lg bg-gray-50">
+                      Nenhum produto pendente
+                    </div>
+                  ) : (
+                    products.map((product) => (
+                      <Card
+                        key={product.id}
+                        className={`overflow-hidden cursor-pointer transition-colors active:bg-gray-100 ${selectedProducts.has(product.id) ? 'border-primary ring-1 ring-primary' : ''}`}
+                        onClick={(e) => {
+                          // Prevent opening modal if clicking the checkbox wrapper/button
+                          if (e.target.closest('button.select-btn')) return;
+                          setSelectedMobileProduct(product);
+                          setIsMobileOptionsOpen(true);
+                        }}
+                      >
+                        <div className="p-3 flex gap-3">
+                          <div className="pt-1 select-btn">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleProductSelection(product.id);
+                              }}
+                              className={`h-6 w-6 p-0 ${selectedProducts.has(product.id) ? 'text-primary' : 'text-muted-foreground'}`}
+                            >
+                              {selectedProducts.has(product.id) ? (
+                                <CheckSquare className="h-5 w-5 pointer-events-none" />
+                              ) : (
+                                <Square className="h-5 w-5 pointer-events-none" />
+                              )}
+                            </Button>
                           </div>
-                          {product.old_price && (
-                            <div className="text-sm text-muted-foreground line-through">
-                              {formatPrice(product.old_price)}
-                            </div>
+                          {product.image_url && (
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              className="w-16 h-16 rounded-md object-cover border border-gray-100 flex-shrink-0"
+                            />
                           )}
-                          {product.final_price && product.final_price < product.current_price && (
-                            <div className="text-xs text-muted-foreground">
-                              Sem cupom: {formatPrice(product.current_price)}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <div className="font-semibold text-sm line-clamp-2 leading-tight">
+                                {product.ai_optimized_title || product.name}
+                              </div>
+                              <PlatformLogo platform={product.platform} size={16} />
                             </div>
-                          )}
+
+                            <div className="flex items-baseline gap-2 mb-1">
+                              <span className="font-bold text-green-600 text-sm">
+                                R$ {parseFloat(product.final_price || product.current_price).toFixed(2)}
+                              </span>
+                              {product.old_price && product.old_price > (product.final_price || product.current_price) && (
+                                <span className="text-xs text-muted-foreground line-through">
+                                  R$ {parseFloat(product.old_price).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {product.discount_percentage > 0 && (
+                                <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">
+                                  -{product.discount_percentage}% OFF
+                                </Badge>
+                              )}
+                              {product.category_name && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                                  {product.category_icon && <span className="mr-1">{product.category_icon}</span>}
+                                  {product.category_name}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {product.discount_percentage > 0 && (
-                          <Badge variant="destructive">
-                            {product.discount_percentage}% OFF
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {new Date(product.created_at).toLocaleDateString('pt-BR')}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(product.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenApprovalDialog(product)}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Aprovar
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleOpenRejectDialog(product)}
-                          >
-                            <X className="h-4 w-4 mr-2" />
-                            Rejeitar
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              )}
 
               {pagination.totalPages > 1 && (
                 <div className="mt-4">
@@ -1016,12 +1180,12 @@ export default function PendingProducts() {
           {selectedProduct && (
             <div className="space-y-4">
               {/* Informações do Produto */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+              <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                <div className={`${isMobile ? 'h-32 bg-gray-50 border rounded-lg p-2 flex items-center justify-center' : ''}`}>
                   <img
                     src={selectedProduct.image_url || 'https://via.placeholder.com/300'}
                     alt={selectedProduct.name}
-                    className="w-full h-64 object-cover rounded-lg"
+                    className={`${isMobile ? 'max-h-full max-w-full object-contain rounded' : 'w-full h-64 object-cover rounded-lg'}`}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1136,7 +1300,7 @@ export default function PendingProducts() {
               </div>
 
               {/* Editar Preços */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className={`grid gap-4 ${isMobile ? 'grid-cols-2' : 'grid-cols-2'}`}>
                 <div>
                   <Label htmlFor="current_price">Preço Atual (R$)</Label>
                   <Input
@@ -1237,93 +1401,110 @@ export default function PendingProducts() {
             </div>
           )}
 
-          <DialogFooter className="flex-wrap gap-2">
+          <DialogFooter className={`flex-wrap gap-2 mt-4 ${isMobile ? 'flex-col sm:flex-row' : ''}`}>
             {/* Botão Cancelar */}
-            <Button
-              variant="outline"
-              onClick={handleCloseApprovalDialog}
-              disabled={approving || shortening || scheduling || approvingOnly}
-            >
-              Cancelar
-            </Button>
+            {!isMobile && (
+              <Button
+                variant="outline"
+                onClick={handleCloseApprovalDialog}
+                disabled={approving || shortening || scheduling || approvingOnly}
+              >
+                Cancelar
+              </Button>
+            )}
 
-            {/* Botão Encurtar Link */}
-            <Button
-              variant="outline"
-              onClick={() => handleApprove(true)}
-              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
-            >
-              {shortening ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Encurtando...
-                </>
-              ) : (
-                <>
-                  <Link2 className="h-4 w-4 mr-2" />
-                  Encurtar + Publicar
-                </>
-              )}
-            </Button>
+            <div className={`flex gap-2 ${isMobile ? 'flex-col w-full' : ''}`}>
+              {/* Botão Encurtar Link */}
+              <Button
+                variant="outline"
+                onClick={() => handleApprove(true)}
+                disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
+                className={isMobile ? 'w-full mb-1' : ''}
+              >
+                {shortening ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Encurtando...
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="h-4 w-4 mr-2" />
+                    Encurtar + Publicar
+                  </>
+                )}
+              </Button>
 
-            {/* Botão Aprovar (SEM publicar) - Verde */}
-            <Button
-              variant="outline"
-              className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
-              onClick={handleApproveOnly}
-              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
-            >
-              {approvingOnly ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Aprovando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Aprovar
-                </>
-              )}
-            </Button>
+              {/* Botão Aprovar (SEM publicar) - Verde */}
+              <Button
+                variant="outline"
+                className={`bg-green-50 hover:bg-green-100 text-green-700 border-green-300 ${isMobile ? 'w-full mb-1' : ''}`}
+                onClick={handleApproveOnly}
+                disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
+              >
+                {approvingOnly ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Aprovando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Aprovar
+                  </>
+                )}
+              </Button>
 
-            {/* Botão Principal: Aprovar e Publicar */}
-            <Button
-              variant="default"
-              onClick={() => handleApprove(false)}
-              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
-            >
-              {approving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Publicando...
-                </>
-              ) : (
-                <>
-                  <Zap className="h-4 w-4 mr-2" />
-                  Aprovar e Publicar
-                </>
-              )}
-            </Button>
+              {/* Botão Principal: Aprovar e Publicar */}
+              <Button
+                variant="default"
+                onClick={() => handleApprove(false)}
+                disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
+                className={isMobile ? 'w-full mb-1' : ''}
+              >
+                {approving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Publicando...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Aprovar e Publicar
+                  </>
+                )}
+              </Button>
 
-            {/* Botão IA Agendar - Roxo */}
-            <Button
-              variant="default"
-              className="bg-purple-600 hover:bg-purple-700"
-              onClick={handleApproveAndSchedule}
-              disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
-            >
-              {scheduling ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Agendando...
-                </>
-              ) : (
-                <>
-                  <Calendar className="h-4 w-4 mr-2" />
-                  IA Agendar
-                </>
-              )}
-            </Button>
+              {/* Botão IA Agendar - Roxo */}
+              <Button
+                variant="default"
+                className={`bg-purple-600 hover:bg-purple-700 ${isMobile ? 'w-full mb-1' : ''}`}
+                onClick={handleApproveAndSchedule}
+                disabled={approving || shortening || scheduling || approvingOnly || !affiliateLink.trim()}
+              >
+                {scheduling ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Agendando...
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    IA Agendar
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {isMobile && (
+              <Button
+                variant="outline"
+                onClick={handleCloseApprovalDialog}
+                disabled={approving || shortening || scheduling || approvingOnly}
+                className="w-full mt-2"
+              >
+                Cancelar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

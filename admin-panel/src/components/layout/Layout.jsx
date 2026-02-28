@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import BottomNav from './BottomNav';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 
 export default function Layout() {
@@ -45,6 +46,9 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-20 md:pb-6">
           <Outlet />
         </main>
+
+        {/* Mobile Bottom Navigation */}
+        {isMobile && <BottomNav onMenuClick={handleMenuClick} />}
       </div>
     </div>
   );

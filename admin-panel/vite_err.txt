@@ -1,0 +1,13 @@
+[31mx[39m Build failed in 5.18s
+[31merror during build:
+[31m[vite-plugin-pwa:build] [plugin vite-plugin-pwa:build] src/pages/Coupons.jsx: There was an error during the build:
+  Could not resolve "../hooks/use-mobile.jsx" from "src/pages/Coupons.jsx"
+Additionally, handling the error in the 'buildEnd' hook caused the following error:
+  Could not resolve "../hooks/use-mobile.jsx" from "src/pages/Coupons.jsx"[31m
+file: [36mC:/dev/MTW/admin-panel/src/pages/Coupons.jsx[31m
+    at getRollupError (file:///C:/dev/MTW/admin-panel/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at file:///C:/dev/MTW/admin-panel/node_modules/rollup/dist/es/shared/node-entry.js:23347:39
+    at async catchUnfinishedHookActions (file:///C:/dev/MTW/admin-panel/node_modules/rollup/dist/es/shared/node-entry.js:22805:16)
+    at async rollupInternal (file:///C:/dev/MTW/admin-panel/node_modules/rollup/dist/es/shared/node-entry.js:23330:5)
+    at async build (file:///C:/dev/MTW/admin-panel/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65709:14)
+    at async CAC.<anonymous> (file:///C:/dev/MTW/admin-panel/node_modules/vite/dist/node/cli.js:829:5)[39m

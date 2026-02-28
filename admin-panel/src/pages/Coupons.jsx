@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Copy, Calendar, Brain, Send, XCircle, CheckCircle, Filter, Download, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, Calendar, Brain, Send, XCircle, CheckCircle, Filter, Download, Loader2, ExternalLink } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { format } from 'date-fns';
 import { Pagination } from '../components/ui/Pagination';
 import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 export default function Coupons() {
   const [activeTab, setActiveTab] = useState('all'); // 'all' ou 'pending'
@@ -22,6 +23,12 @@ export default function Coupons() {
   const [editingCoupon, setEditingCoupon] = useState(null);
   const [approvalCoupon, setApprovalCoupon] = useState(null); // Cupom para modal de aprovação
   const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
+
+  // Mobile UI States
+  const isMobile = useIsMobile();
+  const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
+  const [selectedMobileCoupon, setSelectedMobileCoupon] = useState(null);
+
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -801,8 +808,8 @@ export default function Coupons() {
                 <span className="hidden sm:inline">Novo </span>Cupom
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
+            <DialogContent className="w-[95vw] rounded-xl p-4 sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader className="text-left">
                 <DialogTitle>
                   {editingCoupon ? 'Editar Cupom' : 'Novo Cupom'}
                 </DialogTitle>
@@ -1064,11 +1071,11 @@ export default function Coupons() {
                   </div>
                 )}
 
-                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto">
+                <DialogFooter className="flex-col sm:flex-row gap-3 mt-6 sm:mt-4 sm:space-x-2">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto order-2 sm:order-1">
                     Cancelar
                   </Button>
-                  <Button type="submit" className="w-full sm:w-auto">
+                  <Button type="submit" className="w-full sm:w-auto order-1 sm:order-2">
                     {editingCoupon ? 'Salvar' : 'Criar'}
                   </Button>
                 </DialogFooter>
@@ -1212,312 +1219,580 @@ export default function Coupons() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <input
-                        type="checkbox"
-                        className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
-                        checked={
-                          (activeTab === 'all' ? coupons.length > 0 : pendingCoupons.length > 0) &&
-                          selectedIds.length === (activeTab === 'all' ? coupons.length : pendingCoupons.length)
-                        }
-                        onChange={toggleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Plataforma</TableHead>
-                    <TableHead>Desconto</TableHead>
-                    <TableHead>Confiança</TableHead>
-                    {activeTab === 'pending' && <TableHead>Origem</TableHead>}
-                    <TableHead>Usos</TableHead>
-                    <TableHead>Validade</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(activeTab === 'all' ? coupons : pendingCoupons).length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={activeTab === 'all' ? 9 : 10} className="text-center text-muted-foreground">
-                        {activeTab === 'pending' ? 'Nenhum cupom pendente encontrado' : 'Nenhum cupom encontrado'}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    (activeTab === 'all' ? coupons : pendingCoupons).map((coupon) => (
-                      <TableRow key={coupon.id}>
-                        <TableCell>
+              {/* Mobile Options Modal */}
+              {isMobile && selectedMobileCoupon && (
+                <Dialog open={isMobileOptionsOpen} onOpenChange={setIsMobileOptionsOpen}>
+                  <DialogContent className="w-[95vw] rounded-xl p-4 sm:max-w-md">
+                    <DialogHeader className="text-left mb-4">
+                      <DialogTitle className="text-base line-clamp-2 leading-tight flex items-center gap-2">
+                        <code className="bg-muted px-2 py-1 rounded">{selectedMobileCoupon.code}</code>
+                        {selectedMobileCoupon.is_exclusive && <span className="text-yellow-500">⭐</span>}
+                      </DialogTitle>
+                      <DialogDescription className="text-xs">
+                        Escolha uma ação para este cupom
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-3">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start h-12 text-black bg-gray-50 dark:bg-gray-900"
+                        onClick={() => {
+                          copyToClipboard(selectedMobileCoupon.code);
+                          setIsMobileOptionsOpen(false);
+                        }}
+                      >
+                        <Copy className="mr-3 h-5 w-5 text-gray-500" />
+                        Copiar Código
+                      </Button>
+
+                      {selectedMobileCoupon.is_pending_approval && activeTab === 'pending' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start h-12 text-green-600 bg-green-50 border-green-200"
+                            onClick={() => {
+                              setIsMobileOptionsOpen(false);
+                              setApprovalCoupon(selectedMobileCoupon);
+                              setFormData({
+                                code: selectedMobileCoupon.code || '',
+                                platform: selectedMobileCoupon.platform || 'general',
+                                description: selectedMobileCoupon.description || '',
+                                discount_type: selectedMobileCoupon.discount_type || 'percentage',
+                                discount_value: selectedMobileCoupon.discount_value || '',
+                                min_purchase: selectedMobileCoupon.min_purchase || '',
+                                max_discount_value: selectedMobileCoupon.max_discount_value || '',
+                                is_general: selectedMobileCoupon.is_general !== undefined && selectedMobileCoupon.is_general !== null ? selectedMobileCoupon.is_general : null,
+                                applicable_products: selectedMobileCoupon.applicable_products || [],
+                                max_uses: selectedMobileCoupon.max_uses || '',
+                                current_uses: selectedMobileCoupon.current_uses || 0,
+                                valid_from: selectedMobileCoupon.valid_from ? format(new Date(selectedMobileCoupon.valid_from), 'yyyy-MM-dd') : '',
+                                valid_until: selectedMobileCoupon.valid_until ? format(new Date(selectedMobileCoupon.valid_until), 'yyyy-MM-dd') : '',
+                                is_exclusive: selectedMobileCoupon.is_exclusive || false
+                              });
+                              setIsApprovalDialogOpen(true);
+                            }}
+                          >
+                            <CheckCircle className="mr-3 h-5 w-5" />
+                            Revisar e Publicar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start h-12 text-red-600 bg-red-50 border-red-200"
+                            onClick={() => {
+                              setIsMobileOptionsOpen(false);
+                              const reason = prompt('Motivo da rejeição (opcional):');
+                              if (reason !== null) {
+                                handleRejectCoupon(selectedMobileCoupon.id, reason);
+                              }
+                            }}
+                          >
+                            <XCircle className="mr-3 h-5 w-5" />
+                            Rejeitar Cupom
+                          </Button>
+                        </>
+                      )}
+
+                      {selectedMobileCoupon.is_pending_approval && activeTab === 'all' && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start h-12 text-blue-600 bg-blue-50 border-blue-200"
+                          onClick={() => {
+                            setIsMobileOptionsOpen(false);
+                            handleForcePublish(selectedMobileCoupon);
+                          }}
+                        >
+                          <Send className="mr-3 h-5 w-5" />
+                          Aprovar e Publicar Imediatamente
+                        </Button>
+                      )}
+
+                      {!selectedMobileCoupon.is_pending_approval && (
+                        <>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start h-12"
+                            onClick={() => {
+                              setIsMobileOptionsOpen(false);
+                              handleEdit(selectedMobileCoupon);
+                            }}
+                          >
+                            <Edit className="mr-3 h-5 w-5 text-gray-500" />
+                            Editar Cupom
+                          </Button>
+
+                          {selectedMobileCoupon.is_out_of_stock ? (
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start h-12 text-green-600 bg-green-50 border-green-200"
+                              onClick={() => {
+                                setIsMobileOptionsOpen(false);
+                                handleMarkAsAvailable(selectedMobileCoupon);
+                              }}
+                            >
+                              <CheckCircle className="mr-3 h-5 w-5" />
+                              Marcar como Disponível
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start h-12 text-orange-600 bg-orange-50 border-orange-200"
+                              onClick={() => {
+                                setIsMobileOptionsOpen(false);
+                                handleMarkAsOutOfStock(selectedMobileCoupon);
+                              }}
+                            >
+                              <XCircle className="mr-3 h-5 w-5" />
+                              Marcar como Esgotado
+                            </Button>
+                          )}
+
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start h-12 text-red-600 bg-red-50 border-red-200"
+                            onClick={() => {
+                              setIsMobileOptionsOpen(false);
+                              handleDelete(selectedMobileCoupon.id);
+                            }}
+                          >
+                            <Trash2 className="mr-3 h-5 w-5" />
+                            Excluir Cupom
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+
+              {/* Tabela de Cupons para Desktop OU Lista de Cards para Mobile */}
+              {!isMobile ? (
+                <div className="overflow-x-auto -mx-0 sm:mx-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
                           <input
                             type="checkbox"
                             className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
-                            checked={selectedIds.includes(coupon.id)}
-                            onChange={() => toggleSelection(coupon.id)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <code className="font-mono font-semibold bg-muted px-2 py-1 rounded">
-                              {coupon.code}
-                            </code>
-                            {coupon.is_exclusive && (
-                              <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-white">
-                                ⭐ Exclusivo
-                              </Badge>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => copyToClipboard(coupon.code)}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          {coupon.description && (
-                            <div className="text-sm text-muted-foreground mt-1">
-                              {coupon.description}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <PlatformLogo platform={coupon.platform} size={16} />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {coupon.discount_type === 'percentage'
-                              ? `${coupon.discount_value}%`
-                              : `R$ ${parseFloat(coupon.discount_value).toFixed(2)}`
+                            checked={
+                              (activeTab === 'all' ? coupons.length > 0 : pendingCoupons.length > 0) &&
+                              selectedIds.length === (activeTab === 'all' ? coupons.length : pendingCoupons.length)
                             }
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {coupon.confidence_score !== null && coupon.confidence_score !== undefined ? (
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1">
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div
-                                      className={`h-2 rounded-full ${coupon.confidence_score >= 0.90
-                                        ? 'bg-green-500'
-                                        : coupon.confidence_score >= 0.75
-                                          ? 'bg-yellow-500'
-                                          : 'bg-red-500'
-                                        }`}
-                                      style={{ width: `${coupon.confidence_score * 100}%` }}
-                                    />
-                                  </div>
-                                </div>
-                                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                                  {(coupon.confidence_score * 100).toFixed(0)}%
-                                </span>
+                            onChange={toggleSelectAll}
+                          />
+                        </TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Plataforma</TableHead>
+                        <TableHead>Desconto</TableHead>
+                        <TableHead>Confiança</TableHead>
+                        {activeTab === 'pending' && <TableHead>Origem</TableHead>}
+                        <TableHead>Usos</TableHead>
+                        <TableHead>Validade</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(activeTab === 'all' ? coupons : pendingCoupons).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={activeTab === 'all' ? 9 : 10} className="text-center text-muted-foreground">
+                            {activeTab === 'pending' ? 'Nenhum cupom pendente encontrado' : 'Nenhum cupom encontrado'}
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        (activeTab === 'all' ? coupons : pendingCoupons).map((coupon) => (
+                          <TableRow key={coupon.id}>
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                className="translate-y-0.5 w-4 h-4 rounded border-gray-300"
+                                checked={selectedIds.includes(coupon.id)}
+                                onChange={() => toggleSelection(coupon.id)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <code className="font-mono font-semibold bg-muted px-2 py-1 rounded">
+                                  {coupon.code}
+                                </code>
+                                {coupon.is_exclusive && (
+                                  <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-white">
+                                    ⭐ Exclusivo
+                                  </Badge>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(coupon.code)}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
                               </div>
-                              {activeTab === 'pending' && coupon.ai_decision_reason && (
-                                <div className="text-xs text-muted-foreground mt-1 max-w-xs" title={coupon.ai_decision_reason}>
-                                  <div className="truncate">{coupon.ai_decision_reason}</div>
+                              {coupon.description && (
+                                <div className="text-sm text-muted-foreground mt-1">
+                                  {coupon.description}
                                 </div>
                               )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">N/A</span>
-                          )}
-                        </TableCell>
-                        {activeTab === 'pending' && (
-                          <TableCell>
-                            <div className="flex flex-col gap-1 text-xs">
-                              {coupon.channel_origin && (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-muted-foreground">Canal:</span>
-                                  <Badge variant="outline" className="text-xs">
-                                    {coupon.channel_origin}
-                                  </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <PlatformLogo platform={coupon.platform} size={16} />
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {coupon.discount_type === 'percentage'
+                                  ? `${coupon.discount_value}%`
+                                  : `R$ ${parseFloat(coupon.discount_value).toFixed(2)}`
+                                }
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {coupon.confidence_score !== null && coupon.confidence_score !== undefined ? (
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1">
+                                      <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div
+                                          className={`h-2 rounded-full ${coupon.confidence_score >= 0.90
+                                            ? 'bg-green-500'
+                                            : coupon.confidence_score >= 0.75
+                                              ? 'bg-yellow-500'
+                                              : 'bg-red-500'
+                                            }`}
+                                          style={{ width: `${coupon.confidence_score * 100}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                                      {(coupon.confidence_score * 100).toFixed(0)}%
+                                    </span>
+                                  </div>
+                                  {activeTab === 'pending' && coupon.ai_decision_reason && (
+                                    <div className="text-xs text-muted-foreground mt-1 max-w-xs" title={coupon.ai_decision_reason}>
+                                      <div className="truncate">{coupon.ai_decision_reason}</div>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                              {coupon.capture_source && (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-muted-foreground">Fonte:</span>
-                                  <Badge variant="outline" className="text-xs capitalize">
-                                    {coupon.capture_source}
-                                  </Badge>
-                                </div>
-                              )}
-                              {coupon.created_at && (
-                                <div className="text-muted-foreground">
-                                  📅 {format(new Date(coupon.created_at), 'dd/MM/yyyy HH:mm')}
-                                </div>
-                              )}
-                              {!coupon.channel_origin && !coupon.capture_source && !coupon.created_at && (
+                              ) : (
                                 <span className="text-xs text-muted-foreground">N/A</span>
                               )}
-                            </div>
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          <div className="text-sm">
-                            {coupon.current_uses} / {coupon.max_uses || '∞'}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {coupon.valid_until ? (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Calendar className="h-3 w-3" />
-                              {format(new Date(coupon.valid_until), 'dd/MM/yyyy')}
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Sem validade</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            {coupon.is_out_of_stock ? (
-                              <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
-                                🚫 Esgotado
-                              </Badge>
-                            ) : coupon.is_pending_approval ? (
-                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                                ⏸️ Pendente
-                              </Badge>
-                            ) : (
-                              <Badge variant={coupon.is_active ? 'success' : 'destructive'}>
-                                {coupon.is_active ? 'Ativo' : 'Inativo'}
-                              </Badge>
-                            )}
-                            {activeTab === 'pending' && coupon.verification_status && coupon.verification_status !== 'pending' && (
-                              <Badge variant="outline" className="text-xs mt-1">
-                                {coupon.verification_status === 'active' ? '✅ Válido' :
-                                  coupon.verification_status === 'invalid' ? '❌ Inválido' :
-                                    coupon.verification_status === 'expired' ? '⏰ Expirado' :
-                                      '📋 ' + coupon.verification_status}
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2 flex-wrap">
-                            {coupon.is_pending_approval && activeTab === 'pending' && (
-                              <>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => {
-                                    setApprovalCoupon(coupon);
-                                    setFormData({
-                                      code: coupon.code || '',
-                                      platform: coupon.platform || 'general',
-                                      description: coupon.description || '',
-                                      discount_type: coupon.discount_type || 'percentage',
-                                      discount_value: coupon.discount_value || '',
-                                      min_purchase: coupon.min_purchase || '',
-                                      max_discount_value: coupon.max_discount_value || '',
-                                      is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
-                                      applicable_products: coupon.applicable_products || [],
-                                      max_uses: coupon.max_uses || '',
-                                      current_uses: coupon.current_uses || 0,
-                                      valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
-                                      valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
-                                      is_exclusive: coupon.is_exclusive || false
-                                    });
-                                    setIsApprovalDialogOpen(true);
-                                  }}
-                                  disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
-                                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Revisar e publicar cupom"
-                                >
-                                  {processingCoupons.publishing.has(coupon.id) ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Publicando...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                      Revisar e Publicar
-                                    </>
+                            </TableCell>
+                            {activeTab === 'pending' && (
+                              <TableCell>
+                                <div className="flex flex-col gap-1 text-xs">
+                                  {coupon.channel_origin && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-muted-foreground">Canal:</span>
+                                      <Badge variant="outline" className="text-xs">
+                                        {coupon.channel_origin}
+                                      </Badge>
+                                    </div>
                                   )}
+                                  {coupon.capture_source && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-muted-foreground">Fonte:</span>
+                                      <Badge variant="outline" className="text-xs capitalize">
+                                        {coupon.capture_source}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                  {coupon.created_at && (
+                                    <div className="text-muted-foreground">
+                                      📅 {format(new Date(coupon.created_at), 'dd/MM/yyyy HH:mm')}
+                                    </div>
+                                  )}
+                                  {!coupon.channel_origin && !coupon.capture_source && !coupon.created_at && (
+                                    <span className="text-xs text-muted-foreground">N/A</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              <div className="text-sm">
+                                {coupon.current_uses} / {coupon.max_uses || '∞'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {coupon.valid_until ? (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Calendar className="h-3 w-3" />
+                                  {format(new Date(coupon.valid_until), 'dd/MM/yyyy')}
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">Sem validade</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                {coupon.is_out_of_stock ? (
+                                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                                    🚫 Esgotado
+                                  </Badge>
+                                ) : coupon.is_pending_approval ? (
+                                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                                    ⏸️ Pendente
+                                  </Badge>
+                                ) : (
+                                  <Badge variant={coupon.is_active ? 'success' : 'destructive'}>
+                                    {coupon.is_active ? 'Ativo' : 'Inativo'}
+                                  </Badge>
+                                )}
+                                {activeTab === 'pending' && coupon.verification_status && coupon.verification_status !== 'pending' && (
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    {coupon.verification_status === 'active' ? '✅ Válido' :
+                                      coupon.verification_status === 'invalid' ? '❌ Inválido' :
+                                        coupon.verification_status === 'expired' ? '⏰ Expirado' :
+                                          '📋 ' + coupon.verification_status}
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2 flex-wrap">
+                                {coupon.is_pending_approval && activeTab === 'pending' && (
+                                  <>
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      onClick={() => {
+                                        setApprovalCoupon(coupon);
+                                        setFormData({
+                                          code: coupon.code || '',
+                                          platform: coupon.platform || 'general',
+                                          description: coupon.description || '',
+                                          discount_type: coupon.discount_type || 'percentage',
+                                          discount_value: coupon.discount_value || '',
+                                          min_purchase: coupon.min_purchase || '',
+                                          max_discount_value: coupon.max_discount_value || '',
+                                          is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
+                                          applicable_products: coupon.applicable_products || [],
+                                          max_uses: coupon.max_uses || '',
+                                          current_uses: coupon.current_uses || 0,
+                                          valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
+                                          valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
+                                          is_exclusive: coupon.is_exclusive || false
+                                        });
+                                        setIsApprovalDialogOpen(true);
+                                      }}
+                                      disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
+                                      className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Revisar e publicar cupom"
+                                    >
+                                      {processingCoupons.publishing.has(coupon.id) ? (
+                                        <>
+                                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                          Publicando...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-3 w-3 mr-1" />
+                                          Revisar e Publicar
+                                        </>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => {
+                                        const reason = prompt('Motivo da rejeição (opcional):');
+                                        if (reason !== null) {
+                                          handleRejectCoupon(coupon.id, reason);
+                                        }
+                                      }}
+                                      disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
+                                      className="disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Rejeitar cupom"
+                                    >
+                                      {processingCoupons.rejecting.has(coupon.id) ? (
+                                        <>
+                                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                          Rejeitando...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <XCircle className="h-3 w-3 mr-1" />
+                                          Rejeitar
+                                        </>
+                                      )}
+                                    </Button>
+                                  </>
+                                )}
+                                {coupon.is_pending_approval && activeTab === 'all' && (
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => handleForcePublish(coupon)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    title="Aprovar e publicar imediatamente"
+                                  >
+                                    <Send className="h-3 w-3 mr-1" />
+                                    Publicar
+                                  </Button>
+                                )}
+                                {coupon.is_out_of_stock ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleMarkAsAvailable(coupon)}
+                                    className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
+                                    title="Marcar como disponível"
+                                  >
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Disponível
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleMarkAsOutOfStock(coupon)}
+                                    className="bg-red-50 hover:bg-red-100 text-red-700 border-red-300"
+                                    title="Marcar como esgotado"
+                                  >
+                                    <XCircle className="h-3 w-3 mr-1" />
+                                    Esgotado
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(coupon)}
+                                >
+                                  <Edit className="h-4 w-4" />
                                 </Button>
                                 <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => {
-                                    const reason = prompt('Motivo da rejeição (opcional):');
-                                    if (reason !== null) {
-                                      handleRejectCoupon(coupon.id, reason);
-                                    }
-                                  }}
-                                  disabled={processingCoupons.approving.has(coupon.id) || processingCoupons.publishing.has(coupon.id) || processingCoupons.rejecting.has(coupon.id)}
-                                  className="disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Rejeitar cupom"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(coupon.id)}
                                 >
-                                  {processingCoupons.rejecting.has(coupon.id) ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Rejeitando...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <XCircle className="h-3 w-3 mr-1" />
-                                      Rejeitar
-                                    </>
-                                  )}
+                                  <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
-                              </>
-                            )}
-                            {coupon.is_pending_approval && activeTab === 'all' && (
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => handleForcePublish(coupon)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white"
-                                title="Aprovar e publicar imediatamente"
-                              >
-                                <Send className="h-3 w-3 mr-1" />
-                                Publicar
-                              </Button>
-                            )}
-                            {coupon.is_out_of_stock ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleMarkAsAvailable(coupon)}
-                                className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
-                                title="Marcar como disponível"
-                              >
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Disponível
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleMarkAsOutOfStock(coupon)}
-                                className="bg-red-50 hover:bg-red-100 text-red-700 border-red-300"
-                                title="Marcar como esgotado"
-                              >
-                                <XCircle className="h-3 w-3 mr-1" />
-                                Esgotado
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(coupon)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(coupon.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-3 px-2">
+                  {/* Select All Checkbox for Mobile */}
+                  {(activeTab === 'all' ? coupons : pendingCoupons).length > 0 && (
+                    <div className="flex items-center justify-between px-1 mb-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleSelectAll}
+                        className="p-1 h-auto text-xs flex gap-2 text-muted-foreground"
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300"
+                          checked={
+                            (activeTab === 'all' ? coupons.length > 0 : pendingCoupons.length > 0) &&
+                            selectedIds.length === (activeTab === 'all' ? coupons.length : pendingCoupons.length)
+                          }
+                          readOnly
+                        />
+                        Selecionar Todos
+                      </Button>
+                    </div>
+                  )}
+
+                  {(activeTab === 'all' ? coupons : pendingCoupons).length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8 border rounded-lg bg-gray-50">
+                      {activeTab === 'pending' ? 'Nenhum cupom pendente' : 'Nenhum cupom encontrado'}
+                    </div>
+                  ) : (
+                    (activeTab === 'all' ? coupons : pendingCoupons).map((coupon) => (
+                      <Card
+                        key={coupon.id}
+                        className={`overflow-hidden cursor-pointer transition-colors active:bg-gray-100 ${selectedIds.includes(coupon.id) ? 'border-primary ring-1 ring-primary' : ''}`}
+                        onClick={(e) => {
+                          if (e.target.closest('input[type="checkbox"]')) return;
+                          setSelectedMobileCoupon(coupon);
+                          setIsMobileOptionsOpen(true);
+                        }}
+                      >
+                        <div className="p-3 flex gap-3">
+                          <div className="pt-1 select-btn">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-gray-300 pointer-events-auto"
+                              checked={selectedIds.includes(coupon.id)}
+                              onChange={() => toggleSelection(coupon.id)}
+                            />
                           </div>
-                        </TableCell>
-                      </TableRow>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-1 mb-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <code className="font-mono font-semibold bg-muted px-2 py-0.5 rounded text-sm">
+                                  {coupon.code}
+                                </code>
+                                {coupon.is_exclusive && <span className="text-yellow-500 text-xs">⭐</span>}
+                                <PlatformLogo platform={coupon.platform} size={16} />
+                              </div>
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                                {coupon.discount_type === 'percentage'
+                                  ? `${coupon.discount_value}% OFF`
+                                  : `R$ ${parseFloat(coupon.discount_value).toFixed(2)} OFF`
+                                }
+                              </Badge>
+                            </div>
+
+                            {coupon.description && (
+                              <div className="text-xs text-muted-foreground line-clamp-2 mt-1 mb-2">
+                                {coupon.description}
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-1 mt-1 justify-between items-center">
+                              <div className="flex gap-1 flex-wrap">
+                                {coupon.is_out_of_stock ? (
+                                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300 text-[10px] px-1 py-0 h-4">
+                                    🚫 Esgotado
+                                  </Badge>
+                                ) : coupon.is_pending_approval ? (
+                                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300 text-[10px] px-1 py-0 h-4">
+                                    ⏸️ Pendente
+                                  </Badge>
+                                ) : (
+                                  <Badge variant={coupon.is_active ? 'success' : 'destructive'} className="text-[10px] px-1 py-0 h-4">
+                                    {coupon.is_active ? 'Ativo' : 'Inativo'}
+                                  </Badge>
+                                )}
+
+                                {activeTab === 'pending' && coupon.verification_status && coupon.verification_status !== 'pending' && (
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                                    {coupon.verification_status === 'active' ? '✅' :
+                                      coupon.verification_status === 'invalid' ? '❌' :
+                                        coupon.verification_status === 'expired' ? '⏰' : ''}
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                {coupon.valid_until ? (
+                                  <>
+                                    <Calendar className="h-3 w-3" />
+                                    {format(new Date(coupon.valid_until), 'dd/MM')}
+                                  </>
+                                ) : 'Sem val.'}
+
+                                <span className="ml-1 opacity-50">|</span>
+                                <span className="ml-1">{coupon.current_uses}/{coupon.max_uses || '∞'}</span>
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                      </Card>
                     ))
                   )}
-                </TableBody>
-              </Table>
+                </div>
+              )}
 
               <Pagination
                 currentPage={activeTab === 'all' ? pagination.page : pendingPagination.page}
@@ -1537,11 +1812,11 @@ export default function Coupons() {
 
       {/* Modal de Aprovação com Edição */}
       <Dialog open={isApprovalDialogOpen} onOpenChange={setIsApprovalDialogOpen}>
-        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] rounded-xl p-4 sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="text-left">
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
-              Revisar e Publicar Cupom
+              Revisar e Publicar
             </DialogTitle>
             <DialogDescription>
               Revise e edite os dados do cupom antes de publicar
@@ -1776,7 +2051,7 @@ export default function Coupons() {
               </div>
             </div>
 
-            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+            <DialogFooter className="flex-col sm:flex-row gap-3 mt-6 sm:mt-4 sm:space-x-2">
               <Button
                 type="button"
                 variant="destructive"
@@ -1790,7 +2065,7 @@ export default function Coupons() {
                     }
                   }
                 }}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto order-3 sm:order-1"
               >
                 <XCircle className="h-4 w-4 mr-1" />
                 Rejeitar
@@ -1798,12 +2073,12 @@ export default function Coupons() {
               <Button type="button" variant="outline" onClick={() => {
                 setIsApprovalDialogOpen(false);
                 setApprovalCoupon(null);
-              }} className="w-full sm:w-auto">
+              }} className="w-full sm:w-auto order-2">
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+                className="w-full sm:w-auto bg-green-600 hover:bg-green-700 order-1 sm:order-3"
                 disabled={processingCoupons.publishing.has(approvalCoupon?.id)}
               >
                 {processingCoupons.publishing.has(approvalCoupon?.id) ? (
@@ -1814,7 +2089,7 @@ export default function Coupons() {
                 ) : (
                   <>
                     <Send className="h-4 w-4 mr-1" />
-                    Publicar Cupom
+                    Publicar
                   </>
                 )}
               </Button>

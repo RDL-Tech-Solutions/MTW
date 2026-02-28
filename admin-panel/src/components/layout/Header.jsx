@@ -18,8 +18,8 @@ export default function Header({ onMenuClick, isMobile = false }) {
       <div className="flex items-center justify-between px-3 sm:px-4 md:px-6 py-3 sm:py-4">
         {/* Lado Esquerdo: Menu Hamburguer + Título */}
         <div className="flex items-center gap-3">
-          {/* Botão Menu Hamburguer - só mobile */}
-          {isMobile && (
+          {/* Botão Menu Hamburguer - oculto no mobile pois agora está no BottomNav */}
+          {false && isMobile && (
             <button
               onClick={onMenuClick}
               className="p-2 -ml-2 rounded-lg hover:bg-muted transition-colors"

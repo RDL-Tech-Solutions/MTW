@@ -892,7 +892,7 @@ export default function Bots() {
                             {pairingCode}
                           </div>
                           <p className="text-xs text-center text-muted-foreground max-w-[280px]">
-                            1. No celular: Aparelhos Conectados > Conectar com número de telefone
+                            1. No celular: Aparelhos Conectados &gt; Conectar com número de telefone
                             <br />
                             2. Digite este código no seu WhatsApp.
                           </p>
