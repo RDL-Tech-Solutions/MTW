@@ -287,6 +287,9 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
             {coupon.min_purchase > 0 && (
               <InfoRow icon="wallet-outline" label="Compra mínima" value={formatPrice(coupon.min_purchase)} colors={colors} />
             )}
+            {coupon.max_discount_value > 0 && (
+              <InfoRow icon="trending-down-outline" label="Desconto máximo" value={formatPrice(coupon.max_discount_value)} colors={colors} />
+            )}
             {(coupon.max_uses || coupon.usage_limit) && (
               <InfoRow icon="people-outline" label="Limite" value={`${coupon.max_uses || coupon.usage_limit} usos`} colors={colors} />
             )}

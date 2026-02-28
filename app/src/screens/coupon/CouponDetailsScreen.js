@@ -240,6 +240,13 @@ export default function CouponDetailsScreen({ route, navigation }) {
               </View>
             )}
 
+            {coupon.max_discount_value > 0 && (
+              <View style={s.conditionRow}>
+                <Ionicons name="trending-down-outline" size={16} color="#9CA3AF" />
+                <Text style={s.conditionText}>Desconto máximo: {formatPrice(coupon.max_discount_value)}</Text>
+              </View>
+            )}
+
             {coupon.description && (
               <View style={s.conditionRow}>
                 <Ionicons name="information-circle-outline" size={16} color="#9CA3AF" />

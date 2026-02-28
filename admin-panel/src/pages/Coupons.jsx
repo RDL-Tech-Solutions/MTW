@@ -904,35 +904,37 @@ export default function Coupons() {
                   </div>
                 </div>
 
-                {(formData.platform === 'mercadolivre' || formData.platform === 'shopee') && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="min_purchase">Compra Mínima (R$)</Label>
-                      <Input
-                        id="min_purchase"
-                        type="number"
-                        step="0.01"
-                        value={formData.min_purchase || ''}
-                        onChange={(e) => setFormData({ ...formData, min_purchase: e.target.value })}
-                        placeholder="Ex: 259.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="max_discount_value">Limite Máximo de Desconto (R$)</Label>
-                      <Input
-                        id="max_discount_value"
-                        type="number"
-                        step="0.01"
-                        value={formData.max_discount_value || ''}
-                        onChange={(e) => setFormData({ ...formData, max_discount_value: e.target.value })}
-                        placeholder="Ex: 60.00 (máximo R$ 60 de desconto)"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Valor máximo de desconto que pode ser aplicado (ex: R$ 60 máximo)
-                      </p>
-                    </div>
-                  </>
-                )}
+                {/* Campos de limites disponíveis para todas as plataformas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="min_purchase">Compra Mínima (R$)</Label>
+                    <Input
+                      id="min_purchase"
+                      type="number"
+                      step="0.01"
+                      value={formData.min_purchase || ''}
+                      onChange={(e) => setFormData({ ...formData, min_purchase: e.target.value })}
+                      placeholder="Ex: 259.00"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Valor mínimo de compra para usar o cupom
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="max_discount_value">Limite Máximo de Desconto (R$)</Label>
+                    <Input
+                      id="max_discount_value"
+                      type="number"
+                      step="0.01"
+                      value={formData.max_discount_value || ''}
+                      onChange={(e) => setFormData({ ...formData, max_discount_value: e.target.value })}
+                      placeholder="Ex: 60.00"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Valor máximo de desconto que pode ser aplicado
+                    </p>
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="is_general">Aplicabilidade</Label>
@@ -1677,32 +1679,37 @@ export default function Coupons() {
               </div>
             </div>
 
-            {(formData.platform === 'mercadolivre' || formData.platform === 'shopee') && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="approval-min_purchase">Compra Mínima (R$)</Label>
-                  <Input
-                    id="approval-min_purchase"
-                    type="number"
-                    step="0.01"
-                    value={formData.min_purchase || ''}
-                    onChange={(e) => setFormData({ ...formData, min_purchase: e.target.value })}
-                    placeholder="Ex: 259.00"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="approval-max_discount_value">Limite Máximo de Desconto (R$)</Label>
-                  <Input
-                    id="approval-max_discount_value"
-                    type="number"
-                    step="0.01"
-                    value={formData.max_discount_value || ''}
-                    onChange={(e) => setFormData({ ...formData, max_discount_value: e.target.value })}
-                    placeholder="Ex: 60.00"
-                  />
-                </div>
+            {/* Campos de limites disponíveis para todas as plataformas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="approval-min_purchase">Compra Mínima (R$)</Label>
+                <Input
+                  id="approval-min_purchase"
+                  type="number"
+                  step="0.01"
+                  value={formData.min_purchase || ''}
+                  onChange={(e) => setFormData({ ...formData, min_purchase: e.target.value })}
+                  placeholder="Ex: 259.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Valor mínimo de compra para usar o cupom
+                </p>
               </div>
-            )}
+              <div className="space-y-2">
+                <Label htmlFor="approval-max_discount_value">Limite Máximo de Desconto (R$)</Label>
+                <Input
+                  id="approval-max_discount_value"
+                  type="number"
+                  step="0.01"
+                  value={formData.max_discount_value || ''}
+                  onChange={(e) => setFormData({ ...formData, max_discount_value: e.target.value })}
+                  placeholder="Ex: 60.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Valor máximo de desconto que pode ser aplicado
+                </p>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="approval-is_general">Aplicabilidade</Label>

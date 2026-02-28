@@ -269,6 +269,11 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
                 Mín. R${coupon.min_purchase.toFixed(0)}
               </Text>
             )}
+            {coupon.max_discount_value > 0 && (
+              <Text style={s.conditionText}>
+                Máx. R${coupon.max_discount_value.toFixed(0)}
+              </Text>
+            )}
             {coupon.code && (
               <View style={[s.codeBadge, { backgroundColor: platformColor + '10' }]}>
                 <Text style={[s.codeText, { color: platformColor }]}>{coupon.code}</Text>

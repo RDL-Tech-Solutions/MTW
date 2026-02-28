@@ -45,7 +45,14 @@ function Stop-NodeProcesses {
     
     if ($nodeProcesses) {
         Write-Host "[$(Get-TimeStamp)]    [!] Processos Node.js encontrados. Encerrando..." -ForegroundColor Yellow
-        $nodeProcesses | Stop-Process -Force
+        foreach ($proc in $nodeProcesses) {
+            try {
+                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            }
+            catch {
+                Write-Host "[$(Get-TimeStamp)]    [!] Aviso: Nao foi possivel encerrar processo $($proc.Id)" -ForegroundColor Yellow
+            }
+        }
         Start-Sleep -Seconds 2
         Write-Host "[$(Get-TimeStamp)]    [OK] Processos Node.js encerrados" -ForegroundColor Green
     }
@@ -86,6 +93,22 @@ function Start-Servers {
         return $false
     }
     
+    # Verificar se node_modules existem
+    $backendNodeModules = Join-Path $backendDir "node_modules"
+    $adminNodeModules = Join-Path $adminDir "node_modules"
+    
+    if (-not (Test-Path $backendNodeModules)) {
+        Write-Host "[$(Get-TimeStamp)] [!] AVISO: node_modules nao encontrado no backend" -ForegroundColor Yellow
+        Write-Host "[$(Get-TimeStamp)]    Execute 'npm install' no diretorio backend primeiro" -ForegroundColor Yellow
+        return $false
+    }
+    
+    if (-not (Test-Path $adminNodeModules)) {
+        Write-Host "[$(Get-TimeStamp)] [!] AVISO: node_modules nao encontrado no admin-panel" -ForegroundColor Yellow
+        Write-Host "[$(Get-TimeStamp)]    Execute 'npm install' no diretorio admin-panel primeiro" -ForegroundColor Yellow
+        return $false
+    }
+    
     # Matar processos Node existentes
     Stop-NodeProcesses
     
@@ -95,8 +118,9 @@ function Start-Servers {
     Write-Host "   Diretorio: $backendDir" -ForegroundColor Cyan
     
     try {
+        $backendTitle = "Backend Server - PreçoCerto (Porta 3000)"
         $Global:BackendProcess = Start-Process -FilePath "powershell.exe" `
-            -ArgumentList "-NoExit", "-Command", "cd '$backendDir'; Write-Host '[>>] Backend Server - PreçoCerto' -ForegroundColor Green; Write-Host ''; npm run dev" `
+            -ArgumentList "-NoExit", "-Command", "`$Host.UI.RawUI.WindowTitle='$backendTitle'; cd '$backendDir'; Write-Host '[>>] Backend Server - PreçoCerto' -ForegroundColor Green; Write-Host '    Porta: 3000' -ForegroundColor Cyan; Write-Host ''; npm run dev" `
             -PassThru `
             -WindowStyle Normal
         
@@ -115,8 +139,9 @@ function Start-Servers {
     Write-Host "   Diretorio: $adminDir" -ForegroundColor Cyan
     
     try {
+        $adminTitle = "Admin Panel - PreçoCerto (Porta 5173)"
         $Global:AdminProcess = Start-Process -FilePath "powershell.exe" `
-            -ArgumentList "-NoExit", "-Command", "cd '$adminDir'; Write-Host '[>>] Admin Panel - PreçoCerto' -ForegroundColor Green; Write-Host ''; npm run dev" `
+            -ArgumentList "-NoExit", "-Command", "`$Host.UI.RawUI.WindowTitle='$adminTitle'; cd '$adminDir'; Write-Host '[>>] Admin Panel - PreçoCerto' -ForegroundColor Green; Write-Host '    Porta: 5173' -ForegroundColor Cyan; Write-Host '    URL: http://localhost:5173' -ForegroundColor Blue; Write-Host ''; npm run dev" `
             -PassThru `
             -WindowStyle Normal
         
@@ -129,16 +154,62 @@ function Start-Servers {
     
     # Aguardar servidores iniciarem
     Write-Host ""
-    Write-Host "[$(Get-TimeStamp)] [WAIT] Aguardando servidores iniciarem (8 segundos)..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 8
+    Write-Host "[$(Get-TimeStamp)] [WAIT] Aguardando servidores iniciarem..." -ForegroundColor Yellow
+    
+    $maxWait = 30
+    $waited = 0
+    $backendReady = $false
+    $adminReady = $false
+    
+    while ($waited -lt $maxWait -and (-not $backendReady -or -not $adminReady)) {
+        Start-Sleep -Seconds 1
+        $waited++
+        
+        if (-not $backendReady) {
+            $backendReady = Test-PortInUse -Port 3000
+            if ($backendReady) {
+                Write-Host "[$(Get-TimeStamp)]    [OK] Backend pronto! (${waited}s)" -ForegroundColor Green
+            }
+        }
+        
+        if (-not $adminReady) {
+            $adminReady = Test-PortInUse -Port 5173
+            if ($adminReady) {
+                Write-Host "[$(Get-TimeStamp)]    [OK] Admin Panel pronto! (${waited}s)" -ForegroundColor Green
+            }
+        }
+        
+        if ($waited -eq 10 -and (-not $backendReady -or -not $adminReady)) {
+            Write-Host "[$(Get-TimeStamp)]    [*] Ainda aguardando..." -ForegroundColor Yellow
+        }
+    }
+    
+    if (-not $backendReady -or -not $adminReady) {
+        Write-Host "[$(Get-TimeStamp)]    [!] AVISO: Servidores demoraram mais que o esperado" -ForegroundColor Yellow
+        if (-not $backendReady) {
+            Write-Host "[$(Get-TimeStamp)]       Backend nao respondeu na porta 3000" -ForegroundColor Yellow
+        }
+        if (-not $adminReady) {
+            Write-Host "[$(Get-TimeStamp)]       Admin Panel nao respondeu na porta 5173" -ForegroundColor Yellow
+        }
+    }
     
     # Abrir navegador
     Write-Host ""
     Write-Host "[$(Get-TimeStamp)] [WEB] Abrindo Admin Panel no navegador..." -ForegroundColor Blue
-    Start-Process "http://localhost:5173"
+    try {
+        Start-Process "http://localhost:5173"
+        Write-Host "[$(Get-TimeStamp)]    [OK] Navegador aberto" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[$(Get-TimeStamp)]    [!] Nao foi possivel abrir o navegador automaticamente" -ForegroundColor Yellow
+        Write-Host "[$(Get-TimeStamp)]    Acesse manualmente: http://localhost:5173" -ForegroundColor Cyan
+    }
     
     Write-Host ""
-    Write-Host "[$(Get-TimeStamp)] [OK] Servidores iniciados com sucesso!" -ForegroundColor Green
+    Write-Host "[$(Get-TimeStamp)] [OK] Servidores iniciados!" -ForegroundColor Green
+    Write-Host "[$(Get-TimeStamp)]    Backend:     http://localhost:3000" -ForegroundColor Cyan
+    Write-Host "[$(Get-TimeStamp)]    Admin Panel: http://localhost:5173" -ForegroundColor Cyan
     
     return $true
 }
@@ -153,17 +224,27 @@ function Stop-Servers {
     # Parar Backend
     if ($Global:BackendProcess -and -not $Global:BackendProcess.HasExited) {
         Write-Host "[$(Get-TimeStamp)]    Parando Backend (PID: $($Global:BackendProcess.Id))..." -ForegroundColor Yellow
-        Stop-Process -Id $Global:BackendProcess.Id -Force -ErrorAction SilentlyContinue
-        Write-Host "[$(Get-TimeStamp)]    [OK] Backend parado" -ForegroundColor Green
-        $stopped = $true
+        try {
+            Stop-Process -Id $Global:BackendProcess.Id -Force -ErrorAction Stop
+            Write-Host "[$(Get-TimeStamp)]    [OK] Backend parado" -ForegroundColor Green
+            $stopped = $true
+        }
+        catch {
+            Write-Host "[$(Get-TimeStamp)]    [!] Processo Backend ja foi encerrado" -ForegroundColor Yellow
+        }
     }
     
     # Parar Admin Panel
     if ($Global:AdminProcess -and -not $Global:AdminProcess.HasExited) {
         Write-Host "[$(Get-TimeStamp)]    Parando Admin Panel (PID: $($Global:AdminProcess.Id))..." -ForegroundColor Yellow
-        Stop-Process -Id $Global:AdminProcess.Id -Force -ErrorAction SilentlyContinue
-        Write-Host "[$(Get-TimeStamp)]    [OK] Admin Panel parado" -ForegroundColor Green
-        $stopped = $true
+        try {
+            Stop-Process -Id $Global:AdminProcess.Id -Force -ErrorAction Stop
+            Write-Host "[$(Get-TimeStamp)]    [OK] Admin Panel parado" -ForegroundColor Green
+            $stopped = $true
+        }
+        catch {
+            Write-Host "[$(Get-TimeStamp)]    [!] Processo Admin Panel ja foi encerrado" -ForegroundColor Yellow
+        }
     }
     
     # Matar todos processos Node para garantir
@@ -218,6 +299,7 @@ function Show-Logs {
     Show-Header "[LOGS] Logs em Tempo Real"
     Write-Host ""
     Write-Host "  Pressione Ctrl+C para voltar ao menu" -ForegroundColor Yellow
+    Write-Host "  Arquivo: $logFile" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "----------------------------------------------------------------------" -ForegroundColor Cyan
     Write-Host ""
@@ -233,17 +315,21 @@ function Show-Logs {
     # Usar Get-Content com -Wait para logs em tempo real
     try {
         Get-Content $logFile -Wait -Tail 50 | ForEach-Object {
-            if ($_ -match 'error|ERROR') {
-                Write-Host $_ -ForegroundColor Red
+            $line = $_
+            if ($line -match 'error|ERROR|ERRO') {
+                Write-Host $line -ForegroundColor Red
             }
-            elseif ($_ -match 'warn|WARNING') {
-                Write-Host $_ -ForegroundColor Yellow
+            elseif ($line -match 'warn|WARNING|AVISO') {
+                Write-Host $line -ForegroundColor Yellow
             }
-            elseif ($_ -match 'info|INFO') {
-                Write-Host $_ -ForegroundColor Blue
+            elseif ($line -match 'info|INFO') {
+                Write-Host $line -ForegroundColor Blue
+            }
+            elseif ($line -match 'success|SUCCESS|SUCESSO') {
+                Write-Host $line -ForegroundColor Green
             }
             else {
-                Write-Host $_
+                Write-Host $line
             }
         }
     }
@@ -253,12 +339,81 @@ function Show-Logs {
     }
 }
 
+# Funcao para instalar dependencias
+function Install-Dependencies {
+    Show-Header "[NPM] Instalando Dependencias"
+    
+    $backendDir = Join-Path $Global:ProjectRoot "backend"
+    $adminDir = Join-Path $Global:ProjectRoot "admin-panel"
+    
+    Write-Host ""
+    Write-Host "[$(Get-TimeStamp)] [NPM] Verificando e instalando dependencias..." -ForegroundColor Cyan
+    Write-Host ""
+    
+    # Backend
+    Write-Host "[$(Get-TimeStamp)] [BACKEND] Instalando dependencias do Backend..." -ForegroundColor Blue
+    Write-Host "   Diretorio: $backendDir" -ForegroundColor Cyan
+    
+    if (Test-Path $backendDir) {
+        try {
+            Push-Location $backendDir
+            Write-Host ""
+            npm install
+            Write-Host ""
+            Write-Host "[$(Get-TimeStamp)]    [OK] Dependencias do Backend instaladas!" -ForegroundColor Green
+            Pop-Location
+        }
+        catch {
+            Write-Host "[$(Get-TimeStamp)]    [X] Erro ao instalar dependencias do Backend: $_" -ForegroundColor Red
+            Pop-Location
+        }
+    }
+    else {
+        Write-Host "[$(Get-TimeStamp)]    [X] Diretorio backend nao encontrado" -ForegroundColor Red
+    }
+    
+    Write-Host ""
+    
+    # Admin Panel
+    Write-Host "[$(Get-TimeStamp)] [ADMIN] Instalando dependencias do Admin Panel..." -ForegroundColor Blue
+    Write-Host "   Diretorio: $adminDir" -ForegroundColor Cyan
+    
+    if (Test-Path $adminDir) {
+        try {
+            Push-Location $adminDir
+            Write-Host ""
+            npm install
+            Write-Host ""
+            Write-Host "[$(Get-TimeStamp)]    [OK] Dependencias do Admin Panel instaladas!" -ForegroundColor Green
+            Pop-Location
+        }
+        catch {
+            Write-Host "[$(Get-TimeStamp)]    [X] Erro ao instalar dependencias do Admin Panel: $_" -ForegroundColor Red
+            Pop-Location
+        }
+    }
+    else {
+        Write-Host "[$(Get-TimeStamp)]    [X] Diretorio admin-panel nao encontrado" -ForegroundColor Red
+    }
+    
+    Write-Host ""
+    Write-Host "[$(Get-TimeStamp)] [OK] Instalacao de dependencias concluida!" -ForegroundColor Green
+}
+
 # Funcao para abrir navegador
 function Open-Browser {
     Write-Host ""
-    Write-Host "[$(Get-TimeStamp)] [WEB] Abrindo Admin Panel no navegador: http://localhost:5173" -ForegroundColor Blue
-    Start-Process "http://localhost:5173"
-    Write-Host "[$(Get-TimeStamp)]    [OK] Navegador aberto" -ForegroundColor Green
+    Write-Host "[$(Get-TimeStamp)] [WEB] Abrindo Admin Panel no navegador..." -ForegroundColor Blue
+    Write-Host "[$(Get-TimeStamp)]    URL: http://localhost:5173" -ForegroundColor Cyan
+    
+    try {
+        Start-Process "http://localhost:5173"
+        Write-Host "[$(Get-TimeStamp)]    [OK] Navegador aberto" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[$(Get-TimeStamp)]    [!] Erro ao abrir navegador: $_" -ForegroundColor Yellow
+        Write-Host "[$(Get-TimeStamp)]    Acesse manualmente: http://localhost:5173" -ForegroundColor Cyan
+    }
 }
 
 # Função para countdown automático
@@ -290,7 +445,8 @@ function Show-Menu {
     Write-Host "  [4] Ver Status Detalhado" -ForegroundColor Blue
     Write-Host "  [5] Visualizar Logs em Tempo Real" -ForegroundColor Cyan
     Write-Host "  [6] Abrir Admin Panel no Navegador" -ForegroundColor Blue
-    Write-Host "  [7] Limpar Console" -ForegroundColor Yellow
+    Write-Host "  [7] Limpar Console" -ForegroundColor Magenta
+    Write-Host "  [8] Verificar Dependencias (npm install)" -ForegroundColor Yellow
     Write-Host "  [0] Sair (e parar servidores)" -ForegroundColor Red
     Write-Host "----------------------------------------------------------------------" -ForegroundColor White
     Write-Host ""
@@ -329,6 +485,10 @@ function Start-Menu {
             }
             "7" {
                 Clear-Host
+            }
+            "8" {
+                Install-Dependencies
+                Start-AutoReturn -Seconds 3
             }
             "0" {
                 Write-Host ""

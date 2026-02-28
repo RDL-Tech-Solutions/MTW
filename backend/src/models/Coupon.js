@@ -640,16 +640,52 @@ class Coupon {
   static async findForProduct(productId) {
     const now = new Date().toISOString();
 
+    // Primeiro, buscar o produto para obter sua plataforma
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('platform')
+      .eq('id', productId)
+      .single();
+
+    if (productError) {
+      logger.error('Erro ao buscar produto para filtrar cupons:', productError);
+      throw productError;
+    }
+
+    if (!product) {
+      return [];
+    }
+
+    const productPlatform = product.platform;
+
+    // Buscar cupons que:
+    // 1. Sejam gerais E da mesma plataforma do produto (ou plataforma 'general')
+    // 2. OU tenham o produto na lista de applicable_products
     const { data, error } = await supabase
       .from('coupons')
       .select('*')
       .eq('is_active', true)
       .lte('valid_from', now)
-      .gte('valid_until', now)
-      .or(`is_general.eq.true,applicable_products.cs.["${productId}"]`);
+      .gte('valid_until', now);
 
     if (error) throw error;
-    return data;
+
+    // Filtrar manualmente para garantir a lógica correta
+    const filteredCoupons = (data || []).filter(coupon => {
+      // Cupom diretamente vinculado ao produto via applicable_products
+      if (coupon.applicable_products && coupon.applicable_products.includes(productId)) {
+        return true;
+      }
+
+      // Cupom geral: deve ser da mesma plataforma ou plataforma 'general'
+      if (coupon.is_general === true) {
+        return coupon.platform === 'general' || coupon.platform === productPlatform;
+      }
+
+      return false;
+    });
+
+    return filteredCoupons;
   }
 
   // Buscar todos os cupons ativamente aplicáveis (em estoque, aprovados, não expirados)
