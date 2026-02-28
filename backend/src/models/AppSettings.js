@@ -1,6 +1,6 @@
 import supabase from '../config/database.js';
 import logger from '../config/logger.js';
-import { supabaseWithRetry } from '../utils/supabaseRetry.js';
+import { withRetry } from '../utils/supabaseRetry.js';
 
 class AppSettings {
   /**
@@ -10,7 +10,7 @@ class AppSettings {
     try {
       // Primeiro, tentar buscar com select('*') - funciona se todas as colunas existirem
       // Usar retry automático para lidar com erros 502 do Cloudflare
-      let result = await supabaseWithRetry(
+      let result = await withRetry(
         async () => {
           return await supabase
             .from('app_settings')
@@ -19,7 +19,7 @@ class AppSettings {
             .limit(1)
             .maybeSingle();
         },
-        { maxRetries: 3, initialDelay: 1000 }
+        { operationName: 'Buscar configurações do app' }
       );
 
       let { data, error } = result;
@@ -37,7 +37,7 @@ class AppSettings {
         // Buscar todas as colunas exceto template_mode
         // Usar uma query mais específica que não inclua as novas colunas
         // Usar retry automático
-        const basicResult = await supabaseWithRetry(
+        const basicResult = await withRetry(
           async () => {
             return await supabase
               .from('app_settings')
@@ -75,7 +75,7 @@ class AppSettings {
               .limit(1)
               .maybeSingle();
           },
-          { maxRetries: 3, initialDelay: 1000 }
+          { operationName: 'Buscar configurações básicas do app' }
         );
 
         const { data: basicData, error: basicError } = basicResult;
