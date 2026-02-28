@@ -321,8 +321,8 @@ class Coupon {
       .from('coupons')
       .select('*', { count: 'exact' })
       .eq('is_active', true)
-      .eq('is_pending_approval', false) // NOVO: Excluir cupons pendentes de aprovação
-      .eq('is_out_of_stock', false) // NOVO: Excluir cupons esgotados
+      .eq('is_pending_approval', false) // Excluir cupons pendentes de aprovação
+      // Cupons esgotados agora OBRIGATORIAMENTE retornam e App gerencia a separação
       .lte('valid_from', now)
       .or(`valid_until.is.null,valid_until.gte.${now}`); // Permitir NULL ou data futura
 

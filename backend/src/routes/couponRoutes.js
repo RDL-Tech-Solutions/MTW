@@ -68,7 +68,7 @@ const preprocessCouponData = (req, res, next) => {
 };
 
 // Rotas públicas
-router.get('/', CouponController.listAll); // Mudado de listActive para listAll
+router.get('/', CouponController.listActive); // Restaura listActive para app não receber pendentes
 router.get('/active', CouponController.listActive); // Mantém alias para compatibilidade
 router.get('/expiring', CouponController.expiringSoon);
 router.get('/code/:code', CouponController.getByCode);
