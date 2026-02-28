@@ -96,12 +96,12 @@ class OneSignalService {
       };
 
       logger.info(`📝 Criando/atualizando usuário OneSignal: ${external_id}`);
-      
+
       // OneSignal cria ou atualiza automaticamente baseado no external_user_id
       const response = await this.client.createDevice(playerData);
 
       logger.info(`✅ Usuário OneSignal criado/atualizado: ${external_id}`);
-      
+
       return {
         success: true,
         player_id: response.body.id,
@@ -168,7 +168,7 @@ class OneSignalService {
         },
         ...(subtitle && { subtitle: { en: subtitle, pt: subtitle } }),
         ...(url && { url }),
-        ...(image && { 
+        ...(image && {
           big_picture: image,
           large_icon: image,
           ios_attachments: { id: image }
@@ -176,7 +176,7 @@ class OneSignalService {
         ...(buttons.length > 0 && { buttons }),
         ...(badge && { ios_badgeType: 'SetTo', ios_badgeCount: badge }),
         priority: priority === 'high' ? 10 : 5,
-        android_channel_id: data.type || 'default',
+        // android_channel_id: data.type || 'default',
         ttl: 3600, // 1 hora
         content_available: true
       };
@@ -196,7 +196,7 @@ class OneSignalService {
       }
 
       logger.info(`✅ Notificação OneSignal enviada: ${response.body.id}`);
-      
+
       return {
         success: true,
         notification_id: response.body.id,
@@ -247,7 +247,7 @@ class OneSignalService {
       // OneSignal suporta até 2000 external_ids por requisição
       const batchSize = 2000;
       const batches = [];
-      
+
       for (let i = 0; i < externalIds.length; i += batchSize) {
         batches.push(externalIds.slice(i, i + batchSize));
       }
@@ -269,7 +269,7 @@ class OneSignalService {
             },
             ...(subtitle && { subtitle: { en: subtitle, pt: subtitle } }),
             ...(url && { url }),
-            ...(image && { 
+            ...(image && {
               big_picture: image,
               large_icon: image,
               ios_attachments: { id: image }
@@ -277,7 +277,7 @@ class OneSignalService {
             ...(buttons.length > 0 && { buttons }),
             ...(badge && { ios_badgeType: 'SetTo', ios_badgeCount: badge }),
             priority: priority === 'high' ? 10 : 5,
-            android_channel_id: data.type || 'default',
+            // android_channel_id: data.type || 'default',
             ttl: 3600,
             content_available: true
           };
@@ -293,7 +293,7 @@ class OneSignalService {
             const recipients = response.body.recipients || 0;
             totalSuccess += recipients;
             totalFailed += (batch.length - recipients);
-            
+
             results.push({
               notification_id: response.body.id,
               recipients
@@ -360,7 +360,7 @@ class OneSignalService {
         },
         ...(subtitle && { subtitle: { en: subtitle, pt: subtitle } }),
         ...(url && { url }),
-        ...(image && { 
+        ...(image && {
           big_picture: image,
           large_icon: image,
           ios_attachments: { id: image }
@@ -368,7 +368,7 @@ class OneSignalService {
         ...(buttons.length > 0 && { buttons }),
         ...(badge && { ios_badgeType: 'SetTo', ios_badgeCount: badge }),
         priority: priority === 'high' ? 10 : 5,
-        android_channel_id: data.type || 'default',
+        // android_channel_id: data.type || 'default',
         ttl: 3600,
         content_available: true
       };
@@ -437,7 +437,7 @@ class OneSignalService {
         },
         ...(subtitle && { subtitle: { en: subtitle, pt: subtitle } }),
         ...(url && { url }),
-        ...(image && { 
+        ...(image && {
           big_picture: image,
           large_icon: image,
           ios_attachments: { id: image }
@@ -445,7 +445,7 @@ class OneSignalService {
         ...(buttons.length > 0 && { buttons }),
         ...(badge && { ios_badgeType: 'SetTo', ios_badgeCount: badge }),
         priority: priority === 'high' ? 10 : 5,
-        android_channel_id: data.type || 'default',
+        // android_channel_id: data.type || 'default',
         ttl: 3600,
         content_available: true
       };
@@ -585,7 +585,7 @@ class OneSignalService {
    */
   async notifyNewCoupon(users, coupon) {
     const externalIds = users.map(u => u.id.toString());
-    
+
     return await this.sendToMultiple(externalIds, {
       title: '🎉 Novo Cupom Disponível!',
       message: `${coupon.code} - ${coupon.discount_value}${coupon.discount_type === 'percentage' ? '%' : 'R$'} OFF`,

@@ -1,0 +1,9 @@
+{
+  "enviado": false,
+  "resultadoCompleto": {
+    "success": false,
+    "errors": [
+      "All included players are not subscribed"
+    ]
+  }
+}
