@@ -11,7 +11,6 @@ import { captureLinkHandler } from './handlers/captureHandler.js';
 import * as couponHandler from './handlers/couponHandler.js';
 import * as pendingHandler from './handlers/pendingHandler.js';
 import * as editHandler from './handlers/editHandler.js';
-import * as autoSyncHandler from './handlers/autoSyncHandler.js';
 import * as scheduledPostsHandler from './handlers/scheduledPostsHandler.js';
 
 import Product from '../../models/Product.js'; // Importar Model Product para actions diretas
@@ -116,11 +115,6 @@ export const initAdminBot = async () => {
                 return await pendingHandler.listPendingProducts(ctx, 1);
             }
 
-            // Edição Auto-Sync (Keywords, Interval, Discount)
-            if (step && step.startsWith('AUTOSYNC_EDIT_')) {
-                return await autoSyncHandler.handleEditInput(ctx, text);
-            }
-
             switch (text) {
                 case '🤖 IA ADVANCED':
                     await toggleAiMode(ctx, true);
@@ -130,9 +124,6 @@ export const initAdminBot = async () => {
                     break;
                 case '📋 Pendentes':
                     await pendingHandler.listPendingProducts(ctx, 1);
-                    break;
-                case '🔄 Auto-Sync':
-                    await autoSyncHandler.showAutoSyncMenu(ctx);
                     break;
                 case '📅 Posts Agendados':
                     await scheduledPostsHandler.showScheduledPostsMenu(ctx);
@@ -346,21 +337,6 @@ export const initAdminBot = async () => {
                 }
 
                 // === AUTO-SYNC ===
-                if (data === 'menu:autosync') return await autoSyncHandler.showAutoSyncMenu(ctx);
-
-                if (data.startsWith('autosync:')) {
-                    if (data === 'autosync:toggle:global') return await autoSyncHandler.toggleGlobal(ctx);
-                    if (data === 'autosync:toggle:ai') return await autoSyncHandler.toggleAi(ctx);
-
-                    if (data.startsWith('autosync:toggle_plat:')) return await autoSyncHandler.togglePlatform(ctx, data.split(':')[2]);
-                    if (data.startsWith('autosync:toggle_pub:')) return await autoSyncHandler.toggleAutoPublish(ctx, data.split(':')[2]);
-
-                    if (data === 'autosync:sync_all') return await autoSyncHandler.triggerSyncAll(ctx);
-                    if (data.startsWith('autosync:sync_now:')) return await autoSyncHandler.triggerSync(ctx, data.split(':')[2]);
-
-                    if (data.startsWith('autosync:edit:')) return await autoSyncHandler.startEdit(ctx, data.split(':')[2]);
-                }
-
                 // === SCHEDULED POSTS ===
                 if (data.startsWith('scheduled:')) {
                     if (data === 'scheduled:refresh') return await scheduledPostsHandler.showScheduledPostsMenu(ctx);

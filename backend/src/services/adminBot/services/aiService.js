@@ -74,8 +74,7 @@ CAPACIDADES (Use APENAS estes comandos JSON):
 --- USUÁRIOS (/users) ---
 - manage_users: { action: 'list'|'toggle_status', id: string, active: boolean }
 
---- SISTEMA (/auto-sync, /bots, /settings) ---
-- manage_autosync: { action: 'status'|'start'|'stop'|'force_run' }
+--- SISTEMA (/bots, /settings) ---
 - manage_schedules: { action: 'list'|'create'|'delete', product_id: string, date: string, id: string }
 - manage_channels: { action: 'list'|'toggle', id: string, active: boolean }
 - manage_bot_settings: { action: 'status'|'toggle_feature', feature: string, enabled: boolean }
@@ -101,7 +100,6 @@ DICAS DE COMANDOS:
 - Se o usuário enviar APENAS um link após você perguntar pelo "Link de Afiliado" -> Use \`publish_product\` com esse link inserido no campo \`affiliate_link\`.
 - "criar categoria Eletrônicos" -> manage_categories(action='create', name='Eletrônicos')
 - "listar usuarios" -> manage_users(action='list')
-- "status do sync" -> manage_autosync(action='status')
 - "ligar auto publish" -> manage_bot_settings(action='toggle_feature', feature='auto_publish', enabled=true)
 - ID (UUID) isolado enviado pelo user -> get_product_details(id=...) (NUNCA publique direto um ID solto)
 
@@ -301,10 +299,6 @@ Responda com o JSON da ação a ser tomada.
 
             case 'manage_schedules':
                 await this.manageSchedules(ctx, parameters);
-                break;
-
-            case 'manage_autosync':
-                await this.manageAutoSync(ctx, parameters);
                 break;
 
             case 'manage_channels':
@@ -1706,41 +1700,6 @@ Responda com o JSON da ação a ser tomada.
     /**
      * Gerenciar Auto-Sync
      */
-    async manageAutoSync(ctx, parameters) {
-        const { action } = parameters;
-        try {
-            if (action === 'status') {
-                const config = await SyncConfig.get();
-                let msg = '🔄 *Status do Auto-Sync:*\n\n';
-                msg += `Geral: ${config.is_active ? '✅ Ativo' : '❌ Inativo'}\n`;
-                msg += `Intervalo: ${config.cron_interval_minutes} min\n`;
-                msg += `ML: ${config.mercadolivre_enabled ? '✅' : '❌'} | Shopee: ${config.shopee_enabled ? '✅' : '❌'}\n`;
-                return ctx.reply(msg, { parse_mode: 'Markdown' });
-            }
-            if (action === 'start') {
-                await SyncConfig.upsert({ is_active: true });
-                return ctx.reply('✅ Auto-Sync ativado globalmente.');
-            }
-            if (action === 'stop') {
-                await SyncConfig.upsert({ is_active: false });
-                return ctx.reply('🛑 Auto-Sync desativado.');
-            }
-            if (action === 'force_run') {
-                ctx.reply('🔄 Iniciando sincronização forçada (Jobs Shopee/ML)...');
-                try {
-                    await syncProducts();
-                    return ctx.reply('✅ Sincronização forçada concluída com sucesso!');
-                } catch (e) {
-                    return ctx.reply(`❌ Erro na sincronização: ${e.message}`);
-                }
-            }
-            return ctx.reply(`Ação ${action} desconhecida para auto-sync.`);
-        } catch (error) {
-            logger.error('Erro manageAutoSync:', error);
-            ctx.reply('Erro ao gerenciar sync.');
-        }
-    }
-
     /**
      * Atualizar Produto (Nome, Preço, Link)
      */

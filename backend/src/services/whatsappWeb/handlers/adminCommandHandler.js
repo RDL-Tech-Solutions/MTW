@@ -15,7 +15,7 @@ export const handleAdminCommand = async (client, msg, body) => {
         }
 
         // Status do Sistema
-        if (command === '/status' || command === 'status' || command === '3') {
+        if (command === '/status' || command === 'status' || command === '2') {
             await sendStatus(client, msg);
             return true;
         }
@@ -30,11 +30,6 @@ export const handleAdminCommand = async (client, msg, body) => {
         if (command === '/pendentes' || command === 'pendentes' || command === '1') {
             // Agora delegamos para o MessageHandler iniciar o fluxo complexo
             return { action: 'SHOW_PENDING' };
-        }
-
-        // Auto-Sync
-        if (command === '/autosync' || command === 'auto-sync' || command === '2') {
-            return { action: 'SHOW_AUTOSYNC' };
         }
 
         // Ajuda
@@ -74,7 +69,7 @@ export const handleAdminCommand = async (client, msg, body) => {
 };
 
 const sendMainMenu = async (client, msg) => {
-    const menu = `🤖 *PreçoCerto Admin (WhatsApp)*\n\nEscolha uma opção:\n\n1️⃣ *Pendentes* (Ver produtos aguardando aprovação)\n2️⃣ *Auto-Sync* (Configurações rápidas)\n3️⃣ *Status* (Verificar canais e serviços)\n\n_Responda com o número ou digite o comando (ex: /status)_`;
+    const menu = `🤖 *PreçoCerto Admin (WhatsApp)*\n\nEscolha uma opção:\n\n1️⃣ *Pendentes* (Ver produtos aguardando aprovação)\n2️⃣ *Status* (Verificar canais e serviços)\n\n_Responda com o número ou digite o comando (ex: /status)_`;
 
     // Adicionar delay pequeno para parecer natural
     // await new Promise(r => setTimeout(r, 500));
