@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Animated, Clipboard, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Animated } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
 import { getPlatformIcon, getPlatformColor } from '../../utils/platformIcons';
@@ -14,14 +15,27 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const vipPulseAnim = useRef(new Animated.Value(1)).current;
   const vipGlowAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const iconRotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      delay: Math.min(index * 40, 400),
-      useNativeDriver: true,
-    }).start();
+    // Animação de entrada com fade + slide
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: Math.min(index * 60, 500),
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        delay: Math.min(index * 60, 500),
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
     // Animação especial para cupons exclusivos
     if (coupon.is_exclusive) {
@@ -57,20 +71,89 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
         ])
       ).start();
     }
+
+    // Rotação sutil do ícone da plataforma
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(iconRotateAnim, {
+          toValue: 1,
+          duration: 3000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(iconRotateAnim, {
+          toValue: 0,
+          duration: 3000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, [index, coupon.is_exclusive]);
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.98, useNativeDriver: true }).start();
+    Animated.parallel([
+      Animated.spring(scaleAnim, { 
+        toValue: 0.95, 
+        useNativeDriver: true,
+        friction: 6,
+        tension: 100,
+      }),
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    Animated.parallel([
+      Animated.spring(scaleAnim, { 
+        toValue: 1, 
+        friction: 4, 
+        tension: 50,
+        useNativeDriver: true 
+      }),
+      Animated.timing(rotateAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
-  const handleCopy = () => {
+  const handlePress = () => {
+    // Animação de "pop" antes de abrir o modal
+    Animated.sequence([
+      Animated.spring(scaleAnim, {
+        toValue: 0.92,
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1.05,
+        friction: 4,
+        tension: 50,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 5,
+        tension: 50,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Chama o onPress após a animação
+      onPress();
+    });
+  };
+
+  const handleCopy = async () => {
     if (coupon.code) {
-      Clipboard.setString(coupon.code);
+      await Clipboard.setStringAsync(coupon.code);
       setCopied(true);
+      
+      // Sem animação de scale, apenas transição de cor/texto
       setTimeout(() => setCopied(false), 2000);
     } else {
       onPress();
@@ -108,20 +191,39 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   const s = createStyles(colors, platformColor);
 
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={{ 
+      opacity: fadeAnim, 
+      transform: [
+        { scale: scaleAnim },
+        { translateY: slideAnim }
+      ] 
+    }}>
       <TouchableOpacity
         style={[s.card, coupon.is_out_of_stock && s.outOfStockCard]}
-        onPress={onPress}
+        onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        activeOpacity={0.9}
+        activeOpacity={0.95}
         disabled={coupon.is_out_of_stock}
       >
         {/* Left Section: Icon & Dotted Separator */}
         <View style={s.leftSection}>
-          <View style={[s.platformIconWrapper, { backgroundColor: platformColor }]}>
+          <Animated.View 
+            style={[
+              s.platformIconWrapper, 
+              { 
+                backgroundColor: platformColor,
+                transform: [{
+                  rotate: iconRotateAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '5deg'],
+                  })
+                }]
+              }
+            ]}
+          >
             {PlatformIconComponent}
-          </View>
+          </Animated.View>
           {/* Vertical Dotted Line */}
           <View style={s.dottedLineContainer}>
             {[...Array(6)].map((_, i) => (
@@ -192,11 +294,17 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
             <TouchableOpacity
               style={[
                 s.actionButton,
-                { backgroundColor: coupon.is_out_of_stock ? colors.error : (copied ? colors.success : platformColor) }
+                { backgroundColor: coupon.is_out_of_stock ? colors.error : (copied ? '#16A34A' : platformColor) }
               ]}
               onPress={coupon.is_out_of_stock ? null : handleCopy}
               disabled={coupon.is_out_of_stock}
+              activeOpacity={0.8}
             >
+              <Ionicons 
+                name={copied ? 'checkmark-circle' : 'ticket'} 
+                size={16} 
+                color="#fff" 
+              />
               <Text style={s.actionButtonText}>
                 {coupon.is_out_of_stock ? 'Esgotado' : (copied ? 'Copiado!' : 'Pegar')}
               </Text>
@@ -211,7 +319,13 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
               ]}
               onPress={coupon.is_out_of_stock ? null : onPress}
               disabled={coupon.is_out_of_stock}
+              activeOpacity={0.8}
             >
+              <Ionicons 
+                name="eye-outline" 
+                size={16} 
+                color={coupon.is_out_of_stock ? '#fff' : platformColor} 
+              />
               <Text style={[s.actionButtonText, !coupon.is_out_of_stock && { color: platformColor }]}>
                 {coupon.is_out_of_stock ? 'Esgotado' : 'Ver'}
               </Text>
@@ -380,11 +494,14 @@ const createStyles = (colors, platformColor) => StyleSheet.create({
     paddingRight: 10,
   },
   actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
     minWidth: 90,
-    alignItems: 'center',
     ...(Platform.OS === 'web' ? {
       boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
     } : {
