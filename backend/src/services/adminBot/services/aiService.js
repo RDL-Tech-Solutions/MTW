@@ -519,6 +519,18 @@ Responda com o JSON da ação a ser tomada.
 
             const couponData = coupons[couponIndexOrNone];
             await Product.update(productId, { coupon_id: couponData.id });
+            
+            // CORREÇÃO: Adicionar ao applicable_products se não for geral
+            if (couponData.is_general === false) {
+                const Coupon = (await import('../../../models/Coupon.js')).default;
+                const applicableProducts = couponData.applicable_products || [];
+                if (!applicableProducts.includes(productId)) {
+                    applicableProducts.push(productId);
+                    await Coupon.update(couponData.id, { applicable_products: applicableProducts });
+                    logger.info(`✅ Produto ${productId} adicionado ao applicable_products do cupom ${couponData.code}`);
+                }
+            }
+            
             await ctx.answerCallbackQuery(`✅ Vinculado: ${couponData.code}`);
             await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 

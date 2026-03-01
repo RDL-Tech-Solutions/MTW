@@ -260,7 +260,7 @@ async function showCouponDetails(client, msg, coupon) {
   details += `📅 *Válido de:* ${new Date(coupon.valid_from).toLocaleDateString('pt-BR')}\n`;
   details += `📅 *Válido até:* ${coupon.valid_until ? new Date(coupon.valid_until).toLocaleDateString('pt-BR') : 'Sem data'}\n`;
   details += `👥 *Usos:* ${coupon.current_uses || 0}${coupon.max_uses ? ` / ${coupon.max_uses}` : ''}\n`;
-  details += `🎯 *Aplicabilidade:* ${coupon.is_general ? 'Todos os produtos' : 'Produtos selecionados'}\n`;
+  details += `🎯 *Aplicabilidade:* ${coupon.is_general === false ? 'Produtos selecionados' : 'Todos os produtos'}\n`;
   details += `⭐ *Exclusivo:* ${coupon.is_exclusive ? 'Sim' : 'Não'}\n`;
   details += `📊 *Status:* ${coupon.is_out_of_stock ? '🚫 Esgotado' : '✅ Ativo'}\n\n`;
   details += `${coupon.description || 'Sem descrição'}\n\n`;

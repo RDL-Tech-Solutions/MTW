@@ -69,6 +69,14 @@ export default function CouponDetailsScreen({ route, navigation }) {
     const result = await fetchCouponById(initialCoupon.id);
     setLoading(false);
     if (result.success) {
+      // DEBUG: Log para verificar o que chegou do backend
+      console.log('🔍 Cupom recebido do backend:', {
+        code: result.coupon.code,
+        is_general: result.coupon.is_general,
+        tipo_is_general: typeof result.coupon.is_general,
+        applicable_products: result.coupon.applicable_products
+      });
+      
       setCoupon(result.coupon);
       checkProducts(result.coupon);
       // Registrar visualização silenciosamente
@@ -253,6 +261,26 @@ export default function CouponDetailsScreen({ route, navigation }) {
                 <Text style={s.conditionText}>{coupon.description}</Text>
               </View>
             )}
+            
+            {/* CORREÇÃO: Indicador de aplicabilidade do cupom */}
+            <View style={s.conditionRow}>
+              <Ionicons 
+                name={coupon.is_general === false ? "pricetag-outline" : "globe-outline"} 
+                size={16} 
+                color="#9CA3AF" 
+              />
+              <Text style={s.conditionText}>
+                {/* DEBUG: Mostrar valor real */}
+                {console.log('🎯 Renderizando aplicabilidade:', {
+                  is_general: coupon.is_general,
+                  tipo: typeof coupon.is_general,
+                  resultado: coupon.is_general === false ? 'ESPECÍFICO' : 'GERAL'
+                })}
+                {coupon.is_general === false
+                  ? 'Válido para produtos selecionados'
+                  : `Válido para todos os produtos ${coupon.platform !== 'general' ? `da ${getPlatformName(coupon.platform)}` : ''}`}
+              </Text>
+            </View>
           </View>
 
           {/* ── Code + Copy Section ── */}

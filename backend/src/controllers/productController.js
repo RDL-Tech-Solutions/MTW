@@ -458,6 +458,16 @@ class ProductController {
             updateData.coupon_id = coupon_id;
 
             logger.info(`💰 Preço final calculado: R$ ${product.current_price} → R$ ${finalPrice.toFixed(2)} (cupom: ${coupon.code})`);
+            
+            // CORREÇÃO: Adicionar produto ao array applicable_products do cupom se não for geral
+            if (!coupon.is_general) {
+              const applicableProducts = coupon.applicable_products || [];
+              if (!applicableProducts.includes(id)) {
+                applicableProducts.push(id);
+                await Coupon.update(coupon_id, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${id} adicionado ao array applicable_products do cupom ${coupon.code}`);
+              }
+            }
           } else {
             logger.warn(`⚠️ Cupom ${coupon_id} não está válido no momento`);
           }
@@ -640,6 +650,16 @@ class ProductController {
 
             updateData.coupon_id = coupon_id;
             logger.info(`💰 Preço com cupom: R$ ${finalPrice.toFixed(2)}`);
+            
+            // CORREÇÃO: Adicionar produto ao array applicable_products do cupom se não for geral
+            if (!coupon.is_general) {
+              const applicableProducts = coupon.applicable_products || [];
+              if (!applicableProducts.includes(id)) {
+                applicableProducts.push(id);
+                await Coupon.update(coupon_id, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${id} adicionado ao array applicable_products do cupom ${coupon.code}`);
+              }
+            }
           }
         }
       }
@@ -826,6 +846,16 @@ class ProductController {
 
             updateData.coupon_id = coupon_id;
             logger.info(`💰 Preço com cupom: R$ ${finalPrice.toFixed(2)}`);
+            
+            // CORREÇÃO: Adicionar produto ao array applicable_products do cupom se não for geral
+            if (!coupon.is_general) {
+              const applicableProducts = coupon.applicable_products || [];
+              if (!applicableProducts.includes(id)) {
+                applicableProducts.push(id);
+                await Coupon.update(coupon_id, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${id} adicionado ao array applicable_products do cupom ${coupon.code}`);
+              }
+            }
           } else {
             logger.warn(`⚠️ Cupom ${coupon_id} não está válido no momento`);
           }
@@ -903,6 +933,16 @@ class ProductController {
             updateData.coupon_id = coupon_id;
 
             logger.info(`🎟️ Cupom vinculado na republicação: ${coupon.code}. Novo preço final: R$ ${finalPrice.toFixed(2)}`);
+            
+            // CORREÇÃO: Adicionar produto ao array applicable_products do cupom se não for geral
+            if (!coupon.is_general) {
+              const applicableProducts = coupon.applicable_products || [];
+              if (!applicableProducts.includes(id)) {
+                applicableProducts.push(id);
+                await Coupon.update(coupon_id, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${id} adicionado ao array applicable_products do cupom ${coupon.code}`);
+              }
+            }
           } else {
             return res.status(400).json(errorResponse('Cupom inválido ou inativo', 'INVALID_COUPON'));
           }
@@ -911,6 +951,20 @@ class ProductController {
           updateData.coupon_id = null;
           finalPrice = product.current_price;
           logger.info(`🎟️ Cupom removido na republicação`);
+          
+          // CORREÇÃO: Remover produto do array applicable_products do cupom anterior se existir
+          if (product.coupon_id) {
+            try {
+              const oldCoupon = await Coupon.findById(product.coupon_id);
+              if (oldCoupon && oldCoupon.applicable_products) {
+                const applicableProducts = oldCoupon.applicable_products.filter(pid => pid !== id);
+                await Coupon.update(product.coupon_id, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${id} removido do array applicable_products do cupom anterior`);
+              }
+            } catch (e) {
+              logger.warn(`⚠️ Erro ao remover produto do cupom anterior: ${e.message}`);
+            }
+          }
         }
       }
 

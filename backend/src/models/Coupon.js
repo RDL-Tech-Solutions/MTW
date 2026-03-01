@@ -127,6 +127,12 @@ class Coupon {
       .single();
 
     if (error) throw error;
+    
+    // DEBUG: Log para verificar o valor de is_general
+    if (data) {
+      logger.debug(`🔍 Cupom ${data.code} - is_general: ${data.is_general} (tipo: ${typeof data.is_general})`);
+    }
+    
     return data;
   }
 

@@ -1057,6 +1057,16 @@ class MeliSync {
             // Nota: Se já tinha cupom, vai sobrescrever com o novo (o que é bom, pois é uma nova captura/atualização)
             await Product.update(existing.id, { coupon_id: newCoupon.id });
             logger.info(`   🎟️ Cupom atualizado/adicionado a produto existente: ${product.name}`);
+            
+            // CORREÇÃO: Adicionar ao applicable_products se não for geral
+            if (newCoupon.is_general === false) {
+              const applicableProducts = newCoupon.applicable_products || [];
+              if (!applicableProducts.includes(existing.id)) {
+                applicableProducts.push(existing.id);
+                await Coupon.update(newCoupon.id, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${existing.id} adicionado ao applicable_products do cupom`);
+              }
+            }
           } catch (couponError) {
             logger.error(`   ❌ Erro ao atualizar cupom em produto existente: ${couponError.message}`);
           }
@@ -1092,6 +1102,14 @@ class MeliSync {
           const newCoupon = await Coupon.create(couponData);
           product.coupon_id = newCoupon.id;
           logger.info(`   🎟️ Cupom criado para produto: ${product.coupon.discount_value}`);
+          
+          // CORREÇÃO: Adicionar produto ao applicable_products se não for geral
+          if (newCoupon.is_general === false) {
+            await Coupon.update(newCoupon.id, { 
+              applicable_products: [product.id] 
+            });
+            logger.info(`✅ Produto adicionado ao applicable_products do cupom`);
+          }
         } catch (couponError) {
           logger.error(`   ❌ Erro ao criar cupom: ${couponError.message}`);
           // Segue sem cupom

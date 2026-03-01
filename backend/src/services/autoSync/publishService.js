@@ -469,15 +469,17 @@ class PublishService {
           }
 
           // Aplicabilidade
-          if (coupon.is_general) {
-            message += `✅ *Válido para todos os produtos*\n`;
-          } else {
+          if (coupon.is_general === false) {
+            // Cupom para produtos selecionados
             const productCount = coupon.applicable_products?.length || 0;
             if (productCount > 0) {
-              message += `📦 *Em produtos selecionados* (${productCount} produto${productCount > 1 ? 's' : ''})\n`;
+              message += `🎯 *Válido para produtos selecionados* (${productCount} produto${productCount > 1 ? 's' : ''})\n`;
             } else {
-              message += `📦 *Em produtos selecionados*\n`;
+              message += `🎯 *Válido para produtos selecionados*\n`;
             }
+          } else {
+            // Cupom geral (is_general === true ou null)
+            message += `✅ *Válido para todos os produtos*\n`;
           }
         }
       } catch (error) {

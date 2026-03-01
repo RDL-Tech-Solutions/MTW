@@ -429,6 +429,18 @@ async function _publish(msg, product, couponId) {
     const productToPublish = { ...product };
     if (couponId) {
         productToPublish.coupon_id = couponId;
+        
+        // CORREÇÃO: Adicionar ao applicable_products se não for geral
+        const Coupon = (await import('../../../models/Coupon.js')).default;
+        const coupon = await Coupon.findById(couponId);
+        if (coupon && coupon.is_general === false) {
+            const applicableProducts = coupon.applicable_products || [];
+            if (!applicableProducts.includes(product.id)) {
+                applicableProducts.push(product.id);
+                await Coupon.update(couponId, { applicable_products: applicableProducts });
+                logger.info(`✅ Produto ${product.id} adicionado ao applicable_products do cupom ${coupon.code}`);
+            }
+        }
     }
     const res = await PublishService.publishAll(productToPublish, { manual: true });
     await msg.reply(res.success ? '✅ *Sucesso!*' : `❌ Erro: ${res.reason}`);

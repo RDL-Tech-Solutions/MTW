@@ -382,7 +382,21 @@ export const handleWizardConfirm = async (ctx, action) => {
         if (editData.current_price !== undefined) updates.current_price = editData.current_price;
         if (editData.affiliate_link) updates.affiliate_link = editData.affiliate_link;
         if (editData.discount_percentage !== undefined) updates.discount_percentage = editData.discount_percentage;
-        if (editData.coupon_id) updates.coupon_id = editData.coupon_id;
+        if (editData.coupon_id) {
+            updates.coupon_id = editData.coupon_id;
+            
+            // CORREÇÃO: Adicionar ao applicable_products se não for geral
+            const Coupon = (await import('../../../models/Coupon.js')).default;
+            const coupon = await Coupon.findById(editData.coupon_id);
+            if (coupon && coupon.is_general === false) {
+                const applicableProducts = coupon.applicable_products || [];
+                if (!applicableProducts.includes(productId)) {
+                    applicableProducts.push(productId);
+                    await Coupon.update(editData.coupon_id, { applicable_products: applicableProducts });
+                    logger.info(`✅ Produto ${productId} adicionado ao applicable_products do cupom ${coupon.code}`);
+                }
+            }
+        }
 
         // Se a categoria foi editada manualmente, marcar flag
         const manualCategory = !!editData.category_id;

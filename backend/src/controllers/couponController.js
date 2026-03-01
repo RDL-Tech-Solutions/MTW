@@ -65,6 +65,11 @@ class CouponController {
         );
       }
 
+      // DEBUG: Log para verificar o que está sendo retornado
+      logger.info(`📤 Retornando cupom ${coupon.code}:`);
+      logger.info(`   is_general: ${coupon.is_general} (tipo: ${typeof coupon.is_general})`);
+      logger.info(`   applicable_products: ${JSON.stringify(coupon.applicable_products)}`);
+
       res.json(successResponse(coupon));
     } catch (error) {
       next(error);
@@ -108,7 +113,7 @@ class CouponController {
         ...req.query
       };
 
-      if (coupon.is_general) {
+      if (coupon.is_general === true || coupon.is_general === null) {
         // Se for cupom geral, ele se aplica a todos da plataforma
         if (coupon.platform && coupon.platform !== 'general') {
           filters.platform = coupon.platform;

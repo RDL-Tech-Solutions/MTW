@@ -328,17 +328,17 @@ class TemplateRenderer {
     logger.debug(`   applicable_products: ${JSON.stringify(coupon.applicable_products)}`);
     logger.debug(`   applicable_products length: ${coupon.applicable_products?.length || 0}`);
 
-    if (coupon.is_general === true) {
-      // Cupom válido para todos os produtos
+    if (coupon.is_general === true || coupon.is_general === null) {
+      // Cupom válido para todos os produtos (true ou null = padrão)
       applicability = '✅ **Válido para todos os produtos**';
       logger.debug(`   ✅ Aplicabilidade definida: TODOS OS PRODUTOS`);
     } else if (coupon.is_general === false && coupon.applicable_products?.length > 0) {
-      // Cupom para produtos selecionados
+      // Cupom para produtos selecionados (explicitamente false)
       const productCount = coupon.applicable_products.length;
       applicability = `📦 **Em produtos selecionados** (${productCount} produto${productCount > 1 ? 's' : ''})`;
       logger.debug(`   ✅ Aplicabilidade definida: PRODUTOS SELECIONADOS (${productCount})`);
     } else {
-      // is_general é null ou false sem produtos - não mencionar nada
+      // is_general é false mas sem produtos - não mencionar nada
       applicability = '';
       logger.debug(`   ⚠️ Aplicabilidade VAZIA (is_general=${coupon.is_general}, produtos=${coupon.applicable_products?.length || 0})`);
     }

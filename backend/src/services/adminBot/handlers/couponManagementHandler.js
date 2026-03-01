@@ -245,7 +245,7 @@ export const showCouponDetails = async (ctx) => {
       `📅 *Válido de:* ${new Date(coupon.valid_from).toLocaleDateString('pt-BR')}\n` +
       `📅 *Válido até:* ${coupon.valid_until ? new Date(coupon.valid_until).toLocaleDateString('pt-BR') : 'Sem data'}\n` +
       `👥 *Usos:* ${coupon.current_uses || 0}${coupon.max_uses ? ` / ${coupon.max_uses}` : ''}\n` +
-      `🎯 *Aplicabilidade:* ${coupon.is_general ? 'Todos os produtos' : 'Produtos selecionados'}\n` +
+      `🎯 *Aplicabilidade:* ${coupon.is_general === false ? 'Produtos selecionados' : 'Todos os produtos'}\n` +
       `⭐ *Exclusivo:* ${coupon.is_exclusive ? 'Sim' : 'Não'}\n` +
       `📊 *Status:* ${coupon.is_out_of_stock ? '🚫 Esgotado' : '✅ Ativo'}\n\n` +
       `${coupon.description || 'Sem descrição'}`;
