@@ -1,25 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { LogBox } from 'react-native';
+import OneSignal from 'react-native-onesignal';
 import AppNavigator from './src/navigation/AppNavigator';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
 import SplashScreen from './src/components/common/SplashScreen';
 import { useThemeStore } from './src/theme/theme';
 import { useNotificationStore } from './src/stores/notificationStore';
 import { useAuthStore } from './src/stores/authStore';
+import { useOneSignalStore } from './src/stores/oneSignalStore';
+
+// Ignorar warnings específicos
+LogBox.ignoreLogs([
+  'Non-serializable values were found in the navigation state',
+]);
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const { initialize: initializeTheme } = useThemeStore();
   const { initialize: initializeNotifications } = useNotificationStore();
+  const { initialize: initializeOneSignal } = useOneSignalStore();
   const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
         // Aguardar um pouco para garantir que os módulos nativos estejam prontos
-        // Isso é especialmente importante para evitar erros de PlatformConstants
         await new Promise(resolve => setTimeout(resolve, 200));
         
         // Inicializar tema
@@ -27,6 +35,13 @@ export default function App() {
           await initializeTheme();
         } catch (error) {
           console.error('Erro ao inicializar tema:', error);
+        }
+
+        // Inicializar OneSignal
+        try {
+          await initializeOneSignal();
+        } catch (error) {
+          console.error('Erro ao inicializar OneSignal:', error);
         }
         
         // Marcar como pronto

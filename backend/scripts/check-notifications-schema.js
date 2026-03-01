@@ -1,0 +1,23 @@
+import dotenv from 'dotenv';
+dotenv.config();
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+async function checkSchema() {
+    const { data, error } = await supabase.rpc('exec_sql', {
+        sql: `
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = 'notifications';
+    `
+    });
+    if (error) {
+        console.log('Error checking schema:', error);
+    } else {
+        console.log('Schema:', data);
+    }
+}
+checkSchema();

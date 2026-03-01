@@ -3,7 +3,7 @@ import User from '../models/User.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
 import logger from '../config/logger.js';
-import pushNotificationService from '../services/pushNotification.js';
+import oneSignalService from '../services/oneSignalService.js';
 
 class NotificationController {
   // Listar notificações do usuário
@@ -74,7 +74,7 @@ class NotificationController {
     }
   }
 
-  // Testar push notification
+  // Testar push notification via OneSignal
   static async testPush(req, res, next) {
     try {
       const user = await User.findById(req.user.id);
@@ -83,32 +83,27 @@ class NotificationController {
         return res.status(404).json(errorResponse('Usuário não encontrado'));
       }
 
-      if (!user.push_token) {
-        return res.status(400).json(errorResponse('Usuário não possui push token registrado. Abra o app mobile e faça login para registrar o token.'));
-      }
+      logger.info(`🧪 Testando push notification OneSignal para usuário ${user.id} (${user.email})`);
 
-      logger.info(`🧪 Testando push notification para usuário ${user.id} (${user.email})`);
-      logger.info(`📱 Push token: ${user.push_token.substring(0, 50)}...`);
-
-      const result = await pushNotificationService.sendToUser(
-        user.push_token,
-        {
-          title: '🧪 Teste de Notificação',
-          message: 'Esta é uma notificação de teste do PreçoCerto! Se você recebeu isso, as notificações push estão funcionando perfeitamente! 🎉',
+      const result = await oneSignalService.sendToUser({
+        external_id: user.id.toString(),
+        title: '🧪 Teste de Notificação',
+        message: 'Esta é uma notificação de teste do PreçoCerto! Se você recebeu isso, as notificações push estão funcionando perfeitamente! 🎉',
+        data: { 
           type: 'test',
-          data: { 
-            screen: 'Home',
-            timestamp: new Date().toISOString()
-          }
-        }
-      );
+          screen: 'Home',
+          timestamp: new Date().toISOString()
+        },
+        priority: 'high'
+      });
 
-      if (result) {
+      if (result.success) {
         logger.info(`✅ Notificação de teste enviada com sucesso!`);
         res.json(successResponse(
           { 
             sent: true, 
-            pushToken: user.push_token.substring(0, 50) + '...',
+            notificationId: result.notification_id,
+            recipients: result.recipients,
             user: {
               id: user.id,
               email: user.email,
@@ -118,8 +113,8 @@ class NotificationController {
           'Notificação de teste enviada com sucesso! Verifique seu dispositivo móvel.'
         ));
       } else {
-        logger.error(`❌ Falha ao enviar notificação de teste`);
-        res.status(500).json(errorResponse('Falha ao enviar notificação. Verifique os logs do servidor.'));
+        logger.error(`❌ Falha ao enviar notificação de teste: ${result.error || 'Erro desconhecido'}`);
+        res.status(500).json(errorResponse(result.error || 'Falha ao enviar notificação. Verifique os logs do servidor.'));
       }
     } catch (error) {
       logger.error(`❌ Erro ao testar push notification: ${error.message}`);

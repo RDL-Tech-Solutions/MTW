@@ -1,11 +1,11 @@
 import Notification from '../../models/Notification.js';
 import User from '../../models/User.js';
-import pushNotificationService from '../pushNotificationWrapper.js';
+import oneSignalService from '../oneSignalService.js';
 import logger from '../../config/logger.js';
 
 export const sendNotifications = async () => {
   try {
-    logger.info('🔄 Enviando notificações pendentes...');
+    logger.info('🔄 Enviando notificações pendentes via OneSignal...');
 
     // Buscar notificações não enviadas
     const pendingNotifications = await Notification.findUnsent(50);
@@ -19,22 +19,31 @@ export const sendNotifications = async () => {
 
     for (const notification of pendingNotifications) {
       try {
-        // Buscar usuário com push token
+        // Buscar usuário
         const user = await User.findById(notification.user_id);
 
-        if (!user || !user.push_token) {
-          // Marcar como enviada mesmo sem token para não tentar novamente
+        if (!user) {
+          // Marcar como enviada mesmo sem usuário para não tentar novamente
           await Notification.markAsSent(notification.id);
           continue;
         }
 
-        // Enviar push notification
-        const sent = await pushNotificationService.sendToUser(
-          user.push_token,
-          notification
-        );
+        // Enviar push notification via OneSignal usando external_id (user.id)
+        const result = await oneSignalService.sendToUser({
+          external_id: user.id.toString(),
+          title: notification.title,
+          message: notification.message,
+          data: {
+            type: notification.type,
+            productId: notification.related_product_id,
+            couponId: notification.related_coupon_id,
+            screen: notification.type === 'new_product' ? 'ProductDetails' : 
+                    notification.type === 'new_coupon' ? 'CouponDetails' : 'Home'
+          },
+          priority: 'normal'
+        });
 
-        if (sent) {
+        if (result.success) {
           await Notification.markAsSent(notification.id);
           sentCount++;
         }
@@ -43,7 +52,7 @@ export const sendNotifications = async () => {
       }
     }
 
-    logger.info(`✅ ${sentCount} notificações enviadas`);
+    logger.info(`✅ ${sentCount} notificações enviadas via OneSignal`);
   } catch (error) {
     logger.error(`Erro no envio de notificações: ${error.message}`);
   }

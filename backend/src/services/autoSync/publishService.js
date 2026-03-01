@@ -26,14 +26,14 @@ class PublishService {
   }
 
   /**
-   * Enviar notificação push usando preferências do usuário
+   * Enviar notificação push usando OneSignal
    */
   async notifyPush(product) {
       try {
         const Notification = (await import('../../models/Notification.js')).default;
         const NotificationPreference = (await import('../../models/NotificationPreference.js')).default;
         const User = (await import('../../models/User.js')).default;
-        const pushNotificationService = (await import('../pushNotification.js')).default;
+        const oneSignalService = (await import('../oneSignalService.js')).default;
 
         // Buscar usuários que devem receber notificação
         const usersToNotify = new Set(); // Usar Set para evitar duplicatas
@@ -76,16 +76,16 @@ class PublishService {
 
         logger.info(`🔔 Total de ${uniqueUserIds.length} usuários únicos para notificar`);
 
-        // Buscar usuários com push_token em uma única query
+        // Buscar usuários
         const users = await Promise.all(
           uniqueUserIds.map(userId => User.findById(userId))
         );
 
-        // Filtrar usuários válidos com push_token
-        const validUsers = users.filter(user => user && user.push_token);
+        // Filtrar usuários válidos
+        const validUsers = users.filter(user => user && user.id);
 
         if (validUsers.length === 0) {
-          logger.info(`🔔 Nenhum usuário com push_token válido`);
+          logger.info(`🔔 Nenhum usuário válido encontrado`);
           return true;
         }
 
@@ -102,24 +102,8 @@ class PublishService {
         const createdNotifications = await Notification.createBulk(notifications);
         logger.info(`   💾 ${createdNotifications.length} notificações criadas no banco`);
 
-        // Enviar push notifications em batch
-        const messages = createdNotifications.map((notification, index) => {
-          const user = validUsers[index];
-          return pushNotificationService.createMessage(
-            user.push_token,
-            notification.title,
-            notification.message,
-            {
-              type: notification.type,
-              productId: notification.related_product_id,
-              screen: 'ProductDetails',
-            },
-            { categoryId: 'promo' }
-          );
-        });
-
-        // Enviar em batch
-        const result = await pushNotificationService.sendToMultiple(messages);
+        // Enviar via OneSignal
+        const result = await oneSignalService.notifyNewPromo(validUsers, product);
 
         // Marcar notificações como enviadas
         if (result.success > 0) {
@@ -130,7 +114,7 @@ class PublishService {
           );
         }
 
-        logger.info(`🔔 Push notifications: ${result.success}/${notifications.length} enviadas para: ${product.name}`);
+        logger.info(`🔔 Push notifications OneSignal: ${result.success}/${notifications.length} enviadas para: ${product.name}`);
         return result.success > 0;
       } catch (error) {
         logger.error(`❌ Erro ao enviar push: ${error.message}`);

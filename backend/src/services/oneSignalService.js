@@ -57,7 +57,8 @@ class OneSignalService {
    * Verificar se o serviço está habilitado
    */
   isEnabled() {
-    return this.initialized && process.env.ONESIGNAL_ENABLED !== 'false';
+    const enabled = process.env.ONESIGNAL_ENABLED === 'true';
+    return this.initialized && enabled;
   }
 
   /**

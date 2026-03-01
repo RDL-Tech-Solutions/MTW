@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../services/api';
 import storage from '../services/storage';
+import { useOneSignalStore } from './oneSignalStore';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -16,6 +17,14 @@ export const useAuthStore = create((set, get) => ({
 
       if (token && user) {
         set({ user, token, isAuthenticated: true, isLoading: false });
+        
+        // Fazer login no OneSignal se usuário estiver autenticado
+        try {
+          const oneSignalStore = useOneSignalStore.getState();
+          await oneSignalStore.login(user.id);
+        } catch (error) {
+          console.error('Erro ao fazer login no OneSignal:', error);
+        }
       } else {
         set({ isLoading: false });
       }
@@ -36,6 +45,16 @@ export const useAuthStore = create((set, get) => ({
       await storage.setUser(user);
 
       set({ user, token, isAuthenticated: true });
+
+      // Fazer login no OneSignal
+      try {
+        const oneSignalStore = useOneSignalStore.getState();
+        await oneSignalStore.login(user.id);
+        console.log('✅ Usuário registrado no OneSignal:', user.id);
+      } catch (error) {
+        console.error('Erro ao registrar no OneSignal:', error);
+      }
+
       return { success: true };
     } catch (error) {
       console.error('Erro no login:', error);
@@ -57,6 +76,16 @@ export const useAuthStore = create((set, get) => ({
       await storage.setUser(user);
 
       set({ user, token, isAuthenticated: true });
+
+      // Fazer login no OneSignal
+      try {
+        const oneSignalStore = useOneSignalStore.getState();
+        await oneSignalStore.login(user.id);
+        console.log('✅ Usuário registrado no OneSignal:', user.id);
+      } catch (error) {
+        console.error('Erro ao registrar no OneSignal:', error);
+      }
+
       return { success: true };
     } catch (error) {
       console.error('Erro no registro:', error);
@@ -112,6 +141,15 @@ export const useAuthStore = create((set, get) => ({
   // Logout
   logout: async () => {
     try {
+      // Fazer logout do OneSignal
+      try {
+        const oneSignalStore = useOneSignalStore.getState();
+        await oneSignalStore.logout();
+        console.log('✅ Logout do OneSignal realizado');
+      } catch (error) {
+        console.error('Erro ao fazer logout do OneSignal:', error);
+      }
+
       await storage.clearAll();
       set({ user: null, token: null, isAuthenticated: false });
     } catch (error) {
@@ -138,7 +176,7 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Registrar token de notificação
+  // Registrar token de notificação (mantido para compatibilidade)
   registerPushToken: async (pushToken) => {
     try {
       await api.post('/users/push-token', { token: pushToken });

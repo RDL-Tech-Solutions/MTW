@@ -224,43 +224,29 @@ async function checkDependencies() {
   }
 }
 
-async function checkMigrationStatus() {
-  console.log(chalk.bold('\n5. Verificando Status da Migração\n'));
+async function checkUserSetup() {
+  console.log(chalk.bold('\n5. Verificando Configuração de Usuários\n'));
 
   try {
-    // Contar usuários com tokens Expo
-    const { count: expoTokens, error: expoError } = await supabase
+    // Contar total de usuários
+    const { count: totalUsers, error: totalError } = await supabase
       .from('users')
-      .select('id', { count: 'exact', head: true })
-      .or('push_token.like.ExponentPushToken%,push_token.like.ExpoPushToken%');
+      .select('id', { count: 'exact', head: true });
 
-    if (expoError) {
-      printResult('Tokens Expo', 'warn', `Não foi possível verificar: ${expoError.message}`);
+    if (totalError) {
+      printResult('Total de Usuários', 'warn', `Não foi possível verificar: ${totalError.message}`);
     } else {
-      if (expoTokens > 0) {
-        printResult('Tokens Expo', 'warn', `${expoTokens} usuários com tokens Expo (migração pendente)`);
-      } else {
-        printResult('Tokens Expo', 'pass', 'Nenhum token Expo encontrado');
-      }
+      printResult('Total de Usuários', 'pass', `${totalUsers} usuários cadastrados`);
     }
 
-    // Contar usuários migrados
-    const { count: migrated, error: migratedError } = await supabase
-      .from('users')
-      .select('id', { count: 'exact', head: true })
-      .eq('onesignal_migrated', true);
-
-    if (migratedError) {
-      printResult('Usuários Migrados', 'warn', `Não foi possível verificar: ${migratedError.message}`);
+    // Verificar se há usuários ativos
+    if (totalUsers > 0) {
+      printResult('Sistema Pronto', 'pass', 'Sistema configurado e pronto para enviar notificações');
     } else {
-      if (migrated > 0) {
-        printResult('Usuários Migrados', 'pass', `${migrated} usuários migrados`);
-      } else {
-        printResult('Usuários Migrados', 'warn', 'Nenhum usuário migrado ainda');
-      }
+      printResult('Sistema Pronto', 'warn', 'Nenhum usuário cadastrado ainda');
     }
   } catch (error) {
-    printResult('Migration Status', 'fail', `Erro: ${error.message}`);
+    printResult('User Setup', 'fail', `Erro: ${error.message}`);
   }
 }
 
@@ -299,7 +285,7 @@ async function main() {
     await checkOneSignalConnection();
     await checkDatabaseMigration();
     await checkDependencies();
-    await checkMigrationStatus();
+    await checkUserSetup();
 
     printSummary();
 

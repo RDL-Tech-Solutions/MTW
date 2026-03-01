@@ -588,34 +588,58 @@ ${coupon.affiliate_link || 'Link não disponível'}
   }
 
   /**
-   * Criar notificações push para usuários
+   * Criar notificações push para usuários via OneSignal
    */
   async createPushNotifications(coupon, type) {
     try {
-      // Buscar usuários com push token
+      // Buscar todos os usuários ativos (OneSignal usa external_id = user.id)
       const { data: users, error } = await supabase
         .from('users')
-        .select('id, push_token')
-        .not('push_token', 'is', null);
+        .select('id');
 
       if (error) throw error;
 
       if (!users || users.length === 0) {
-        logger.info('Nenhum usuário com push token encontrado');
+        logger.info('Nenhum usuário encontrado');
         return;
       }
 
-      // Criar notificações em lote
+      logger.info(`📱 Enviando notificações push OneSignal para ${users.length} usuários...`);
+
+      // Importar oneSignalService
+      const oneSignalService = (await import('../oneSignalService.js')).default;
+
+      // Preparar dados da notificação
+      const title = type === 'new_coupon' ? '🔥 Novo Cupom Disponível!' : '⏰ Cupom Expirando!';
+      const message = `${coupon.code} - ${coupon.discount_value}${coupon.discount_type === 'percentage' ? '%' : 'R$'} OFF em ${this.getPlatformName(coupon.platform)}`;
+
+      // Enviar notificações usando OneSignal
+      const result = await oneSignalService.sendCustomNotification(
+        users,
+        title,
+        message,
+        {
+          type,
+          couponId: coupon.id,
+          screen: 'CouponDetails'
+        },
+        {
+          priority: 'high'
+        }
+      );
+
+      // Criar registros de notificações no banco para histórico
       const notifications = users.map(user => ({
         user_id: user.id,
-        title: type === 'new_coupon' ? '🔥 Novo Cupom Disponível!' : '⏰ Cupom Expirando!',
-        message: `${coupon.code} - ${coupon.discount_value}% OFF em ${this.getPlatformName(coupon.platform)}`,
+        title,
+        message,
         type,
         related_coupon_id: coupon.id
       }));
 
       await Notification.createBulk(notifications);
-      logger.info(`✅ ${notifications.length} notificações push criadas`);
+
+      logger.info(`✅ Notificações push OneSignal enviadas: ${result.success || 0} sucesso, ${result.failed || 0} falhas`);
 
     } catch (error) {
       logger.error(`Erro ao criar notificações push: ${error.message}`);

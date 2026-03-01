@@ -1,13 +1,12 @@
 import express from 'express';
 import oneSignalService from '../services/oneSignalService.js';
-import oneSignalMigration from '../services/oneSignalMigration.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 import logger from '../config/logger.js';
 
 const router = express.Router();
 
 /**
- * Rotas para gerenciamento do OneSignal e migração
+ * Rotas para gerenciamento do OneSignal
  * Todas as rotas requerem autenticação de admin
  */
 
@@ -37,133 +36,6 @@ router.get('/status', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erro ao verificar status',
-      error: error.message
-    });
-  }
-});
-
-/**
- * GET /api/onesignal/migration/stats
- * Obter estatísticas de migração
- */
-router.get('/migration/stats', async (req, res) => {
-  try {
-    const result = await oneSignalMigration.getMigrationStats();
-
-    if (!result.success) {
-      return res.status(500).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error(`Erro ao obter estatísticas: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao obter estatísticas',
-      error: error.message
-    });
-  }
-});
-
-/**
- * POST /api/onesignal/migration/start
- * Iniciar migração de usuários
- * 
- * Body:
- * - dryRun: boolean (opcional, default: false)
- * - limit: number (opcional)
- */
-router.post('/migration/start', async (req, res) => {
-  try {
-    const { dryRun = false, limit } = req.body;
-
-    logger.info(`🚀 Iniciando migração OneSignal (admin: ${req.user.email})`);
-    logger.info(`   Dry Run: ${dryRun}`);
-    logger.info(`   Limit: ${limit || 'sem limite'}`);
-
-    const result = await oneSignalMigration.migrateAllUsers({ dryRun, limit });
-
-    res.json(result);
-  } catch (error) {
-    logger.error(`Erro ao iniciar migração: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao iniciar migração',
-      error: error.message
-    });
-  }
-});
-
-/**
- * POST /api/onesignal/migration/user/:userId
- * Migrar um usuário específico
- */
-router.post('/migration/user/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { dryRun = false } = req.body;
-
-    // Buscar usuário
-    const User = (await import('../models/User.js')).default;
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Usuário não encontrado'
-      });
-    }
-
-    const result = await oneSignalMigration.migrateUser(user, dryRun);
-
-    res.json(result);
-  } catch (error) {
-    logger.error(`Erro ao migrar usuário: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao migrar usuário',
-      error: error.message
-    });
-  }
-});
-
-/**
- * POST /api/onesignal/migration/rollback/:userId
- * Reverter migração de um usuário
- */
-router.post('/migration/rollback/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const result = await oneSignalMigration.rollbackUser(userId);
-
-    res.json(result);
-  } catch (error) {
-    logger.error(`Erro ao reverter migração: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao reverter migração',
-      error: error.message
-    });
-  }
-});
-
-/**
- * POST /api/onesignal/migration/cleanup
- * Limpar dados de migração (remover tokens Expo antigos)
- */
-router.post('/migration/cleanup', async (req, res) => {
-  try {
-    logger.warn(`⚠️ Limpeza de dados de migração iniciada (admin: ${req.user.email})`);
-
-    const result = await oneSignalMigration.cleanupMigrationData();
-
-    res.json(result);
-  } catch (error) {
-    logger.error(`Erro ao limpar dados: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao limpar dados',
       error: error.message
     });
   }

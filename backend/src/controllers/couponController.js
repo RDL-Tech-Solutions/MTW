@@ -8,7 +8,7 @@ import { cacheSet, cacheGet, cacheDel, cacheDelByPattern } from '../utils/cache.
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
 import couponNotificationService from '../services/coupons/couponNotificationService.js';
 import couponApiService from '../services/coupons/couponApiService.js';
-import pushNotificationService from '../services/pushNotification.js';
+import oneSignalService from '../services/oneSignalService.js';
 
 class CouponController {
   // Listar cupons ativos
@@ -412,22 +412,26 @@ class CouponController {
         }
       }
 
-      // Notificar usuários que visualizaram este cupom via push
+      // Notificar usuários que visualizaram este cupom via push OneSignal
       try {
         const users = await Coupon.getUsersWhoViewed(id);
         if (users && users.length > 0) {
-          logger.info(`📱 Enviando push notification para ${users.length} usuários que visualizaram o cupom`);
-          const messages = users.map(user =>
-            pushNotificationService.createMessage(
-              user.push_token,
-              '🚫 Cupom Esgotado!',
-              `O cupom "${coupon.code || coupon.title}" que você visualizou acabou de esgotar.`,
-              { type: 'coupon_out_of_stock', couponId: id },
-              { categoryId: 'coupon' }
-            )
+          logger.info(`📱 Enviando push notification OneSignal para ${users.length} usuários que visualizaram o cupom`);
+          
+          const result = await oneSignalService.sendCustomNotification(
+            users,
+            '🚫 Cupom Esgotado!',
+            `O cupom "${coupon.code || coupon.title}" que você visualizou acabou de esgotar.`,
+            { 
+              type: 'coupon_out_of_stock', 
+              couponId: id 
+            },
+            { 
+              priority: 'normal' 
+            }
           );
-          await pushNotificationService.sendToMultiple(messages);
-          logger.info(`✅ Push notifications enviadas para ${users.length} usuários`);
+          
+          logger.info(`✅ Push notifications OneSignal enviadas: ${result.success || 0} sucesso, ${result.failed || 0} falhas`);
         }
       } catch (pushError) {
         logger.error(`❌ Erro ao enviar push notifications: ${pushError.message}`);
