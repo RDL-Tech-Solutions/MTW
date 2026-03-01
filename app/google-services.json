@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "105534015898",
+    "project_id": "precocerto-60872",
+    "storage_bucket": "precocerto-60872.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:105534015898:android:1553c1de023a2f75919223",
+        "android_client_info": {
+          "package_name": "com.precocerto.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCa25VLzHJ9wuCLb-nb6OVSpj8cb-dmURM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
