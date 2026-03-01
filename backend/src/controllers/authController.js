@@ -235,7 +235,10 @@ class AuthController {
       // Atualizar senha
       const { hashPassword } = await import('../utils/helpers.js');
       const hashedPassword = await hashPassword(newPassword);
-      await User.update(req.user.id, { password: hashedPassword });
+      await User.update(req.user.id, { 
+        password: hashedPassword,
+        password_hash: hashedPassword // Salvar em ambos os campos para compatibilidade
+      });
 
       logger.info(`Senha alterada: ${user.email}`);
 
@@ -908,6 +911,7 @@ class AuthController {
       
       await User.update(user.id, {
         password: hashedPassword,
+        password_hash: hashedPassword, // Salvar em ambos os campos para compatibilidade
         verification_code: null,
         verification_code_expiry: null,
       });

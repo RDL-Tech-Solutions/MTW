@@ -293,10 +293,24 @@ class Product {
     const { data, error, count } = await query;
 
     if (error) {
-      logger.error(`❌ Erro na query do Supabase: ${error.message || 'Erro desconhecido'}`);
-      logger.error(`Código: ${error.code || 'N/A'}`);
-      logger.error(`Detalhes completos: ${JSON.stringify(error, null, 2)}`);
-      throw new Error(`Erro do Supabase: ${error.message || JSON.stringify(error)}`);
+      // Log detalhado do erro
+      logger.error(`❌ Erro na query do Supabase`);
+      logger.error(`   Message: ${error.message || 'N/A'}`);
+      logger.error(`   Code: ${error.code || 'N/A'}`);
+      logger.error(`   Details: ${error.details || 'N/A'}`);
+      logger.error(`   Hint: ${error.hint || 'N/A'}`);
+      
+      // Log das propriedades do objeto error
+      if (typeof error === 'object') {
+        logger.error(`   Propriedades do erro:`);
+        for (const key in error) {
+          if (error.hasOwnProperty(key)) {
+            logger.error(`     ${key}: ${error[key]}`);
+          }
+        }
+      }
+      
+      throw new Error(`Erro do Supabase: ${error.message || error.details || error.code || 'Erro desconhecido'}`);
     }
 
     logger.debug(`✅ Query executada - ${count} produtos encontrados`);
@@ -398,7 +412,7 @@ class Product {
     logger.error(`Mensagem: ${error.message || 'Sem mensagem'}`);
     logger.error(`Tipo: ${error.constructor.name}`);
     logger.error(`Stack: ${error.stack || 'Sem stack trace'}`);
-    logger.error(`Objeto completo: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`);
+    logger.error(`Message: ${error.message || 'Sem mensagem'}`);
     throw error;
   }
 }
@@ -684,8 +698,9 @@ class Product {
 
       if (error) {
         logger.error(`❌ Erro na query inicial: ${error.message}`);
-        logger.error(`   Código: ${error.code}`);
-        logger.error(`   Detalhes: ${JSON.stringify(error, null, 2)}`);
+        logger.error(`   Código: ${error.code || 'N/A'}`);
+        logger.error(`   Detalhes: ${error.details || 'N/A'}`);
+        logger.error(`   Hint: ${error.hint || 'N/A'}`);
 
         // Se o erro for sobre a coluna status não existir, retornar array vazio
         // Isso permite que a migração seja executada depois sem quebrar a aplicação
@@ -822,7 +837,8 @@ class Product {
       logger.error('❌ Erro em findPending:', error);
       logger.error('   Mensagem:', error.message);
       logger.error('   Stack:', error.stack);
-      logger.error('   Detalhes:', JSON.stringify(error, null, 2));
+      logger.error('   Code:', error.code || 'N/A');
+      logger.error('   Details:', error.details || 'N/A');
 
       // Se o erro for sobre a coluna status não existir, retornar array vazio
       const isStatusColumnError =

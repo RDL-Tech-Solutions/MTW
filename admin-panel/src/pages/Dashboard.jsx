@@ -3,11 +3,12 @@ import api from '../services/api';
 import {
   Package, Ticket, Users, TrendingUp, Activity, ShoppingBag,
   Bot, MessageSquare, RefreshCw, Clock, AlertCircle, CheckCircle,
-  ArrowUp, ArrowDown, Zap, Eye, MousePointerClick, Bell
+  ArrowUp, ArrowDown, Zap, Eye, MousePointerClick, Bell, Calendar,
+  DollarSign, Percent, BarChart3, PieChart, TrendingDown
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { PlatformLogo } from '../utils/platformLogos.jsx';
 
 export default function Dashboard() {
@@ -16,6 +17,7 @@ export default function Dashboard() {
   const [syncStats, setSyncStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(30);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -23,23 +25,20 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
+      setRefreshing(true);
       setLoading(true);
 
-      // Buscar dados em paralelo
-      const [dashboardRes, botStatsRes, syncStatsRes, productStatsRes, userStatsRes] = await Promise.allSettled([
+      const [dashboardRes, botStatsRes, syncStatsRes] = await Promise.allSettled([
         api.get(`/analytics/dashboard?days=${period}`),
         api.get('/bots/logs?limit=100'),
-        api.get('/sync/stats?days=7'),
-        api.get('/products/stats'),
-        api.get('/users/stats')
+        api.get('/sync/stats?days=7')
       ]);
 
-      // Processar dashboard
       if (dashboardRes.status === 'fulfilled') {
         setStats(dashboardRes.value.data.data);
       }
 
-      // Processar estatísticas de bots
+
       if (botStatsRes.status === 'fulfilled') {
         const logs = botStatsRes.value.data.data?.logs || botStatsRes.value.data.data || [];
         const sent = logs.filter(log => log.status === 'sent' || log.success === true).length;
@@ -55,7 +54,6 @@ export default function Dashboard() {
         });
       }
 
-      // Processar estatísticas de sincronização
       if (syncStatsRes.status === 'fulfilled') {
         setSyncStats(syncStatsRes.value.data.data);
       }
@@ -64,12 +62,13 @@ export default function Dashboard() {
       console.error('Erro ao carregar dashboard:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  if (loading) {
+  if (loading && !stats) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
           <div className="text-muted-foreground">Carregando dashboard...</div>
@@ -78,56 +77,63 @@ export default function Dashboard() {
     );
   }
 
-  // Preparar dados para gráficos
-  const clicksChartData = stats?.most_clicked_products?.slice(0, 7).map((item, index) => ({
-    name: `Produto ${index + 1}`,
-    cliques: item.click_count || 0
-  })) || [];
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-  const couponsChartData = stats?.most_used_coupons?.slice(0, 7).map((coupon, index) => ({
-    name: coupon.code || `Cupom ${index + 1}`,
-    usos: coupon.current_uses || 0
-  })) || [];
-
-  // Cards principais
-  const mainCards = [
+  const mainMetrics = [
     {
       title: 'Total de Produtos',
       value: stats?.overview?.total_products || 0,
       icon: Package,
-      color: 'bg-blue-500',
+      color: 'from-blue-500 to-blue-600',
+      bgColor: 'bg-blue-50 dark:bg-blue-950',
+      iconColor: 'text-blue-600 dark:text-blue-400',
       change: '+12%',
-      changeType: 'up'
+      changeType: 'up',
+      description: 'Produtos cadastrados'
     },
     {
       title: 'Cupons Ativos',
       value: stats?.overview?.total_coupons || 0,
       icon: Ticket,
-      color: 'bg-green-500',
+      color: 'from-green-500 to-green-600',
+      bgColor: 'bg-green-50 dark:bg-green-950',
+      iconColor: 'text-green-600 dark:text-green-400',
       change: '+8%',
-      changeType: 'up'
+      changeType: 'up',
+      description: 'Cupons disponíveis'
     },
     {
-      title: 'Usuários',
+      title: 'Usuários Ativos',
       value: stats?.overview?.total_users || 0,
       icon: Users,
-      color: 'bg-purple-500',
+      color: 'from-purple-500 to-purple-600',
+      bgColor: 'bg-purple-50 dark:bg-purple-950',
+      iconColor: 'text-purple-600 dark:text-purple-400',
       change: '+15%',
-      changeType: 'up'
+      changeType: 'up',
+      description: 'Usuários registrados'
     },
     {
       title: 'Taxa de Conversão',
       value: `${stats?.overview?.conversion_rate || 0}%`,
       icon: TrendingUp,
-      color: 'bg-orange-500',
+      color: 'from-orange-500 to-orange-600',
+      bgColor: 'bg-orange-50 dark:bg-orange-950',
+      iconColor: 'text-orange-600 dark:text-orange-400',
       change: stats?.overview?.conversion_rate > 0 ? '+2.5%' : '0%',
-      changeType: stats?.overview?.conversion_rate > 0 ? 'up' : 'neutral'
-    },
+      changeType: stats?.overview?.conversion_rate > 0 ? 'up' : 'neutral',
+      description: 'Cliques convertidos'
+    }
+  ];
+
+  const engagementMetrics = [
     {
       title: 'Total de Cliques',
       value: stats?.overview?.total_clicks || 0,
       icon: MousePointerClick,
-      color: 'bg-indigo-500',
+      color: 'from-indigo-500 to-indigo-600',
+      bgColor: 'bg-indigo-50 dark:bg-indigo-950',
+      iconColor: 'text-indigo-600 dark:text-indigo-400',
       change: '+22%',
       changeType: 'up'
     },
@@ -135,197 +141,330 @@ export default function Dashboard() {
       title: 'Conversões',
       value: stats?.overview?.total_conversions || 0,
       icon: CheckCircle,
-      color: 'bg-emerald-500',
+      color: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50 dark:bg-emerald-950',
+      iconColor: 'text-emerald-600 dark:text-emerald-400',
       change: '+18%',
       changeType: 'up'
-    }
-  ];
-
-  // Cards de bots
-  const botCards = [
+    },
     {
       title: 'Notificações Enviadas',
       value: botStats?.sent || 0,
       icon: Bell,
-      color: 'bg-green-500',
-      subtitle: `${botStats?.success_rate || 0}% de sucesso`
+      color: 'from-cyan-500 to-cyan-600',
+      bgColor: 'bg-cyan-50 dark:bg-cyan-950',
+      iconColor: 'text-cyan-600 dark:text-cyan-400',
+      change: `${botStats?.success_rate || 0}%`,
+      changeType: 'neutral'
     },
     {
-      title: 'Notificações Falhadas',
-      value: botStats?.failed || 0,
-      icon: AlertCircle,
-      color: 'bg-red-500',
-      subtitle: `${botStats?.total || 0} total`
+      title: 'Taxa de Sucesso',
+      value: `${botStats?.success_rate || 0}%`,
+      icon: Zap,
+      color: 'from-yellow-500 to-yellow-600',
+      bgColor: 'bg-yellow-50 dark:bg-yellow-950',
+      iconColor: 'text-yellow-600 dark:text-yellow-400',
+      change: botStats?.failed > 0 ? `${botStats.failed} falhas` : 'Sem falhas',
+      changeType: botStats?.failed > 0 ? 'down' : 'up'
     }
   ];
 
+  const clicksChartData = stats?.most_clicked_products?.slice(0, 10).map((item, index) => ({
+    name: `P${index + 1}`,
+    cliques: item.click_count || 0,
+    fullName: `Produto #${item.product_id}`
+  })) || [];
+
+  const couponsChartData = stats?.most_used_coupons?.slice(0, 10).map((coupon) => ({
+    name: coupon.code?.substring(0, 8) || 'N/A',
+    usos: coupon.current_uses || 0,
+    fullCode: coupon.code
+  })) || [];
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header Responsivo */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="space-y-6 pb-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
-            Visão geral do sistema
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Visão geral e métricas do sistema
           </p>
         </div>
         <div className="flex items-center gap-2">
           <select
             value={period}
             onChange={(e) => setPeriod(parseInt(e.target.value))}
-            className="h-9 sm:h-10 px-2 sm:px-3 rounded-md border border-input bg-background text-xs sm:text-sm flex-1 sm:flex-none"
+            className="h-10 px-3 rounded-lg border border-input bg-background text-sm hover:bg-accent transition-colors"
           >
-            <option value={7}>7 dias</option>
-            <option value={30}>30 dias</option>
-            <option value={90}>90 dias</option>
+            <option value={7}>Últimos 7 dias</option>
+            <option value={30}>Últimos 30 dias</option>
+            <option value={90}>Últimos 90 dias</option>
           </select>
           <button
             onClick={fetchDashboardData}
-            className="h-9 sm:h-10 px-3 sm:px-4 rounded-md border border-input bg-background hover:bg-accent text-sm flex-shrink-0"
+            disabled={refreshing}
+            className="h-10 px-4 rounded-lg border border-input bg-background hover:bg-accent text-sm transition-colors disabled:opacity-50"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Cards Principais - Grid Responsivo */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {mainCards.map((card) => (
-          <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-4">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                {card.title}
-              </CardTitle>
-              <div className={`${card.color} p-1.5 sm:p-2 rounded-lg`}>
-                <card.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-4 pt-0">
-              <div className="text-xl sm:text-2xl font-bold">{card.value}</div>
-              <div className="flex items-center text-[10px] sm:text-xs mt-1">
-                {card.changeType === 'up' && (
-                  <span className="text-green-600 flex items-center">
-                    <ArrowUp className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                    {card.change}
-                  </span>
-                )}
-                {card.changeType === 'down' && (
-                  <span className="text-red-600 flex items-center">
-                    <ArrowDown className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                    {card.change}
-                  </span>
-                )}
-                {card.changeType === 'neutral' && (
-                  <span className="text-muted-foreground">{card.change}</span>
-                )}
-                <span className="text-muted-foreground ml-1 sm:ml-2 hidden sm:inline">vs anterior</span>
+
+      {/* Métricas Principais */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {mainMetrics.map((metric) => (
+          <Card key={metric.title} className="overflow-hidden hover:shadow-lg transition-shadow">
+            <CardContent className="p-0">
+              <div className={`h-2 bg-gradient-to-r ${metric.color}`}></div>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`${metric.bgColor} p-3 rounded-xl`}>
+                    <metric.icon className={`h-6 w-6 ${metric.iconColor}`} />
+                  </div>
+                  {metric.changeType !== 'neutral' && (
+                    <Badge variant={metric.changeType === 'up' ? 'success' : 'destructive'} className="text-xs">
+                      {metric.changeType === 'up' ? (
+                        <ArrowUp className="h-3 w-3 mr-1" />
+                      ) : (
+                        <ArrowDown className="h-3 w-3 mr-1" />
+                      )}
+                      {metric.change}
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {metric.title}
+                  </p>
+                  <p className="text-3xl font-bold">{metric.value}</p>
+                  {metric.description && (
+                    <p className="text-xs text-muted-foreground">{metric.description}</p>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Gráficos - Responsivos */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="p-3 sm:p-4 pb-2">
-            <CardTitle className="text-sm sm:text-base">Produtos Mais Clicados</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Top produtos com mais engajamento
-            </CardDescription>
+      {/* Métricas de Engajamento */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {engagementMetrics.map((metric) => (
+          <Card key={metric.title} className="overflow-hidden hover:shadow-lg transition-shadow">
+            <CardContent className="p-0">
+              <div className={`h-1.5 bg-gradient-to-r ${metric.color}`}></div>
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`${metric.bgColor} p-2.5 rounded-lg`}>
+                    <metric.icon className={`h-5 w-5 ${metric.iconColor}`} />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {metric.title}
+                  </p>
+                  <p className="text-2xl font-bold">{metric.value}</p>
+                  <p className="text-xs text-muted-foreground">{metric.change}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Gráficos Principais */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Produtos Mais Clicados */}
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-blue-600" />
+                  Produtos Mais Clicados
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Top 10 produtos com mais engajamento
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {clicksChartData.length} produtos
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent className="p-3 sm:p-4 pt-0">
+          <CardContent>
             {clicksChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200} className="sm:!h-[280px]">
+              <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={clicksChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="cliques" fill="#3b82f6" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#fff', 
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                    }}
+                    formatter={(value, name, props) => [value, props.payload.fullName]}
+                  />
+                  <Bar 
+                    dataKey="cliques" 
+                    fill="#3b82f6" 
+                    radius={[8, 8, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[200px] sm:h-[280px] text-muted-foreground text-sm">
-                Nenhum dado disponível
+              <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                <Package className="h-12 w-12 mb-2 opacity-20" />
+                <p className="text-sm">Nenhum dado disponível</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="p-3 sm:p-4 pb-2">
-            <CardTitle className="text-sm sm:text-base">Cupons Mais Usados</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Cupons com maior taxa de utilização
-            </CardDescription>
+        {/* Cupons Mais Usados */}
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Ticket className="h-5 w-5 text-green-600" />
+                  Cupons Mais Usados
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Top 10 cupons com maior utilização
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {couponsChartData.length} cupons
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent className="p-3 sm:p-4 pt-0">
+          <CardContent>
             {couponsChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200} className="sm:!h-[280px]">
+              <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={couponsChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="usos" fill="#10b981" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    stroke="#6b7280"
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#fff', 
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                    }}
+                    formatter={(value, name, props) => [value, props.payload.fullCode]}
+                  />
+                  <Bar 
+                    dataKey="usos" 
+                    fill="#10b981" 
+                    radius={[8, 8, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[200px] sm:h-[280px] text-muted-foreground text-sm">
-                Nenhum dado disponível
+              <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                <Ticket className="h-12 w-12 mb-2 opacity-20" />
+                <p className="text-sm">Nenhum dado disponível</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
+
       {/* Estatísticas de Bots e Sincronização */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {/* Estatísticas de Bots */}
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              Estatísticas de Bots
-            </CardTitle>
-            <CardDescription>
-              Notificações enviadas pelos bots
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Bot className="h-5 w-5 text-purple-600" />
+                  Estatísticas de Notificações
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Notificações enviadas pelos bots
+                </CardDescription>
+              </div>
+              <Badge 
+                variant={botStats?.success_rate >= 90 ? 'success' : botStats?.success_rate >= 70 ? 'warning' : 'destructive'}
+                className="text-xs"
+              >
+                {botStats?.success_rate || 0}% sucesso
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 mb-4">
-              {botCards.map((card) => (
-                <div key={card.title} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{card.title}</span>
-                    <div className={`${card.color} p-2 rounded-lg`}>
-                      <card.icon className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                  <div className="text-2xl font-bold">{card.value}</div>
-                  <p className="text-xs text-muted-foreground">{card.subtitle}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Total</p>
+                <p className="text-2xl font-bold text-blue-600">{botStats?.total || 0}</p>
+              </div>
+              <div className="text-center p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Enviadas</p>
+                <p className="text-2xl font-bold text-green-600">{botStats?.sent || 0}</p>
+              </div>
+              <div className="text-center p-4 bg-red-50 dark:bg-red-950 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Falhas</p>
+                <p className="text-2xl font-bold text-red-600">{botStats?.failed || 0}</p>
+              </div>
             </div>
 
             {botStats?.recent_logs && botStats.recent_logs.length > 0 && (
-              <div className="space-y-2 mt-4">
-                <h4 className="text-sm font-medium">Atividades Recentes</h4>
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Atividades Recentes
+                </h4>
                 <div className="space-y-2">
                   {botStats.recent_logs.map((log, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm p-2 bg-muted rounded">
-                      <div className="flex items-center gap-2">
+                    <div 
+                      key={index} 
+                      className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
                         {log.status === 'sent' || log.success ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <div className="p-1.5 bg-green-100 dark:bg-green-900 rounded-full">
+                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          </div>
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-red-500" />
+                          <div className="p-1.5 bg-red-100 dark:bg-red-900 rounded-full">
+                            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                          </div>
                         )}
-                        <span className="text-muted-foreground">
-                          {log.event_type === 'promotion_new' ? 'Nova Promoção' :
-                            log.event_type === 'coupon_new' ? 'Novo Cupom' :
-                              log.event_type || 'Notificação'}
-                        </span>
+                        <div>
+                          <p className="text-sm font-medium">
+                            {log.event_type === 'promotion_new' ? 'Nova Promoção' :
+                              log.event_type === 'coupon_new' ? 'Novo Cupom' :
+                                log.event_type || 'Notificação'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : 'Agora'}
+                          </p>
+                        </div>
                       </div>
                       <Badge variant={log.status === 'sent' || log.success ? 'success' : 'destructive'}>
                         {log.status === 'sent' || log.success ? 'Enviado' : 'Falhou'}
@@ -339,52 +478,76 @@ export default function Dashboard() {
         </Card>
 
         {/* Estatísticas de Sincronização */}
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              Estatísticas de Sincronização
-            </CardTitle>
-            <CardDescription>
-              Últimas sincronizações de produtos
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5 text-indigo-600" />
+                  Sincronização de Produtos
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Últimas sincronizações automáticas
+                </CardDescription>
+              </div>
+              {syncStats?.last_sync && (
+                <Badge variant="outline" className="text-xs">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {new Date(syncStats.last_sync).toLocaleDateString('pt-BR')}
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {syncStats ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Sincronizado</p>
-                    <p className="text-2xl font-bold">{syncStats.total || 0}</p>
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Total Sincronizado</p>
+                    <p className="text-2xl font-bold text-blue-600">{syncStats.total || 0}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Novos Produtos</p>
+                  <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Novos Produtos</p>
                     <p className="text-2xl font-bold text-green-600">{syncStats.new || 0}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Erros</p>
+                  <div className="p-4 bg-red-50 dark:bg-red-950 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Erros</p>
                     <p className="text-2xl font-bold text-red-600">{syncStats.errors || 0}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Última Sincronização</p>
-                    <p className="text-sm font-medium">
-                      {syncStats.last_sync
-                        ? new Date(syncStats.last_sync).toLocaleString('pt-BR')
-                        : 'Nunca'}
+                  <div className="p-4 bg-purple-50 dark:bg-purple-950 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Taxa de Sucesso</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {syncStats.total > 0 
+                        ? ((((syncStats.total - syncStats.errors) / syncStats.total) * 100).toFixed(1))
+                        : 0}%
                     </p>
                   </div>
                 </div>
 
                 {syncStats.platforms && Object.keys(syncStats.platforms).length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium mb-2">Por Plataforma</h4>
+                  <div className="mt-6">
+                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <ShoppingBag className="h-4 w-4" />
+                      Por Plataforma
+                    </h4>
                     <div className="space-y-2">
                       {Object.entries(syncStats.platforms).map(([platform, data]) => (
-                        <div key={platform} className="flex items-center justify-between text-sm p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                          <PlatformLogo platform={platform} size={16} />
-                          <div className="flex items-center gap-4">
-                            <Badge variant="outline">{data.new || 0} novos</Badge>
-                            <Badge variant={data.errors > 0 ? 'destructive' : 'success'}>
+                        <div 
+                          key={platform} 
+                          className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <PlatformLogo platform={platform} size={20} />
+                            <span className="text-sm font-medium capitalize">{platform}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {data.new || 0} novos
+                            </Badge>
+                            <Badge 
+                              variant={data.errors > 0 ? 'destructive' : 'success'}
+                              className="text-xs"
+                            >
                               {data.errors || 0} erros
                             </Badge>
                           </div>
@@ -395,87 +558,195 @@ export default function Dashboard() {
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[200px] text-muted-foreground">
-                Nenhum dado de sincronização disponível
+              <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                <RefreshCw className="h-12 w-12 mb-2 opacity-20" />
+                <p className="text-sm">Nenhum dado de sincronização disponível</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Top Produtos e Cupons */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+
+      {/* Rankings - Top Produtos e Cupons */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Top Produtos */}
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Produtos Mais Clicados</CardTitle>
-            <CardDescription>
-              Top 5 produtos com mais engajamento
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-orange-600" />
+                  Top 5 Produtos
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Produtos com mais engajamento
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                Por cliques
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {stats?.most_clicked_products?.slice(0, 5).map((product, index) => (
-                <div key={index} className="flex items-center">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold text-sm mr-3">
-                    {index + 1}
+            <div className="space-y-3">
+              {stats?.most_clicked_products?.slice(0, 5).map((product, index) => {
+                const maxClicks = stats.most_clicked_products[0]?.click_count || 1;
+                const percentage = ((product.click_count / maxClicks) * 100).toFixed(0);
+                
+                return (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`
+                          flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm
+                          ${index === 0 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                            index === 1 ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
+                            index === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                            'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}
+                        `}>
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">
+                            Produto #{product.product_id}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {product.click_count} cliques
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        <MousePointerClick className="h-3 w-3 mr-1" />
+                        {product.click_count}
+                      </Badge>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all"
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      Produto #{product.product_id}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {product.click_count} cliques
-                    </p>
-                  </div>
-                  <Badge variant="secondary">
-                    <Activity className="mr-1 h-3 w-3" />
-                    {product.click_count}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
               {(!stats?.most_clicked_products || stats.most_clicked_products.length === 0) && (
-                <div className="text-center text-muted-foreground py-8">
-                  Nenhum produto encontrado
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <Package className="h-12 w-12 mb-2 opacity-20" />
+                  <p className="text-sm">Nenhum produto encontrado</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Top Cupons */}
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Cupons Mais Usados</CardTitle>
-            <CardDescription>
-              Cupons com maior taxa de utilização
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Ticket className="h-5 w-5 text-green-600" />
+                  Top 5 Cupons
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Cupons mais utilizados
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                Por usos
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {stats?.most_used_coupons?.slice(0, 5).map((coupon, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {coupon.code}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {coupon.current_uses} usos
-                    </p>
+            <div className="space-y-3">
+              {stats?.most_used_coupons?.slice(0, 5).map((coupon, index) => {
+                const maxUses = stats.most_used_coupons[0]?.current_uses || 1;
+                const percentage = ((coupon.current_uses / maxUses) * 100).toFixed(0);
+                
+                return (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`
+                          flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm
+                          ${index === 0 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                            index === 1 ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
+                            index === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                            'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}
+                        `}>
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium font-mono">
+                            {coupon.code}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {coupon.current_uses} usos
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="success" className="text-xs">
+                        <Ticket className="h-3 w-3 mr-1" />
+                        {coupon.current_uses}
+                      </Badge>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all"
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <Badge variant="success">
-                    <Ticket className="mr-1 h-3 w-3" />
-                    {coupon.current_uses}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
               {(!stats?.most_used_coupons || stats.most_used_coupons.length === 0) && (
-                <div className="text-center text-muted-foreground py-8">
-                  Nenhum cupom encontrado
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <Ticket className="h-12 w-12 mb-2 opacity-20" />
+                  <p className="text-sm">Nenhum cupom encontrado</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
-    </div >
+
+      {/* Resumo Rápido */}
+      <Card className="hover:shadow-lg transition-shadow border-2">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" />
+            Resumo Rápido
+          </CardTitle>
+          <CardDescription>
+            Visão geral das principais métricas do período
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-lg">
+              <Package className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+              <p className="text-2xl font-bold text-blue-600">{stats?.overview?.total_products || 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Produtos</p>
+            </div>
+            <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 rounded-lg">
+              <Ticket className="h-8 w-8 mx-auto mb-2 text-green-600" />
+              <p className="text-2xl font-bold text-green-600">{stats?.overview?.total_coupons || 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Cupons</p>
+            </div>
+            <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 rounded-lg">
+              <Users className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+              <p className="text-2xl font-bold text-purple-600">{stats?.overview?.total_users || 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Usuários</p>
+            </div>
+            <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 rounded-lg">
+              <TrendingUp className="h-8 w-8 mx-auto mb-2 text-orange-600" />
+              <p className="text-2xl font-bold text-orange-600">{stats?.overview?.conversion_rate || 0}%</p>
+              <p className="text-xs text-muted-foreground mt-1">Conversão</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

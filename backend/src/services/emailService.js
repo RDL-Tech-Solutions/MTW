@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { createTransport } from 'nodemailer';
 import logger from '../config/logger.js';
 
 class EmailService {
@@ -28,9 +28,9 @@ class EmailService {
         return;
       }
 
-      this.transporter = nodemailer.createTransporter(config);
+      this.transporter = createTransport(config);
       this.initialized = true;
-      logger.info('✅ Serviço de email inicializado');
+      logger.info('✅ Serviço de email SMTP inicializado');
     } catch (error) {
       logger.error(`❌ Erro ao inicializar serviço de email: ${error.message}`);
     }

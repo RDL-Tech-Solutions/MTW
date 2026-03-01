@@ -15,7 +15,7 @@ import colors from '../../theme/colors';
 import { ERROR_MESSAGES } from '../../utils/constants';
 
 export default function ForgotPasswordScreen({ navigation }) {
-  const [step, setStep] = useState(1); // 1: email, 2: code + password
+  const [step, setStep] = useState(1); // 1: email, 2: code verification, 3: new password
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -23,7 +23,7 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const { forgotPassword, resetPasswordWithCode } = useAuthStore();
+  const { forgotPassword, verifyResetCode, resetPasswordWithCode } = useAuthStore();
 
   const validateEmail = () => {
     const newErrors = {};
@@ -38,7 +38,7 @@ export default function ForgotPasswordScreen({ navigation }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const validateReset = () => {
+  const validateCode = () => {
     const newErrors = {};
 
     if (!code) {
@@ -46,6 +46,13 @@ export default function ForgotPasswordScreen({ navigation }) {
     } else if (code.length !== 6) {
       newErrors.code = 'O código deve ter 6 dígitos';
     }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validatePassword = () => {
+    const newErrors = {};
 
     if (!newPassword) {
       newErrors.newPassword = ERROR_MESSAGES.REQUIRED_FIELD;
@@ -93,8 +100,26 @@ export default function ForgotPasswordScreen({ navigation }) {
     }
   };
 
+  const handleVerifyCode = async () => {
+    if (!validateCode()) return;
+
+    setLoading(true);
+    const result = await verifyResetCode(email, code);
+    setLoading(false);
+
+    if (result.success) {
+      setStep(3);
+      Alert.alert(
+        'Código Verificado',
+        'Agora você pode definir sua nova senha.'
+      );
+    } else {
+      Alert.alert('Erro', result.error || 'Código inválido ou expirado.');
+    }
+  };
+
   const handleResetPassword = async () => {
-    if (!validateReset()) return;
+    if (!validatePassword()) return;
 
     setLoading(true);
     const result = await resetPasswordWithCode(email, code, newPassword);
@@ -158,77 +183,119 @@ export default function ForgotPasswordScreen({ navigation }) {
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+  if (step === 2) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Digite o Código</Text>
-          <Text style={styles.subtitle}>
-            Enviamos um código de 6 dígitos para {email}
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Digite o Código</Text>
+            <Text style={styles.subtitle}>
+              Enviamos um código de 6 dígitos para {email}
+            </Text>
+          </View>
 
-        <View style={styles.form}>
-          <Input
-            label="Código de Verificação"
-            value={code}
-            onChangeText={setCode}
-            placeholder="000000"
-            keyboardType="number-pad"
-            maxLength={6}
-            leftIcon="key-outline"
-            error={errors.code}
-          />
+          <View style={styles.form}>
+            <Input
+              label="Código de Verificação"
+              value={code}
+              onChangeText={setCode}
+              placeholder="000000"
+              keyboardType="number-pad"
+              maxLength={6}
+              leftIcon="key-outline"
+              error={errors.code}
+              autoFocus
+            />
 
-          <Input
-            label="Nova Senha"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            placeholder="Mínimo 6 caracteres"
-            secureTextEntry
-            leftIcon="lock-closed-outline"
-            error={errors.newPassword}
-          />
+            <Button
+              title="Verificar Código"
+              onPress={handleVerifyCode}
+              loading={loading}
+              style={styles.submitButton}
+            />
 
-          <Input
-            label="Confirmar Nova Senha"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Digite a senha novamente"
-            secureTextEntry
-            leftIcon="lock-closed-outline"
-            error={errors.confirmPassword}
-          />
+            <Button
+              title="Reenviar Código"
+              onPress={handleResendCode}
+              variant="outline"
+              style={styles.resendButton}
+            />
 
-          <Button
-            title="Redefinir Senha"
-            onPress={handleResetPassword}
-            loading={loading}
-            style={styles.submitButton}
-          />
+            <Button
+              title="Voltar"
+              onPress={() => setStep(1)}
+              variant="text"
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
-          <Button
-            title="Reenviar Código"
-            onPress={handleResendCode}
-            variant="outline"
-            style={styles.resendButton}
-          />
+  if (step === 3) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Nova Senha</Text>
+            <Text style={styles.subtitle}>
+              Defina uma nova senha para sua conta
+            </Text>
+          </View>
 
-          <Button
-            title="Voltar"
-            onPress={() => setStep(1)}
-            variant="text"
-          />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
+          <View style={styles.form}>
+            <Input
+              label="Nova Senha"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder="Mínimo 6 caracteres"
+              secureTextEntry
+              leftIcon="lock-closed-outline"
+              error={errors.newPassword}
+              autoFocus
+            />
+
+            <Input
+              label="Confirmar Nova Senha"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Digite a senha novamente"
+              secureTextEntry
+              leftIcon="lock-closed-outline"
+              error={errors.confirmPassword}
+            />
+
+            <Button
+              title="Redefinir Senha"
+              onPress={handleResetPassword}
+              loading={loading}
+              style={styles.submitButton}
+            />
+
+            <Button
+              title="Voltar"
+              onPress={() => setStep(2)}
+              variant="text"
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({

@@ -12,8 +12,28 @@ class ProductController {
   // Listar produtos
   static async list(req, res, next) {
     try {
-      logger.info(`📦 Buscando produtos - Página: ${req.query.page || 1}, Limit: ${req.query.limit || 20}`);
-      // CACHE REMOVIDO: Direto ao banco
+      // Validar e limitar página
+      let page = parseInt(req.query.page) || 1;
+      let limit = parseInt(req.query.limit) || 20;
+      
+      // Limitar página máxima para evitar problemas
+      if (page > 100) {
+        logger.warn(`⚠️ Página ${page} muito alta, limitando para 100`);
+        page = 100;
+      }
+      
+      // Limitar limit máximo
+      if (limit > 100) {
+        logger.warn(`⚠️ Limit ${limit} muito alto, limitando para 100`);
+        limit = 100;
+      }
+      
+      // Atualizar query com valores validados
+      req.query.page = page;
+      req.query.limit = limit;
+      
+      logger.info(`📦 Buscando produtos - Página: ${page}, Limit: ${limit}`);
+      
       const result = await Product.findAll(req.query);
       logger.info(`✅ ${result.products?.length || 0} produtos encontrados`);
       res.json(successResponse(result));

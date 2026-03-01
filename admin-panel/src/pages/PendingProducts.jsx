@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp, Calendar, Clipboard } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -59,6 +59,9 @@ export default function PendingProducts() {
   const [batchCapturing, setBatchCapturing] = useState(false);
   const [batchCaptureProgress, setBatchCaptureProgress] = useState({ current: 0, total: 0 });
   const [batchCaptureResults, setBatchCaptureResults] = useState(null);
+
+  // NOVO: Estado para modal de aprovação em lote
+  const [isBatchApprovalDialogOpen, setIsBatchApprovalDialogOpen] = useState(false);
 
   const isMobile = useIsMobile();
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
@@ -268,7 +271,7 @@ export default function PendingProducts() {
     }
   };
 
-  const handleBatchApprove = async () => {
+  const handleBatchApproveAndPublish = async () => {
     if (selectedProducts.size === 0) {
       toast({
         title: "Aviso",
@@ -279,10 +282,17 @@ export default function PendingProducts() {
     }
 
     setBatchProcessing(true);
+    setIsBatchApprovalDialogOpen(false);
+    
     try {
       const productIds = Array.from(selectedProducts);
       let successCount = 0;
       let errorCount = 0;
+
+      toast({
+        title: "Processando...",
+        description: `Aprovando e publicando ${productIds.length} produtos`,
+      });
 
       for (const productId of productIds) {
         try {
@@ -304,7 +314,125 @@ export default function PendingProducts() {
 
       toast({
         title: "Processamento concluído",
+        description: `${successCount} produtos aprovados e publicados${errorCount > 0 ? `, ${errorCount} com erro` : ''}`,
+      });
+
+      setSelectedProducts(new Set());
+      fetchPendingProducts(pagination.page);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao processar produtos em lote",
+        variant: "destructive"
+      });
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const handleBatchApproveOnly = async () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos um produto",
+        variant: "default"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    setIsBatchApprovalDialogOpen(false);
+    
+    try {
+      const productIds = Array.from(selectedProducts);
+      let successCount = 0;
+      let errorCount = 0;
+
+      toast({
+        title: "Processando...",
+        description: `Aprovando ${productIds.length} produtos (sem publicar)`,
+      });
+
+      for (const productId of productIds) {
+        try {
+          const product = products.find(p => p.id === productId);
+          if (!product || !product.original_link) {
+            errorCount++;
+            continue;
+          }
+
+          await api.post(`/products/pending/${productId}/approve-only`, {
+            affiliate_link: product.original_link,
+            shorten_link: false
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: "Processamento concluído",
         description: `${successCount} produtos aprovados${errorCount > 0 ? `, ${errorCount} com erro` : ''}`,
+      });
+
+      setSelectedProducts(new Set());
+      fetchPendingProducts(pagination.page);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao processar produtos em lote",
+        variant: "destructive"
+      });
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const handleBatchSchedule = async () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos um produto",
+        variant: "default"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    setIsBatchApprovalDialogOpen(false);
+    
+    try {
+      const productIds = Array.from(selectedProducts);
+      let successCount = 0;
+      let errorCount = 0;
+
+      toast({
+        title: "Processando...",
+        description: `Agendando ${productIds.length} produtos com IA`,
+      });
+
+      for (const productId of productIds) {
+        try {
+          const product = products.find(p => p.id === productId);
+          if (!product || !product.original_link) {
+            errorCount++;
+            continue;
+          }
+
+          await api.post(`/products/pending/${productId}/approve-schedule`, {
+            affiliate_link: product.original_link,
+            shorten_link: false
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: "Processamento concluído",
+        description: `${successCount} produtos agendados com IA${errorCount > 0 ? `, ${errorCount} com erro` : ''}`,
       });
 
       setSelectedProducts(new Set());
@@ -817,20 +945,11 @@ export default function PendingProducts() {
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={handleBatchApprove}
+                  onClick={() => setIsBatchApprovalDialogOpen(true)}
                   disabled={batchProcessing}
                 >
-                  {batchProcessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Aprovar Selecionados ({selectedProducts.size})
-                    </>
-                  )}
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Aprovar Selecionados ({selectedProducts.size})
                 </Button>
                 <Button
                   variant="destructive"
@@ -1364,12 +1483,41 @@ export default function PendingProducts() {
               {/* Link de Afiliado */}
               <div>
                 <Label htmlFor="affiliate_link">Link de Afiliado *</Label>
-                <Input
-                  id="affiliate_link"
-                  value={affiliateLink}
-                  onChange={(e) => setAffiliateLink(e.target.value)}
-                  placeholder="Cole o link de afiliado convertido aqui"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="affiliate_link"
+                    value={affiliateLink}
+                    onChange={(e) => setAffiliateLink(e.target.value)}
+                    placeholder="Cole o link de afiliado convertido aqui"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                          setAffiliateLink(text);
+                          toast({
+                            title: "Link colado!",
+                            description: "Link de afiliado colado do clipboard",
+                          });
+                        }
+                      } catch (error) {
+                        toast({
+                          title: "Erro",
+                          description: "Não foi possível acessar o clipboard. Cole manualmente (Ctrl+V)",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                    title="Colar link do clipboard"
+                  >
+                    <Clipboard className="h-4 w-4" />
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Cole o link de afiliado gerado a partir do link original
                 </p>
@@ -1724,6 +1872,79 @@ export default function PendingProducts() {
                 Fechar
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Aprovação em Lote */}
+      <Dialog open={isBatchApprovalDialogOpen} onOpenChange={setIsBatchApprovalDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Aprovar Produtos em Lote</DialogTitle>
+            <DialogDescription className="text-sm">
+              Escolha como deseja aprovar os {selectedProducts.size} produtos selecionados
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            {/* Opção 1: Aprovar e Publicar */}
+            <Button
+              variant="default"
+              className="w-full h-auto py-4 px-4 flex flex-col items-start gap-2 bg-red-500 hover:bg-red-600 text-white"
+              onClick={handleBatchApproveAndPublish}
+              disabled={batchProcessing}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <Zap className="h-5 w-5 flex-shrink-0" />
+                <span className="font-semibold text-base">Aprovar e Publicar</span>
+              </div>
+              <span className="text-xs text-left text-white/90 font-normal leading-relaxed pl-8">
+                Aprova os produtos e publica imediatamente nos canais configurados
+              </span>
+            </Button>
+
+            {/* Opção 2: Aprovar (sem publicar) */}
+            <Button
+              variant="outline"
+              className="w-full h-auto py-4 px-4 flex flex-col items-start gap-2 bg-green-50 hover:bg-green-100 text-green-700 border-2 border-green-300"
+              onClick={handleBatchApproveOnly}
+              disabled={batchProcessing}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                <span className="font-semibold text-base">Aprovar</span>
+              </div>
+              <span className="text-xs text-left text-green-700/90 font-normal leading-relaxed pl-8">
+                Apenas aprova os produtos. Eles aparecerão no app mas não serão publicados
+              </span>
+            </Button>
+
+            {/* Opção 3: IA Agenda */}
+            <Button
+              variant="default"
+              className="w-full h-auto py-4 px-4 flex flex-col items-start gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={handleBatchSchedule}
+              disabled={batchProcessing}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <Calendar className="h-5 w-5 flex-shrink-0" />
+                <span className="font-semibold text-base">IA Agenda</span>
+              </div>
+              <span className="text-xs text-left text-white/90 font-normal leading-relaxed pl-8">
+                A IA define o melhor horário para publicar cada produto
+              </span>
+            </Button>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setIsBatchApprovalDialogOpen(false)}
+              disabled={batchProcessing}
+              className="w-full"
+            >
+              Cancelar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
