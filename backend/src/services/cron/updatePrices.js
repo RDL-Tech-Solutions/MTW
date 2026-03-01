@@ -2,6 +2,7 @@ import Product from '../../models/Product.js';
 import Notification from '../../models/Notification.js';
 import logger from '../../config/logger.js';
 import { withRetry } from '../../utils/supabaseRetry.js';
+import oneSignalService from '../oneSignalService.js';
 
 export const updatePrices = async () => {
   try {
@@ -35,17 +36,50 @@ export const updatePrices = async () => {
             { operationName: 'Buscar usuários para notificar' }
           );
           
-          for (const user of users) {
-            await withRetry(
-              () => Notification.create({
-                user_id: user.id,
-                title: '💰 Preço Caiu!',
-                message: `${product.name} agora por R$ ${product.current_price.toFixed(2)}`,
-                type: 'price_drop',
-                related_product_id: product.id
-              }),
-              { operationName: 'Criar notificação' }
+          if (users && users.length > 0) {
+            // Criar notificações no banco
+            const notifications = users.map(user => ({
+              user_id: user.id,
+              title: '💰 Preço Caiu!',
+              message: `${product.name} agora por R$ ${product.current_price.toFixed(2)}`,
+              type: 'price_drop',
+              related_product_id: product.id
+            }));
+
+            const createdNotifications = await withRetry(
+              () => Notification.createBulk(notifications),
+              { operationName: 'Criar notificações' }
             );
+
+            // Enviar imediatamente via OneSignal
+            try {
+              const result = await oneSignalService.sendToMultiple(
+                users.map(u => u.id.toString()),
+                {
+                  title: '💰 Preço Caiu!',
+                  message: `${product.name} agora por R$ ${product.current_price.toFixed(2)}`,
+                  data: {
+                    type: 'price_drop',
+                    productId: product.id,
+                    screen: 'ProductDetails'
+                  },
+                  priority: 'high'
+                }
+              );
+
+              // Marcar como enviadas
+              if (result.success > 0) {
+                await Promise.all(
+                  createdNotifications.slice(0, result.success).map(n => 
+                    Notification.markAsSent(n.id)
+                  )
+                );
+                logger.info(`✅ ${result.success} notificações de preço enviadas para: ${product.name}`);
+              }
+            } catch (error) {
+              logger.error(`❌ Erro ao enviar notificações via OneSignal: ${error.message}`);
+              // Notificações ficam no banco para retry pelo cron job
+            }
           }
           
           priceChanges++;

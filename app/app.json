@@ -28,6 +28,26 @@
       "package": "com.precocerto.app",
       "permissions": [
         "NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "precocerto.app",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "precocerto"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {
@@ -35,12 +55,6 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
-      [
-        "expo-notifications",
-        {
-          "color": "#DC2626"
-        }
-      ],
       [
         "onesignal-expo-plugin",
         {

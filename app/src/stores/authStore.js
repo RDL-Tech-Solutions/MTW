@@ -17,14 +17,7 @@ export const useAuthStore = create((set, get) => ({
 
       if (token && user) {
         set({ user, token, isAuthenticated: true, isLoading: false });
-        
-        // Fazer login no OneSignal se usuário estiver autenticado
-        try {
-          const oneSignalStore = useOneSignalStore.getState();
-          await oneSignalStore.login(user.id);
-        } catch (error) {
-          console.error('Erro ao fazer login no OneSignal:', error);
-        }
+        // OneSignal login será feito no App.js após autenticação
       } else {
         set({ isLoading: false });
       }
@@ -46,14 +39,8 @@ export const useAuthStore = create((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
-      // Fazer login no OneSignal
-      try {
-        const oneSignalStore = useOneSignalStore.getState();
-        await oneSignalStore.login(user.id);
-        console.log('✅ Usuário registrado no OneSignal:', user.id);
-      } catch (error) {
-        console.error('Erro ao registrar no OneSignal:', error);
-      }
+      // OneSignal login será feito no App.js após autenticação
+      console.log('✅ Login realizado com sucesso');
 
       return { success: true };
     } catch (error) {
@@ -77,14 +64,8 @@ export const useAuthStore = create((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
-      // Fazer login no OneSignal
-      try {
-        const oneSignalStore = useOneSignalStore.getState();
-        await oneSignalStore.login(user.id);
-        console.log('✅ Usuário registrado no OneSignal:', user.id);
-      } catch (error) {
-        console.error('Erro ao registrar no OneSignal:', error);
-      }
+      // OneSignal login será feito no App.js após autenticação
+      console.log('✅ Registro realizado com sucesso');
 
       return { success: true };
     } catch (error) {

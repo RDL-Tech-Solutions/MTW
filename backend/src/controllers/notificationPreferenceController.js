@@ -53,6 +53,16 @@ class NotificationPreferenceController {
         home_filters,
       });
 
+      // Sincronizar tags com OneSignal
+      try {
+        const oneSignalService = (await import('../services/oneSignalService.js')).default;
+        await oneSignalService.syncUserTags(req.user.id, preferences);
+        logger.info(`Tags OneSignal sincronizadas: usuário ${req.user.id}`);
+      } catch (error) {
+        logger.error(`Erro ao sincronizar tags OneSignal: ${error.message}`);
+        // Não falhar a requisição se OneSignal falhar
+      }
+
       logger.info(`Preferências atualizadas: usuário ${req.user.id}`);
       res.json(successResponse(preferences, 'Preferências atualizadas com sucesso'));
     } catch (error) {

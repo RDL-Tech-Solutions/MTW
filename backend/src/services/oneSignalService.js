@@ -675,6 +675,157 @@ class OneSignalService {
       ...options
     });
   }
+
+  /**
+   * Sincronizar tags de preferências do usuário
+   * 
+   * @param {number} userId - ID do usuário
+   * @param {Object} preferences - Preferências do usuário
+   * @returns {Promise<Object>} Resultado da operação
+   */
+  async syncUserTags(userId, preferences) {
+    try {
+      if (!this.isEnabled()) {
+        logger.warn('OneSignal não está habilitado - tags não sincronizadas');
+        return { success: false, error: 'OneSignal não habilitado' };
+      }
+
+      const externalId = userId.toString();
+      
+      // Construir tags baseadas nas preferências
+      const tags = {
+        // Preferências básicas
+        push_enabled: preferences.push_enabled ? 'true' : 'false',
+        email_enabled: preferences.email_enabled ? 'true' : 'false',
+        
+        // Categorias (como string separada por vírgula)
+        categories: (preferences.category_preferences || []).join(',') || 'none',
+        category_count: (preferences.category_preferences || []).length.toString(),
+        
+        // Palavras-chave (como string separada por vírgula)
+        keywords: (preferences.keyword_preferences || []).join(',') || 'none',
+        keyword_count: (preferences.keyword_preferences || []).length.toString(),
+        
+        // Nomes de produtos (como string separada por vírgula)
+        product_names: (preferences.product_name_preferences || []).join(',') || 'none',
+        product_name_count: (preferences.product_name_preferences || []).length.toString(),
+        
+        // Filtros da home
+        home_platforms: (preferences.home_filters?.platforms || []).join(',') || 'all',
+        home_categories: (preferences.home_filters?.categories || []).join(',') || 'all',
+        home_min_discount: (preferences.home_filters?.min_discount || 0).toString(),
+        home_max_price: (preferences.home_filters?.max_price || 'none').toString(),
+        home_only_coupon: preferences.home_filters?.only_with_coupon ? 'true' : 'false',
+        
+        // Metadata
+        last_sync: new Date().toISOString(),
+        has_preferences: 'true'
+      };
+
+      logger.info(`🏷️ Sincronizando tags OneSignal para usuário ${externalId}`);
+      logger.debug(`   Tags: ${JSON.stringify(tags, null, 2)}`);
+
+      // Enviar tags para OneSignal
+      // Nota: OneSignal SDK v5+ usa editTags no lugar de sendTags
+      const response = await this.client.editDevice(externalId, {
+        tags
+      });
+
+      logger.info(`✅ Tags sincronizadas com sucesso para usuário ${externalId}`);
+
+      return {
+        success: true,
+        tags,
+        external_id: externalId
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao sincronizar tags: ${error.message}`);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Enviar notificação usando segmentação por tags
+   * 
+   * @param {Object} notification - Dados da notificação
+   * @param {Array} tags - Tags para segmentação
+   * @returns {Promise<Object>} Resultado do envio
+   */
+  async sendToTags(notification, tags) {
+    try {
+      if (!this.isEnabled()) {
+        throw new Error('OneSignal não está habilitado');
+      }
+
+      const {
+        title,
+        message,
+        data = {},
+        url,
+        image,
+        buttons = [],
+        priority = 'normal'
+      } = notification;
+
+      if (!title || !message) {
+        throw new Error('title e message são obrigatórios');
+      }
+
+      if (!Array.isArray(tags) || tags.length === 0) {
+        throw new Error('tags deve ser um array não vazio');
+      }
+
+      const notificationData = {
+        app_id: this.appId,
+        tags: tags, // Formato: [{"key": "category", "relation": "=", "value": "1"}]
+        headings: { en: title, pt: title },
+        contents: { en: message, pt: message },
+        data: {
+          ...data,
+          sent_at: new Date().toISOString()
+        },
+        ...(url && { url }),
+        ...(image && {
+          big_picture: image,
+          large_icon: image,
+          ios_attachments: { id: image }
+        }),
+        ...(buttons.length > 0 && { buttons }),
+        priority: priority === 'high' ? 10 : 5,
+        ttl: 3600,
+        content_available: true
+      };
+
+      logger.info(`📤 Enviando notificação OneSignal com tags: ${JSON.stringify(tags)}`);
+
+      const response = await this.client.createNotification(notificationData);
+
+      if (response.body.errors) {
+        logger.error(`❌ Erros ao enviar com tags: ${JSON.stringify(response.body.errors)}`);
+        return {
+          success: false,
+          errors: response.body.errors
+        };
+      }
+
+      logger.info(`✅ Notificação enviada com tags: ${response.body.id}`);
+
+      return {
+        success: true,
+        notification_id: response.body.id,
+        recipients: response.body.recipients || 0
+      };
+    } catch (error) {
+      logger.error(`❌ Erro ao enviar com tags: ${error.message}`);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
 }
 
 export default new OneSignalService();

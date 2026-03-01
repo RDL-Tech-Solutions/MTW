@@ -20,9 +20,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const { initialize: initializeTheme } = useThemeStore();
-  const { initialize: initializeNotifications } = useNotificationStore();
-  const { initialize: initializeOneSignal } = useOneSignalStore();
-  const { isAuthenticated } = useAuthStore();
+  const { initialize: initializePreferences } = useNotificationStore();
+  const { initialize: initializeOneSignal, login: oneSignalLogin } = useOneSignalStore();
+  const { isAuthenticated, user, initialize: initializeAuth } = useAuthStore();
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -30,36 +30,36 @@ export default function App() {
         // Aguardar um pouco para garantir que os módulos nativos estejam prontos
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Inicializar tema
+        // 1. Inicializar tema
         try {
           await initializeTheme();
         } catch (error) {
           console.error('Erro ao inicializar tema:', error);
         }
 
-        // Inicializar OneSignal
+        // 2. Inicializar OneSignal (antes de auth para estar pronto)
         try {
           await initializeOneSignal();
         } catch (error) {
           console.error('Erro ao inicializar OneSignal:', error);
         }
+
+        // 3. Inicializar autenticação
+        try {
+          await initializeAuth();
+        } catch (error) {
+          console.error('Erro ao inicializar auth:', error);
+        }
+
+        // 4. Inicializar preferências de notificação
+        try {
+          await initializePreferences();
+        } catch (error) {
+          console.error('Erro ao inicializar preferências:', error);
+        }
         
         // Marcar como pronto
         setIsReady(true);
-        
-        // Inicializar notificações se autenticado (após um delay maior para garantir que tudo está pronto)
-        if (isAuthenticated) {
-          setTimeout(() => {
-            initializeNotifications().catch(err => {
-              // Silenciar erros de VAPID no web e PlatformConstants
-              if (err.message?.includes('vapidPublicKey') || err.message?.includes('PlatformConstants')) {
-                console.log('Push notifications não disponíveis nesta plataforma');
-              } else {
-                console.error('Erro ao inicializar notificações:', err);
-              }
-            });
-          }, 1000);
-        }
         
         // Simular carregamento inicial (6 segundos para completar animação do GIF)
         setTimeout(() => {
@@ -73,7 +73,33 @@ export default function App() {
     };
 
     initializeApp();
-  }, [isAuthenticated]);
+  }, []);
+
+  // Registrar usuário no OneSignal após autenticação
+  useEffect(() => {
+    const registerOneSignal = async () => {
+      if (isAuthenticated && user?.id && isReady) {
+        try {
+          console.log('🔐 Registrando usuário no OneSignal após autenticação');
+          await oneSignalLogin(user.id);
+          
+          // Sincronizar preferências como tags
+          try {
+            const { preferences } = useNotificationStore.getState();
+            if (preferences) {
+              console.log('🏷️ Preferências carregadas, tags serão sincronizadas pelo backend');
+            }
+          } catch (error) {
+            console.error('Erro ao verificar preferências:', error);
+          }
+        } catch (error) {
+          console.error('Erro ao registrar no OneSignal:', error);
+        }
+      }
+    };
+
+    registerOneSignal();
+  }, [isAuthenticated, user?.id, isReady]);
 
   if (isLoading) {
     return <SplashScreen onFinish={() => setIsLoading(false)} />;

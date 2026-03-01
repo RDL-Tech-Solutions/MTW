@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuthStore } from '../stores/authStore';
+import { useOneSignalStore } from '../stores/oneSignalStore';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
 import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
@@ -25,10 +26,19 @@ const Stack = createStackNavigator();
 export default function AppNavigator() {
   const { isAuthenticated, isLoading, initialize } = useAuthStore();
   const { colors } = useThemeStore();
+  const navigationRef = useRef(null);
+  const { setNavigationRef } = useOneSignalStore();
 
   useEffect(() => {
     initialize();
   }, []);
+
+  // Configurar referência de navegação para OneSignal
+  useEffect(() => {
+    if (navigationRef.current) {
+      setNavigationRef(navigationRef.current);
+    }
+  }, [navigationRef.current]);
 
   if (isLoading) {
     return (
@@ -38,8 +48,26 @@ export default function AppNavigator() {
     );
   }
 
+  const linking = {
+    prefixes: ['precocerto://', 'https://precocerto.app'],
+    config: {
+      screens: {
+        Main: {
+          screens: {
+            Home: 'home',
+            Coupons: 'coupons',
+            Favorites: 'favorites',
+            Profile: 'profile',
+          },
+        },
+        ProductDetails: 'product/:id',
+        CouponDetails: 'coupon/:id',
+      },
+    },
+  };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthNavigator} />

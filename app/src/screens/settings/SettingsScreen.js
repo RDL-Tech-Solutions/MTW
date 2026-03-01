@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useThemeStore } from '../../theme/theme';
 import { SCREEN_NAMES } from '../../utils/constants';
+import OneSignalDebug from '../../components/common/OneSignalDebug';
 
 export default function SettingsScreen({ navigation }) {
   const { preferences, updatePreferences } = useNotificationStore();
@@ -184,6 +185,14 @@ export default function SettingsScreen({ navigation }) {
             isLast
           />
         </View>
+
+        {/* ── Debug OneSignal (apenas em DEV) ──────────────── */}
+        {__DEV__ && (
+          <>
+            <SectionLabel label="DEBUG" />
+            <OneSignalDebug />
+          </>
+        )}
 
         {/* Footer */}
         <View style={s.footer}>

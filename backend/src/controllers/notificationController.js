@@ -51,18 +51,21 @@ class NotificationController {
     }
   }
 
-  // Registrar push token
+  // Registrar push token (DEPRECATED - OneSignal gerencia tokens automaticamente)
+  // Mantido para compatibilidade com versões antigas do app
   static async registerToken(req, res, next) {
     try {
       const { push_token } = req.body;
-      await User.updatePushToken(req.user.id, push_token);
-
-      logger.info(`Push token registrado: usuário ${req.user.id}`);
-      res.json(successResponse(null, 'Token registrado com sucesso'));
+      
+      logger.warn(`⚠️ DEPRECATED: Endpoint /register-token chamado. OneSignal gerencia tokens automaticamente.`);
+      logger.info(`Push token Expo (ignorado): usuário ${req.user.id}`);
+      
+      // Não salvar mais o token, apenas retornar sucesso para compatibilidade
+      res.json(successResponse(null, 'Token recebido (OneSignal gerencia automaticamente)'));
     } catch (error) {
       next(error);
     }
-  }
+  },
 
   // Estatísticas (admin)
   static async stats(req, res, next) {
