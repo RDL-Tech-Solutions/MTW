@@ -266,14 +266,6 @@ class AuthController {
     }
   }
 
-      res.json(
-        successResponse(null, 'Push token registrado com sucesso')
-      );
-    } catch (error) {
-      next(error);
-    }
-  }
-
   // Login/Registro com Google (usando ID Token)
   static async googleAuth(req, res, next) {
     try {
