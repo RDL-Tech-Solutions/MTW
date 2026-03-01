@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "PreçoCerto",
-    "slug": "PreçoCerto",
+    "slug": "mtw-promo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -65,7 +65,7 @@
       "expo-web-browser"
     ],
     "extra": {
-      "apiUrl": "http://192.168.7.9:3000/api",
+      "apiUrl": "https://king.apiprecocerto.space/api",
       "oneSignalAppId": "40967aa6-5a0e-4ac3-813e-f22c589b89ce",
       "eas": {
         "projectId": "e04af0c1-090d-4315-8448-626e0b84834e"
