@@ -52,13 +52,9 @@ export const useOneSignalStore = create((set, get) => ({
         OneSignal.setLogLevel(6, 0); // Verbose
       }
 
-      // Solicitar permissões para ambas as plataformas
-      // iOS: Mostra dialog nativo
-      // Android 13+: Mostra dialog de permissão
-      OneSignal.promptForPushNotificationsWithUserResponse(response => {
-        console.log('📱 Permissão de notificação:', response);
-        set({ hasPermission: response });
-      });
+      // NÃO solicitar permissões automaticamente na inicialização
+      // Deixar o usuário decidir quando ativar
+      console.log('ℹ️ OneSignal inicializado. Use requestPermission() para solicitar permissões.');
 
       // Handler para notificações recebidas em foreground
       OneSignal.setNotificationWillShowInForegroundHandler(notificationReceivedEvent => {
@@ -101,8 +97,18 @@ export const useOneSignalStore = create((set, get) => ({
         }
       });
 
-      set({ isInitialized: true, isAvailable: true });
+      // Verificar se já tem permissão
+      const deviceState = await OneSignal.getDeviceState();
+      const hasPermission = deviceState?.isPushDisabled === false;
+      
+      set({ 
+        isInitialized: true, 
+        isAvailable: true,
+        hasPermission 
+      });
+      
       console.log('✅ OneSignal inicializado com sucesso');
+      console.log('📱 Permissão atual:', hasPermission ? 'Concedida' : 'Não concedida');
 
     } catch (error) {
       console.error('❌ Erro ao inicializar OneSignal:', error);

@@ -118,8 +118,8 @@ export default function SettingsScreen({ navigation }) {
           <NavRow
             icon="options"
             iconBg="#0EA5E9"
-            title="Preferências detalhadas"
-            subtitle="Categorias e palavras-chave"
+            title="Configurar Notificações"
+            subtitle="Ativar e gerenciar notificações push"
             onPress={() => navigation.navigate(SCREEN_NAMES.NOTIFICATION_SETTINGS)}
             isLast
           />

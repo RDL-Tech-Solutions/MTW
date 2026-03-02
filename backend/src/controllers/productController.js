@@ -1095,7 +1095,23 @@ class ProductController {
             continue;
           }
 
-          // Criar produto com status 'pending'
+          // NOVO: Detectar categoria com IA (similar ao auto-sync)
+          let categoryId = null;
+          try {
+            const categoryDetector = (await import('../services/categoryDetector.js')).default;
+            const detectedCategory = await categoryDetector.detectWithAI(productInfo.name);
+            
+            if (detectedCategory) {
+              categoryId = detectedCategory.id;
+              logger.info(`   🤖 IA detectou categoria: ${detectedCategory.name} (${detectedCategory.slug})`);
+            } else {
+              logger.warn(`   ⚠️ IA não conseguiu detectar categoria para: ${productInfo.name.substring(0, 50)}...`);
+            }
+          } catch (categoryError) {
+            logger.error(`   ❌ Erro ao detectar categoria com IA: ${categoryError.message}`);
+          }
+
+          // Criar produto com status 'pending' e categoria detectada pela IA
           const product = await Product.create({
             name: productInfo.name,
             description: productInfo.description || '',
@@ -1107,10 +1123,11 @@ class ProductController {
             original_link: url,
             affiliate_link: productInfo.affiliateLink || url,
             external_id: productInfo.productId || `batch_${Date.now()}_${i}`, // ID externo ou gerado
+            category_id: categoryId, // NOVO: Categoria detectada pela IA
             status: 'pending' // Salvar como pendente
           });
 
-          logger.info(`   ✅ Produto capturado: ${product.name} (ID: ${product.id})`);
+          logger.info(`   ✅ Produto capturado: ${product.name} (ID: ${product.id})${categoryId ? ` - Categoria: ${categoryId}` : ''}`);
 
           results.push({
             url: url,
@@ -1119,7 +1136,8 @@ class ProductController {
               id: product.id,
               name: product.name,
               platform: platform,
-              current_price: product.current_price
+              current_price: product.current_price,
+              category_id: categoryId // NOVO: Incluir categoria no resultado
             }
           });
 

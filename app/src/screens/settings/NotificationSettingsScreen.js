@@ -4,393 +4,382 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Switch,
-  TextInput,
   TouchableOpacity,
   Alert,
   Platform,
-  StatusBar,
-  FlatList,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useNotificationStore } from '../../stores/notificationStore';
-import { useProductStore } from '../../stores/productStore';
-import { useThemeStore } from '../../theme/theme';
-import Button from '../../components/common/Button';
+import { useOneSignalStore } from '../../stores/oneSignalStore';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function NotificationSettingsScreen({ navigation }) {
-  const { preferences, updatePreferences, addCategory, removeCategory, addKeyword, removeKeyword, addProductName, removeProductName } = useNotificationStore();
-  const { categories, fetchCategories } = useProductStore();
-  const { colors } = useThemeStore();
-  const [localPreferences, setLocalPreferences] = useState(preferences || {
-    push_enabled: true,
-    email_enabled: false,
-    category_preferences: [],
-    keyword_preferences: [],
-    product_name_preferences: [],
-  });
-  const [newKeyword, setNewKeyword] = useState('');
-  const [newProductName, setNewProductName] = useState('');
-  const [saving, setSaving] = useState(false);
+  const {
+    isInitialized,
+    hasPermission,
+    isAvailable,
+    userId,
+    requestPermission,
+    getDeviceState,
+    login,
+  } = useOneSignalStore();
+  
+  const { user } = useAuthStore();
+  const [deviceState, setDeviceState] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (preferences) {
-      setLocalPreferences(preferences);
-    }
-    fetchCategories();
-  }, [preferences]);
+    loadDeviceState();
+  }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
-    const result = await updatePreferences(localPreferences);
-    setSaving(false);
-    if (result.success) {
-      Alert.alert('Sucesso', 'Preferências salvas com sucesso!');
+  const loadDeviceState = async () => {
+    try {
+      const state = await getDeviceState();
+      setDeviceState(state);
+    } catch (error) {
+      console.error('Erro ao carregar estado do dispositivo:', error);
+    }
+  };
+
+  const handleRequestPermission = async () => {
+    try {
+      setLoading(true);
+      const granted = await requestPermission();
+      
+      if (granted) {
+        Alert.alert(
+          'Sucesso!',
+          'Permissão de notificações concedida. Você receberá notificações sobre novos produtos e cupons.',
+          [{ text: 'OK' }]
+        );
+        
+        // Recarregar estado
+        await loadDeviceState();
+        
+        // Se usuário está logado, fazer login no OneSignal
+        if (user?.id) {
+          await login(user.id);
+        }
+      } else {
+        Alert.alert(
+          'Permissão Negada',
+          'Você negou a permissão de notificações. Para ativar, vá em Configurações do dispositivo.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Abrir Configurações', onPress: openSettings },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao solicitar permissão:', error);
+      Alert.alert('Erro', 'Não foi possível solicitar permissão de notificações.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openSettings = () => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
     } else {
-      Alert.alert('Erro', result.error || 'Não foi possível salvar as preferências');
+      Linking.openSettings();
     }
   };
 
-  const handleTogglePush = (value) => {
-    setLocalPreferences({ ...localPreferences, push_enabled: value });
+  const handleTestNotification = () => {
+    Alert.alert(
+      'Testar Notificação',
+      'Para testar notificações, use o painel admin ou o endpoint /api/notifications/test-push',
+      [{ text: 'OK' }]
+    );
   };
 
-  const handleToggleCategory = async (categoryId) => {
-    const isSelected = localPreferences.category_preferences?.includes(categoryId);
-    const updatedCategories = isSelected
-      ? localPreferences.category_preferences.filter(id => id !== categoryId)
-      : [...(localPreferences.category_preferences || []), categoryId];
+  const renderStatusItem = (label, value, icon, color) => (
+    <View style={styles.statusItem}>
+      <View style={styles.statusLeft}>
+        <Ionicons name={icon} size={24} color={color} />
+        <Text style={styles.statusLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.statusValue, { color }]}>{value}</Text>
+    </View>
+  );
 
-    setLocalPreferences({
-      ...localPreferences,
-      category_preferences: updatedCategories,
-    });
-  };
-
-  const handleAddKeyword = () => {
-    if (newKeyword.trim()) {
-      const keywords = [...(localPreferences.keyword_preferences || []), newKeyword.trim().toLowerCase()];
-      setLocalPreferences({
-        ...localPreferences,
-        keyword_preferences: keywords,
-      });
-      setNewKeyword('');
-    }
-  };
-
-  const handleRemoveKeyword = (keyword) => {
-    const keywords = localPreferences.keyword_preferences.filter(k => k !== keyword);
-    setLocalPreferences({
-      ...localPreferences,
-      keyword_preferences: keywords,
-    });
-  };
-
-  const handleAddProductName = () => {
-    if (newProductName.trim()) {
-      const productNames = [...(localPreferences.product_name_preferences || []), newProductName.trim()];
-      setLocalPreferences({
-        ...localPreferences,
-        product_name_preferences: productNames,
-      });
-      setNewProductName('');
-    }
-  };
-
-  const handleRemoveProductName = (productName) => {
-    const productNames = localPreferences.product_name_preferences.filter(pn => pn !== productName);
-    setLocalPreferences({
-      ...localPreferences,
-      product_name_preferences: productNames,
-    });
-  };
+  if (!isAvailable) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.unavailableContainer}>
+          <Ionicons name="warning-outline" size={64} color="#F59E0B" />
+          <Text style={styles.unavailableTitle}>OneSignal Não Disponível</Text>
+          <Text style={styles.unavailableText}>
+            OneSignal requer um build nativo. Você está usando Expo Go.
+          </Text>
+          <Text style={styles.unavailableSteps}>
+            Para usar notificações push:
+          </Text>
+          <Text style={styles.unavailableStep}>1. Execute: npx expo prebuild</Text>
+          <Text style={styles.unavailableStep}>2. Execute: npx expo run:android</Text>
+          <Text style={styles.unavailableStep}>3. OneSignal funcionará no build nativo</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={['#3B82F6', '#2563EB']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
-      >
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.headerBackBtn}
-        >
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Notificações</Text>
-          <Text style={styles.headerSubtitle}>Preferências detalhadas</Text>
-        </View>
-      </LinearGradient>
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
-        {/* Notificações Push */}
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificações Push</Text>
-          <View style={styles.switchRow}>
-            <View style={styles.switchLabel}>
-              <Ionicons name="notifications" size={24} color={colors.primary} />
-              <View style={styles.switchText}>
-                <Text style={[styles.switchTitle, { color: colors.text }]}>Ativar Notificações</Text>
-                <Text style={[styles.switchSubtitle, { color: colors.textMuted }]}>
-                  Receba alertas sobre novas promoções
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localPreferences.push_enabled}
-              onValueChange={handleTogglePush}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.white}
-            />
-          </View>
-        </View>
-
-        {/* Categorias */}
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Categoria</Text>
-          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-            Selecione as categorias de produtos para receber notificações
-          </Text>
-          {categories.map((category) => {
-            const isSelected = localPreferences.category_preferences?.includes(category.id);
-            return (
-              <TouchableOpacity
-                key={category.id}
-                style={[styles.categoryItem, { borderColor: colors.border }]}
-                onPress={() => handleToggleCategory(category.id)}
-              >
-                <View style={styles.categoryLeft}>
-                  <Text style={styles.categoryEmoji}>{category.icon || '📦'}</Text>
-                  <Text style={[styles.categoryName, { color: colors.text }]}>{category.name}</Text>
-                </View>
-                <Switch
-                  value={isSelected}
-                  onValueChange={() => handleToggleCategory(category.id)}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor={colors.white}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Palavras-chave */}
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Palavra-chave</Text>
-          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-            Adicione palavras-chave para receber notificações quando produtos relacionados forem publicados
-          </Text>
-          <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-            <TextInput
-              style={[styles.input, { color: colors.text }]}
-              placeholder="Digite uma palavra-chave..."
-              placeholderTextColor={colors.textMuted}
-              value={newKeyword}
-              onChangeText={setNewKeyword}
-              onSubmitEditing={handleAddKeyword}
-            />
-            <TouchableOpacity onPress={handleAddKeyword} style={styles.addButton}>
-              <Ionicons name="add" size={24} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-          {localPreferences.keyword_preferences?.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {localPreferences.keyword_preferences.map((keyword, index) => (
-                <View key={index} style={[styles.tag, { backgroundColor: colors.primaryLight + '20' }]}>
-                  <Text style={[styles.tagText, { color: colors.primary }]}>{keyword}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveKeyword(keyword)}>
-                    <Ionicons name="close-circle" size={18} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        {/* Status */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Status das Notificações</Text>
+          
+          {renderStatusItem(
+            'OneSignal Inicializado',
+            isInitialized ? 'Sim' : 'Não',
+            isInitialized ? 'checkmark-circle' : 'close-circle',
+            isInitialized ? '#10B981' : '#EF4444'
+          )}
+          
+          {renderStatusItem(
+            'Permissão Concedida',
+            hasPermission ? 'Sim' : 'Não',
+            hasPermission ? 'checkmark-circle' : 'close-circle',
+            hasPermission ? '#10B981' : '#EF4444'
+          )}
+          
+          {renderStatusItem(
+            'Usuário Registrado',
+            userId ? 'Sim' : 'Não',
+            userId ? 'checkmark-circle' : 'close-circle',
+            userId ? '#10B981' : '#EF4444'
           )}
         </View>
 
-        {/* Nomes de Produtos */}
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notificar por Nome de Produto</Text>
-          <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-            Adicione nomes específicos de produtos para receber notificações
-          </Text>
-          <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-            <TextInput
-              style={[styles.input, { color: colors.text }]}
-              placeholder="Digite o nome do produto..."
-              placeholderTextColor={colors.textMuted}
-              value={newProductName}
-              onChangeText={setNewProductName}
-              onSubmitEditing={handleAddProductName}
-            />
-            <TouchableOpacity onPress={handleAddProductName} style={styles.addButton}>
-              <Ionicons name="add" size={24} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-          {localPreferences.product_name_preferences?.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {localPreferences.product_name_preferences.map((productName, index) => (
-                <View key={index} style={[styles.tag, { backgroundColor: colors.infoLight }]}>
-                  <Text style={[styles.tagText, { color: colors.info }]}>{productName}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveProductName(productName)}>
-                    <Ionicons name="close-circle" size={18} color={colors.info} />
-                  </TouchableOpacity>
-                </View>
-              ))}
+        {/* Informações do Dispositivo */}
+        {deviceState && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Informações do Dispositivo</Text>
+            
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Player ID:</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {deviceState.userId || 'N/A'}
+              </Text>
             </View>
+            
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Push Token:</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {deviceState.pushToken ? 'Configurado' : 'N/A'}
+              </Text>
+            </View>
+            
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Notificações Habilitadas:</Text>
+              <Text style={styles.infoValue}>
+                {deviceState.isPushDisabled === false ? 'Sim' : 'Não'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Ações */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Ações</Text>
+          
+          {!hasPermission && (
+            <TouchableOpacity
+              style={[styles.button, styles.primaryButton]}
+              onPress={handleRequestPermission}
+              disabled={loading}
+            >
+              <Ionicons name="notifications" size={20} color="#FFF" />
+              <Text style={styles.buttonText}>
+                {loading ? 'Solicitando...' : 'Ativar Notificações'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          
+          <TouchableOpacity
+            style={[styles.button, styles.secondaryButton]}
+            onPress={loadDeviceState}
+          >
+            <Ionicons name="refresh" size={20} color="#DC2626" />
+            <Text style={[styles.buttonText, styles.secondaryButtonText]}>
+              Atualizar Status
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.button, styles.secondaryButton]}
+            onPress={openSettings}
+          >
+            <Ionicons name="settings" size={20} color="#DC2626" />
+            <Text style={[styles.buttonText, styles.secondaryButtonText]}>
+              Abrir Configurações do Sistema
+            </Text>
+          </TouchableOpacity>
+          
+          {hasPermission && (
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={handleTestNotification}
+            >
+              <Ionicons name="flask" size={20} color="#DC2626" />
+              <Text style={[styles.buttonText, styles.secondaryButtonText]}>
+                Testar Notificação
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 
-        {/* Botão Salvar */}
-        <Button
-          title={saving ? "Salvando..." : "Salvar Preferências"}
-          onPress={handleSave}
-          loading={saving}
-          style={styles.saveButton}
-          size="large"
-        />
-      </ScrollView>
-    </View>
+        {/* Ajuda */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Precisa de Ajuda?</Text>
+          <Text style={styles.helpText}>
+            Se as notificações não estão funcionando:
+          </Text>
+          <Text style={styles.helpStep}>
+            • Verifique se você concedeu permissão nas configurações do dispositivo
+          </Text>
+          <Text style={styles.helpStep}>
+            • Certifique-se de estar usando um build nativo (não Expo Go)
+          </Text>
+          <Text style={styles.helpStep}>
+            • Verifique sua conexão com a internet
+          </Text>
+          <Text style={styles.helpStep}>
+            • Tente fazer logout e login novamente
+          </Text>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  headerGradient: {
-    paddingTop: Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 24) + 12,
-    paddingBottom: 18,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerBackBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 1,
+    backgroundColor: '#F9FAFB',
   },
   content: {
     padding: 16,
   },
   section: {
-    padding: 16,
+    backgroundColor: '#FFF',
     borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-    } : {
-      elevation: 2,
-    }),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sectionDescription: {
-    fontSize: 13,
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  switchText: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  switchTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 4,
+    color: '#111827',
+    marginBottom: 16,
   },
-  switchSubtitle: {
-    fontSize: 13,
-  },
-  categoryItem: {
+  statusItem: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  categoryLeft: {
+  statusLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    gap: 12,
   },
-  categoryEmoji: {
-    fontSize: 24,
-    marginRight: 4,
+  statusLabel: {
+    fontSize: 16,
+    color: '#374151',
   },
-  categoryName: {
-    marginLeft: 12,
-    fontSize: 15,
-    fontWeight: '500',
+  statusValue: {
+    fontSize: 16,
+    fontWeight: '600',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+  infoItem: {
     marginBottom: 12,
   },
-  input: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 15,
+  infoLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
   },
-  addButton: {
-    padding: 4,
+  infoValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tag: {
+  button: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 12,
   },
-  tagText: {
-    fontSize: 13,
-    fontWeight: '500',
+  primaryButton: {
+    backgroundColor: '#DC2626',
   },
-  saveButton: {
-    marginTop: 8,
+  secondaryButton: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#DC2626',
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  secondaryButtonText: {
+    color: '#DC2626',
+  },
+  helpText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  helpStep: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 8,
+    paddingLeft: 8,
+  },
+  unavailableContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  unavailableTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  unavailableText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
     marginBottom: 24,
   },
+  unavailableSteps: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  unavailableStep: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
 });
-

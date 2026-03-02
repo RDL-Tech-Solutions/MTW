@@ -31,6 +31,8 @@
     "test:smtp": "node scripts/test-smtp.js",
     "test:push": "node scripts/test-push-notification.js",
     "test:push-quick": "node scripts/test-push-quick.js",
+    "test:push-player": "node scripts/test-push-with-player-id.js",
+    "test:push-all": "node scripts/test-push-all.js",
     "test:onesignal": "node scripts/validate-onesignal-setup.js",
     "clean:data": "node scripts/cleanAllData.js",
     "logs": "tail -f logs/app.log",
