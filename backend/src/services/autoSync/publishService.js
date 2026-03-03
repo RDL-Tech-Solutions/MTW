@@ -32,65 +32,20 @@ class PublishService {
   async notifyPush(product) {
     try {
       const Notification = (await import('../../models/Notification.js')).default;
-      const NotificationPreference = (await import('../../models/NotificationPreference.js')).default;
-      const User = (await import('../../models/User.js')).default;
+      const notificationSegmentationService = (await import('../notificationSegmentationService.js')).default;
 
-      // Buscar usuários que devem receber notificação
-      const usersToNotify = new Set(); // Usar Set para evitar duplicatas
+      // Segmentar usuários baseado nas preferências
+      const users = await notificationSegmentationService.getUsersForProduct(product);
 
-      // 1. Usuários que têm a categoria nas preferências
-      if (product.category_id) {
-        const usersByCategory = await NotificationPreference.findUsersByCategory(product.category_id);
-        usersByCategory.forEach(u => usersToNotify.add(u.user_id));
-        logger.info(`   📂 ${usersByCategory.length} usuários por categoria`);
-      }
-
-      // 2. Usuários que têm palavra-chave nas preferências
-      // Buscar por palavras significativas (> 3 caracteres)
-      const productNameLower = product.name.toLowerCase();
-      const words = productNameLower.split(/\s+/).filter(w => w.length > 3);
-
-      for (const word of words) {
-        const usersByKeyword = await NotificationPreference.findUsersByKeyword(word);
-        usersByKeyword.forEach(u => usersToNotify.add(u.user_id));
-      }
-
-      if (words.length > 0) {
-        logger.info(`   🔑 Buscando por ${words.length} palavras-chave: ${words.join(', ')}`);
-      }
-
-      // 3. Usuários que têm o nome do produto nas preferências
-      const usersByProductName = await NotificationPreference.findUsersByProductName(product.name);
-      usersByProductName.forEach(u => usersToNotify.add(u.user_id));
-
-      if (usersByProductName.length > 0) {
-        logger.info(`   📦 ${usersByProductName.length} usuários por nome de produto`);
-      }
-
-      const uniqueUserIds = Array.from(usersToNotify);
-
-      if (uniqueUserIds.length === 0) {
-        logger.info(`🔔 Nenhum usuário para notificar sobre: ${product.name}`);
+      if (!users || users.length === 0) {
+        logger.info(`🔔 Nenhum usuário segmentado para notificar sobre: ${product.name}`);
         return true;
       }
 
-      logger.info(`🔔 Total de ${uniqueUserIds.length} usuários únicos para notificar`);
-
-      // Buscar usuários com token FCM
-      const users = await Promise.all(
-        uniqueUserIds.map(userId => User.findById(userId))
-      );
-
-      // Filtrar usuários válidos com token FCM
-      const validUsers = users.filter(user => user && user.id && user.fcm_token);
-
-      if (validUsers.length === 0) {
-        logger.info(`🔔 Nenhum usuário com FCM token encontrado`);
-        return true;
-      }
+      logger.info(`🔔 ${users.length} usuários segmentados para notificar`);
 
       // Criar notificações para cada usuário
-      const notifications = validUsers.map(user => ({
+      const notifications = users.map(user => ({
         user_id: user.id,
         title: '🔥 Nova Promoção!',
         message: `${product.name}${product.discount_percentage ? ` - ${product.discount_percentage}% OFF` : ''}`,
@@ -103,7 +58,7 @@ class PublishService {
       logger.info(`   💾 ${createdNotifications.length} notificações criadas no banco`);
 
       // Enviar via FCM
-      const result = await fcmService.notifyNewPromo(validUsers, product);
+      const result = await fcmService.notifyNewPromo(users, product);
 
       // Marcar notificações como enviadas
       if (result.total_sent > 0) {

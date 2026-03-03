@@ -32,6 +32,8 @@
     "test:push": "node scripts/test-push-notification.js",
     "check:firebase": "node scripts/check-firebase-admin.js",
     "test:register-token": "node scripts/test-register-token.js",
+    "test:onesignal-email": "node scripts/test-onesignal-email.js",
+    "test:all-emails": "node scripts/test-all-emails.js",
     "clean:data": "node scripts/cleanAllData.js",
     "logs": "tail -f logs/app.log",
     "logs:error": "tail -f logs/app.log | grep ERROR"

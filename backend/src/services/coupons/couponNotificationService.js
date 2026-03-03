@@ -593,20 +593,18 @@ ${coupon.affiliate_link || 'Link não disponível'}
    */
   async createPushNotifications(coupon, type) {
     try {
-      // Buscar todos os usuários ativos com token FCM
-      const { data: users, error } = await supabase
-        .from('users')
-        .select('id, fcm_token')
-        .not('fcm_token', 'is', null);
+      // Importar serviço de segmentação
+      const notificationSegmentationService = (await import('../notificationSegmentationService.js')).default;
 
-      if (error) throw error;
+      // Segmentar usuários baseado nas preferências
+      const users = await notificationSegmentationService.getUsersForCoupon(coupon);
 
       if (!users || users.length === 0) {
-        logger.info('Nenhum usuário com FCM token encontrado');
+        logger.info('Nenhum usuário segmentado para receber notificação deste cupom');
         return;
       }
 
-      logger.info(`📱 Enviando notificações push FCM para ${users.length} usuários...`);
+      logger.info(`📱 Enviando notificações push FCM para ${users.length} usuários segmentados...`);
 
       // Preparar dados da notificação
       const title = type === 'new_coupon' ? '🔥 Novo Cupão Disponível!' : '⏰ Cupão Expirando!';

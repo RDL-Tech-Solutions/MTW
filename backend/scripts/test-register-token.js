@@ -25,13 +25,45 @@ async function testRegisterToken() {
     // 1. Fazer login para obter token JWT
     console.log(chalk.yellow('1. Fazendo login...'));
     
-    const loginResponse = await axios.post(`${API_URL}/api/auth/login`, {
-      email: 'admin@precocerto.com',
-      password: 'admin123'
-    });
+    // Tentar diferentes credenciais
+    let jwtToken = null;
+    const credentials = [
+      { email: 'admin@precocerto.com', password: 'admin123' },
+      { email: 'test@test.com', password: 'test123' },
+      { email: 'user@example.com', password: 'password123' }
+    ];
 
-    const jwtToken = loginResponse.data.data.token;
-    console.log(chalk.green('   ✅ Login realizado com sucesso\n'));
+    for (const cred of credentials) {
+      try {
+        const loginResponse = await axios.post(`${API_URL}/api/auth/login`, cred);
+        jwtToken = loginResponse.data.data.token;
+        console.log(chalk.green(`   ✅ Login realizado com sucesso (${cred.email})\n`));
+        break;
+      } catch (error) {
+        console.log(chalk.yellow(`   ⚠️  Falha com ${cred.email}, tentando próximo...`));
+      }
+    }
+
+    if (!jwtToken) {
+      console.log(chalk.red('\n   ❌ Nenhuma credencial funcionou. Criando usuário de teste...\n'));
+      
+      // Criar usuário de teste
+      try {
+        const registerResponse = await axios.post(`${API_URL}/api/auth/register`, {
+          name: 'Test User',
+          email: 'test@fcm.com',
+          password: 'test123',
+          phone: '11999999999'
+        });
+        
+        jwtToken = registerResponse.data.data.token;
+        console.log(chalk.green('   ✅ Usuário de teste criado e logado\n'));
+      } catch (regError) {
+        console.log(chalk.red('   ❌ Erro ao criar usuário de teste'));
+        console.log(chalk.red(`   ${regError.response?.data?.message || regError.message}\n`));
+        process.exit(1);
+      }
+    }
 
     // 2. Testar registro de token com campo CORRETO
     console.log(chalk.yellow('2. Testando registro de token (campo "token")...'));

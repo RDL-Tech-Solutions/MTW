@@ -199,6 +199,17 @@ class User {
     };
   }
 
+  // Buscar todos os usuários com FCM token
+  static async findAllWithFCMToken() {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, name, email, fcm_token')
+      .not('fcm_token', 'is', null);
+
+    if (error) throw error;
+    return data || [];
+  }
+
   // DEPRECATED: VIP feature removed - all users have full access
   // Methods kept for backward compatibility but do nothing
   static async upgradeToVIP(userId) {
