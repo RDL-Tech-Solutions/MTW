@@ -589,7 +589,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
   }
 
   /**
-   * Criar notificações push para usuários via OneSignal
+   * Criar notificações push para usuários via FCM
    */
   async createPushNotifications(coupon, type) {
     try {

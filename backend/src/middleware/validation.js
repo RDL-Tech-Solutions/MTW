@@ -144,7 +144,7 @@ export const updateCategorySchema = Joi.object({
 
 // Notifications
 export const registerPushTokenSchema = Joi.object({
-  push_token: Joi.string().required()
+  token: Joi.string().required()
 });
 
 // Query params validation

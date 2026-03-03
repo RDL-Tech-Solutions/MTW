@@ -4,7 +4,6 @@ import smtpEmailService from './emailService.js';
 /**
  * Email Service — usa SMTP exclusivamente
  * 
- * Nota: OneSignal Email foi removido (estava desabilitado via ONESIGNAL_EMAIL_ENABLED=false).
  * Todos os envios de email são feitos via SMTP (Gmail) configurado no .env.
  */
 class EmailServiceWrapper {
