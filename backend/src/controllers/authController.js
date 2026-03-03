@@ -250,17 +250,17 @@ class AuthController {
     }
   }
 
-  // Registrar push token (DEPRECATED - OneSignal gerencia tokens automaticamente)
-  // Mantido para compatibilidade com versões antigas do app
+  // Registrar FCM token
   static async registerPushToken(req, res, next) {
     try {
       const { push_token } = req.body;
 
-      logger.warn(`⚠️ DEPRECATED: Endpoint /push-token chamado. OneSignal gerencia tokens automaticamente.`);
-      logger.info(`Push token Expo (ignorado): usuário ${req.user.id}`);
+      logger.info(`Registrando FCM token: usuário ${req.user.id}`);
 
-      // Não salvar mais o token, apenas retornar sucesso para compatibilidade
-      res.json(successResponse(null, 'Token recebido (OneSignal gerencia automaticamente)'));
+      // Salvar token FCM no banco
+      await User.update(req.user.id, { fcm_token: push_token });
+
+      res.json(successResponse(null, 'FCM token registrado com sucesso'));
     } catch (error) {
       next(error);
     }

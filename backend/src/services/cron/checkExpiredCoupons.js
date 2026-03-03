@@ -3,7 +3,7 @@ import Notification from '../../models/Notification.js';
 import logger from '../../config/logger.js';
 import { daysUntilExpiration } from '../../utils/helpers.js';
 import supabase from '../../config/database.js';
-import oneSignalService from '../oneSignalService.js';
+import fcmService from '../fcmService.js';
 
 export const checkExpiredCoupons = async () => {
   try {
@@ -40,33 +40,25 @@ export const checkExpiredCoupons = async () => {
           const createdNotifications = await Notification.createBulk(notifications);
           logger.info(`${createdNotifications.length} notificações criadas para cupom ${coupon.code}`);
 
-          // Enviar imediatamente via OneSignal
+          // Enviar imediatamente via FCM
           try {
-            const result = await oneSignalService.sendToMultiple(
-              users.map(u => u.id.toString()),
-              {
-                title: '⏰ Cupom Expirando!',
-                message: `O cupom ${coupon.code} expira em ${daysLeft} dia(s)`,
-                data: {
-                  type: 'expiring_coupon',
-                  couponId: coupon.id,
-                  screen: 'CouponDetails'
-                },
-                priority: daysLeft === 1 ? 'high' : 'normal'
-              }
+            const result = await fcmService.notifyExpiringCoupon(
+              users,
+              coupon,
+              daysLeft
             );
 
             // Marcar como enviadas
-            if (result.success > 0) {
+            if (result.total_sent > 0) {
               await Promise.all(
-                createdNotifications.slice(0, result.success).map(n => 
+                createdNotifications.slice(0, result.total_sent).map(n => 
                   Notification.markAsSent(n.id)
                 )
               );
-              logger.info(`✅ ${result.success} notificações enviadas para cupom ${coupon.code}`);
+              logger.info(`✅ ${result.total_sent} notificações enviadas para cupom ${coupon.code}`);
             }
           } catch (error) {
-            logger.error(`❌ Erro ao enviar notificações via OneSignal: ${error.message}`);
+            logger.error(`❌ Erro ao enviar notificações via FCM: ${error.message}`);
             // Notificações ficam no banco para retry pelo cron job
           }
         }

@@ -2,7 +2,7 @@ import Product from '../../models/Product.js';
 import Notification from '../../models/Notification.js';
 import logger from '../../config/logger.js';
 import { withRetry } from '../../utils/supabaseRetry.js';
-import oneSignalService from '../oneSignalService.js';
+import fcmService from '../fcmService.js';
 
 export const updatePrices = async () => {
   try {
@@ -51,33 +51,26 @@ export const updatePrices = async () => {
               { operationName: 'Criar notificações' }
             );
 
-            // Enviar imediatamente via OneSignal
+            // Enviar imediatamente via FCM
             try {
-              const result = await oneSignalService.sendToMultiple(
-                users.map(u => u.id.toString()),
-                {
-                  title: '💰 Preço Caiu!',
-                  message: `${product.name} agora por R$ ${product.current_price.toFixed(2)}`,
-                  data: {
-                    type: 'price_drop',
-                    productId: product.id,
-                    screen: 'ProductDetails'
-                  },
-                  priority: 'high'
-                }
+              const result = await fcmService.notifyPriceDrop(
+                users,
+                product,
+                oldPrice,
+                product.current_price
               );
 
               // Marcar como enviadas
-              if (result.success > 0) {
+              if (result.total_sent > 0) {
                 await Promise.all(
-                  createdNotifications.slice(0, result.success).map(n => 
+                  createdNotifications.slice(0, result.total_sent).map(n => 
                     Notification.markAsSent(n.id)
                   )
                 );
-                logger.info(`✅ ${result.success} notificações de preço enviadas para: ${product.name}`);
+                logger.info(`✅ ${result.total_sent} notificações de preço enviadas para: ${product.name}`);
               }
             } catch (error) {
-              logger.error(`❌ Erro ao enviar notificações via OneSignal: ${error.message}`);
+              logger.error(`❌ Erro ao enviar notificações via FCM: ${error.message}`);
               // Notificações ficam no banco para retry pelo cron job
             }
           }

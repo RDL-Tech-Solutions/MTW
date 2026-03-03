@@ -8,7 +8,7 @@ import { cacheSet, cacheGet, cacheDel, cacheDelByPattern } from '../utils/cache.
 import notificationDispatcher from '../services/bots/notificationDispatcher.js';
 import couponNotificationService from '../services/coupons/couponNotificationService.js';
 import couponApiService from '../services/coupons/couponApiService.js';
-import oneSignalService from '../services/oneSignalService.js';
+import fcmService from '../services/fcmService.js';
 
 class CouponController {
   // Listar cupons ativos
@@ -417,13 +417,13 @@ class CouponController {
         }
       }
 
-      // Notificar usuários que visualizaram este cupom via push OneSignal
+      // Notificar usuários que visualizaram este cupom via push FCM
       try {
         const users = await Coupon.getUsersWhoViewed(id);
         if (users && users.length > 0) {
-          logger.info(`📱 Enviando push notification OneSignal para ${users.length} usuários que visualizaram o cupom`);
+          logger.info(`📱 Enviando push notification FCM para ${users.length} usuários que visualizaram o cupom`);
           
-          const result = await oneSignalService.sendCustomNotification(
+          const result = await fcmService.sendCustomNotification(
             users,
             '🚫 Cupom Esgotado!',
             `O cupom "${coupon.code || coupon.title}" que você visualizou acabou de esgotar.`,
@@ -436,7 +436,7 @@ class CouponController {
             }
           );
           
-          logger.info(`✅ Push notifications OneSignal enviadas: ${result.success || 0} sucesso, ${result.failed || 0} falhas`);
+          logger.info(`✅ Push notifications FCM enviadas: ${result.total_sent || 0} sucesso, ${result.total_failed || 0} falhas`);
         }
       } catch (pushError) {
         logger.error(`❌ Erro ao enviar push notifications: ${pushError.message}`);

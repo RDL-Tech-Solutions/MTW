@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import chalk from 'chalk';
 import readline from 'readline';
-import oneSignalService from '../src/services/oneSignalService.js';
+import fcmService from '../src/services/fcmService.js';
 import supabase from '../src/config/database.js';
 import logger from '../src/config/logger.js';
 
@@ -18,7 +18,7 @@ function question(query) {
 
 function printHeader() {
   console.log('\n' + chalk.bold.blue('='.repeat(60)));
-  console.log(chalk.bold.blue('  🧪 Teste de Notificação Push OneSignal'));
+  console.log(chalk.bold.blue('  🧪 Teste de Notificação Push FCM'));
   console.log(chalk.bold.blue('='.repeat(60)) + '\n');
 }
 
@@ -27,7 +27,7 @@ async function listUsers() {
 
   const { data: users, error } = await supabase
     .from('users')
-    .select('id, email, name, created_at')
+    .select('id, email, name, fcm_token, created_at')
     .order('created_at', { ascending: false })
     .limit(10);
 
@@ -42,20 +42,33 @@ async function listUsers() {
   }
 
   users.forEach((user, index) => {
-    console.log(chalk.white(`${index + 1}. ${chalk.bold(user.name || 'Sem nome')} (${user.email})`));
+    const hasToken = user.fcm_token ? chalk.green('✓') : chalk.red('✗');
+    console.log(chalk.white(`${index + 1}. ${chalk.bold(user.name || 'Sem nome')} (${user.email}) ${hasToken} FCM`));
     console.log(chalk.gray(`   ID: ${user.id}`));
+    if (user.fcm_token) {
+      console.log(chalk.gray(`   Token: ${user.fcm_token.substring(0, 30)}...`));
+    }
     console.log(chalk.gray(`   Cadastrado em: ${new Date(user.created_at).toLocaleString('pt-BR')}\n`));
   });
 
   return users;
 }
 
-async function sendTestNotification(userId, title, message) {
+async function sendTestNotification(user, title, message) {
   console.log(chalk.bold.cyan('\n📤 Enviando notificação...\n'));
 
   try {
-    const result = await oneSignalService.sendToUser({
-      external_id: userId.toString(),
+    if (!user.fcm_token) {
+      console.log(chalk.red('❌ Usuário não tem FCM token registrado'));
+      console.log(chalk.yellow('\n💡 O usuário precisa:'));
+      console.log(chalk.gray('   1. Abrir o app mobile'));
+      console.log(chalk.gray('   2. Fazer login'));
+      console.log(chalk.gray('   3. Conceder permissão de notificações'));
+      return { success: false, error: 'No FCM token' };
+    }
+
+    const result = await fcmService.sendToUser({
+      fcm_token: user.fcm_token,
       title: title,
       message: message,
       data: {
@@ -63,27 +76,21 @@ async function sendTestNotification(userId, title, message) {
         timestamp: new Date().toISOString(),
         test_id: Math.random().toString(36).substring(7)
       },
-      priority: 'high',
-      badge: 1
+      priority: 'high'
     });
 
     if (result.success) {
       console.log(chalk.green('✅ Notificação enviada com sucesso!\n'));
       console.log(chalk.white('📊 Detalhes:'));
-      console.log(chalk.gray(`   Notification ID: ${result.notification_id}`));
-      console.log(chalk.gray(`   Recipients: ${result.recipients || 'N/A'}`));
-      
-      if (result.errors && result.errors.length > 0) {
-        console.log(chalk.yellow('\n⚠️  Avisos:'));
-        result.errors.forEach(err => console.log(chalk.yellow(`   - ${err}`)));
-      }
+      console.log(chalk.gray(`   Message ID: ${result.message_id}`));
+      console.log(chalk.gray(`   Recipients: ${result.recipients || 1}`));
     } else {
       console.log(chalk.red('❌ Falha ao enviar notificação\n'));
       console.log(chalk.red('Erro:'), result.error || 'Erro desconhecido');
       
-      if (result.errors && result.errors.length > 0) {
-        console.log(chalk.red('\nErros detalhados:'));
-        result.errors.forEach(err => console.log(chalk.red(`   - ${err}`)));
+      if (result.code === 'messaging/registration-token-not-registered') {
+        console.log(chalk.yellow('\n⚠️  Token FCM inválido ou expirado'));
+        console.log(chalk.gray('   O usuário precisa fazer login novamente no app'));
       }
     }
 
@@ -96,48 +103,39 @@ async function sendTestNotification(userId, title, message) {
   }
 }
 
-async function checkOneSignalStatus() {
-  console.log(chalk.bold.cyan('🔍 Verificando configuração do OneSignal...\n'));
+async function checkFCMStatus() {
+  console.log(chalk.bold.cyan('🔍 Verificando configuração do FCM...\n'));
 
-  // Aguardar inicialização se necessário
-  if (!oneSignalService.initialized && oneSignalService.appId && oneSignalService.apiKey) {
-    console.log(chalk.yellow('⏳ Aguardando inicialização do OneSignal...'));
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  }
-
-  const enabled = process.env.ONESIGNAL_ENABLED === 'true';
-  const initialized = oneSignalService.initialized;
-  const hasAppId = !!oneSignalService.appId;
-  const hasApiKey = !!oneSignalService.apiKey;
+  const initialized = fcmService.isEnabled();
 
   console.log(chalk.white('Status:'));
-  console.log(enabled ? chalk.green('   ✓ OneSignal habilitado') : chalk.red('   ✗ OneSignal desabilitado'));
-  console.log(initialized ? chalk.green('   ✓ Cliente inicializado') : chalk.red('   ✗ Cliente não inicializado'));
-  console.log(hasAppId ? chalk.green('   ✓ App ID configurado') : chalk.red('   ✗ App ID não configurado'));
-  console.log(hasApiKey ? chalk.green('   ✓ API Key configurada') : chalk.red('   ✗ API Key não configurada'));
+  console.log(initialized ? chalk.green('   ✓ Firebase Admin inicializado') : chalk.red('   ✗ Firebase Admin não inicializado'));
+  console.log(initialized ? chalk.green('   ✓ FCM Messaging disponível') : chalk.red('   ✗ FCM Messaging não disponível'));
 
-  if (hasAppId) {
-    console.log(chalk.gray(`   App ID: ${oneSignalService.appId.substring(0, 8)}...`));
+  if (!initialized) {
+    console.log(chalk.yellow('\n⚠️  Firebase Admin não está configurado'));
+    console.log(chalk.gray('   Verifique se firebase-service-account.json existe'));
+    console.log(chalk.gray('   Ou configure FIREBASE_SERVICE_ACCOUNT_PATH no .env'));
   }
 
   console.log('');
 
-  return enabled && initialized && hasAppId && hasApiKey;
+  return initialized;
 }
 
 async function main() {
   try {
     printHeader();
 
-    // Verificar status do OneSignal
-    const isConfigured = await checkOneSignalStatus();
+    // Verificar status do FCM
+    const isConfigured = await checkFCMStatus();
 
     if (!isConfigured) {
-      console.log(chalk.red('❌ OneSignal não está configurado corretamente'));
-      console.log(chalk.yellow('\nVerifique as variáveis de ambiente:'));
-      console.log(chalk.gray('   - ONESIGNAL_ENABLED=true'));
-      console.log(chalk.gray('   - ONESIGNAL_APP_ID=<seu-app-id>'));
-      console.log(chalk.gray('   - ONESIGNAL_REST_API_KEY=<sua-api-key>'));
+      console.log(chalk.red('❌ Firebase Admin não está configurado corretamente'));
+      console.log(chalk.yellow('\nPara configurar:'));
+      console.log(chalk.gray('   1. Baixe firebase-service-account.json do Firebase Console'));
+      console.log(chalk.gray('   2. Salve em: backend/firebase-service-account.json'));
+      console.log(chalk.gray('   3. Ou configure FIREBASE_SERVICE_ACCOUNT_PATH no .env'));
       console.log('');
       rl.close();
       process.exit(1);
@@ -149,6 +147,18 @@ async function main() {
     if (users.length === 0) {
       console.log(chalk.yellow('\n⚠️  Não há usuários para testar'));
       console.log(chalk.gray('Cadastre um usuário no app mobile primeiro\n'));
+      rl.close();
+      process.exit(0);
+    }
+
+    // Verificar se algum usuário tem FCM token
+    const usersWithToken = users.filter(u => u.fcm_token);
+    if (usersWithToken.length === 0) {
+      console.log(chalk.yellow('\n⚠️  Nenhum usuário tem FCM token registrado'));
+      console.log(chalk.gray('Os usuários precisam:'));
+      console.log(chalk.gray('   1. Abrir o app mobile'));
+      console.log(chalk.gray('   2. Fazer login'));
+      console.log(chalk.gray('   3. Conceder permissão de notificações\n'));
       rl.close();
       process.exit(0);
     }
@@ -183,7 +193,7 @@ async function main() {
 
     for (const user of selectedUsers) {
       console.log(chalk.bold(`\n📱 Enviando para: ${user.name || user.email}`));
-      const result = await sendTestNotification(user.id, title, message);
+      const result = await sendTestNotification(user, title, message);
       
       if (result.success) {
         successCount++;
@@ -193,7 +203,7 @@ async function main() {
 
       // Aguardar um pouco entre envios para não sobrecarregar
       if (selectedUsers.length > 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -210,16 +220,16 @@ async function main() {
       console.log(chalk.gray('\nVerifique o dispositivo móvel para confirmar o recebimento.\n'));
       console.log(chalk.yellow('⚠️  Importante:'));
       console.log(chalk.gray('   - O usuário deve ter feito login no app mobile'));
-      console.log(chalk.gray('   - O OneSignal SDK deve estar inicializado no app'));
-      console.log(chalk.gray('   - O external_id deve ter sido definido como user.id no login'));
+      console.log(chalk.gray('   - O Firebase Messaging SDK deve estar inicializado'));
+      console.log(chalk.gray('   - O FCM token deve ter sido registrado no backend'));
       console.log(chalk.gray('   - As permissões de notificação devem estar habilitadas\n'));
     } else {
       console.log(chalk.bold.red('❌ Todas as notificações falharam'));
       console.log(chalk.yellow('\nPossíveis causas:'));
-      console.log(chalk.gray('   - Usuário não está registrado no OneSignal'));
-      console.log(chalk.gray('   - App mobile não inicializou o OneSignal SDK'));
-      console.log(chalk.gray('   - external_id não foi definido no login'));
-      console.log(chalk.gray('   - Credenciais do OneSignal incorretas\n'));
+      console.log(chalk.gray('   - Usuário não tem FCM token registrado'));
+      console.log(chalk.gray('   - App mobile não inicializou o Firebase Messaging'));
+      console.log(chalk.gray('   - Token FCM expirou (usuário precisa fazer login novamente)'));
+      console.log(chalk.gray('   - Firebase Service Account não está configurado\n'));
     }
 
     rl.close();

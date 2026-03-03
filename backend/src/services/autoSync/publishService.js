@@ -27,7 +27,7 @@ class PublishService {
   }
 
   /**
-   * Enviar notificação push usando OneSignal
+   * Enviar notificação push usando FCM
    */
   async notifyPush(product) {
     try {
