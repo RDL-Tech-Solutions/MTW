@@ -561,7 +561,6 @@ async function publishCoupon(ctx, coupon) {
         // Converter documento mongoose para objeto para garantir que notificationDispatcher possa alterar data
         const couponData = coupon.toObject ? coupon.toObject() : { ...coupon };
 
-        // Assinatura correta: dispatch(eventType, data, options)
         // FIX: Injetar category_id para evitar filtro do dispatcher
         const { PLATFORM_CATEGORY_MAP, CATEGORY_IDS } = await import('../../../utils/categoryMap.js');
 
@@ -591,22 +590,38 @@ async function publishCoupon(ctx, coupon) {
             logger.info(`⚠️ Cupom sem categoria, forçando Geral (${couponData.category_id}) para envio.`);
         }
 
-        // Assinatura correta: dispatch(eventType, data, options)
-        const result = await notificationDispatcher.dispatch('coupon_new', couponData, { manual: true });
+        // CORREÇÃO: Usar couponNotificationService em vez de notificationDispatcher
+        // couponNotificationService envia para Telegram, WhatsApp E FCM push
+        // notificationDispatcher envia apenas para Telegram e WhatsApp (sem FCM)
+        const couponNotificationService = (await import('../../../services/coupons/couponNotificationService.js')).default;
+        const result = await couponNotificationService.notifyNewCoupon(couponData, { manual: true });
 
         let msg = `✅ *Cupom Publicado!*\n\n`;
-        if (result.results && result.results.sent > 0) {
-            msg += `📢 Enviado para ${result.results.sent} canais.\n`;
-            if (result.results.details) {
-                result.results.details.forEach(d => {
-                    if (d.success) msg += `   - ${d.platform}: ✅\n`;
-                });
+        
+        // Verificar resultado do envio
+        if (result && result.success) {
+            msg += `📢 Notificações enviadas com sucesso!\n`;
+            
+            // Detalhes de Telegram
+            if (result.telegram && result.telegram.success) {
+                msg += `   - Telegram: ✅ ${result.telegram.sent || 0} canal(is)\n`;
+            } else if (result.telegram) {
+                msg += `   - Telegram: ⚠️ ${result.telegram.reason || 'Falha'}\n`;
             }
-        } else if (result.results && result.results.filtered > 0) {
-            msg += `⚠️ Filtrado: ${result.results.filtered} canais ignoraram este cupom.\n`;
-            msg += `(Provavelmente filtros de categoria/plataforma)\n`;
+            
+            // Detalhes de WhatsApp
+            if (result.whatsapp && result.whatsapp.success) {
+                msg += `   - WhatsApp: ✅ ${result.whatsapp.sent || 0} canal(is)\n`;
+            } else if (result.whatsapp) {
+                msg += `   - WhatsApp: ⚠️ ${result.whatsapp.reason || 'Falha'}\n`;
+            }
+            
+            msg += `   - Push FCM: ✅ Enviado para usuários segmentados\n`;
         } else {
-            msg += `⚠️ Nenhum envio confirmado. Verifique logs/filtros.`;
+            msg += `⚠️ Erro ao enviar notificações.\n`;
+            if (result && result.message) {
+                msg += `Motivo: ${result.message}\n`;
+            }
         }
 
         await ctx.editMessageText(msg, { parse_mode: 'Markdown' });

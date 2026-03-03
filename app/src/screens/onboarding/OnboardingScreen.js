@@ -6,9 +6,12 @@ import {
   Dimensions,
   TouchableOpacity,
   Animated,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFcmStore } from '../../stores/fcmStore';
 
 const { width } = Dimensions.get('window');
 
@@ -34,12 +37,24 @@ const slides = [
     description: 'Marque produtos e cupons favoritos para acessar rapidamente quando precisar',
     color: '#10B981',
   },
+  {
+    id: 4,
+    icon: 'notifications-circle',
+    title: 'Ativar Notificações?',
+    description: 'Permita que enviemos alertas sobre ofertas imperdíveis e cupons exclusivos. Você pode desativar a qualquer momento.',
+    color: '#DC2626',
+    hasAction: true,
+  },
 ];
 
 export default function OnboardingScreen({ navigation }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const slidesRef = useRef(null);
+  const [requestingPermission, setRequestingPermission] = useState(false);
+  
+  // FCM Store
+  const { requestPermission, isAvailable } = useFcmStore();
   
   // Animações para texto
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -98,6 +113,58 @@ export default function OnboardingScreen({ navigation }) {
     }
   };
 
+  // Função para ativar notificações
+  const handleActivateNotifications = async () => {
+    if (!isAvailable) {
+      Alert.alert(
+        'Notificações Não Disponíveis',
+        'As notificações push não estão disponíveis neste dispositivo. Você pode ativá-las depois nas configurações.',
+        [{ text: 'OK', onPress: handleFinish }]
+      );
+      return;
+    }
+
+    try {
+      setRequestingPermission(true);
+      const granted = await requestPermission();
+
+      if (granted) {
+        Alert.alert(
+          'Sucesso! 🎉',
+          'Notificações ativadas! Você receberá alertas sobre ofertas imperdíveis.',
+          [{ text: 'Continuar', onPress: handleFinish }]
+        );
+      } else {
+        Alert.alert(
+          'Sem Problema',
+          'Você pode ativar as notificações depois em Configurações.',
+          [{ text: 'OK', onPress: handleFinish }]
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao solicitar permissão:', error);
+      Alert.alert(
+        'Erro',
+        'Não foi possível solicitar permissão. Você pode tentar depois nas configurações.',
+        [{ text: 'OK', onPress: handleFinish }]
+      );
+    } finally {
+      setRequestingPermission(false);
+    }
+  };
+
+  // Função para pular ativação de notificações
+  const handleSkipNotifications = () => {
+    Alert.alert(
+      'Tem Certeza?',
+      'Você pode perder ofertas incríveis! Quer mesmo pular?',
+      [
+        { text: 'Ativar Agora', onPress: handleActivateNotifications },
+        { text: 'Pular', onPress: handleFinish, style: 'cancel' },
+      ]
+    );
+  };
+
   // Animação de pulse no botão Next
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -135,6 +202,44 @@ export default function OnboardingScreen({ navigation }) {
         <Text style={styles.title}>{item.title}</Text>
         <Text style={styles.description}>{item.description}</Text>
       </Animated.View>
+
+      {/* Botões de ação para slide de notificações */}
+      {item.hasAction && (
+        <Animated.View
+          style={[
+            styles.actionButtonsContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideUpAnim }],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[styles.actionButton, styles.activateButton]}
+            onPress={handleActivateNotifications}
+            disabled={requestingPermission}
+            activeOpacity={0.8}
+          >
+            {requestingPermission ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="notifications" size={20} color="#FFF" />
+                <Text style={styles.actionButtonText}>Ativar Agora</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.skipActionButton]}
+            onPress={handleSkipNotifications}
+            disabled={requestingPermission}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipActionButtonText}>Mais Tarde</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 
@@ -190,19 +295,21 @@ export default function OnboardingScreen({ navigation }) {
         })}
       </View>
 
-      {/* Next/Finish Button */}
-      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-        <TouchableOpacity 
-          style={styles.nextButton} 
-          onPress={scrollTo}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.nextText}>
-            {currentIndex === slides.length - 1 ? 'Começar' : 'Próximo'}
-          </Text>
-          <Ionicons name="arrow-forward" size={20} color="#FFF" />
-        </TouchableOpacity>
-      </Animated.View>
+      {/* Next/Finish Button - Não mostrar no slide de ativação */}
+      {!slides[currentIndex]?.hasAction && (
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <TouchableOpacity 
+            style={styles.nextButton} 
+            onPress={scrollTo}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.nextText}>
+              {currentIndex === slides.length - 1 ? 'Começar' : 'Próximo'}
+            </Text>
+            <Ionicons name="arrow-forward" size={20} color="#FFF" />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -285,5 +392,46 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFF',
+  },
+  actionButtonsContainer: {
+    width: '100%',
+    paddingHorizontal: 40,
+    marginTop: 40,
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  activateButton: {
+    backgroundColor: '#DC2626',
+    shadowColor: '#DC2626',
+    shadowOpacity: 0.3,
+  },
+  skipActionButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  skipActionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
   },
 });

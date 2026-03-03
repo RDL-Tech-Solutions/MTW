@@ -589,6 +589,101 @@ ${coupon.affiliate_link || 'Link não disponível'}
   }
 
   /**
+   * Formatar mensagem de cupom esgotado
+   */
+  formatOutOfStockCouponMessage(coupon) {
+    const emoji = this.getPlatformEmoji(coupon.platform);
+
+    return `
+⚠️ *CUPOM ESGOTADO* ⚠️
+
+${emoji} *Plataforma:* ${this.getPlatformName(coupon.platform)}
+🎟️ *Cupom:* \`${coupon.code}\`
+
+😢 Este cupom esgotou! Mas não se preocupe, novos cupons estão chegando.
+Fique de olho para não perder as próximas ofertas!
+    `.trim();
+  }
+
+  /**
+   * Notificar cupom esgotado
+   */
+  async notifyOutOfStockCoupon(coupon) {
+    try {
+      logger.info(`📢 ========== NOTIFICAÇÃO DE CUPOM ESGOTADO ==========`);
+      logger.info(`   Cupom: ${coupon.code}`);
+      logger.info(`   Plataforma: ${coupon.platform}`);
+      logger.info(`   ID: ${coupon.id}`);
+
+      // Preparar variáveis do template
+      const variables = {
+        coupon_code: coupon.code || 'N/A',
+        platform_name: this.getPlatformName(coupon.platform),
+        platform_emoji: this.getPlatformEmoji(coupon.platform)
+      };
+
+      // Preparar contextData para IA ADVANCED
+      const contextData = { coupon };
+
+      // Renderizar templates para cada plataforma
+      let whatsappMessage, telegramMessage;
+      
+      try {
+        whatsappMessage = await templateRenderer.render('out_of_stock_coupon', 'whatsapp', variables, contextData);
+        telegramMessage = await templateRenderer.render('out_of_stock_coupon', 'telegram', variables, contextData);
+        logger.info(`   Templates renderizados (WhatsApp: ${whatsappMessage.length} chars, Telegram: ${telegramMessage.length} chars)`);
+      } catch (templateError) {
+        // Fallback: usar mensagem formatada manualmente
+        logger.warn(`⚠️ Template 'out_of_stock_coupon' não encontrado, usando fallback`);
+        whatsappMessage = this.formatOutOfStockCouponMessage(coupon);
+        telegramMessage = this.formatOutOfStockCouponMessage(coupon);
+      }
+
+      // Enviar para WhatsApp
+      let whatsappResult = null;
+      try {
+        logger.info(`📤 Enviando para WhatsApp...`);
+        whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_out_of_stock');
+        logger.info(`✅ Mensagem WhatsApp enviada: ${JSON.stringify(whatsappResult)}`);
+      } catch (error) {
+        logger.error(`❌ Erro ao enviar WhatsApp: ${error.message}`);
+      }
+
+      // Enviar para Telegram
+      let telegramResult = null;
+      try {
+        logger.info(`📤 Enviando para Telegram...`);
+        telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_out_of_stock');
+        logger.info(`✅ Mensagem Telegram enviada: ${JSON.stringify(telegramResult)}`);
+      } catch (error) {
+        logger.error(`❌ Erro ao enviar Telegram: ${error.message}`);
+      }
+
+      // Criar notificações push para usuários
+      logger.info(`📱 Criando notificações push...`);
+      await this.createPushNotifications(coupon, 'out_of_stock_coupon');
+      logger.info(`✅ Notificações push criadas`);
+
+      const result = {
+        success: true,
+        message: 'Notificações de cupom esgotado enviadas',
+        whatsapp: whatsappResult,
+        telegram: telegramResult
+      };
+
+      logger.info(`✅ ========== NOTIFICAÇÃO CONCLUÍDA ==========`);
+      logger.info(`   Resultado: ${JSON.stringify(result)}`);
+
+      return result;
+
+    } catch (error) {
+      logger.error(`❌ Erro ao notificar cupom esgotado: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+      throw error;
+    }
+  }
+
+  /**
    * Criar notificações push para usuários via FCM
    */
   async createPushNotifications(coupon, type) {
@@ -606,9 +701,29 @@ ${coupon.affiliate_link || 'Link não disponível'}
 
       logger.info(`📱 Enviando notificações push FCM para ${users.length} usuários segmentados...`);
 
-      // Preparar dados da notificação
-      const title = type === 'new_coupon' ? '🔥 Novo Cupão Disponível!' : '⏰ Cupão Expirando!';
-      const message = `${coupon.code} - ${coupon.discount_value}${coupon.discount_type === 'percentage' ? '%' : 'R$'} OFF em ${this.getPlatformName(coupon.platform)}`;
+      // Preparar dados da notificação baseado no tipo
+      let title, message;
+      
+      switch (type) {
+        case 'new_coupon':
+          title = '🔥 Novo Cupão Disponível!';
+          message = `${coupon.code} - ${coupon.discount_value}${coupon.discount_type === 'percentage' ? '%' : 'R$'} OFF em ${this.getPlatformName(coupon.platform)}`;
+          break;
+        
+        case 'expiring_coupon':
+          title = '⏰ Cupão Expirando!';
+          message = `${coupon.code} expira em breve! Use agora em ${this.getPlatformName(coupon.platform)}`;
+          break;
+        
+        case 'out_of_stock_coupon':
+          title = '⚠️ Cupão Esgotado';
+          message = `${coupon.code} esgotou! Mas novos cupons estão chegando.`;
+          break;
+        
+        default:
+          title = '🎟️ Atualização de Cupão';
+          message = `${coupon.code} - ${this.getPlatformName(coupon.platform)}`;
+      }
 
       // Enviar notificações usando FCM
       const result = await fcmService.sendCustomNotification(
@@ -621,7 +736,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
           screen: 'CouponDetails'
         },
         {
-          priority: 'high'
+          priority: type === 'out_of_stock_coupon' ? 'normal' : 'high'
         }
       );
 

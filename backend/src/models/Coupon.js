@@ -534,7 +534,28 @@ class Coupon {
 
   // Marcar cupom como esgotado
   static async markAsOutOfStock(id) {
-    return await this.update(id, { is_out_of_stock: true });
+    const updated = await this.update(id, { is_out_of_stock: true });
+    
+    // Enviar notificações de cupom esgotado
+    try {
+      const couponNotificationService = (await import('../services/coupons/couponNotificationService.js')).default;
+      const logger = (await import('../config/logger.js')).default;
+      
+      logger.info(`🎟️ Cupom ${id} marcado como esgotado, enviando notificações...`);
+      
+      // Buscar dados completos do cupom para notificação
+      const fullCoupon = await this.findById(id);
+      if (fullCoupon) {
+        await couponNotificationService.notifyOutOfStockCoupon(fullCoupon);
+        logger.info(`✅ Notificações de cupom esgotado enviadas para: ${fullCoupon.code}`);
+      }
+    } catch (notifError) {
+      const logger = (await import('../config/logger.js')).default;
+      logger.error(`❌ Erro ao enviar notificações de cupom esgotado: ${notifError.message}`);
+      // Não falhar a operação se notificação falhar
+    }
+    
+    return updated;
   }
 
   // Marcar cupom como disponível novamente

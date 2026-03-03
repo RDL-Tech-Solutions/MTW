@@ -201,13 +201,48 @@ class User {
 
   // Buscar todos os usuários com FCM token
   static async findAllWithFCMToken() {
+    // CORREÇÃO: Buscar da tabela fcm_tokens em vez de users.fcm_token
     const { data, error } = await supabase
-      .from('users')
-      .select('id, name, email, fcm_token')
-      .not('fcm_token', 'is', null);
+      .from('fcm_tokens')
+      .select(`
+        fcm_token,
+        user_id,
+        platform,
+        device_id,
+        users!inner (
+          id,
+          name,
+          email
+        )
+      `);
 
     if (error) throw error;
-    return data || [];
+    
+    // Transformar resultado para formato esperado
+    // Agrupar por usuário (um usuário pode ter múltiplos tokens/dispositivos)
+    const usersMap = new Map();
+    
+    (data || []).forEach(token => {
+      const user = token.users;
+      if (!usersMap.has(user.id)) {
+        usersMap.set(user.id, {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          fcm_token: token.fcm_token, // Usar o primeiro token encontrado
+          fcm_tokens: [] // Array com todos os tokens do usuário
+        });
+      }
+      
+      // Adicionar token ao array
+      usersMap.get(user.id).fcm_tokens.push({
+        fcm_token: token.fcm_token,
+        platform: token.platform,
+        device_id: token.device_id
+      });
+    });
+    
+    return Array.from(usersMap.values());
   }
 
   // DEPRECATED: VIP feature removed - all users have full access
