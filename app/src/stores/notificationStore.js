@@ -6,7 +6,7 @@ import storage from '../services/storage';
  * Store de Preferências de Notificação
  * 
  * Gerencia apenas as preferências do usuário.
- * Notificações push são gerenciadas pelo OneSignal (oneSignalStore.js)
+ * Notificações push são gerenciadas pelo fcmStore (fcmStore.js)
  */
 export const useNotificationStore = create((set, get) => ({
   preferences: null,
@@ -72,9 +72,9 @@ export const useNotificationStore = create((set, get) => ({
   updatePreferences: async (updates) => {
     try {
       set({ isLoading: true });
-      
+
       const response = await api.put('/notification-preferences', updates);
-      
+
       const preferences = response.data.data;
 
       set({ preferences });
@@ -85,7 +85,7 @@ export const useNotificationStore = create((set, get) => ({
       return { success: true };
     } catch (error) {
       console.error('❌ Erro ao atualizar preferências:', error);
-      
+
       return {
         success: false,
         error: error.response?.data?.error || error.message

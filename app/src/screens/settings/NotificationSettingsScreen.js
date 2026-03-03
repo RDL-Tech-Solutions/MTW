@@ -10,7 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useOneSignalStore } from '../../stores/oneSignalStore';
+import { useFcmStore } from '../../stores/fcmStore';
 import { useAuthStore } from '../../stores/authStore';
 
 export default function NotificationSettingsScreen({ navigation }) {
@@ -18,45 +18,27 @@ export default function NotificationSettingsScreen({ navigation }) {
     isInitialized,
     hasPermission,
     isAvailable,
-    userId,
+    fcmToken,
     requestPermission,
-    getDeviceState,
     login,
-  } = useOneSignalStore();
-  
+  } = useFcmStore();
+
   const { user } = useAuthStore();
-  const [deviceState, setDeviceState] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadDeviceState();
-  }, []);
-
-  const loadDeviceState = async () => {
-    try {
-      const state = await getDeviceState();
-      setDeviceState(state);
-    } catch (error) {
-      console.error('Erro ao carregar estado do dispositivo:', error);
-    }
-  };
 
   const handleRequestPermission = async () => {
     try {
       setLoading(true);
       const granted = await requestPermission();
-      
+
       if (granted) {
         Alert.alert(
           'Sucesso!',
           'Permissão de notificações concedida. Você receberá notificações sobre novos produtos e cupons.',
           [{ text: 'OK' }]
         );
-        
-        // Recarregar estado
-        await loadDeviceState();
-        
-        // Se usuário está logado, fazer login no OneSignal
+
+        // Se usuário está logado, garantir que o token está registrado
         if (user?.id) {
           await login(user.id);
         }
@@ -109,16 +91,16 @@ export default function NotificationSettingsScreen({ navigation }) {
       <View style={styles.container}>
         <View style={styles.unavailableContainer}>
           <Ionicons name="warning-outline" size={64} color="#F59E0B" />
-          <Text style={styles.unavailableTitle}>OneSignal Não Disponível</Text>
+          <Text style={styles.unavailableTitle}>Notificações Não Disponíveis</Text>
           <Text style={styles.unavailableText}>
-            OneSignal requer um build nativo. Você está usando Expo Go.
+            Firebase Cloud Messaging requer um build nativo. Você está usando Expo Go.
           </Text>
           <Text style={styles.unavailableSteps}>
             Para usar notificações push:
           </Text>
           <Text style={styles.unavailableStep}>1. Execute: npx expo prebuild</Text>
           <Text style={styles.unavailableStep}>2. Execute: npx expo run:android</Text>
-          <Text style={styles.unavailableStep}>3. OneSignal funcionará no build nativo</Text>
+          <Text style={styles.unavailableStep}>3. Notificações funcionarão no build nativo</Text>
         </View>
       </View>
     );
@@ -130,52 +112,38 @@ export default function NotificationSettingsScreen({ navigation }) {
         {/* Status */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Status das Notificações</Text>
-          
+
           {renderStatusItem(
-            'OneSignal Inicializado',
+            'FCM Inicializado',
             isInitialized ? 'Sim' : 'Não',
             isInitialized ? 'checkmark-circle' : 'close-circle',
             isInitialized ? '#10B981' : '#EF4444'
           )}
-          
+
           {renderStatusItem(
             'Permissão Concedida',
             hasPermission ? 'Sim' : 'Não',
             hasPermission ? 'checkmark-circle' : 'close-circle',
             hasPermission ? '#10B981' : '#EF4444'
           )}
-          
+
           {renderStatusItem(
-            'Usuário Registrado',
-            userId ? 'Sim' : 'Não',
-            userId ? 'checkmark-circle' : 'close-circle',
-            userId ? '#10B981' : '#EF4444'
+            'Token Registrado',
+            fcmToken ? 'Sim' : 'Não',
+            fcmToken ? 'checkmark-circle' : 'close-circle',
+            fcmToken ? '#10B981' : '#EF4444'
           )}
         </View>
 
         {/* Informações do Dispositivo */}
-        {deviceState && (
+        {fcmToken && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Informações do Dispositivo</Text>
-            
+            <Text style={styles.sectionTitle}>Token FCM</Text>
+
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Player ID:</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                {deviceState.userId || 'N/A'}
-              </Text>
-            </View>
-            
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Push Token:</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                {deviceState.pushToken ? 'Configurado' : 'N/A'}
-              </Text>
-            </View>
-            
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Notificações Habilitadas:</Text>
-              <Text style={styles.infoValue}>
-                {deviceState.isPushDisabled === false ? 'Sim' : 'Não'}
+              <Text style={styles.infoLabel}>Token:</Text>
+              <Text style={styles.infoValue} numberOfLines={2}>
+                {fcmToken.substring(0, 40)}...
               </Text>
             </View>
           </View>
@@ -184,7 +152,7 @@ export default function NotificationSettingsScreen({ navigation }) {
         {/* Ações */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ações</Text>
-          
+
           {!hasPermission && (
             <TouchableOpacity
               style={[styles.button, styles.primaryButton]}
@@ -197,17 +165,7 @@ export default function NotificationSettingsScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
           )}
-          
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={loadDeviceState}
-          >
-            <Ionicons name="refresh" size={20} color="#DC2626" />
-            <Text style={[styles.buttonText, styles.secondaryButtonText]}>
-              Atualizar Status
-            </Text>
-          </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.button, styles.secondaryButton]}
             onPress={openSettings}
@@ -217,7 +175,7 @@ export default function NotificationSettingsScreen({ navigation }) {
               Abrir Configurações do Sistema
             </Text>
           </TouchableOpacity>
-          
+
           {hasPermission && (
             <TouchableOpacity
               style={[styles.button, styles.secondaryButton]}
@@ -310,7 +268,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   infoValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#111827',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },

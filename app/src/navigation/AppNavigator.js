@@ -2,12 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuthStore } from '../stores/authStore';
-import { useOneSignalStore } from '../stores/oneSignalStore';
+import { useFcmStore } from '../stores/fcmStore';
 import AuthNavigator from './AuthNavigator';
 import TabNavigator from './TabNavigator';
 import ProductDetailsScreen from '../screens/product/ProductDetailsScreen';
 import CouponDetailsScreen from '../screens/coupon/CouponDetailsScreen';
-import CouponProductsScreen from '../screens/coupon/CouponProductsScreen';
 import LinkedProductsScreen from '../screens/coupon/LinkedProductsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -27,13 +26,13 @@ export default function AppNavigator() {
   const { isAuthenticated, isLoading, initialize } = useAuthStore();
   const { colors } = useThemeStore();
   const navigationRef = useRef(null);
-  const { setNavigationRef } = useOneSignalStore();
+  const { setNavigationRef } = useFcmStore();
 
   useEffect(() => {
     initialize();
   }, []);
 
-  // Configurar referência de navegação para OneSignal
+  // Configurar referência de navegação para FCM
   useEffect(() => {
     if (navigationRef.current) {
       setNavigationRef(navigationRef.current);
@@ -82,11 +81,6 @@ export default function AppNavigator() {
             <Stack.Screen
               name={SCREEN_NAMES.COUPON_DETAILS}
               component={CouponDetailsScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name={SCREEN_NAMES.COUPON_PRODUCTS}
-              component={CouponProductsScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

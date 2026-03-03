@@ -112,3 +112,5 @@ public/uploads/
 *.seed
 *.pid.lock
 
+firebase-service-account.json
+

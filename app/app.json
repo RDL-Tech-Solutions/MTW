@@ -56,17 +56,11 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
-      [
-        "onesignal-expo-plugin",
-        {
-          "mode": "development"
-        }
-      ],
+      "@react-native-firebase/app",
       "expo-web-browser"
     ],
     "extra": {
       "apiUrl": "https://king.apiprecocerto.space/api",
-      "oneSignalAppId": "40967aa6-5a0e-4ac3-813e-f22c589b89ce",
       "eas": {
         "projectId": "e04af0c1-090d-4315-8448-626e0b84834e"
       }

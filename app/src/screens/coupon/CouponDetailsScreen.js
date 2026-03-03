@@ -76,7 +76,7 @@ export default function CouponDetailsScreen({ route, navigation }) {
         tipo_is_general: typeof result.coupon.is_general,
         applicable_products: result.coupon.applicable_products
       });
-      
+
       setCoupon(result.coupon);
       checkProducts(result.coupon);
       // Registrar visualização silenciosamente
@@ -261,13 +261,13 @@ export default function CouponDetailsScreen({ route, navigation }) {
                 <Text style={s.conditionText}>{coupon.description}</Text>
               </View>
             )}
-            
+
             {/* CORREÇÃO: Indicador de aplicabilidade do cupom */}
             <View style={s.conditionRow}>
-              <Ionicons 
-                name={coupon.is_general === false ? "pricetag-outline" : "globe-outline"} 
-                size={16} 
-                color="#9CA3AF" 
+              <Ionicons
+                name={coupon.is_general === false ? "pricetag-outline" : "globe-outline"}
+                size={16}
+                color="#9CA3AF"
               />
               <Text style={s.conditionText}>
                 {/* DEBUG: Mostrar valor real */}
@@ -337,7 +337,7 @@ export default function CouponDetailsScreen({ route, navigation }) {
               >
                 <Ionicons name="bag-handle-outline" size={20} color="#fff" />
                 <Text style={[s.viewProductsBtnText, { color: '#fff' }]}>
-                  Ver {linkedProductsCount} {linkedProductsCount === 1 ? 'produto vinculado' : 'produtos vinculados'}
+                  Ver {linkedProductsCount} produto{linkedProductsCount !== 1 ? 's' : ''} com este cupom
                 </Text>
               </TouchableOpacity>
             </View>

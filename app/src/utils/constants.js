@@ -77,7 +77,6 @@ export const SCREEN_NAMES = {
   // Stack
   PRODUCT_DETAILS: 'ProductDetails',
   COUPON_DETAILS: 'CouponDetails',
-  COUPON_PRODUCTS: 'CouponProducts',
   LINKED_PRODUCTS: 'LinkedProducts',
   EDIT_PROFILE: 'EditProfile',
   PRODUCT_LIST: 'ProductList',

@@ -68,24 +68,24 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
       // Animação de abertura em cascata
       Animated.parallel([
         // Backdrop fade in
-        Animated.timing(backdropAnim, { 
-          toValue: 1, 
-          duration: 300, 
-          useNativeDriver: true 
+        Animated.timing(backdropAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true
         }),
         // Sheet slide up com bounce
-        Animated.spring(slideAnim, { 
-          toValue: 0, 
-          useNativeDriver: true, 
-          friction: 9, 
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 9,
           tension: 65,
           velocity: 2,
         }),
         // Sheet scale up
-        Animated.spring(scaleAnim, { 
-          toValue: 1, 
-          useNativeDriver: true, 
-          friction: 8, 
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          friction: 8,
           tension: 50,
           delay: 50,
         }),
@@ -117,34 +117,34 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
       ]).start();
 
       // Content fade in
-      Animated.timing(contentFadeAnim, { 
-        toValue: 1, 
-        duration: 400, 
-        delay: 150, 
-        useNativeDriver: true 
+      Animated.timing(contentFadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: 150,
+        useNativeDriver: true
       }).start();
     } else {
       // Animação de fechamento
       Animated.parallel([
-        Animated.timing(slideAnim, { 
-          toValue: SCREEN_HEIGHT, 
-          duration: 250, 
-          useNativeDriver: true 
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true
         }),
-        Animated.timing(backdropAnim, { 
-          toValue: 0, 
-          duration: 200, 
-          useNativeDriver: true 
+        Animated.timing(backdropAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true
         }),
-        Animated.timing(scaleAnim, { 
-          toValue: 0.85, 
-          duration: 200, 
-          useNativeDriver: true 
+        Animated.timing(scaleAnim, {
+          toValue: 0.85,
+          duration: 200,
+          useNativeDriver: true
         }),
-        Animated.timing(contentFadeAnim, { 
-          toValue: 0, 
-          duration: 150, 
-          useNativeDriver: true 
+        Animated.timing(contentFadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true
         }),
       ]).start();
 
@@ -172,7 +172,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
   if (!coupon) return null;
 
   const platformColor = getPlatformColor(coupon.platform);
-  const hasProducts = Array.isArray(coupon.applicable_products) && coupon.applicable_products.length > 0;
+  const hasProducts = coupon.is_general === false;
   const hasLinkedProducts = linkedProductsCount > 0;
   const scope = hasProducts ? 'Produtos selecionados' : 'Todos os produtos';
 
@@ -183,23 +183,18 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
     if (coupon.code) {
       await Clipboard.setStringAsync(coupon.code);
       setCodeCopied(true);
-      
+
       // Sem animação de scale, apenas transição de cor/texto
       setTimeout(() => setCodeCopied(false), 2500);
     }
   };
 
-  const handleSeeProducts = () => {
-    onClose();
-    setTimeout(() => {
-      navigation.navigate(SCREEN_NAMES.COUPON_PRODUCTS, { coupon });
-    }, 300);
-  };
+
 
   const handleSeeLinkedProducts = () => {
     onClose();
     setTimeout(() => {
-      navigation.navigate(SCREEN_NAMES.LINKED_PRODUCTS, { 
+      navigation.navigate(SCREEN_NAMES.LINKED_PRODUCTS, {
         couponId: coupon.id,
         platformColor: platformColor
       });
@@ -221,14 +216,14 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
       </TouchableWithoutFeedback>
 
       {/* Sheet */}
-      <Animated.View 
+      <Animated.View
         style={[
-          s.sheet, 
-          { 
+          s.sheet,
+          {
             transform: [
               { translateY: slideAnim },
               { scale: scaleAnim }
-            ] 
+            ]
           }
         ]}
       >
@@ -239,10 +234,10 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
 
         <Animated.View style={{ opacity: contentFadeAnim }}>
           {/* Platform header strip */}
-          <Animated.View 
+          <Animated.View
             style={[
-              s.platformStrip, 
-              { 
+              s.platformStrip,
+              {
                 backgroundColor: platformColor + '12',
                 transform: [{ translateY: headerSlideAnim }]
               }
@@ -266,7 +261,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
 
           {/* Title */}
           {coupon.title && (
-            <Animated.Text 
+            <Animated.Text
               style={[
                 s.couponTitle,
                 { transform: [{ translateY: headerSlideAnim }] }
@@ -277,7 +272,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
           )}
 
           {/* Info rows */}
-          <Animated.View 
+          <Animated.View
             style={[
               s.infoSection,
               { transform: [{ translateY: infoSlideAnim }] }
@@ -338,22 +333,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
             </View>
           )}
 
-          {/* See Products Buttons */}
-          {hasProducts && (
-            <Animated.View style={{ transform: [{ translateY: buttonSlideAnim }] }}>
-              <TouchableOpacity
-                style={[s.productsBtn, { borderColor: platformColor }]}
-                onPress={handleSeeProducts}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="grid-outline" size={18} color={platformColor} />
-                <Text style={[s.productsBtnText, { color: platformColor }]}>
-                  Ver {coupon.applicable_products.length} produto{coupon.applicable_products.length !== 1 ? 's' : ''} vinculado{coupon.applicable_products.length !== 1 ? 's' : ''}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={platformColor} />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
+
 
           {/* Linked Products Button */}
           {hasLinkedProducts && (
@@ -410,7 +390,7 @@ export default function CouponsScreen({ navigation }) {
 
   useEffect(() => {
     loadCoupons();
-    
+
     // Animação de entrada do header com bounce
     Animated.spring(headerAnim, {
       toValue: 1,
@@ -497,26 +477,26 @@ export default function CouponsScreen({ navigation }) {
       }
 
       const response = await api.get('/coupons', { params });
-      
+
       const data = response.data.data;
       let couponsList = Array.isArray(data) ? data : data?.coupons || [];
-      
+
       // Log para debug - ver cupons duplicados
       console.log('📊 Total de cupons recebidos:', couponsList.length);
-      console.log('📋 Cupons completos:', JSON.stringify(couponsList.map(c => ({ 
-        id: c.id, 
-        code: c.code, 
+      console.log('📋 Cupons completos:', JSON.stringify(couponsList.map(c => ({
+        id: c.id,
+        code: c.code,
         title: c.title,
         platform: c.platform,
         discount_value: c.discount_value,
         is_exclusive: c.is_exclusive,
         is_out_of_stock: c.is_out_of_stock
       })), null, 2));
-      
+
       // Remover duplicatas por ID
       const uniqueCoupons = [];
       const seenIds = new Set();
-      
+
       for (const coupon of couponsList) {
         if (!seenIds.has(coupon.id)) {
           seenIds.add(coupon.id);
@@ -525,29 +505,29 @@ export default function CouponsScreen({ navigation }) {
           console.warn('⚠️ Cupom duplicado removido:', coupon.id, coupon.code);
         }
       }
-      
+
       console.log('✅ Cupons únicos após filtro:', uniqueCoupons.length);
-      
+
       couponsList = uniqueCoupons;
-      
+
       // Ordenar cupons: Exclusivos primeiro, depois por data de criação
       couponsList.sort((a, b) => {
         // 1. Cupons exclusivos sempre no topo
         if (a.is_exclusive && !b.is_exclusive) return -1;
         if (!a.is_exclusive && b.is_exclusive) return 1;
-        
+
         // 2. Entre cupons do mesmo tipo, ordenar por data (mais recentes primeiro)
         const dateA = new Date(a.created_at || 0);
         const dateB = new Date(b.created_at || 0);
         return dateB - dateA;
       });
-      
+
       console.log('🎯 Cupons ordenados (Exclusivos primeiro):', couponsList.map(c => ({
         code: c.code,
         is_exclusive: c.is_exclusive,
         created_at: c.created_at
       })));
-      
+
       setCoupons(couponsList);
     } catch (error) {
       console.error('❌ Erro ao carregar cupons:', error);
@@ -623,7 +603,7 @@ export default function CouponsScreen({ navigation }) {
         </View>
       );
     }
-    
+
     // Renderizar cupom normal
     return <CouponCard coupon={item} onPress={() => handleCouponPress(item)} index={index} />;
   };
@@ -652,7 +632,7 @@ export default function CouponsScreen({ navigation }) {
 
     return (
       <View>
-        <Animated.View 
+        <Animated.View
           style={[
             s.headerBar,
             {
@@ -662,7 +642,7 @@ export default function CouponsScreen({ navigation }) {
           ]}
         >
           <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-          
+
           <View style={s.headerContent}>
             <Animated.View style={{ transform: [{ scale: pulseAnim }, { translateY: floatingAnim }] }}>
               <Ionicons name="ticket" size={28} color="#fff" />
@@ -677,10 +657,10 @@ export default function CouponsScreen({ navigation }) {
         </Animated.View>
 
         {/* Search Bar com animação */}
-        <Animated.View 
+        <Animated.View
           style={[
-            s.searchSection, 
-            { 
+            s.searchSection,
+            {
               opacity: searchBarAnim,
               transform: [{ scale: searchBarScale }],
             }
@@ -694,8 +674,8 @@ export default function CouponsScreen({ navigation }) {
         </Animated.View>
 
         {/* Filter Tabs com slide */}
-        <Animated.View 
-          style={{ 
+        <Animated.View
+          style={{
             opacity: fadeAnim,
             transform: [{ translateX: tabsSlideAnim }],
           }}
@@ -712,7 +692,7 @@ export default function CouponsScreen({ navigation }) {
                 <TouchableOpacity
                   key={tab.key}
                   style={[
-                    s.tabChip, 
+                    s.tabChip,
                     isActive && s.tabChipActive,
                     isActive && { backgroundColor: colors.primary + '12' }
                   ]}
@@ -720,11 +700,11 @@ export default function CouponsScreen({ navigation }) {
                   activeOpacity={0.7}
                 >
                   {isActive && (
-                    <Animated.View 
+                    <Animated.View
                       style={[
                         StyleSheet.absoluteFill,
                         s.tabChipActive,
-                        { 
+                        {
                           transform: [{ scale: pulseAnim }],
                           backgroundColor: colors.primary + '12'
                         }
@@ -739,9 +719,9 @@ export default function CouponsScreen({ navigation }) {
             })}
             <View style={s.tabDivider} />
             {[
-              'all', 
-              PLATFORMS.MERCADOLIVRE, 
-              PLATFORMS.SHOPEE, 
+              'all',
+              PLATFORMS.MERCADOLIVRE,
+              PLATFORMS.SHOPEE,
               PLATFORMS.AMAZON,
               PLATFORMS.ALIEXPRESS,
               PLATFORMS.KABUM,
@@ -753,7 +733,7 @@ export default function CouponsScreen({ navigation }) {
                 <TouchableOpacity
                   key={platform}
                   style={[
-                    s.tabChip, 
+                    s.tabChip,
                     isActive && s.tabChipActive,
                     isActive && { backgroundColor: colors.primary + '12' }
                   ]}
@@ -761,11 +741,11 @@ export default function CouponsScreen({ navigation }) {
                   activeOpacity={0.7}
                 >
                   {isActive && (
-                    <Animated.View 
+                    <Animated.View
                       style={[
                         StyleSheet.absoluteFill,
                         s.tabChipActive,
-                        { 
+                        {
                           transform: [{ scale: pulseAnim }],
                           backgroundColor: colors.primary + '12'
                         }
@@ -788,10 +768,10 @@ export default function CouponsScreen({ navigation }) {
     return (
       <View style={s.container}>
         {renderHeader()}
-        <Animated.View 
+        <Animated.View
           style={[
             s.loadingContainer,
-            { 
+            {
               opacity: fadeAnim,
               transform: [{ translateY: floatingAnim }]
             }

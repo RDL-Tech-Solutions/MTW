@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import api from '../services/api';
 import storage from '../services/storage';
-import { useOneSignalStore } from './oneSignalStore';
+import { useFcmStore } from './fcmStore';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -17,7 +17,7 @@ export const useAuthStore = create((set, get) => ({
 
       if (token && user) {
         set({ user, token, isAuthenticated: true, isLoading: false });
-        // OneSignal login será feito no App.js após autenticação
+        // FCM login será feito no App.js após autenticação
       } else {
         set({ isLoading: false });
       }
@@ -39,7 +39,7 @@ export const useAuthStore = create((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
-      // OneSignal login será feito no App.js após autenticação
+      // FCM login será feito no App.js após autenticação
       console.log('✅ Login realizado com sucesso');
 
       return { success: true };
@@ -64,7 +64,7 @@ export const useAuthStore = create((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
-      // OneSignal login será feito no App.js após autenticação
+      // FCM login será feito no App.js após autenticação
       console.log('✅ Registro realizado com sucesso');
 
       return { success: true };
@@ -122,13 +122,13 @@ export const useAuthStore = create((set, get) => ({
   // Logout
   logout: async () => {
     try {
-      // Fazer logout do OneSignal
+      // Fazer logout do FCM
       try {
-        const oneSignalStore = useOneSignalStore.getState();
-        await oneSignalStore.logout();
-        console.log('✅ Logout do OneSignal realizado');
+        const fcmStore = useFcmStore.getState();
+        await fcmStore.logout();
+        console.log('✅ Logout do FCM realizado');
       } catch (error) {
-        console.error('Erro ao fazer logout do OneSignal:', error);
+        console.error('Erro ao fazer logout do FCM:', error);
       }
 
       await storage.clearAll();
@@ -161,7 +161,7 @@ export const useAuthStore = create((set, get) => ({
   registerPushToken: async (pushToken) => {
     try {
       await api.post('/users/push-token', { token: pushToken });
-      
+
       const user = get().user;
       if (user) {
         const updatedUser = { ...user, push_token: pushToken };

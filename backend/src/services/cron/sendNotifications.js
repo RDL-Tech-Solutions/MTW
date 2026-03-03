@@ -1,6 +1,6 @@
 import Notification from '../../models/Notification.js';
 import User from '../../models/User.js';
-import oneSignalService from '../oneSignalService.js';
+import fcmService from '../fcmService.js';
 import logger from '../../config/logger.js';
 
 const MAX_RETRIES = 3;
@@ -8,7 +8,7 @@ const RETRY_DELAY = 5000; // 5 segundos
 
 export const sendNotifications = async () => {
   try {
-    logger.info('🔄 Enviando notificações pendentes via OneSignal...');
+    logger.info('🔄 Enviando notificações pendentes via FCM...');
 
     // Buscar notificações não enviadas
     const pendingNotifications = await Notification.findUnsent(50);
@@ -59,19 +59,23 @@ export const sendNotifications = async () => {
 // Função auxiliar para enviar com retry
 async function sendWithRetry(notification, user, attempt = 1) {
   try {
-    // Enviar push notification via OneSignal usando external_id (user.id)
-    const result = await oneSignalService.sendToUser({
-      external_id: user.id.toString(),
+    if (!user.fcm_token) {
+      logger.warn(`⚠️ FCM token não encontrado para usuário ${user.id}. Pulando.`);
+      return { success: true }; // Marcar como enviada para não retentar
+    }
+
+    const result = await fcmService.sendToUser({
+      fcm_token: user.fcm_token,
       title: notification.title,
       message: notification.message,
       data: {
         type: notification.type,
         productId: notification.related_product_id,
         couponId: notification.related_coupon_id,
-        screen: notification.type === 'new_product' ? 'ProductDetails' : 
-                notification.type === 'new_coupon' ? 'CouponDetails' : 
-                notification.type === 'price_drop' ? 'ProductDetails' :
-                notification.type === 'expiring_coupon' ? 'CouponDetails' : 'Home'
+        screen: notification.type === 'new_product' ? 'ProductDetails' :
+          notification.type === 'new_coupon' ? 'CouponDetails' :
+            notification.type === 'price_drop' ? 'ProductDetails' :
+              notification.type === 'expiring_coupon' ? 'CouponDetails' : 'Home'
       },
       priority: notification.type === 'price_drop' ? 'high' : 'normal'
     });

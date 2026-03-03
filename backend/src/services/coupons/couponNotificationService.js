@@ -5,6 +5,7 @@ import imageGenerator from '../bots/imageGenerator.js';
 import Notification from '../../models/Notification.js';
 import supabase from '../../config/database.js';
 import AppSettings from '../../models/AppSettings.js';
+import fcmService from '../fcmService.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -592,35 +593,33 @@ ${coupon.affiliate_link || 'Link não disponível'}
    */
   async createPushNotifications(coupon, type) {
     try {
-      // Buscar todos os usuários ativos (OneSignal usa external_id = user.id)
+      // Buscar todos os usuários ativos com token FCM
       const { data: users, error } = await supabase
         .from('users')
-        .select('id');
+        .select('id, fcm_token')
+        .not('fcm_token', 'is', null);
 
       if (error) throw error;
 
       if (!users || users.length === 0) {
-        logger.info('Nenhum usuário encontrado');
+        logger.info('Nenhum usuário com FCM token encontrado');
         return;
       }
 
-      logger.info(`📱 Enviando notificações push OneSignal para ${users.length} usuários...`);
-
-      // Importar oneSignalService
-      const oneSignalService = (await import('../oneSignalService.js')).default;
+      logger.info(`📱 Enviando notificações push FCM para ${users.length} usuários...`);
 
       // Preparar dados da notificação
-      const title = type === 'new_coupon' ? '🔥 Novo Cupom Disponível!' : '⏰ Cupom Expirando!';
+      const title = type === 'new_coupon' ? '🔥 Novo Cupão Disponível!' : '⏰ Cupão Expirando!';
       const message = `${coupon.code} - ${coupon.discount_value}${coupon.discount_type === 'percentage' ? '%' : 'R$'} OFF em ${this.getPlatformName(coupon.platform)}`;
 
-      // Enviar notificações usando OneSignal
-      const result = await oneSignalService.sendCustomNotification(
+      // Enviar notificações usando FCM
+      const result = await fcmService.sendCustomNotification(
         users,
         title,
         message,
         {
           type,
-          couponId: coupon.id,
+          couponId: String(coupon.id),
           screen: 'CouponDetails'
         },
         {
@@ -639,7 +638,7 @@ ${coupon.affiliate_link || 'Link não disponível'}
 
       await Notification.createBulk(notifications);
 
-      logger.info(`✅ Notificações push OneSignal enviadas: ${result.success || 0} sucesso, ${result.failed || 0} falhas`);
+      logger.info(`✅ Notificações push FCM: ${result.total_sent || 0} enviadas, ${result.total_failed || 0} falhas`);
 
     } catch (error) {
       logger.error(`Erro ao criar notificações push: ${error.message}`);

@@ -21,7 +21,7 @@ import healthRoutes from './healthRoutes.js';
 import serverRoutes from './serverRoutes.js';
 import imageRoutes from './imageRoutes.js';
 import appCardRoutes from './appCardRoutes.js';
-import oneSignalRoutes from './oneSignalRoutes.js';
+import fcmRoutes from './fcmRoutes.js';
 
 const router = express.Router();
 
@@ -51,6 +51,6 @@ router.use('/ai', aiRoutes);
 router.use('/scheduled-posts', scheduledPostRoutes);
 router.use('/images', imageRoutes); // Rotas para conversão de imagens
 router.use('/app-cards', appCardRoutes); // Cards promocionais do app
-router.use('/onesignal', oneSignalRoutes); // Rotas para OneSignal e migração
+router.use('/fcm', fcmRoutes); // Rotas para FCM
 
 export default router;

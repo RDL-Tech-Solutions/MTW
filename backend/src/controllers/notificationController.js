@@ -2,7 +2,7 @@
 import User from '../models/User.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import logger from '../config/logger.js';
-import oneSignalService from '../services/oneSignalService.js';
+import fcmService from '../services/fcmService.js';
 
 class NotificationController {
   static async list(req, res, next) {
@@ -46,9 +46,13 @@ class NotificationController {
 
   static async registerToken(req, res, next) {
     try {
-      logger.warn('DEPRECATED: Endpoint /register-token chamado. OneSignal gerencia tokens automaticamente.');
-      logger.info('Push token Expo (ignorado): usuário ' + req.user.id);
-      res.json(successResponse(null, 'Token recebido (OneSignal gerencia automaticamente)'));
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json(errorResponse('token é obrigatório'));
+      }
+      await User.update(req.user.id, { fcm_token: token });
+      logger.info('FCM token registrado para usuário ' + req.user.id);
+      res.json(successResponse(null, 'FCM token registrado com sucesso'));
     } catch (error) {
       next(error);
     }
@@ -69,23 +73,26 @@ class NotificationController {
       if (!user) {
         return res.status(404).json(errorResponse('Usuário não encontrado'));
       }
-      logger.info('Testando push notification OneSignal para usuário ' + user.id + ' (' + user.email + ')');
-      const result = await oneSignalService.sendToUser({
-        external_id: user.id.toString(),
+      if (!user.fcm_token) {
+        return res.status(400).json(errorResponse('Usuário não tem FCM token. Abra o app para registrar o token.'));
+      }
+      logger.info('Testando push notification FCM para usuário ' + user.id + ' (' + user.email + ')');
+      const result = await fcmService.sendToUser({
+        fcm_token: user.fcm_token,
         title: 'Teste de Notificação',
         message: 'Esta é uma notificação de teste do PreçoCerto! Se você recebeu isso, as notificações push estão funcionando perfeitamente!',
         data: { type: 'test', screen: 'Home', timestamp: new Date().toISOString() },
         priority: 'high'
       });
       if (result.success) {
-        logger.info('Notificação de teste enviada com sucesso!');
-        res.json(successResponse({ sent: true, notificationId: result.notification_id, recipients: result.recipients, user: { id: user.id, email: user.email, name: user.name } }, 'Notificação de teste enviada com sucesso! Verifique seu dispositivo móvel.'));
+        logger.info('Notificação de teste FCM enviada com sucesso!');
+        res.json(successResponse({ sent: true, message_id: result.message_id, user: { id: user.id, email: user.email, name: user.name } }, 'Notificação de teste enviada com sucesso! Verifique seu dispositivo móvel.'));
       } else {
-        logger.error('Falha ao enviar notificação de teste: ' + (result.error || 'Erro desconhecido'));
+        logger.error('Falha ao enviar notificação de teste FCM: ' + (result.error || 'Erro desconhecido'));
         res.status(500).json(errorResponse(result.error || 'Falha ao enviar notificação. Verifique os logs do servidor.'));
       }
     } catch (error) {
-      logger.error('Erro ao testar push notification: ' + error.message);
+      logger.error('Erro ao testar push notification FCM: ' + error.message);
       next(error);
     }
   }
