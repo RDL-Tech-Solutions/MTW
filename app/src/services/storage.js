@@ -7,6 +7,7 @@ const KEYS = {
   FAVORITES: '@mtw_favorites',
   THEME: '@mtw_theme',
   NOTIFICATION_PREFERENCES: '@mtw_notification_preferences',
+  ONBOARDING_COMPLETED: '@onboarding_completed',
 };
 
 class StorageService {
@@ -134,6 +135,25 @@ class StorageService {
     } catch (error) {
       console.error('Erro ao buscar preferências:', error);
       return null;
+    }
+  }
+
+  // Onboarding
+  async setOnboardingCompleted(completed = true) {
+    try {
+      await AsyncStorage.setItem(KEYS.ONBOARDING_COMPLETED, completed ? 'true' : 'false');
+    } catch (error) {
+      console.error('Erro ao salvar onboarding:', error);
+    }
+  }
+
+  async getOnboardingCompleted() {
+    try {
+      const completed = await AsyncStorage.getItem(KEYS.ONBOARDING_COMPLETED);
+      return completed === 'true';
+    } catch (error) {
+      console.error('Erro ao buscar onboarding:', error);
+      return false;
     }
   }
 

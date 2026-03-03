@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuthStore } from '../stores/authStore';
@@ -19,6 +19,7 @@ import CookiePolicyScreen from '../screens/legal/CookiePolicyScreen';
 import { SCREEN_NAMES } from '../utils/constants';
 import { ActivityIndicator, View } from 'react-native';
 import { useThemeStore } from '../theme/theme';
+import StorageService from '../services/storage';
 
 const Stack = createStackNavigator();
 
@@ -27,10 +28,17 @@ export default function AppNavigator() {
   const { colors } = useThemeStore();
   const navigationRef = useRef(null);
   const { setNavigationRef } = useFcmStore();
+  const [onboardingCompleted, setOnboardingCompleted] = useState(null);
 
   useEffect(() => {
     initialize();
+    checkOnboarding();
   }, []);
+
+  const checkOnboarding = async () => {
+    const completed = await StorageService.getOnboardingCompleted();
+    setOnboardingCompleted(completed);
+  };
 
   // Configurar referência de navegação para FCM
   useEffect(() => {
@@ -39,7 +47,7 @@ export default function AppNavigator() {
     }
   }, [navigationRef.current]);
 
-  if (isLoading) {
+  if (isLoading || onboardingCompleted === null) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -69,7 +77,11 @@ export default function AppNavigator() {
     <NavigationContainer ref={navigationRef} linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
-          <Stack.Screen name="Auth" component={AuthNavigator} />
+          <Stack.Screen 
+            name="Auth" 
+            component={AuthNavigator}
+            initialParams={{ onboardingCompleted }}
+          />
         ) : (
           <>
             <Stack.Screen name="Main" component={TabNavigator} />

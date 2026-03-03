@@ -1,9 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, Animated, Platform, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
-import PlatformBadge from './PlatformBadge';
-import { PlatformIcon, getPlatformColor } from '../../utils/platformIcons';
+import { PlatformIcon } from '../../utils/platformIcons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 8;
@@ -16,6 +15,9 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScaleAnim = useRef(new Animated.Value(1)).current;
   const heartRotateAnim = useRef(new Animated.Value(0)).current;
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const [couponCodeWidth, setCouponCodeWidth] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -133,6 +135,34 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
   const bestCoupon = getBestCoupon();
   const couponCode = bestCoupon?.code; // Remover fallback para product.coupon_code
 
+  // Animação de scroll para códigos e descontos longos
+  useEffect(() => {
+    // Adicionar margem de segurança para garantir que a animação seja ativada
+    const threshold = 5; // pixels de margem
+    if (couponCode && containerWidth > 0 && couponCodeWidth > (containerWidth - threshold)) {
+      const scrollDistance = couponCodeWidth - containerWidth + 30; // +30 para espaço extra
+      
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(1500), // Pausa no início
+          Animated.timing(scrollAnim, {
+            toValue: -scrollDistance,
+            duration: Math.max(scrollDistance * 40, 2000), // Mínimo 2s, máximo proporcional
+            useNativeDriver: true,
+          }),
+          Animated.delay(1500), // Pausa no final
+          Animated.timing(scrollAnim, {
+            toValue: 0,
+            duration: Math.max(scrollDistance * 40, 2000),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      scrollAnim.setValue(0);
+    }
+  }, [couponCode, couponCodeWidth, containerWidth]);
+
   // Usar price_with_coupon se houver cupom, senão usar current_price
   const displayPrice = bestCoupon && product.price_with_coupon 
     ? product.price_with_coupon 
@@ -236,18 +266,40 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             <Text style={s.priceCent}>{currentPrice.centPart}</Text>
           </View>
 
-          {/* Coupon - badge compacto vermelho */}
+          {/* Coupon - badge compacto vermelho com animação */}
           {!!couponCode && (
             <View style={s.couponContainer}>
               <View style={s.couponBadge}>
                 <View style={s.couponIconBox}>
-                  <Ionicons name="ticket" size={11} color="#fff" />
+                  <Ionicons name="ticket" size={isGrid ? 13 : 12} color="#fff" />
                 </View>
-                <View style={s.couponInfo}>
-                  <Text style={s.couponCode}>{couponCode}</Text>
-                  {couponDiscount > 0 && (
-                    <Text style={s.couponDiscount}>-{couponDiscount}%</Text>
-                  )}
+                <View 
+                  style={s.couponInfo}
+                  onLayout={(e) => {
+                    const width = e.nativeEvent.layout.width;
+                    setContainerWidth(width);
+                  }}
+                >
+                  <View style={s.couponCodeContainer}>
+                    <Animated.View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        transform: [{ translateX: scrollAnim }]
+                      }}
+                      onLayout={(e) => {
+                        const width = e.nativeEvent.layout.width;
+                        setCouponCodeWidth(width);
+                      }}
+                    >
+                      <Text style={s.couponCode} numberOfLines={1}>
+                        {couponCode}
+                      </Text>
+                      {couponDiscount > 0 && (
+                        <Text style={s.couponDiscount}> -{couponDiscount}%</Text>
+                      )}
+                    </Animated.View>
+                  </View>
                 </View>
               </View>
             </View>
@@ -428,28 +480,30 @@ const gridStyles = (colors) => StyleSheet.create({
     }),
   },
   couponIconBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   couponInfo: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  couponCodeContainer: {
+    flex: 1,
+    overflow: 'hidden',
   },
   couponCode: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     textTransform: 'uppercase',
   },
   couponDiscount: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 0.3,
@@ -583,27 +637,30 @@ const listStyles = (colors) => StyleSheet.create({
     }),
   },
   couponIconBox: {
-    width: 16,
-    height: 16,
-    borderRadius: 3,
+    width: 18,
+    height: 18,
+    borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   couponInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  couponCodeContainer: {
+    flex: 1,
+    overflow: 'hidden',
   },
   couponCode: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: 0.6,
+    letterSpacing: 0.9,
     textTransform: 'uppercase',
   },
   couponDiscount: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 0.3,

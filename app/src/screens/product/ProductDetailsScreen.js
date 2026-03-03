@@ -22,6 +22,8 @@ import { useThemeStore } from '../../theme/theme';
 import { PLATFORM_LABELS, PLATFORM_COLORS } from '../../utils/constants';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isSmallScreen = SCREEN_WIDTH < 360;
+const isMediumScreen = SCREEN_WIDTH >= 360 && SCREEN_WIDTH < 400;
 
 export default function ProductDetailsScreen({ route, navigation }) {
   const { colors } = useThemeStore();
@@ -630,9 +632,9 @@ const createStyles = (colors) => StyleSheet.create({
   // ── Coupon ──
   couponCard: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: isSmallScreen ? 12 : 16,
+    padding: isSmallScreen ? 12 : 16,
+    marginBottom: isSmallScreen ? 12 : 16,
     borderWidth: 2,
     borderColor: colors.border,
     ...(Platform.OS === 'web' ? {
@@ -660,57 +662,58 @@ const createStyles = (colors) => StyleSheet.create({
     }),
   },
   bestCouponHeader: {
-    flexDirection: 'row',
+    flexDirection: isSmallScreen ? 'column' : 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
+    alignItems: isSmallScreen ? 'flex-start' : 'center',
+    gap: isSmallScreen ? 8 : 0,
+    marginBottom: isSmallScreen ? 12 : 16,
+    paddingBottom: isSmallScreen ? 10 : 12,
     borderBottomWidth: 1,
     borderBottomColor: '#FFD70030',
   },
   crownBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: isSmallScreen ? 4 : 6,
     backgroundColor: '#FFD700',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: isSmallScreen ? 10 : 12,
+    paddingVertical: isSmallScreen ? 5 : 6,
     borderRadius: 20,
   },
   crownText: {
-    fontSize: 11,
+    fontSize: isSmallScreen ? 10 : 11,
     fontWeight: '900',
     color: '#000',
     letterSpacing: 0.8,
   },
   savingsBadgeSmall: {
     backgroundColor: colors.success + '20',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: isSmallScreen ? 8 : 10,
+    paddingVertical: isSmallScreen ? 4 : 5,
     borderRadius: 12,
   },
   savingsTextSmall: {
-    fontSize: 11,
+    fontSize: isSmallScreen ? 10 : 11,
     fontWeight: '800',
     color: colors.success,
     letterSpacing: 0.3,
   },
   couponContent: {
-    flexDirection: 'row',
+    flexDirection: isSmallScreen ? 'column' : 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: isSmallScreen ? 'stretch' : 'center',
+    gap: isSmallScreen ? 12 : 12,
   },
   couponLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: isSmallScreen ? 10 : 12,
   },
   couponIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: isSmallScreen ? 48 : 56,
+    height: isSmallScreen ? 48 : 56,
+    borderRadius: isSmallScreen ? 24 : 28,
     backgroundColor: colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
@@ -719,7 +722,7 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
   },
   couponTitle: {
-    fontSize: 13,
+    fontSize: isSmallScreen ? 12 : 13,
     fontWeight: '600',
     color: colors.textMuted,
     marginBottom: 4,
@@ -730,7 +733,7 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 4,
   },
   discountValue: {
-    fontSize: 24,
+    fontSize: isSmallScreen ? 20 : 24,
     fontWeight: '900',
     color: colors.primary,
     letterSpacing: -0.5,
@@ -739,12 +742,13 @@ const createStyles = (colors) => StyleSheet.create({
     color: '#FFD700',
   },
   discountLabel: {
-    fontSize: 14,
+    fontSize: isSmallScreen ? 12 : 14,
     fontWeight: '700',
     color: colors.textMuted,
   },
   couponCodeContainer: {
-    minWidth: 100,
+    minWidth: isSmallScreen ? '100%' : 100,
+    alignSelf: isSmallScreen ? 'stretch' : 'auto',
   },
   couponCodeContainerBest: {
     // Estilo especial para o melhor cupom
@@ -753,17 +757,18 @@ const createStyles = (colors) => StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.primary + '40',
     borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: isSmallScreen ? 10 : 12,
+    padding: isSmallScreen ? 8 : 10,
     backgroundColor: colors.background,
     alignItems: 'center',
   },
   couponCode: {
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     fontWeight: '900',
     color: colors.text,
-    letterSpacing: 1.5,
-    marginBottom: 8,
+    letterSpacing: isSmallScreen ? 1 : 1.5,
+    marginBottom: isSmallScreen ? 6 : 8,
+    textAlign: 'center',
   },
   couponCodeBest: {
     color: '#B8860B',
@@ -772,8 +777,8 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: isSmallScreen ? 5 : 6,
+    paddingHorizontal: isSmallScreen ? 8 : 10,
     borderRadius: 8,
     backgroundColor: colors.primary + '15',
   },
@@ -781,7 +786,7 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.success + '20',
   },
   copyButtonText: {
-    fontSize: 11,
+    fontSize: isSmallScreen ? 10 : 11,
     fontWeight: '800',
     color: colors.primary,
     letterSpacing: 0.5,

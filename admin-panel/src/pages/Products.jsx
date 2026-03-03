@@ -40,8 +40,13 @@ export default function Products() {
     analyzing: false,
     batchDeleting: false,
     scheduling: false,
-    republishing: false
+    republishing: false,
+    autoRepublishing: false
   });
+
+  // Estados para republicação automática
+  const [autoRepublishEnabled, setAutoRepublishEnabled] = useState(false);
+  const [loadingAutoRepublishStatus, setLoadingAutoRepublishStatus] = useState(true);
 
   const [isRepublishDialogOpen, setIsRepublishDialogOpen] = useState(false);
   const [republishingProduct, setRepublishingProduct] = useState(null);
@@ -93,6 +98,7 @@ export default function Products() {
     fetchCategories();
     fetchCoupons();
     loadTemplateModes();
+    loadAutoRepublishStatus();
   }, []);
 
   // Limpar cupom selecionado quando a plataforma mudar e o cupom não for compatível
@@ -231,6 +237,81 @@ export default function Products() {
       setCoupons(response.data.data.coupons || []);
     } catch (error) {
       console.error('Erro ao carregar cupons:', error);
+    }
+  };
+
+  // Carregar status da republicação automática
+  const loadAutoRepublishStatus = async () => {
+    try {
+      setLoadingAutoRepublishStatus(true);
+      const response = await api.get('/auto-republish/status');
+      setAutoRepublishEnabled(response.data.data.enabled || false);
+    } catch (error) {
+      console.error('Erro ao carregar status de republicação automática:', error);
+    } finally {
+      setLoadingAutoRepublishStatus(false);
+    }
+  };
+
+  // Alternar republicação automática
+  const handleToggleAutoRepublish = async () => {
+    try {
+      const newState = !autoRepublishEnabled;
+      const response = await api.post('/auto-republish/toggle', { enabled: newState });
+      
+      setAutoRepublishEnabled(newState);
+      
+      toast({
+        title: newState ? "Republicação Automática Ativada! 🤖" : "Republicação Automática Desativada",
+        description: newState 
+          ? "A IA irá analisar e republicar produtos aprovados automaticamente"
+          : "Republicação automática foi desativada",
+        variant: "success",
+      });
+    } catch (error) {
+      console.error('Erro ao alternar republicação automática:', error);
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || "Erro ao alterar configuração",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Executar republicação automática manualmente
+  const handleRunAutoRepublish = async () => {
+    if (!autoRepublishEnabled) {
+      toast({
+        title: "Atenção!",
+        description: "Ative a republicação automática primeiro",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setProcessingActions(prev => ({ ...prev, autoRepublishing: true }));
+    
+    try {
+      const response = await api.post('/auto-republish/run');
+      const result = response.data.data;
+      
+      toast({
+        title: "Republicação Automática Concluída! 🎉",
+        description: result.message || `${result.scheduled} produtos agendados`,
+        variant: "success",
+      });
+
+      // Recarregar produtos
+      fetchProducts(pagination.page);
+    } catch (error) {
+      console.error('Erro ao executar republicação automática:', error);
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || "Erro ao executar republicação automática",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingActions(prev => ({ ...prev, autoRepublishing: false }));
     }
   };
 
@@ -673,7 +754,49 @@ export default function Products() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* Botões de Republicação Automática */}
+          <div className="flex gap-2 items-center">
+            <Button
+              variant={autoRepublishEnabled ? "default" : "outline"}
+              size="sm"
+              onClick={handleToggleAutoRepublish}
+              disabled={loadingAutoRepublishStatus}
+              className={autoRepublishEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+            >
+              {loadingAutoRepublishStatus ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Brain className="mr-2 h-4 w-4" />
+                  {autoRepublishEnabled ? "IA Ativa" : "Ativar IA"}
+                </>
+              )}
+            </Button>
+
+            {autoRepublishEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunAutoRepublish}
+                disabled={processingActions.autoRepublishing}
+                className="border-purple-300 text-purple-700 hover:bg-purple-50"
+              >
+                {processingActions.autoRepublishing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Analisando...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Republicar Agora
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+
           {selectedIds.length > 0 && (
             <Button
               variant="destructive"
@@ -976,6 +1099,42 @@ export default function Products() {
           </Dialog>
         </div>
       </div>
+
+      {/* Card Informativo sobre Republicação Automática */}
+      {autoRepublishEnabled && (
+        <Card className="border-purple-200 bg-purple-50 dark:bg-purple-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                  Republicação Automática com IA Ativada
+                </h3>
+                <p className="text-sm text-purple-700 dark:text-purple-300">
+                  A IA está analisando produtos aprovados e criando uma estratégia inteligente de republicação. 
+                  Os produtos serão distribuídos ao longo dos próximos dias em horários estratégicos para maximizar o alcance.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-purple-600 dark:text-purple-400">
+                  <span className="flex items-center gap-1">
+                    <Zap className="h-3 w-3" />
+                    Prioriza melhores ofertas
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Distribui ao longo de 7 dias
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Brain className="h-3 w-3" />
+                    Evita repetições
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="p-3 sm:p-4 md:p-6">
