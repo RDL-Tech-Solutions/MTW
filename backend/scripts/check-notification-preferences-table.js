@@ -93,7 +93,7 @@ async function checkAndFixTable() {
     // 3. Testar inserção
     logger.info('\n3️⃣ Testando inserção de dados...');
     
-    const testUserId = 99999; // ID de teste
+    const testUserId = '99999999-9999-9999-9999-999999999999'; // UUID de teste válido
     const testData = {
       user_id: testUserId,
       push_enabled: true,

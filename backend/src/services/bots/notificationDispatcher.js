@@ -450,8 +450,17 @@ class NotificationDispatcher {
     }
 
     try {
+      // Verificar se data existe e tem propriedades válidas
+      if (!data || typeof data !== 'object') {
+        logger.debug(`   ⚠️ Data inválido ou null - permitindo envio`);
+        return false;
+      }
+
       const entityId = data.id || data.product_id || data.coupon_id;
-      if (!entityId) return false;
+      if (!entityId) {
+        logger.debug(`   ⚠️ Nenhum ID encontrado em data - permitindo envio`);
+        return false;
+      }
 
       // NOVO: Para cupons, verificar também por código
       if (eventType === 'coupon_new' && data.code) {
@@ -911,7 +920,9 @@ class NotificationDispatcher {
 
       for (const channel of channels) {
         logger.debug(`   🔍 Verificando duplicação para canal ${channel.id}`);
-        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
+        // Garantir que data existe antes de acessar propriedades
+        const itemData = data ? { ...data, id: data.product_id || data.coupon_id || data.id } : { id: null };
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, itemData, options.bypassDuplicates);
         if (isDuplicate) {
           results.push({ channelId: channel.id, success: false, skipped: true, reason: 'Duplicado' });
           continue;
@@ -978,7 +989,9 @@ class NotificationDispatcher {
       // Enviar para cada canal
       for (const channel of channels) {
         try {
-          const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, { ...data, id: data.product_id || data.coupon_id }, options.bypassDuplicates);
+          // Corrigir: verificar se data existe antes de acessar propriedades
+          const itemId = data ? (data.product_id || data.coupon_id || data.id) : null;
+          const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, itemId, options.bypassDuplicates);
           if (isDuplicate) continue;
 
           if (hasValidImage) {
@@ -1021,14 +1034,16 @@ class NotificationDispatcher {
 
       if (allChannels.length === 0) return { success: false, reason: 'Nenhum canal WhatsApp ativo ou habilitado' };
 
-      const channels = await this.filterChannelsBySegmentation(allChannels, eventType, data);
-      if (channels.length === 0) return { success: false, sent: 0, total: allChannels.length, reason: "Segmentação." };
+      // ✅ REMOVIDO: Segmentação do WhatsApp - envia para todos os canais ativos
+      const channels = allChannels;
 
       let sent = 0;
       const results = [];
 
       for (const channel of channels) {
-        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data, options.bypassDuplicates);
+        // Garantir que data existe antes de verificar duplicação
+        const itemData = data ? { ...data, id: data.product_id || data.coupon_id || data.id } : { id: null };
+        const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, itemData, options.bypassDuplicates);
         if (isDuplicate) {
           results.push({ channelId: channel.id, success: false, skipped: true, reason: 'Duplicado' });
           continue;

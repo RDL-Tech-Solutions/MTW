@@ -319,13 +319,22 @@ WITH cupom AS (
   SELECT * FROM coupons WHERE code = 'CODIGO_DO_CUPOM'
 ),
 usuarios_com_token AS (
-  SELECT u.*, np.*
+  SELECT 
+    u.id as user_id,
+    u.name,
+    u.email,
+    u.fcm_token,
+    np.id as preference_id,
+    np.push_enabled,
+    np.category_preferences,
+    np.keyword_preferences,
+    np.product_name_preferences
   FROM users u
   LEFT JOIN notification_preferences np ON u.id = np.user_id
   WHERE u.fcm_token IS NOT NULL
 )
 SELECT 
-  id,
+  user_id,
   name,
   email,
   push_enabled,
@@ -398,14 +407,20 @@ ORDER BY taxa_falha_pct DESC;
 
 -- DIAGNÓSTICO 3: Verificar configuração do sistema
 -- ============================================
+-- NOTA: A tabela app_settings é um registro único, não tem coluna 'key'
+-- Para verificar configurações, use o modelo AppSettings no backend
+-- Exemplo de verificação manual:
+/*
 SELECT 
-  key,
-  value,
+  id,
+  amazon_marketplace,
+  openrouter_enabled,
+  cleanup_schedule_hour,
+  created_at,
   updated_at
 FROM app_settings
-WHERE key IN (
-  'backend_url',
-  'fcm_enabled',
-  'notify_bots_on_new_coupon',
-  'notify_bots_on_new_product'
-);
+WHERE id = '00000000-0000-0000-0000-000000000001';
+*/
+
+-- Alternativa: Verificar se FCM está configurado via variáveis de ambiente
+-- (não é possível verificar via SQL, apenas no backend)

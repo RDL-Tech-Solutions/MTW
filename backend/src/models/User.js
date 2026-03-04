@@ -201,8 +201,10 @@ class User {
 
   // Buscar todos os usuários com FCM token
   static async findAllWithFCMToken() {
-    // CORREÇÃO: Buscar da tabela fcm_tokens em vez de users.fcm_token
-    const { data, error } = await supabase
+    // CORREÇÃO: Buscar de ambas as fontes (tabela fcm_tokens E coluna users.fcm_token)
+    
+    // 1. Buscar da nova tabela fcm_tokens
+    const { data: tokensData, error: tokensError } = await supabase
       .from('fcm_tokens')
       .select(`
         fcm_token,
@@ -216,13 +218,22 @@ class User {
         )
       `);
 
-    if (error) throw error;
+    if (tokensError) throw tokensError;
+    
+    // 2. Buscar da coluna antiga users.fcm_token (fallback)
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('id, name, email, fcm_token')
+      .not('fcm_token', 'is', null);
+
+    if (usersError) throw usersError;
     
     // Transformar resultado para formato esperado
     // Agrupar por usuário (um usuário pode ter múltiplos tokens/dispositivos)
     const usersMap = new Map();
     
-    (data || []).forEach(token => {
+    // Adicionar tokens da nova tabela
+    (tokensData || []).forEach(token => {
       const user = token.users;
       if (!usersMap.has(user.id)) {
         usersMap.set(user.id, {
@@ -240,6 +251,23 @@ class User {
         platform: token.platform,
         device_id: token.device_id
       });
+    });
+    
+    // Adicionar tokens da coluna antiga (se não estiver já no map)
+    (usersData || []).forEach(user => {
+      if (!usersMap.has(user.id) && user.fcm_token) {
+        usersMap.set(user.id, {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          fcm_token: user.fcm_token,
+          fcm_tokens: [{
+            fcm_token: user.fcm_token,
+            platform: 'unknown', // Não sabemos a plataforma da coluna antiga
+            device_id: null
+          }]
+        });
+      }
     });
     
     return Array.from(usersMap.values());

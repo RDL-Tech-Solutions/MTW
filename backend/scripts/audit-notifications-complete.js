@@ -351,6 +351,15 @@ class NotificationAuditor {
     try {
       logger.info('📝 Simulando criação de produto...');
       
+      // Buscar uma categoria real do banco
+      const { data: categories } = await supabase
+        .from('categories')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      const categoryId = categories?.id || null;
+      
       const testProduct = {
         name: `Produto Teste Auditoria ${Date.now()}`,
         description: 'Produto de teste para auditoria de notificações',
@@ -361,12 +370,14 @@ class NotificationAuditor {
         image_url: 'https://via.placeholder.com/300',
         platform: 'shopee',
         status: 'approved',
-        category_id: 1
+        category_id: categoryId, // Usar categoria real ou null
+        external_id: `test_audit_${Date.now()}` // ID externo obrigatório
       };
       
       logger.info(`   Nome: ${testProduct.name}`);
       logger.info(`   Preço: R$ ${testProduct.current_price}`);
       logger.info(`   Desconto: ${testProduct.discount_percentage}%`);
+      logger.info(`   Categoria: ${categoryId || 'SEM CATEGORIA'}`);
       
       // Criar produto
       const product = await Product.create(testProduct);

@@ -649,11 +649,18 @@ Fique de olho para não perder as próximas ofertas!
         logger.error(`❌ Erro ao enviar WhatsApp: ${error.message}`);
       }
 
-      // Enviar para Telegram
+      // Enviar para Telegram (sem imagem)
       let telegramResult = null;
       try {
         logger.info(`📤 Enviando para Telegram...`);
-        telegramResult = await notificationDispatcher.sendToTelegram(telegramMessage, 'coupon_out_of_stock');
+        // Usar sendToTelegramWithImage sem imagem (null) para enviar apenas texto
+        telegramResult = await notificationDispatcher.sendToTelegramWithImage(
+          telegramMessage,
+          null, // Sem imagem
+          'coupon_out_of_stock',
+          { coupon_id: coupon.id, id: coupon.id },
+          { bypassDuplicates: false }
+        );
         logger.info(`✅ Mensagem Telegram enviada: ${JSON.stringify(telegramResult)}`);
       } catch (error) {
         logger.error(`❌ Erro ao enviar Telegram: ${error.message}`);
