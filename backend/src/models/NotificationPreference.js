@@ -6,6 +6,8 @@ class NotificationPreference {
     const {
       push_enabled = true,
       email_enabled = false,
+      coupons_only = false,
+      coupon_platforms = [],
       category_preferences = [],
       keyword_preferences = [],
       product_name_preferences = [],
@@ -19,6 +21,8 @@ class NotificationPreference {
           user_id: userId,
           push_enabled,
           email_enabled,
+          coupons_only,
+          coupon_platforms,
           category_preferences,
           keyword_preferences,
           product_name_preferences,

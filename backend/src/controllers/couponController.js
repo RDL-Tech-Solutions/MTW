@@ -402,50 +402,18 @@ class CouponController {
 
       logger.info(`🚫 Cupom marcado como esgotado: ${id} (${coupon.code})`);
 
-      // Buscar canais que receberam este cupom
-      const channels = await Coupon.getChannelsWithCoupon(id);
-      logger.info(`📋 Encontrados ${channels.length} canais para notificar sobre cupom esgotado`);
-
-      // Notificar todos os canais sobre o cupom esgotado
-      if (channels.length > 0) {
-        try {
-          await notificationDispatcher.notifyCouponOutOfStock(updatedCoupon, channels);
-          logger.info(`✅ Notificações de cupom esgotado enviadas para ${channels.length} canais`);
-        } catch (notifyError) {
-          logger.error(`❌ Erro ao notificar canais sobre cupom esgotado: ${notifyError.message}`);
-          // Não falhar a operação se a notificação falhar
-        }
-      }
-
-      // Notificar usuários que visualizaram este cupom via push FCM
+      // CORREÇÃO: Usar serviço completo de notificações (bots + push)
       try {
-        const users = await Coupon.getUsersWhoViewed(id);
-        if (users && users.length > 0) {
-          logger.info(`📱 Enviando push notification FCM para ${users.length} usuários que visualizaram o cupom`);
-          
-          const result = await fcmService.sendCustomNotification(
-            users,
-            '🚫 Cupom Esgotado!',
-            `O cupom "${coupon.code || coupon.title}" que você visualizou acabou de esgotar.`,
-            { 
-              type: 'coupon_out_of_stock', 
-              couponId: id 
-            },
-            { 
-              priority: 'normal' 
-            }
-          );
-          
-          logger.info(`✅ Push notifications FCM enviadas: ${result.total_sent || 0} sucesso, ${result.total_failed || 0} falhas`);
-        }
-      } catch (pushError) {
-        logger.error(`❌ Erro ao enviar push notifications: ${pushError.message}`);
+        logger.info(`📢 Enviando notificações de cupom esgotado...`);
+        await couponNotificationService.notifyOutOfStockCoupon(updatedCoupon);
+        logger.info(`✅ Notificações de cupom esgotado enviadas (bots + push)`);
+      } catch (notifyError) {
+        logger.error(`❌ Erro ao notificar cupom esgotado: ${notifyError.message}`);
+        logger.error(`   Stack: ${notifyError.stack}`);
+        // Não falhar a operação se a notificação falhar
       }
 
-      res.json(successResponse({
-        coupon: updatedCoupon,
-        channelsNotified: channels.length
-      }, `Cupom marcado como esgotado e ${channels.length} canais notificados`));
+      res.json(successResponse(updatedCoupon, 'Cupom marcado como esgotado e notificações enviadas'));
     } catch (error) {
       logger.error(`❌ Erro ao marcar cupom como esgotado: ${error.message}`);
       next(error);

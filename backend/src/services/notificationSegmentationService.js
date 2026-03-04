@@ -58,45 +58,77 @@ class NotificationSegmentationService {
    */
   async getUsersForCoupon(coupon) {
     try {
-      logger.info(`🎯 Segmentando usuários para cupom: ${coupon.code}`);
+      logger.info(`\n🎯 ========== SEGMENTAÇÃO DE USUÁRIOS (CUPOM) ==========`);
+      logger.info(`   Cupom: ${coupon.code} (ID: ${coupon.id})`);
+      logger.info(`   Plataforma: ${coupon.platform}`);
 
       // Buscar todos os usuários com push ativado e FCM token
+      logger.info(`\n   📱 Buscando usuários com FCM token...`);
       const allUsers = await User.findAllWithFCMToken();
       
       if (!allUsers || allUsers.length === 0) {
-        logger.info('   Nenhum usuário com FCM token encontrado');
+        logger.warn(`   ❌ Nenhum usuário com FCM token encontrado!`);
+        logger.warn(`   Motivo: Nenhum usuário registrou token FCM no app`);
+        logger.warn(`   Solução: Usuários precisam abrir o app e permitir notificações`);
         return [];
       }
 
-      logger.info(`   ${allUsers.length} usuários com FCM token`);
+      logger.info(`   ✅ ${allUsers.length} usuários com FCM token encontrados`);
 
       const segmentedUsers = [];
+      let usersSkippedNoPref = 0;
+      let usersSkippedPushDisabled = 0;
+      let usersSkippedNoMatch = 0;
+
+      logger.info(`\n   🔍 Aplicando filtros de segmentação...`);
 
       for (const user of allUsers) {
         const prefs = await NotificationPreference.findByUserId(user.id);
         
         // Se não tem preferências, enviar para todos (comportamento padrão)
         if (!prefs) {
+          logger.debug(`      ✅ ${user.name || user.email}: SEM preferências (recebe tudo)`);
           segmentedUsers.push(user);
           continue;
         }
 
         // Se push desativado, pular
         if (!prefs.push_enabled) {
+          logger.debug(`      ⏭️ ${user.name || user.email}: Push DESABILITADO`);
+          usersSkippedPushDisabled++;
           continue;
         }
 
         // Verificar se deve receber notificação deste cupom
         if (this.shouldReceiveCouponNotification(coupon, prefs)) {
+          logger.debug(`      ✅ ${user.name || user.email}: MATCH (recebe notificação)`);
           segmentedUsers.push(user);
+        } else {
+          logger.debug(`      ⏭️ ${user.name || user.email}: SEM match com filtros`);
+          usersSkippedNoMatch++;
         }
       }
 
-      logger.info(`   ✅ ${segmentedUsers.length} usuários segmentados`);
+      logger.info(`\n   📊 Resultado da segmentação:`);
+      logger.info(`      Total de usuários com token: ${allUsers.length}`);
+      logger.info(`      ✅ Usuários segmentados: ${segmentedUsers.length}`);
+      logger.info(`      ⏭️ Pulados (push desabilitado): ${usersSkippedPushDisabled}`);
+      logger.info(`      ⏭️ Pulados (sem match): ${usersSkippedNoMatch}`);
+
+      if (segmentedUsers.length === 0) {
+        logger.warn(`\n   ⚠️ NENHUM USUÁRIO SEGMENTADO!`);
+        logger.warn(`   Possíveis causas:`);
+        logger.warn(`   1. Todos os usuários desabilitaram push (${usersSkippedPushDisabled} usuários)`);
+        logger.warn(`   2. Nenhum usuário tem filtros que correspondem ao cupom (${usersSkippedNoMatch} usuários)`);
+        logger.warn(`   3. Usuários têm filtros muito restritivos`);
+      }
+
+      logger.info(`========================================================\n`);
       return segmentedUsers;
 
     } catch (error) {
-      logger.error(`Erro ao segmentar usuários para cupom: ${error.message}`);
+      logger.error(`❌ Erro ao segmentar usuários para cupom: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
       throw error;
     }
   }

@@ -688,18 +688,39 @@ Fique de olho para não perder as próximas ofertas!
    */
   async createPushNotifications(coupon, type) {
     try {
+      logger.info(`\n🔔 ========== CRIANDO NOTIFICAÇÕES PUSH ==========`);
+      logger.info(`   Cupom: ${coupon.code} (ID: ${coupon.id})`);
+      logger.info(`   Tipo: ${type}`);
+      logger.info(`   Plataforma: ${coupon.platform}`);
+
       // Importar serviço de segmentação
       const notificationSegmentationService = (await import('../notificationSegmentationService.js')).default;
 
       // Segmentar usuários baseado nas preferências
+      logger.info(`   🔍 Segmentando usuários...`);
       const users = await notificationSegmentationService.getUsersForCoupon(coupon);
 
+      logger.info(`   📊 Resultado da segmentação: ${users ? users.length : 0} usuários`);
+
       if (!users || users.length === 0) {
-        logger.info('Nenhum usuário segmentado para receber notificação deste cupom');
+        logger.warn(`   ⚠️ NENHUM USUÁRIO SEGMENTADO!`);
+        logger.warn(`   Possíveis causas:`);
+        logger.warn(`   1. Nenhum usuário tem preferências habilitadas (notify_coupons)`);
+        logger.warn(`   2. Nenhum usuário tem token FCM`);
+        logger.warn(`   3. Filtros de segmentação muito restritivos`);
         return;
       }
 
-      logger.info(`📱 Enviando notificações push FCM para ${users.length} usuários segmentados...`);
+      logger.info(`\n📱 Enviando notificações push FCM para ${users.length} usuários segmentados...`);
+      
+      // Log dos usuários que receberão notificação
+      logger.info(`   🔍 Usuários que receberão notificação:`);
+      users.slice(0, 5).forEach(u => {
+        logger.info(`      - ${u.name || u.email} (ID: ${u.id}, Token: ${u.fcm_token ? 'SIM' : 'NÃO'})`);
+      });
+      if (users.length > 5) {
+        logger.info(`      ... e mais ${users.length - 5} usuários`);
+      }
 
       // Preparar dados da notificação baseado no tipo
       let title, message;
@@ -725,7 +746,13 @@ Fique de olho para não perder as próximas ofertas!
           message = `${coupon.code} - ${this.getPlatformName(coupon.platform)}`;
       }
 
+      logger.info(`\n   📝 Dados da notificação:`);
+      logger.info(`      Título: ${title}`);
+      logger.info(`      Mensagem: ${message}`);
+      logger.info(`      Tipo: ${type}`);
+
       // Enviar notificações usando FCM
+      logger.info(`\n   📤 Enviando via FCM...`);
       const result = await fcmService.sendCustomNotification(
         users,
         title,
@@ -740,7 +767,13 @@ Fique de olho para não perder as próximas ofertas!
         }
       );
 
+      logger.info(`\n   📊 Resultado do FCM:`);
+      logger.info(`      Total enviado: ${result.total_sent || 0}`);
+      logger.info(`      Total falhou: ${result.total_failed || 0}`);
+      logger.info(`      Detalhes: ${JSON.stringify(result)}`);
+
       // Criar registros de notificações no banco para histórico
+      logger.info(`\n   💾 Criando registros no banco...`);
       const notifications = users.map(user => ({
         user_id: user.id,
         title,
@@ -750,11 +783,15 @@ Fique de olho para não perder as próximas ofertas!
       }));
 
       await Notification.createBulk(notifications);
+      logger.info(`      ✅ ${notifications.length} registros criados`);
 
-      logger.info(`✅ Notificações push FCM: ${result.total_sent || 0} enviadas, ${result.total_failed || 0} falhas`);
+      logger.info(`\n✅ Notificações push FCM: ${result.total_sent || 0} enviadas, ${result.total_failed || 0} falhas`);
+      logger.info(`================================================\n`);
 
     } catch (error) {
-      logger.error(`Erro ao criar notificações push: ${error.message}`);
+      logger.error(`\n❌ Erro ao criar notificações push: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+      logger.error(`   Cupom: ${coupon?.code} (ID: ${coupon?.id})`);
     }
   }
 
