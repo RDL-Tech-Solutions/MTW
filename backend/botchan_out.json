@@ -1,0 +1,57 @@
+[
+  {
+    "id": "20d23b2b-c0bd-4d0b-b9f1-a1973815af2d",
+    "platform": "whatsapp_web",
+    "identifier": "120363423394638237@newsletter",
+    "name": "PrecoCerto",
+    "is_active": true,
+    "category_filter": [
+      "b478b692-84df-4281-b20f-2722d8f1d356",
+      "d577278a-3c1a-4eff-b486-effcad04c7ff",
+      "df5861f9-e361-433f-983a-36bb87248c56",
+      "3bc68bd2-9e4d-4fec-b7c4-59eef8478a6c",
+      "f5931bf7-759f-4c36-ae74-4e1d12db5873",
+      "d35a8047-56b7-4479-9fb1-506ef6f81d14",
+      "daef9c6c-9b0a-4d6a-b694-9268bd60ea4a",
+      "680f828c-2c95-4094-9585-abd291252779"
+    ],
+    "platform_filter": [],
+    "content_filter": {
+      "coupons": true,
+      "products": true
+    },
+    "schedule_start": null,
+    "schedule_end": null,
+    "min_offer_score": 0,
+    "avoid_duplicates_hours": 24,
+    "created_at": "2026-02-07T02:26:27.908576+00:00",
+    "updated_at": "2026-02-07T02:26:27.908576+00:00",
+    "only_coupons": false,
+    "no_coupons": false
+  },
+  {
+    "id": "4a2d4790-67b5-4929-bc3a-7b08c39b4692",
+    "platform": "whatsapp_web",
+    "identifier": "120363405400556600@newsletter",
+    "name": "PreçoCerto Gamer",
+    "is_active": true,
+    "category_filter": [
+      "0d216f78-9a48-4a2a-8262-ae4f06fb67c7",
+      "f5931bf7-759f-4c36-ae74-4e1d12db5873",
+      "ae9ecaf7-c5fa-4717-8a2c-62a5d0b939c3"
+    ],
+    "platform_filter": [],
+    "content_filter": {
+      "coupons": true,
+      "products": true
+    },
+    "schedule_start": null,
+    "schedule_end": null,
+    "min_offer_score": 0,
+    "avoid_duplicates_hours": 24,
+    "created_at": "2026-02-07T02:25:46.320003+00:00",
+    "updated_at": "2026-02-07T02:26:36.067253+00:00",
+    "only_coupons": false,
+    "no_coupons": false
+  }
+]

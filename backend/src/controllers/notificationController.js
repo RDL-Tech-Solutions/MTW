@@ -58,6 +58,16 @@ class NotificationController {
     }
   }
 
+  static async removeToken(req, res, next) {
+    try {
+      await User.update(req.user.id, { fcm_token: null });
+      logger.info('FCM token removido para o usuário ' + req.user.id);
+      res.json(successResponse(null, 'FCM token removido com sucesso'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async stats(req, res, next) {
     try {
       const stats = await Notification.getStats();

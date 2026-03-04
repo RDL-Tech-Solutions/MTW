@@ -30,7 +30,7 @@ export default function NotificationSettingsScreen({ navigation }) {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
-  
+
   // Preferências
   const [pushEnabled, setPushEnabled] = useState(true);
   const [couponsOnly, setCouponsOnly] = useState(false);
@@ -70,7 +70,7 @@ export default function NotificationSettingsScreen({ navigation }) {
       setLoadingPrefs(true);
       const response = await api.get('/notification-preferences');
       const prefs = response.data.data;
-      
+
       if (prefs) {
         setPushEnabled(prefs.push_enabled ?? true);
         setCouponsOnly(prefs.coupons_only ?? false);
@@ -97,7 +97,7 @@ export default function NotificationSettingsScreen({ navigation }) {
         keyword_preferences: keywords,
         product_name_preferences: productNames,
       });
-      
+
       Alert.alert('Sucesso!', 'Preferências salvas com sucesso.');
     } catch (error) {
       console.error('Erro ao salvar preferências:', error);
@@ -133,7 +133,7 @@ export default function NotificationSettingsScreen({ navigation }) {
         if (user?.id) {
           await login(user.id);
         }
-        
+
         // Ativar push nas preferências
         setPushEnabled(true);
       } else {
@@ -232,10 +232,10 @@ export default function NotificationSettingsScreen({ navigation }) {
 
           <View style={styles.statusItem}>
             <View style={styles.statusLeft}>
-              <Ionicons 
-                name={hasPermission ? 'checkmark-circle' : 'close-circle'} 
-                size={24} 
-                color={hasPermission ? '#10B981' : '#EF4444'} 
+              <Ionicons
+                name={hasPermission ? 'checkmark-circle' : 'close-circle'}
+                size={24}
+                color={hasPermission ? '#10B981' : '#EF4444'}
               />
               <Text style={styles.statusLabel}>Permissão do Sistema</Text>
             </View>
@@ -246,10 +246,10 @@ export default function NotificationSettingsScreen({ navigation }) {
 
           <View style={styles.statusItem}>
             <View style={styles.statusLeft}>
-              <Ionicons 
-                name={fcmToken ? 'checkmark-circle' : 'close-circle'} 
-                size={24} 
-                color={fcmToken ? '#10B981' : '#EF4444'} 
+              <Ionicons
+                name={fcmToken ? 'checkmark-circle' : 'close-circle'}
+                size={24}
+                color={fcmToken ? '#10B981' : '#EF4444'}
               />
               <Text style={styles.statusLabel}>Dispositivo Registrado</Text>
             </View>
@@ -291,7 +291,7 @@ export default function NotificationSettingsScreen({ navigation }) {
               onValueChange={setCouponsOnly}
               trackColor={{ false: '#D1D5DB', true: '#FCA5A5' }}
               thumbColor={couponsOnly ? '#DC2626' : '#9CA3AF'}
-              disabled={!hasPermission || !pushEnabled}
+              disabled={!hasPermission}
             />
           </View>
 
@@ -303,38 +303,36 @@ export default function NotificationSettingsScreen({ navigation }) {
         </View>
 
         {/* Plataformas de Cupons */}
-        {couponsOnly && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Plataformas de Cupons</Text>
-            <Text style={styles.sectionDescription}>
-              Selecione as plataformas de cupons que deseja receber
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Plataformas de Cupons</Text>
+          <Text style={styles.sectionDescription}>
+            Selecione as plataformas de cupons que deseja receber
+          </Text>
+
+          {availablePlatforms.map((platform, index) => (
+            <TouchableOpacity
+              key={platform.id}
+              style={[styles.categoryItem, index === availablePlatforms.length - 1 && { borderBottomWidth: 0 }]}
+              onPress={() => togglePlatform(platform.id)}
+            >
+              <View style={styles.categoryLeft}>
+                <Ionicons
+                  name={couponPlatforms.includes(platform.id) ? 'checkbox' : 'square-outline'}
+                  size={24}
+                  color={couponPlatforms.includes(platform.id) ? '#DC2626' : '#9CA3AF'}
+                />
+                <Ionicons name={platform.icon} size={20} color="#6B7280" style={{ marginLeft: 8 }} />
+                <Text style={styles.categoryLabel}>{platform.name}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {couponPlatforms.length === 0 && (
+            <Text style={styles.infoText}>
+              ℹ️ Se nenhuma plataforma for selecionada, você receberá cupons de todas as plataformas.
             </Text>
-
-            {availablePlatforms.map((platform, index) => (
-              <TouchableOpacity
-                key={platform.id}
-                style={[styles.categoryItem, index === availablePlatforms.length - 1 && { borderBottomWidth: 0 }]}
-                onPress={() => togglePlatform(platform.id)}
-              >
-                <View style={styles.categoryLeft}>
-                  <Ionicons 
-                    name={couponPlatforms.includes(platform.id) ? 'checkbox' : 'square-outline'} 
-                    size={24} 
-                    color={couponPlatforms.includes(platform.id) ? '#DC2626' : '#9CA3AF'} 
-                  />
-                  <Ionicons name={platform.icon} size={20} color="#6B7280" style={{ marginLeft: 8 }} />
-                  <Text style={styles.categoryLabel}>{platform.name}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-
-            {couponPlatforms.length === 0 && (
-              <Text style={styles.infoText}>
-                ℹ️ Se nenhuma plataforma for selecionada, você receberá cupons de todas as plataformas.
-              </Text>
-            )}
-          </View>
-        )}
+          )}
+        </View>
 
         {/* Categorias */}
         <View style={styles.section}>
@@ -353,10 +351,10 @@ export default function NotificationSettingsScreen({ navigation }) {
                 onPress={() => toggleCategory(category.id)}
               >
                 <View style={styles.categoryLeft}>
-                  <Ionicons 
-                    name={selectedCategories.includes(category.id) ? 'checkbox' : 'square-outline'} 
-                    size={24} 
-                    color={selectedCategories.includes(category.id) ? '#DC2626' : '#9CA3AF'} 
+                  <Ionicons
+                    name={selectedCategories.includes(category.id) ? 'checkbox' : 'square-outline'}
+                    size={24}
+                    color={selectedCategories.includes(category.id) ? '#DC2626' : '#9CA3AF'}
                   />
                   <Text style={styles.categoryLabel}>{category.name}</Text>
                 </View>

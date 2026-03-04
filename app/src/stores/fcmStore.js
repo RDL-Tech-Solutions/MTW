@@ -198,6 +198,8 @@ export const useFcmStore = create((set, get) => ({
             const token = get().fcmToken || await get().refreshToken();
 
             if (token) {
+                // Registrar explicitamente o token no backend durante o login
+                await get().registerTokenOnBackend(token);
                 console.log('✅ FCM: Login realizado para usuário:', userId);
             } else {
                 console.warn('⚠️ FCM: Login sem token (permissão não concedida)');
@@ -216,6 +218,15 @@ export const useFcmStore = create((set, get) => ({
             }
 
             console.log('🚪 FCM: Fazendo logout');
+
+            // Remover token do backend
+            try {
+                await api.post('/notifications/remove-token');
+                console.log('✅ FCM token removido do backend');
+            } catch (removeError) {
+                console.error('❌ Erro ao remover token do backend:', removeError.message);
+            }
+
             set({ fcmToken: null });
             // Não deletamos o token FCM aqui pois o device pode compartilhar entre usuários
             // O backend associa o token ao usuário autenticado via JWT

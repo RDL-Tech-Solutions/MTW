@@ -182,7 +182,7 @@ class NotificationDispatcher {
 
       // Filtrar canais usando segmentação inteligente
       console.time('🔍 Time: Filtering Channels');
-      const channels = await this.filterChannelsBySegmentation(activeChannels, eventType, data);
+      const channels = await this.filterChannelsBySegmentation(activeChannels, eventType, data, options);
       console.timeEnd('🔍 Time: Filtering Channels');
 
       if (channels.length === 0) {
@@ -317,7 +317,7 @@ class NotificationDispatcher {
    * Filtrar canais por segmentação inteligente
    * Respeita categoria, horários, score mínimo, only_coupons
    */
-  async filterChannelsBySegmentation(channels, eventType, data) {
+  async filterChannelsBySegmentation(channels, eventType, data, options = {}) {
     const filtered = [];
     const now = new Date();
     const currentHour = now.getHours();
@@ -385,9 +385,15 @@ class NotificationDispatcher {
         }
       } else {
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
-          const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
-          logger.info(`🚫 Canal ${channel.name} (${channel.id}) ignorado: Item (${itemType}) sem categoria definida e canal possui filtro restrito.`);
-          continue;
+          // Bypass para cupons manuais sem categoria
+          if (options.manual && eventType === 'coupon_new') {
+            logger.info(`   ⚠️ Canal ${channel.name} (${channel.id}): Item sem categoria, mas bypass ativo por envio manual de cupom.`);
+            // NÃO bloquear - permitir que o cupom seja enviado
+          } else {
+            const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
+            logger.info(`🚫 Canal ${channel.name} (${channel.id}) ignorado: Item (${itemType}) sem categoria definida e canal possui filtro restrito.`);
+            continue; // Bloquear apenas se NÃO for manual
+          }
         }
       }
 

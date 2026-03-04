@@ -106,9 +106,10 @@ export default function HomeScreen({ navigation, route }) {
     hasMore: true,
   });
 
-  // Animações
+  // Animações e Refs
   const headerAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const carouselRef = useRef(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -125,6 +126,34 @@ export default function HomeScreen({ navigation, route }) {
       }),
     ]).start();
   }, []);
+
+  // Timer para o carrossel automático
+  useEffect(() => {
+    if (appCards.length <= 1) return;
+
+    let autoPlayTimer;
+
+    const startAutoPlay = () => {
+      autoPlayTimer = setInterval(() => {
+        setActiveCardIndex((prevIndex) => {
+          const nextIndex = (prevIndex + 1) % appCards.length;
+
+          if (carouselRef.current) {
+            const cardW = screenWidth - GRID_PADDING * 2;
+            carouselRef.current.scrollTo({
+              x: nextIndex * cardWidth,
+              animated: true,
+            });
+          }
+          return nextIndex;
+        });
+      }, 4000); // Muda de card a cada 4 segundos
+    };
+
+    startAutoPlay();
+
+    return () => clearInterval(autoPlayTimer);
+  }, [appCards.length, screenWidth]);
 
   // Load categories, cards, and favorites on mount
   useEffect(() => {
@@ -321,157 +350,164 @@ export default function HomeScreen({ navigation, route }) {
   // ─── LIST HEADER (banner + platform icons + active filter) ───────
   const [activeCardIndex, setActiveCardIndex] = useState(0);
 
-  const renderListHeader = () => (
-    <View style={s.listHeaderContent}>
-      {/* ── Dynamic Card Carousel ── */}
-      {appCards.length > 0 && (
-        <View>
+  const renderListHeader = () => {
+    const cardWidth = screenWidth - GRID_PADDING * 2;
+
+    return (
+      <View style={s.listHeaderContent}>
+        {/* ── Dynamic Card Carousel ── */}
+        {appCards.length > 0 && (
+          <View>
+            <ScrollView
+              ref={carouselRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              snapToInterval={cardWidth}
+              snapToAlignment="start"
+              disableIntervalMomentum={true}
+              onScroll={(e) => {
+                const offset = e.nativeEvent.contentOffset.x;
+                const idx = Math.round(offset / cardWidth);
+                if (idx !== activeCardIndex && idx >= 0 && idx < appCards.length) {
+                  setActiveCardIndex(idx);
+                }
+              }}
+              scrollEventThrottle={16}
+              contentContainerStyle={s.cardCarouselScroll}
+              style={s.cardCarousel}
+            >
+              {appCards.map((card) => (
+                <TouchableOpacity
+                  key={card.id}
+                  style={[
+                    s.bannerContainer,
+                    { width: screenWidth - GRID_PADDING * 2 - 8 },
+                  ]}
+                  activeOpacity={0.9}
+                  onPress={() => handleCardPress(card)}
+                >
+                  {card.image_url ? (
+                    <View style={[s.bannerGradient, { height: bannerSizes.bannerHeight }]}>
+                      <Image source={{ uri: card.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      <View style={[s.bannerContent, { position: 'absolute', bottom: 0, left: 0, right: 0, padding: bannerSizes.bannerPaddingH, backgroundColor: 'rgba(0,0,0,0.38)' }]}>
+                        <View style={s.bannerTextArea}>
+                          <Text style={[s.bannerTitle, { color: card.text_color || '#fff', fontSize: bannerSizes.titleFontSize }]}>{card.title}</Text>
+                          {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff', fontSize: bannerSizes.subtitleFontSize }]}>{card.subtitle}</Text> : null}
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={[card.background_color || colors.primary, darkenColor(card.background_color || colors.primary)]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[s.bannerGradient, { height: bannerSizes.bannerHeight, paddingHorizontal: bannerSizes.bannerPaddingH, paddingVertical: bannerSizes.bannerPaddingV }]}
+                    >
+                      <View style={s.bannerContent}>
+                        <View style={s.bannerTextArea}>
+                          <Text style={[s.bannerTitle, { color: card.text_color || '#fff', fontSize: bannerSizes.titleFontSize }]}>{card.title}</Text>
+                          {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff', fontSize: bannerSizes.subtitleFontSize }]}>{card.subtitle}</Text> : null}
+                        </View>
+                        <View style={s.bannerIconArea}>
+                          <Ionicons name={card.icon || 'gift'} size={bannerSizes.iconSize} color="rgba(255,255,255,0.18)" />
+                        </View>
+                      </View>
+                    </LinearGradient>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Pagination dots */}
+            {appCards.length > 1 && (
+              <View style={s.paginationDots}>
+                {appCards.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      s.dot,
+                      i === activeCardIndex && s.dotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Platform Icon Row ── */}
+        <View style={s.platformSection}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            snapToInterval={screenWidth - GRID_PADDING * 2}
-            snapToAlignment="center"
-            onScroll={(e) => {
-              const offset = e.nativeEvent.contentOffset.x;
-              const cardW = screenWidth - GRID_PADDING * 2;
-              const idx = Math.round(offset / cardW);
-              if (idx !== activeCardIndex) setActiveCardIndex(idx);
-            }}
-            scrollEventThrottle={16}
-            contentContainerStyle={s.cardCarouselScroll}
-            style={s.cardCarousel}
+            contentContainerStyle={s.platformScroll}
           >
-            {appCards.map((card) => (
-              <TouchableOpacity
-                key={card.id}
-                style={[
-                  s.bannerContainer,
-                  { width: screenWidth - GRID_PADDING * 2 - 8 },
-                ]}
-                activeOpacity={0.9}
-                onPress={() => handleCardPress(card)}
-              >
-                {card.image_url ? (
-                  <View style={[s.bannerGradient, { height: bannerSizes.bannerHeight }]}>
-                    <Image source={{ uri: card.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                    <View style={[s.bannerContent, { position: 'absolute', bottom: 0, left: 0, right: 0, padding: bannerSizes.bannerPaddingH, backgroundColor: 'rgba(0,0,0,0.38)' }]}>
-                      <View style={s.bannerTextArea}>
-                        <Text style={[s.bannerTitle, { color: card.text_color || '#fff', fontSize: bannerSizes.titleFontSize }]}>{card.title}</Text>
-                        {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff', fontSize: bannerSizes.subtitleFontSize }]}>{card.subtitle}</Text> : null}
-                      </View>
-                    </View>
+            {PLATFORM_SHORTCUTS.map(p => {
+              const isActive = selectedPlatform === p.key;
+              return (
+                <TouchableOpacity
+                  key={p.key}
+                  style={[s.platformItem, { width: bannerSizes.platformItemWidth }]}
+                  onPress={() => handlePlatformSelect(p.key)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    s.platformIconCircle,
+                    {
+                      width: bannerSizes.platformCircle,
+                      height: bannerSizes.platformCircle,
+                      borderRadius: bannerSizes.platformCircle / 2,
+                    },
+                    isActive && { borderColor: p.color, borderWidth: 2.5 },
+                  ]}>
+                    <PlatformLogoBadge platform={p.key} size={bannerSizes.platformIconSize} />
                   </View>
-                ) : (
-                  <LinearGradient
-                    colors={[card.background_color || colors.primary, darkenColor(card.background_color || colors.primary)]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[s.bannerGradient, { height: bannerSizes.bannerHeight, paddingHorizontal: bannerSizes.bannerPaddingH, paddingVertical: bannerSizes.bannerPaddingV }]}
-                  >
-                    <View style={s.bannerContent}>
-                      <View style={s.bannerTextArea}>
-                        <Text style={[s.bannerTitle, { color: card.text_color || '#fff', fontSize: bannerSizes.titleFontSize }]}>{card.title}</Text>
-                        {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff', fontSize: bannerSizes.subtitleFontSize }]}>{card.subtitle}</Text> : null}
-                      </View>
-                      <View style={s.bannerIconArea}>
-                        <Ionicons name={card.icon || 'gift'} size={bannerSizes.iconSize} color="rgba(255,255,255,0.18)" />
-                      </View>
-                    </View>
-                  </LinearGradient>
-                )}
-              </TouchableOpacity>
-            ))}
+                  <Text style={[
+                    s.platformLabel,
+                    isActive && { color: colors.text, fontWeight: '700' },
+                  ]} numberOfLines={1}>
+                    {p.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
-
-          {/* Pagination dots */}
-          {appCards.length > 1 && (
-            <View style={s.paginationDots}>
-              {appCards.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    s.dot,
-                    i === activeCardIndex && s.dotActive,
-                  ]}
-                />
-              ))}
-            </View>
-          )}
         </View>
-      )}
 
-      {/* ── Platform Icon Row ── */}
-      <View style={s.platformSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.platformScroll}
-        >
-          {PLATFORM_SHORTCUTS.map(p => {
-            const isActive = selectedPlatform === p.key;
-            return (
-              <TouchableOpacity
-                key={p.key}
-                style={[s.platformItem, { width: bannerSizes.platformItemWidth }]}
-                onPress={() => handlePlatformSelect(p.key)}
-                activeOpacity={0.7}
-              >
-                <View style={[
-                  s.platformIconCircle,
-                  {
-                    width: bannerSizes.platformCircle,
-                    height: bannerSizes.platformCircle,
-                    borderRadius: bannerSizes.platformCircle / 2,
-                  },
-                  isActive && { borderColor: p.color, borderWidth: 2.5 },
-                ]}>
-                  <PlatformLogoBadge platform={p.key} size={bannerSizes.platformIconSize} />
-                </View>
-                <Text style={[
-                  s.platformLabel,
-                  isActive && { color: colors.text, fontWeight: '700' },
-                ]} numberOfLines={1}>
-                  {p.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* ── Active Filters ── */}
+        {!!(selectedCategory || selectedPlatform !== 'all') && (
+          <View style={s.activeFilterRow}>
+            <Text style={s.activeFilterText}>
+              {selectedPlatform !== 'all'
+                ? `${PLATFORM_LABELS[selectedPlatform] || selectedPlatform}`
+                : ''}
+              {selectedPlatform !== 'all' && selectedCategory ? ' • ' : ''}
+              {selectedCategory
+                ? categories.find(c => c.id === selectedCategory)?.name || 'Categoria'
+                : ''}
+            </Text>
+            <TouchableOpacity onPress={() => { setSelectedCategory(null); setSelectedPlatform('all'); }}>
+              <Ionicons name="close-circle" size={18} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Section Title ── */}
+        <View style={s.sectionTitleRow}>
+          <View style={s.sectionTitleLeft}>
+            <Ionicons name="flame" size={20} color={colors.primary} />
+            <Text style={s.sectionTitle}>
+              {selectedPlatform !== 'all'
+                ? `Produtos ${PLATFORM_LABELS[selectedPlatform] || ''}`
+                : 'Ofertas em destaque'}
+            </Text>
+          </View>
+          <Text style={s.sectionCount}>{filteredProducts.length}</Text>
+        </View>
       </View>
-
-      {/* ── Active Filters ── */}
-      {!!(selectedCategory || selectedPlatform !== 'all') && (
-        <View style={s.activeFilterRow}>
-          <Text style={s.activeFilterText}>
-            {selectedPlatform !== 'all'
-              ? `${PLATFORM_LABELS[selectedPlatform] || selectedPlatform}`
-              : ''}
-            {selectedPlatform !== 'all' && selectedCategory ? ' • ' : ''}
-            {selectedCategory
-              ? categories.find(c => c.id === selectedCategory)?.name || 'Categoria'
-              : ''}
-          </Text>
-          <TouchableOpacity onPress={() => { setSelectedCategory(null); setSelectedPlatform('all'); }}>
-            <Ionicons name="close-circle" size={18} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── Section Title ── */}
-      <View style={s.sectionTitleRow}>
-        <View style={s.sectionTitleLeft}>
-          <Ionicons name="flame" size={20} color={colors.primary} />
-          <Text style={s.sectionTitle}>
-            {selectedPlatform !== 'all'
-              ? `Produtos ${PLATFORM_LABELS[selectedPlatform] || ''}`
-              : 'Ofertas em destaque'}
-          </Text>
-        </View>
-        <Text style={s.sectionCount}>{filteredProducts.length}</Text>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const renderEmpty = () => (
     <EmptyState
@@ -491,66 +527,66 @@ export default function HomeScreen({ navigation, route }) {
     );
   };
 
-  const renderItem = ({ item, index }) => {
+        const renderItem = ({item, index}) => {
     // Show skeleton for loading items
     if (item.skeleton) {
       return <ProductCardSkeleton />;
     }
 
-    return (
-      <ProductCard
-        product={item}
-        onPress={() => handleProductPress(item)}
-        onFavoritePress={() => handleFavorite(item.id)}
-        isFavorite={isFavorite(item.id)}
-        index={index}
-        isGrid={true}
-      />
-    );
+        return (
+        <ProductCard
+          product={item}
+          onPress={() => handleProductPress(item)}
+          onFavoritePress={() => handleFavorite(item.id)}
+          isFavorite={isFavorite(item.id)}
+          index={index}
+          isGrid={true}
+        />
+        );
   };
 
-  if (loading && !refreshing) {
+        if (loading && !refreshing) {
     return (
-      <View style={s.container}>
-        {renderStickyHeader()}
-        <ModernLoading
-          icon="pricetag"
-          title="Carregando produtos..."
-          subtitle="Buscando as melhores ofertas para você"
-        />
-      </View>
-    );
+        <View style={s.container}>
+          {renderStickyHeader()}
+          <ModernLoading
+            icon="pricetag"
+            title="Carregando produtos..."
+            subtitle="Buscando as melhores ofertas para você"
+          />
+        </View>
+        );
   }
 
-  return (
-    <View style={s.container}>
-      {renderStickyHeader()}
+        return (
+        <View style={s.container}>
+          {renderStickyHeader()}
 
-      <FlatList
-        data={filteredProducts}
-        extraData={favorites}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        numColumns={2}
-        columnWrapperStyle={s.gridRow}
-        ListHeaderComponent={renderListHeader}
-        ListEmptyComponent={renderEmpty}
-        ListFooterComponent={renderFooter}
-        contentContainerStyle={s.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
+          <FlatList
+            data={filteredProducts}
+            extraData={favorites}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            numColumns={2}
+            columnWrapperStyle={s.gridRow}
+            ListHeaderComponent={renderListHeader}
+            ListEmptyComponent={renderEmpty}
+            ListFooterComponent={renderFooter}
+            contentContainerStyle={s.list}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+              />
+            }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            showsVerticalScrollIndicator={false}
           />
-        }
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
-  );
+        </View>
+        );
 }
 
 // Helper to darken a hex color for gradient end
@@ -559,271 +595,271 @@ const darkenColor = (hex) => {
     const num = parseInt(hex.replace('#', ''), 16);
     const r = Math.max(0, (num >> 16) - 40);
     const g = Math.max(0, ((num >> 8) & 0x00FF) - 40);
-    const b = Math.max(0, (num & 0x0000FF) - 40);
-    return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
+        const b = Math.max(0, (num & 0x0000FF) - 40);
+        return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
   } catch {
     return '#991B1B';
   }
 };
 
 const dynamicStyles = (colors) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
+        StyleSheet.create({
+          container: {
+          flex: 1,
+        backgroundColor: colors.background,
     },
 
-    // ─── Sticky Header ───────────────────────────────────
-    headerBar: {
-      backgroundColor: colors.primary,
-      paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 8,
-      paddingBottom: 8,
-      paddingHorizontal: 12,
+        // ─── Sticky Header ───────────────────────────────────
+        headerBar: {
+          backgroundColor: colors.primary,
+        paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 8,
+        paddingBottom: 8,
+        paddingHorizontal: 12,
     },
-    searchRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginBottom: 8,
+        searchRow: {
+          flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 8,
     },
-    headerIconBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-
-    // ─── Category chips ──────────────────────────────────
-    categoryChipsScroll: {
-      paddingBottom: 4,
-      gap: 0,
-    },
-    categoryChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 16,
-      marginRight: 8,
-    },
-    categoryChipActive: {
-      backgroundColor: 'rgba(255,255,255,0.25)',
-    },
-    categoryChipText: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: 'rgba(255,255,255,0.8)',
-    },
-    categoryChipTextActive: {
-      fontWeight: '700',
-      color: '#fff',
+        headerIconBtn: {
+          width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
-    // ─── Banner ──────────────────────────────────────────
-    bannerContainer: {
-      marginHorizontal: 4,
-      marginTop: 12,
-      marginBottom: 4,
-      borderRadius: 16,
-      overflow: 'hidden',
-      ...(Platform.OS === 'web' ? {
-        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+        // ─── Category chips ──────────────────────────────────
+        categoryChipsScroll: {
+          paddingBottom: 4,
+        gap: 0,
+    },
+        categoryChip: {
+          paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginRight: 8,
+    },
+        categoryChipActive: {
+          backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+        categoryChipText: {
+          fontSize: 13,
+        fontWeight: '500',
+        color: 'rgba(255,255,255,0.8)',
+    },
+        categoryChipTextActive: {
+          fontWeight: '700',
+        color: '#fff',
+    },
+
+        // ─── Banner ──────────────────────────────────────────
+        bannerContainer: {
+          marginHorizontal: 4,
+        marginTop: 12,
+        marginBottom: 4,
+        borderRadius: 16,
+        overflow: 'hidden',
+        ...(Platform.OS === 'web' ? {
+          boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
       } : {
-        elevation: 4,
+          elevation: 4,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: {width: 0, height: 2 },
         shadowOpacity: 0.12,
         shadowRadius: 8,
       }),
     },
-    bannerGradient: {
-      overflow: 'hidden',
-      borderRadius: 16,
+        bannerGradient: {
+          overflow: 'hidden',
+        borderRadius: 16,
     },
-    bannerContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+        bannerContent: {
+          flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
-    bannerTextArea: {
-      flex: 1,
+        bannerTextArea: {
+          flex: 1,
     },
-    bannerTitle: {
-      fontWeight: '800',
-      color: '#fff',
-      letterSpacing: 0.5,
+        bannerTitle: {
+          fontWeight: '800',
+        color: '#fff',
+        letterSpacing: 0.5,
     },
-    bannerSubtitle: {
-      fontWeight: '900',
-      color: '#fff',
-      marginTop: 4,
-      letterSpacing: 0.3,
+        bannerSubtitle: {
+          fontWeight: '900',
+        color: '#fff',
+        marginTop: 4,
+        letterSpacing: 0.3,
     },
-    bannerIconArea: {
-      alignItems: 'center',
-      justifyContent: 'center',
+        bannerIconArea: {
+          alignItems: 'center',
+        justifyContent: 'center',
     },
-    cardCarousel: {
-      marginTop: 12,
-      marginBottom: 0,
+        cardCarousel: {
+          marginTop: 12,
+        marginBottom: 0,
     },
-    cardCarouselScroll: {
-      paddingHorizontal: 4,
-      gap: 0,
+        cardCarouselScroll: {
+          paddingHorizontal: 4,
+        gap: 0,
     },
-    // ─── Pagination dots ─────────────────────────────────
-    paginationDots: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: 8,
-      gap: 6,
+        // ─── Pagination dots ─────────────────────────────────
+        paginationDots: {
+          flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 8,
+        gap: 6,
     },
-    dot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.border,
+        dot: {
+          width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: colors.border,
     },
-    dotActive: {
-      width: 18,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.primary,
+        dotActive: {
+          width: 18,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: colors.primary,
     },
 
-    // ─── Platform Icons ──────────────────────────────────
-    platformSection: {
-      backgroundColor: colors.card,
-      marginTop: 12,
-      marginHorizontal: 4,
-      borderRadius: 12,
-      paddingVertical: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      ...(Platform.OS === 'web' ? {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        // ─── Platform Icons ──────────────────────────────────
+        platformSection: {
+          backgroundColor: colors.card,
+        marginTop: 12,
+        marginHorizontal: 4,
+        borderRadius: 12,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: colors.border,
+        ...(Platform.OS === 'web' ? {
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
       } : {
-        elevation: 2,
+          elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: {width: 0, height: 1 },
         shadowOpacity: 0.06,
         shadowRadius: 4,
       }),
     },
-    platformScroll: {
-      paddingHorizontal: 8,
+        platformScroll: {
+          paddingHorizontal: 8,
     },
-    platformItem: {
-      alignItems: 'center',
-      marginHorizontal: 2,
+        platformItem: {
+          alignItems: 'center',
+        marginHorizontal: 2,
     },
-    platformIconCircle: {
-      backgroundColor: colors.background,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 6,
-      borderWidth: 2,
-      borderColor: 'transparent',
-      ...(Platform.OS === 'web' ? {
-        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+        platformIconCircle: {
+          backgroundColor: colors.background,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 6,
+        borderWidth: 2,
+        borderColor: 'transparent',
+        ...(Platform.OS === 'web' ? {
+          boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
       } : {
-        elevation: 2,
+          elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: {width: 0, height: 1 },
         shadowOpacity: 0.08,
         shadowRadius: 3,
       }),
     },
-    platformLabel: {
-      fontSize: 11,
-      color: colors.textMuted,
-      fontWeight: '600',
-      textAlign: 'center',
+        platformLabel: {
+          fontSize: 11,
+        color: colors.textMuted,
+        fontWeight: '600',
+        textAlign: 'center',
     },
 
-    // ─── Active Filter ────────────────────────────────────
-    activeFilterRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.card,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 6,
-      marginTop: 8,
-      marginHorizontal: 4,
+        // ─── Active Filter ────────────────────────────────────
+        activeFilterRow: {
+          flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.card,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
+        marginTop: 8,
+        marginHorizontal: 4,
     },
-    activeFilterText: {
-      fontSize: 13,
-      color: colors.text,
-      fontWeight: '500',
-    },
-
-    // ─── Section Title ────────────────────────────────────
-    sectionTitleRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 14,
-      marginBottom: 4,
-      marginHorizontal: 4,
-    },
-    sectionTitleLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    sectionTitle: {
-      fontSize: 17,
-      fontWeight: '800',
-      color: colors.text,
-      letterSpacing: 0.3,
-    },
-    sectionCount: {
-      fontSize: 13,
-      color: colors.textMuted,
-      fontWeight: '600',
-      backgroundColor: colors.background,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
+        activeFilterText: {
+          fontSize: 13,
+        color: colors.text,
+        fontWeight: '500',
     },
 
-    // ─── Product Grid ────────────────────────────────────
-    list: {
-      paddingHorizontal: GRID_PADDING,
-      paddingTop: 0,
-      paddingBottom: 100, // Espaço para navbar flutuante (64px navbar + padding)
+        // ─── Section Title ────────────────────────────────────
+        sectionTitleRow: {
+          flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 14,
+        marginBottom: 4,
+        marginHorizontal: 4,
     },
-    gridRow: {
-      justifyContent: 'space-between',
-      marginBottom: 0,
+        sectionTitleLeft: {
+          flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
-    listHeaderContent: {
-      marginBottom: 8,
+        sectionTitle: {
+          fontSize: 17,
+        fontWeight: '800',
+        color: colors.text,
+        letterSpacing: 0.3,
+    },
+        sectionCount: {
+          fontSize: 13,
+        color: colors.textMuted,
+        fontWeight: '600',
+        backgroundColor: colors.background,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
 
-    // ─── Loading / Footer ────────────────────────────────
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: colors.background,
+        // ─── Product Grid ────────────────────────────────────
+        list: {
+          paddingHorizontal: GRID_PADDING,
+        paddingTop: 0,
+        paddingBottom: 100, // Espaço para navbar flutuante (64px navbar + padding)
     },
-    loadingText: {
-      marginTop: 12,
-      fontSize: 14,
-      color: colors.textMuted,
-      fontWeight: '500',
+        gridRow: {
+          justifyContent: 'space-between',
+        marginBottom: 0,
     },
-    footerLoader: {
-      paddingVertical: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
+        listHeaderContent: {
+          marginBottom: 8,
     },
-    footerLoaderText: {
-      marginTop: 8,
-      fontSize: 12,
-      color: colors.textMuted,
+
+        // ─── Loading / Footer ────────────────────────────────
+        loadingContainer: {
+          flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+    },
+        loadingText: {
+          marginTop: 12,
+        fontSize: 14,
+        color: colors.textMuted,
+        fontWeight: '500',
+    },
+        footerLoader: {
+          paddingVertical: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+        footerLoaderText: {
+          marginTop: 8,
+        fontSize: 12,
+        color: colors.textMuted,
     },
   });

@@ -64,7 +64,7 @@ class AutoRepublishService {
 
       // Buscar produtos aprovados
       const approvedProducts = await this.getApprovedProducts();
-      
+
       if (approvedProducts.length === 0) {
         logger.info('ℹ️ Nenhum produto aprovado encontrado para republicação');
         return { success: true, scheduled: 0, message: 'Nenhum produto para republicar' };
@@ -101,9 +101,9 @@ class AutoRepublishService {
   async getApprovedProducts() {
     try {
       const { supabase } = await import('../config/database.js');
-      
-      // Buscar produtos aprovados que não foram republicados recentemente
-      const { data, error } = await supabase
+
+      // 1) Buscar os 30 produtos mais recentes
+      const { data: recentData, error: recentError } = await supabase
         .from('products')
         .select(`
           *,
@@ -113,13 +113,35 @@ class AutoRepublishService {
         .eq('status', 'approved')
         .eq('stock_available', true)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(30);
 
-      if (error) throw error;
+      if (recentError) throw recentError;
+
+      // 2) Buscar os 30 produtos mais antigos com melhor offer_score
+      const { data: topScoredData, error: topScoredError } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(id, name, icon),
+          coupon:coupons(id, code, discount_value, discount_type, platform)
+        `)
+        .eq('status', 'approved')
+        .eq('stock_available', true)
+        .gte('offer_score', 50) // apenas com score razoável
+        .order('offer_score', { ascending: false })
+        .order('created_at', { ascending: true }) // prioriza mais antigos para republicar
+        .limit(30);
+
+      if (topScoredError) throw topScoredError;
+
+      // 3) Mesclar e remover duplicados
+      const mergedMap = new Map();
+      [...(recentData || []), ...(topScoredData || [])].forEach(p => mergedMap.set(p.id, p));
+      const mergedData = Array.from(mergedMap.values());
 
       // Filtrar produtos que não têm agendamento pendente
       const productsWithoutSchedule = [];
-      for (const product of data || []) {
+      for (const product of mergedData) {
         const hasPending = await this.hasScheduledPost(product.id);
         if (!hasPending) {
           productsWithoutSchedule.push(product);
@@ -139,7 +161,7 @@ class AutoRepublishService {
   async hasScheduledPost(productId) {
     try {
       const { supabase } = await import('../config/database.js');
-      
+
       const { data, error } = await supabase
         .from('scheduled_posts')
         .select('id')
@@ -176,22 +198,26 @@ class AutoRepublishService {
         created_at: p.created_at
       }));
 
+      const currentHour = new Date().getHours() - 3; // Estimativa simples GMT-3 para informar a IA
+
       const prompt = `Você é um especialista em marketing digital e estratégia de publicação de ofertas.
 
-Analise os seguintes produtos aprovados e crie uma estratégia de republicação inteligente:
+Analise os seguintes produtos aprovados e crie uma estratégia de republicação inteligente.
+Existem até 60 produtos na lista, mas VOCÊ DEVE SELECIONAR NO MÁXIMO OS 35 MELHORES.
 
 PRODUTOS:
 ${JSON.stringify(productsData, null, 2)}
 
 REGRAS IMPORTANTES:
-1. Distribua as publicações ao longo dos próximos 7 dias
-2. Priorize produtos com maior desconto e melhor offer_score
-3. Evite publicar produtos similares no mesmo dia
-4. Considere horários de pico: 10h-12h, 14h-16h, 19h-21h (horário de Brasília)
-5. Produtos com cupom devem ter prioridade
-6. Não agende mais de 5 produtos por dia
-7. Espaçe as publicações em pelo menos 2 horas
-8. Produtos da mesma categoria devem ser espaçados em dias diferentes
+1. Selecione NO MÁXIMO 35 PRODUTOS para a estratégia.
+2. Distribua as publicações ao longo dos próximos 7 dias (inclusive a data de hoje).
+3. Priorize produtos com maior desconto e melhor offer_score.
+4. Evite publicar produtos similares no mesmo dia.
+5. Considere horários de pico: 10h-12h, 14h-16h, 19h-21h (horário de Brasília).
+   NOTA MENTAL: Considerando que o horário atual aproximado é ${currentHour}h, NÃO agende horários anteriores ao longo do dia 0.
+6. Produtos com cupom devem ter prioridade máxima.
+7. Não agende mais de 5 produtos por dia.
+8. Espaçe as publicações em pelo menos 2 horas e categorias similares em dias diferentes.
 
 RESPONDA APENAS COM JSON no seguinte formato:
 {
@@ -220,7 +246,7 @@ RESPONDA APENAS COM JSON no seguinte formato:
 
     } catch (error) {
       logger.error(`Erro ao criar estratégia com IA: ${error.message}`);
-      
+
       // Fallback: criar estratégia simples sem IA
       logger.info('⚠️ Usando estratégia de fallback (sem IA)');
       return this.createFallbackStrategy(products);
@@ -233,7 +259,7 @@ RESPONDA APENAS COM JSON no seguinte formato:
   createFallbackStrategy(products) {
     const schedule = [];
     const now = new Date();
-    
+
     // Ordenar por offer_score e discount_percentage
     const sortedProducts = products.sort((a, b) => {
       const scoreA = (a.offer_score || 0) + (a.discount_percentage || 0);
@@ -245,7 +271,18 @@ RESPONDA APENAS COM JSON no seguinte formato:
     const maxPerDay = 5;
     let currentDay = 0;
     let countToday = 0;
-    let currentHour = 10; // Começar às 10h
+
+    // Pegar a hora local real no Brasil como base de partida para hoje
+    const spTimeFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false });
+    const localHourToday = parseInt(spTimeFormatter.format(now));
+
+    // Para hoje, agendar apenas horas futuras
+    let currentHour = Math.max(10, localHourToday + 1);
+    if (currentHour > 20) {
+      // Já passou das 20h, joga pro dia seguinte
+      currentDay = 1;
+      currentHour = 10;
+    }
 
     for (const product of sortedProducts.slice(0, 35)) { // Máximo 35 produtos (5 por dia x 7 dias)
       if (countToday >= maxPerDay) {
@@ -254,10 +291,16 @@ RESPONDA APENAS COM JSON no seguinte formato:
         currentHour = 10;
       }
 
-      const scheduledDate = new Date(now);
+      // Adicionar offset em dias respeitando timezone
+      const scheduledDate = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
       scheduledDate.setDate(scheduledDate.getDate() + currentDay);
-      
-      const dateStr = scheduledDate.toISOString().split('T')[0];
+
+      // Formatar dateStr de forma segura local e nao usando toISOString (que usa GMT 0 e pode voltar um dia atras na noite)
+      const year = scheduledDate.getFullYear();
+      const month = String(scheduledDate.getMonth() + 1).padStart(2, '0');
+      const day = String(scheduledDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
       const timeStr = `${currentHour.toString().padStart(2, '0')}:00`;
 
       schedule.push({

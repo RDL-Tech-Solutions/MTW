@@ -14,6 +14,7 @@ router.get('/unread/count', NotificationController.countUnread);
 router.put('/:id/read', NotificationController.markAsRead);
 router.put('/read-all', NotificationController.markAllAsRead);
 router.post('/register-token', validate(registerPushTokenSchema), NotificationController.registerToken);
+router.post('/remove-token', NotificationController.removeToken);
 router.post('/test-push', NotificationController.testPush);
 
 export default router;

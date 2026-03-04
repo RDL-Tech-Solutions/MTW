@@ -65,7 +65,7 @@ class LinkAnalyzer {
             },
             timeout: 10000
           });
-          
+
           // Pegar o Location header do redirecionamento
           const location = headResponse.headers.location || headResponse.headers.Location;
           if (location) {
@@ -272,11 +272,11 @@ class LinkAnalyzer {
           break;
 
         } catch (error) {
-          const errorMsg = error.response?.status 
-            ? `HTTP ${error.response.status}: ${error.response.statusText}` 
+          const errorMsg = error.response?.status
+            ? `HTTP ${error.response.status}: ${error.response.statusText}`
             : error.message;
           console.log(`   ⚠️ Erro na tentativa ${attempts}: ${errorMsg}`);
-          
+
           // Se for erro de timeout ou rede, tentar novamente
           if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
             console.log(`   🔄 Erro de rede/timeout, tentando novamente...`);
@@ -286,7 +286,7 @@ class LinkAnalyzer {
             console.log(`   🚫 Acesso bloqueado (${error.response.status}), parando tentativas`);
             break;
           }
-          
+
           if (attempts >= maxAttempts) {
             console.log(`   ⚠️ Máximo de tentativas atingido, usando última URL conhecida`);
             break;
@@ -303,12 +303,12 @@ class LinkAnalyzer {
       }
 
       console.log(`   ✅ URL final após ${attempts} tentativa(s): ${finalUrl.substring(0, 100)}...`);
-      
+
       // Se a URL não mudou após todas as tentativas, avisar
       if (finalUrl === url && attempts > 1) {
         console.log(`   ⚠️ URL não mudou após seguir redirecionamentos`);
       }
-      
+
       return finalUrl;
 
     } catch (error) {
@@ -3054,7 +3054,7 @@ class LinkAnalyzer {
             url = finalUrl;
           } else {
             console.log('   ⚠️ URL não mudou após seguir redirecionamentos');
-            
+
             // Tentar método alternativo: fazer requisição e buscar ASIN no HTML
             if (url.includes('amzn.to')) {
               console.log('   🔍 Tentando extrair ASIN do HTML da página encurtada...');
@@ -3067,12 +3067,12 @@ class LinkAnalyzer {
                   },
                   timeout: 15000
                 });
-                
+
                 // Pegar URL final após redirecionamentos automáticos do axios
-                const redirectedUrl = response.request?.res?.responseUrl || 
-                                     response.request?.responseURL || 
-                                     response.config?.url;
-                
+                const redirectedUrl = response.request?.res?.responseUrl ||
+                  response.request?.responseURL ||
+                  response.config?.url;
+
                 if (redirectedUrl && redirectedUrl !== url) {
                   console.log(`   ✅ URL obtida via axios redirect: ${redirectedUrl}`);
                   url = redirectedUrl;
@@ -3103,19 +3103,75 @@ class LinkAnalyzer {
 
       console.log(`   ✅ ASIN identificado: ${asin}`);
 
-      // Fazer requisição à página do produto
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Referer': 'https://www.amazon.com.br/',
-          'Connection': 'keep-alive'
-        },
-        timeout: 15000,
-        maxRedirects: 5
-      });
+      // Limpar URL: manter apenas o ASIN para evitar erros de parâmetros inválidos
+      let cleanUrl = url;
+      try {
+        const urlObj = new URL(url);
+        // Reconstituir URL limpa com apenas o ASIN
+        if (asin) {
+          cleanUrl = `https://www.amazon.com.br/dp/${asin}?language=pt_BR`;
+        }
+      } catch (e) {
+        console.log(`   ⚠️ Não foi possível limpar URL: ${e.message}`);
+      }
+      console.log(`   🔗 URL limpa para extração: ${cleanUrl}`);
+
+      // Fazer requisição à página do produto com headers completos simulando Chrome real
+      let response;
+      try {
+        response = await axios.get(cleanUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Referer': 'https://www.google.com.br/',
+            'Connection': 'keep-alive',
+            'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0'
+          },
+          timeout: 20000,
+          maxRedirects: 10,
+          validateStatus: (status) => status < 500
+        });
+      } catch (reqError) {
+        const errMsg = reqError?.message || reqError?.toString() || String(reqError);
+        const errStatus = reqError?.response?.status;
+        console.error(`   ❌ Erro na requisição HTTP Amazon: status=${errStatus || 'N/A'} msg=${errMsg}`);
+        throw new Error(`Falha na requisição à Amazon (${errStatus || errMsg})`);
+      }
+
+      if (!response || !response.data) {
+        throw new Error('Amazon retornou resposta vazia');
+      }
+
+      const responseStatus = response.status;
+      console.log(`   📡 Status HTTP da Amazon: ${responseStatus}`);
+
+      if (responseStatus === 503 || responseStatus === 429) {
+        throw new Error(`Amazon bloqueou a requisição (HTTP ${responseStatus}). Tente novamente em alguns instantes.`);
+      }
+
+      // Detectar página de CAPTCHA / bot detection da Amazon
+      const htmlSample = (response.data || '').substring(0, 5000);
+      if (
+        htmlSample.includes('Type the characters you see in this image') ||
+        htmlSample.includes('Enter the characters you see below') ||
+        htmlSample.includes('robot.h') ||
+        htmlSample.toLowerCase().includes('captcha') ||
+        htmlSample.includes('api-services-support@amazon.com') ||
+        (htmlSample.includes('<form') && htmlSample.includes('captcha'))
+      ) {
+        console.warn('   ⚠️ Amazon retornou página de CAPTCHA/bot detection');
+        throw new Error('A Amazon detectou acesso automatizado e exibiu um CAPTCHA. Tente novamente mais tarde ou use a API oficial da Amazon (PA-API).');
+      }
 
       const $ = cheerio.load(response.data);
 
@@ -3273,7 +3329,17 @@ class LinkAnalyzer {
         asin: asin
       };
     } catch (error) {
-      console.error('❌ Erro ao extrair informações da Amazon:', error.message);
+      const errMsg = error?.message || error?.toString() || String(error);
+      const errStatus = error?.response?.status;
+      console.error(`❌ Erro ao extrair informações da Amazon: status=${errStatus || 'N/A'} msg=${errMsg}`);
+      if (error?.response?.data) {
+        const sample = String(error.response.data).substring(0, 300);
+        console.error(`   📄 Resposta parcial: ${sample}`);
+      }
+      // Garantir que o erro tem uma mensagem útil
+      if (!error?.message) {
+        throw new Error(errMsg || 'Erro desconhecido ao extrair dados da Amazon');
+      }
       throw error;
     }
   }
@@ -4095,9 +4161,13 @@ class LinkAnalyzer {
       try {
         result = await this.extractAmazonInfo(finalUrl);
       } catch (amazonError) {
-        console.error('❌ Erro ao extrair info Amazon:', amazonError.message);
+        const amazonErrMsg = amazonError?.message || amazonError?.toString() || 'Erro desconhecido';
+        console.error(`❌ Erro ao extrair info Amazon: ${amazonErrMsg}`);
+        if (amazonError?.stack) {
+          console.error(`   📍 Stack: ${amazonError.stack.split('\n').slice(0, 3).join(' | ')}`);
+        }
         result = {
-          error: `Erro ao extrair informações da Amazon: ${amazonError.message}`,
+          error: `Erro ao extrair informações da Amazon: ${amazonErrMsg}`,
           platform: 'amazon',
           affiliateLink: finalUrl
         };
