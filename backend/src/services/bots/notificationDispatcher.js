@@ -618,21 +618,32 @@ class NotificationDispatcher {
         throw new Error(`Plataforma não suportada: ${channel.platform}`);
       }
 
-      // Atualizar log como enviado apenas se foi criado com sucesso
-      if (log && log.id) {
+      // Atualizar log como enviado apenas se foi criado com sucesso E o envio foi bem-sucedido
+      if (log && log.id && result && result.success) {
         try {
           await NotificationLog.markAsSent(log.id);
         } catch (logError) {
           logger.warn(`Erro ao marcar log como enviado: ${logError.message}`);
         }
+      } else if (log && log.id && result && !result.success) {
+        // Marcar como falho se o envio falhou
+        try {
+          await NotificationLog.markAsFailed(log.id, result.error || 'Envio falhou');
+        } catch (logError) {
+          logger.warn(`Erro ao marcar log como falho: ${logError.message}`);
+        }
       }
+
+      // Retornar o status real do envio
+      const wasSuccessful = result && result.success === true;
 
       return {
         channelId: channel.id,
         platform: channel.platform,
-        success: true,
+        success: wasSuccessful,
         logId: log?.id || null,
-        result
+        result,
+        error: wasSuccessful ? undefined : (result?.error || 'Envio falhou')
       };
     } catch (error) {
       // Atualizar log como falho apenas se foi criado com sucesso

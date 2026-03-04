@@ -107,8 +107,8 @@ class AutoRepublishService {
         .from('products')
         .select(`
           *,
-          category:categories(id, name, icon),
-          coupon:coupons(id, code, discount_value, discount_type, platform)
+          categories!products_category_id_fkey(id, name, icon),
+          coupons!products_coupon_id_fkey(id, code, discount_value, discount_type, platform)
         `)
         .eq('status', 'approved')
         .eq('stock_available', true)
@@ -122,8 +122,8 @@ class AutoRepublishService {
         .from('products')
         .select(`
           *,
-          category:categories(id, name, icon),
-          coupon:coupons(id, code, discount_value, discount_type, platform)
+          categories!products_category_id_fkey(id, name, icon),
+          coupons!products_coupon_id_fkey(id, code, discount_value, discount_type, platform)
         `)
         .eq('status', 'approved')
         .eq('stock_available', true)
@@ -136,7 +136,17 @@ class AutoRepublishService {
 
       // 3) Mesclar e remover duplicados
       const mergedMap = new Map();
-      [...(recentData || []), ...(topScoredData || [])].forEach(p => mergedMap.set(p.id, p));
+      [...(recentData || []), ...(topScoredData || [])].forEach(p => {
+        // Mapear categories para category para manter compatibilidade
+        if (p.categories && !p.category) {
+          p.category = p.categories;
+        }
+        // Mapear coupons para coupon para manter compatibilidade
+        if (p.coupons && !p.coupon) {
+          p.coupon = p.coupons;
+        }
+        mergedMap.set(p.id, p);
+      });
       const mergedData = Array.from(mergedMap.values());
 
       // Filtrar produtos que não têm agendamento pendente
