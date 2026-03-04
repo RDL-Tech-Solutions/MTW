@@ -3,7 +3,7 @@ import {
     Plus, Pencil, Trash2, ToggleLeft, ToggleRight,
     Image as ImageIcon, Link, List, Ticket, Monitor,
     GripVertical, Eye, EyeOff, X, Save, Loader2,
-    Upload, Trash
+    Upload, Trash, ExternalLink, ShoppingBag, Smartphone
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -12,6 +12,26 @@ const ACTION_TYPES = [
     { value: 'product_list', label: 'Lista de produtos', icon: List },
     { value: 'coupon_list', label: 'Tela de cupons', icon: Ticket },
     { value: 'screen', label: 'Tela do app', icon: Monitor },
+];
+
+// Dynamic icon shown in the card preview based on action type
+const ACTION_ICONS = {
+    link: ExternalLink,
+    product_list: ShoppingBag,
+    coupon_list: Ticket,
+    screen: Smartphone,
+};
+
+// Available icons for the card visual
+const CARD_ICONS = [
+    { value: 'gift', label: 'Presente', icon: '🎁' },
+    { value: 'flash', label: 'Raio/Oferta', icon: '⚡' },
+    { value: 'pricetag', label: 'Etiqueta', icon: '🏷️' },
+    { value: 'heart', label: 'Coração', icon: '❤️' },
+    { value: 'star', label: 'Estrela', icon: '⭐' },
+    { value: 'diamond', label: 'Diamante', icon: '💎' },
+    { value: 'cart', label: 'Carrinho', icon: '🛒' },
+    { value: 'ticket', label: 'Cupom', icon: '🎟️' },
 ];
 
 const DEFAULT_CARD = {
@@ -25,6 +45,7 @@ const DEFAULT_CARD = {
     product_ids: [],
     position: 0,
     is_active: true,
+    icon: 'gift',
 };
 
 export default function AppCards() {
@@ -85,6 +106,7 @@ export default function AppCards() {
             product_ids: card.product_ids || [],
             position: card.position || 0,
             is_active: card.is_active,
+            icon: card.icon || 'gift',
         });
         setShowModal(true);
     };
@@ -236,9 +258,16 @@ export default function AppCards() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                                {ACTION_TYPES.find(a => a.value === card.action_type)?.label || card.action_type}
-                                            </span>
+                                            {(() => {
+                                                const actionDef = ACTION_TYPES.find(a => a.value === card.action_type);
+                                                const ActionIc = ACTION_ICONS[card.action_type] || Link;
+                                                return (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                                        <ActionIc className="w-3.5 h-3.5 text-gray-500" />
+                                                        {actionDef?.label || card.action_type}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-4 py-3">
                                             <button
@@ -325,7 +354,7 @@ export default function AppCards() {
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Preview</label>
                                 <div
-                                    className="rounded-xl p-5 relative overflow-hidden"
+                                    className="rounded-xl p-5 relative overflow-hidden min-h-[110px] flex items-center"
                                     style={{ backgroundColor: form.background_color, color: form.text_color }}
                                 >
                                     {form.image_url ? (
@@ -335,13 +364,31 @@ export default function AppCards() {
                                             className="absolute inset-0 w-full h-full object-cover rounded-xl"
                                         />
                                     ) : null}
-                                    <div className="relative z-10">
+                                    {/* Dynamic action icon — top right corner */}
+                                    {(() => {
+                                        const PreviewIcon = ACTION_ICONS[form.action_type] || ExternalLink;
+                                        return (
+                                            <PreviewIcon
+                                                className="absolute top-4 right-4 opacity-20"
+                                                style={{ width: 52, height: 52, color: form.text_color || '#fff' }}
+                                            />
+                                        );
+                                    })()}
+                                    <div className="relative z-10 flex-1">
                                         <p className="text-xs font-bold tracking-wider opacity-90">
                                             {form.title || 'TÍTULO DO CARD'}
                                         </p>
                                         <p className="text-2xl font-black mt-1">
                                             {form.subtitle || 'Subtítulo do card'}
                                         </p>
+                                        {/* Action type pill */}
+                                        <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: form.text_color || '#fff' }}>
+                                            {(() => {
+                                                const Ic = ACTION_ICONS[form.action_type] || ExternalLink;
+                                                return <Ic className="w-3 h-3" />;
+                                            })()}
+                                            {ACTION_TYPES.find(a => a.value === form.action_type)?.label || form.action_type}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -393,8 +440,8 @@ export default function AppCards() {
                                 {!form.image_url && (
                                     <label
                                         className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-colors mb-3 ${uploading
-                                                ? 'border-red-300 bg-red-50'
-                                                : 'border-gray-300 hover:border-red-400 hover:bg-red-50/50'
+                                            ? 'border-red-300 bg-red-50'
+                                            : 'border-gray-300 hover:border-red-400 hover:bg-red-50/50'
                                             }`}
                                         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                         onDrop={(e) => {
@@ -478,6 +525,29 @@ export default function AppCards() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Icon Selection */}
+                            {!form.image_url && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Ícone do Card</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {CARD_ICONS.map(ic => (
+                                            <button
+                                                key={ic.value}
+                                                type="button"
+                                                onClick={() => setForm(f => ({ ...f, icon: ic.value }))}
+                                                className={`flex items-center justify-center w-12 h-12 rounded-lg border-2 transition-colors text-xl ${form.icon === ic.value
+                                                        ? 'border-red-500 bg-red-50'
+                                                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                                                    }`}
+                                                title={ic.label}
+                                            >
+                                                {ic.icon}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Action Type */}
                             <div>

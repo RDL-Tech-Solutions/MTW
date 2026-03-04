@@ -685,6 +685,15 @@ class ProductController {
       logger.info(`📅 ✅ Produto agendado com IA: ${fullProduct.name}`);
       logger.info(`   Verifique em /scheduled-posts para ver o horário definido pela IA`);
 
+      // ENVIAR NOTIFICAÇÃO PUSH SEGMENTADA (mesmo que agendado, notificar usuários)
+      try {
+        const publishService = (await import('../services/autoSync/publishService.js')).default;
+        const pushSent = await publishService.notifyPush(fullProduct);
+        logger.info(`🔔 Notificação push enviada: ${pushSent ? 'Sim' : 'Não'}`);
+      } catch (pushError) {
+        logger.error(`❌ Erro ao enviar notificação push: ${pushError.message}`);
+      }
+
       res.json(successResponse({
         product: approvedProduct,
         scheduled: true,
@@ -868,6 +877,24 @@ class ProductController {
       const approvedProduct = await Product.approve(id, finalAffiliateLink, updateData);
       logger.info(`✅ Produto aprovado (não publicado): ${approvedProduct.name}`);
       logger.info(`   Status: approved (aparecerá no app mas não foi publicado nos canais)`);
+
+      // ENVIAR NOTIFICAÇÃO PUSH SEGMENTADA (mesmo sem publicar nos canais, notificar usuários do app)
+      try {
+        const fullProduct = await Product.findById(id);
+        fullProduct.affiliate_link = finalAffiliateLink;
+        if (category_id) fullProduct.category_id = category_id;
+        if (coupon_id) {
+          fullProduct.coupon_id = coupon_id;
+          fullProduct.final_price = finalPrice;
+          fullProduct.price_with_coupon = finalPrice;
+        }
+
+        const publishService = (await import('../services/autoSync/publishService.js')).default;
+        const pushSent = await publishService.notifyPush(fullProduct);
+        logger.info(`🔔 Notificação push enviada: ${pushSent ? 'Sim' : 'Não'}`);
+      } catch (pushError) {
+        logger.error(`❌ Erro ao enviar notificação push: ${pushError.message}`);
+      }
 
       res.json(successResponse({
         product: approvedProduct,

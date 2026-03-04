@@ -1,16 +1,91 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, Animated, Platform, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, Animated, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../theme/theme';
 import { PlatformIcon } from '../../utils/platformIcons';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 8;
 const GRID_PADDING = 16;
-const CARD_WIDTH = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP) / 2;
+
+// ── Responsive size helper ────────────────────────────────────────
+function getCardSizes(screenWidth) {
+  if (screenWidth <= 360) {
+    // Small phones (Galaxy A10, SE, etc.)
+    return {
+      cardWidth: (screenWidth - GRID_PADDING * 2 - GRID_GAP) / 2,
+      imageAspectRatio: 1.05,
+      titleFontSize: 11,
+      titleLineHeight: 15,
+      titleMinHeight: 30,
+      oldPriceFontSize: 10,
+      currencySignFontSize: 12,
+      priceIntFontSize: 18,
+      priceCentFontSize: 11,
+      infoPadding: 8,
+      discountBadgeFontSize: 10,
+      couponFontSize: 10,
+      couponIconSize: 12,
+      couponIconBoxSize: 18,
+      platformCircleSize: 24,
+      platformIconSize: 14,
+      favBtnSize: 28,
+      favBtnRadius: 14,
+      favIconSize: 17,
+    };
+  } else if (screenWidth >= 414) {
+    // Large phones (Plus / Pro Max / XL)
+    return {
+      cardWidth: (screenWidth - GRID_PADDING * 2 - GRID_GAP) / 2,
+      imageAspectRatio: 0.92,
+      titleFontSize: 14,
+      titleLineHeight: 19,
+      titleMinHeight: 38,
+      oldPriceFontSize: 12,
+      currencySignFontSize: 16,
+      priceIntFontSize: 24,
+      priceCentFontSize: 14,
+      infoPadding: 12,
+      discountBadgeFontSize: 12,
+      couponFontSize: 13,
+      couponIconSize: 14,
+      couponIconBoxSize: 22,
+      platformCircleSize: 32,
+      platformIconSize: 20,
+      favBtnSize: 34,
+      favBtnRadius: 17,
+      favIconSize: 21,
+    };
+  } else {
+    // Medium phones (375–413px – iPhone standard, Pixel 6)
+    return {
+      cardWidth: (screenWidth - GRID_PADDING * 2 - GRID_GAP) / 2,
+      imageAspectRatio: 1,
+      titleFontSize: 13,
+      titleLineHeight: 17,
+      titleMinHeight: 34,
+      oldPriceFontSize: 11,
+      currencySignFontSize: 15,
+      priceIntFontSize: 22,
+      priceCentFontSize: 13,
+      infoPadding: 10,
+      discountBadgeFontSize: 11,
+      couponFontSize: 12,
+      couponIconSize: 13,
+      couponIconBoxSize: 20,
+      platformCircleSize: 28,
+      platformIconSize: 18,
+      favBtnSize: 32,
+      favBtnRadius: 16,
+      favIconSize: 20,
+    };
+  }
+}
 
 export default function ProductCard({ product, onPress, onFavoritePress, isFavorite, index = 0, isGrid = false }) {
   const { colors } = useThemeStore();
+  const { width: screenWidth } = useWindowDimensions();
+  const sizes = getCardSizes(screenWidth);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScaleAnim = useRef(new Animated.Value(1)).current;
@@ -44,25 +119,24 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
   };
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, { 
-      toValue: 0.96, 
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
       friction: 5,
       tension: 100,
-      useNativeDriver: true 
+      useNativeDriver: true
     }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, { 
-      toValue: 1, 
+    Animated.spring(scaleAnim, {
+      toValue: 1,
       friction: 5,
       tension: 100,
-      useNativeDriver: true 
+      useNativeDriver: true
     }).start();
   };
 
   const handleFavoritePress = () => {
-    // Animação do coração
     Animated.sequence([
       Animated.parallel([
         Animated.spring(heartScaleAnim, {
@@ -97,60 +171,48 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
     }
   };
 
-  // Calcular desconto baseado no preço original vs preço atual
   const discount = product.discount_percentage ||
     (product.old_price && product.old_price > product.current_price
       ? Math.round(((product.old_price - product.current_price) / product.old_price) * 100)
       : 0);
 
-  // Selecionar o melhor cupom (maior desconto em %)
   const getBestCoupon = () => {
     if (!product.coupons || product.coupons.length === 0) return null;
-    
-    // Filtrar cupons não esgotados
     const activeCoupons = product.coupons.filter(c => !c.is_out_of_stock);
     if (activeCoupons.length === 0) return null;
 
-    // Calcular desconto percentual de cada cupom
     const couponsWithDiscount = activeCoupons.map(coupon => {
       const currentPrice = parseFloat(product.current_price) || 0;
       let discountPercent = 0;
-
       if (coupon.discount_type === 'percentage') {
         discountPercent = parseFloat(coupon.discount_value) || 0;
       } else {
-        // Converter desconto fixo em percentual
         const discountValue = parseFloat(coupon.discount_value) || 0;
         discountPercent = currentPrice > 0 ? (discountValue / currentPrice) * 100 : 0;
       }
-
       return { ...coupon, discountPercent };
     });
 
-    // Ordenar por maior desconto
     couponsWithDiscount.sort((a, b) => b.discountPercent - a.discountPercent);
     return couponsWithDiscount[0];
   };
 
   const bestCoupon = getBestCoupon();
-  const couponCode = bestCoupon?.code; // Remover fallback para product.coupon_code
+  const couponCode = bestCoupon?.code;
 
-  // Animação de scroll para códigos e descontos longos
   useEffect(() => {
-    // Adicionar margem de segurança para garantir que a animação seja ativada
-    const threshold = 5; // pixels de margem
+    const threshold = 5;
     if (couponCode && containerWidth > 0 && couponCodeWidth > (containerWidth - threshold)) {
-      const scrollDistance = couponCodeWidth - containerWidth + 30; // +30 para espaço extra
-      
+      const scrollDistance = couponCodeWidth - containerWidth + 30;
       Animated.loop(
         Animated.sequence([
-          Animated.delay(1500), // Pausa no início
+          Animated.delay(1500),
           Animated.timing(scrollAnim, {
             toValue: -scrollDistance,
-            duration: Math.max(scrollDistance * 40, 2000), // Mínimo 2s, máximo proporcional
+            duration: Math.max(scrollDistance * 40, 2000),
             useNativeDriver: true,
           }),
-          Animated.delay(1500), // Pausa no final
+          Animated.delay(1500),
           Animated.timing(scrollAnim, {
             toValue: 0,
             duration: Math.max(scrollDistance * 40, 2000),
@@ -163,25 +225,23 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
     }
   }, [couponCode, couponCodeWidth, containerWidth]);
 
-  // Usar price_with_coupon se houver cupom, senão usar current_price
-  const displayPrice = bestCoupon && product.price_with_coupon 
-    ? product.price_with_coupon 
+  const displayPrice = bestCoupon && product.price_with_coupon
+    ? product.price_with_coupon
     : product.current_price;
-  
+
   const currentPrice = formatPrice(displayPrice);
 
-  // Calcular desconto adicional do cupom
   const couponDiscount = bestCoupon && product.price_with_coupon
     ? Math.round(((product.current_price - product.price_with_coupon) / product.current_price) * 100)
     : 0;
 
-  const s = isGrid ? gridStyles(colors) : listStyles(colors);
+  const s = isGrid ? gridStyles(colors, sizes) : listStyles(colors);
 
   return (
     <Animated.View
       style={[
         { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-        isGrid && { width: CARD_WIDTH },
+        isGrid && { width: sizes.cardWidth },
       ]}
     >
       <TouchableOpacity
@@ -198,14 +258,14 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             style={s.image}
             resizeMode="cover"
           />
-          
-          {/* Discount badge on image */}
+
+          {/* Discount badge */}
           {discount > 0 && (
             <View style={s.discountBadge}>
               <Text style={s.discountBadgeText}>{discount}%</Text>
             </View>
           )}
-          
+
           {/* Favorite button */}
           {onFavoritePress && (
             <TouchableOpacity
@@ -217,7 +277,7 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
                 style={{
                   transform: [
                     { scale: heartScaleAnim },
-                    { 
+                    {
                       rotate: heartRotateAnim.interpolate({
                         inputRange: [0, 1],
                         outputRange: ['0deg', '360deg'],
@@ -228,15 +288,16 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
               >
                 <Ionicons
                   name={isFavorite ? 'heart' : 'heart-outline'}
-                  size={isGrid ? 20 : 22}
+                  size={sizes.favIconSize}
                   color={isFavorite ? colors.error : '#fff'}
                 />
               </Animated.View>
             </TouchableOpacity>
           )}
+
           {/* Platform logo */}
           <View style={s.platformLogoContainer}>
-            <PlatformIcon platform={product.platform} size={isGrid ? 18 : 16} />
+            <PlatformIcon platform={product.platform} size={sizes.platformIconSize} />
           </View>
         </View>
 
@@ -246,7 +307,6 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             {product.name}
           </Text>
 
-          {/* Old price - mostrar preço original se houver cupom, senão mostrar old_price */}
           {bestCoupon && product.price_with_coupon ? (
             <Text style={s.oldPrice}>
               R$ {parseFloat(product.current_price).toFixed(2).replace('.', ',')}
@@ -259,21 +319,19 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
             )
           )}
 
-          {/* Current price ML-style */}
           <View style={s.priceRow}>
             <Text style={s.currencySign}>R$ </Text>
             <Text style={s.priceInt}>{currentPrice.intPart}</Text>
             <Text style={s.priceCent}>{currentPrice.centPart}</Text>
           </View>
 
-          {/* Coupon - badge compacto vermelho com animação */}
           {!!couponCode && (
             <View style={s.couponContainer}>
               <View style={s.couponBadge}>
                 <View style={s.couponIconBox}>
-                  <Ionicons name="ticket" size={isGrid ? 13 : 12} color="#fff" />
+                  <Ionicons name="ticket" size={sizes.couponIconSize} color="#fff" />
                 </View>
-                <View 
+                <View
                   style={s.couponInfo}
                   onLayout={(e) => {
                     const width = e.nativeEvent.layout.width;
@@ -310,8 +368,8 @@ export default function ProductCard({ product, onPress, onFavoritePress, isFavor
   );
 }
 
-// ─── GRID (2-column Modern Style) ──────────────────────────────
-const gridStyles = (colors) => StyleSheet.create({
+// ─── GRID (2-column Responsive) ─────────────────────────────────
+const gridStyles = (colors, sizes) => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -331,7 +389,7 @@ const gridStyles = (colors) => StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: sizes.imageAspectRatio,
     backgroundColor: '#FAFAFA',
     position: 'relative',
     overflow: 'hidden',
@@ -342,14 +400,14 @@ const gridStyles = (colors) => StyleSheet.create({
   },
   discountBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: 7,
+    left: 7,
     backgroundColor: colors.error,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 6,
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
     } : {
       elevation: 4,
       shadowColor: '#000',
@@ -359,23 +417,23 @@ const gridStyles = (colors) => StyleSheet.create({
     }),
   },
   discountBadgeText: {
-    fontSize: 11,
+    fontSize: sizes.discountBadgeFontSize,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: 0.3,
   },
   favoriteBtn: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: 7,
+    right: 7,
+    width: sizes.favBtnSize,
+    height: sizes.favBtnSize,
+    borderRadius: sizes.favBtnRadius,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     } : {
       elevation: 3,
       shadowColor: '#000',
@@ -386,16 +444,16 @@ const gridStyles = (colors) => StyleSheet.create({
   },
   platformLogoContainer: {
     position: 'absolute',
-    bottom: 8,
-    left: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    bottom: 7,
+    left: 7,
+    width: sizes.platformCircleSize,
+    height: sizes.platformCircleSize,
+    borderRadius: sizes.platformCircleSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
     } : {
       elevation: 3,
       shadowColor: '#000',
@@ -404,24 +462,19 @@ const gridStyles = (colors) => StyleSheet.create({
       shadowRadius: 3,
     }),
   },
-  platformLogo: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-  },
   info: {
-    padding: 10,
+    padding: sizes.infoPadding,
   },
   title: {
-    fontSize: 13,
+    fontSize: sizes.titleFontSize,
     fontWeight: '500',
     color: colors.text,
-    lineHeight: 17,
-    marginBottom: 8,
-    minHeight: 34,
+    lineHeight: sizes.titleLineHeight,
+    marginBottom: 6,
+    minHeight: sizes.titleMinHeight,
   },
   oldPrice: {
-    fontSize: 11,
+    fontSize: sizes.oldPriceFontSize,
     color: colors.textMuted,
     textDecorationLine: 'line-through',
     marginBottom: 2,
@@ -430,47 +483,47 @@ const gridStyles = (colors) => StyleSheet.create({
   priceRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   currencySign: {
-    fontSize: 15,
+    fontSize: sizes.currencySignFontSize,
     fontWeight: '500',
     color: colors.text,
     marginTop: 2,
   },
   priceInt: {
-    fontSize: 22,
+    fontSize: sizes.priceIntFontSize,
     fontWeight: '700',
     color: colors.text,
-    lineHeight: 26,
+    lineHeight: sizes.priceIntFontSize + 4,
     letterSpacing: -0.5,
   },
   priceCent: {
-    fontSize: 13,
+    fontSize: sizes.priceCentFontSize,
     fontWeight: '600',
     color: colors.text,
     marginTop: 2,
   },
   discountText: {
-    fontSize: 12,
+    fontSize: sizes.discountBadgeFontSize,
     fontWeight: '700',
     color: colors.success,
     marginTop: 2,
     letterSpacing: 0.2,
   },
   couponContainer: {
-    marginTop: 8,
+    marginTop: 6,
   },
   couponBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DC2626', // Vermelho
+    backgroundColor: '#DC2626',
     borderRadius: 6,
     paddingVertical: 5,
-    paddingHorizontal: 8,
-    gap: 6,
+    paddingHorizontal: 7,
+    gap: 5,
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.35)',
+      boxShadow: '0 2px 6px rgba(220,38,38,0.35)',
     } : {
       elevation: 2,
       shadowColor: '#DC2626',
@@ -480,10 +533,10 @@ const gridStyles = (colors) => StyleSheet.create({
     }),
   },
   couponIconBox: {
-    width: 20,
-    height: 20,
+    width: sizes.couponIconBoxSize,
+    height: sizes.couponIconBoxSize,
     borderRadius: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -496,21 +549,21 @@ const gridStyles = (colors) => StyleSheet.create({
     overflow: 'hidden',
   },
   couponCode: {
-    fontSize: 12,
+    fontSize: sizes.couponFontSize,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   couponDiscount: {
-    fontSize: 12,
+    fontSize: sizes.couponFontSize,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 0.3,
   },
 });
 
-// ─── LIST (full-width, legacy fallback) ────────────────────
+// ─── LIST (full-width, legacy fallback) ─────────────────────────
 const listStyles = (colors) => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
@@ -562,11 +615,6 @@ const listStyles = (colors) => StyleSheet.create({
     } : {
       elevation: 2,
     }),
-  },
-  platformLogo: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
   },
   info: {
     flex: 1,
@@ -620,14 +668,14 @@ const listStyles = (colors) => StyleSheet.create({
   couponBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DC2626', // Vermelho
+    backgroundColor: '#DC2626',
     borderRadius: 5,
     paddingVertical: 4,
     paddingHorizontal: 7,
     gap: 5,
     alignSelf: 'flex-start',
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)',
+      boxShadow: '0 2px 4px rgba(220,38,38,0.3)',
     } : {
       elevation: 2,
       shadowColor: '#DC2626',
@@ -640,7 +688,7 @@ const listStyles = (colors) => StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },

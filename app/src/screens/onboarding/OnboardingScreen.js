@@ -22,6 +22,12 @@ const slides = [
     title: 'Melhores Ofertas',
     description: 'Encontre os melhores preços e cupons de desconto das principais lojas do Brasil',
     color: '#DC2626',
+    gradient: ['#DC2626', '#EF4444'],
+    features: [
+      { icon: 'flash', text: 'Ofertas em tempo real' },
+      { icon: 'trending-down', text: 'Até 90% de desconto' },
+      { icon: 'gift', text: 'Cupons exclusivos' },
+    ],
   },
   {
     id: 2,
@@ -52,10 +58,10 @@ export default function OnboardingScreen({ navigation }) {
   const scrollX = useRef(new Animated.Value(0)).current;
   const slidesRef = useRef(null);
   const [requestingPermission, setRequestingPermission] = useState(false);
-  
+
   // FCM Store
   const { requestPermission, isAvailable } = useFcmStore();
-  
+
   // Animações para texto
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideUpAnim = useRef(new Animated.Value(30)).current;
@@ -187,20 +193,35 @@ export default function OnboardingScreen({ navigation }) {
 
   const renderSlide = ({ item }) => (
     <View style={styles.slide}>
-      {/* Ícone SEM animação */}
+      {/* Ícone com gradiente para primeiro slide */}
       <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
         <Ionicons name={item.icon} size={80} color={item.color} />
       </View>
-      
+
       {/* Texto COM animação */}
       <Animated.View
         style={{
+          width: '100%',
           opacity: fadeAnim,
           transform: [{ translateY: slideUpAnim }],
         }}
       >
         <Text style={styles.title}>{item.title}</Text>
         <Text style={styles.description}>{item.description}</Text>
+
+        {/* Features do primeiro slide */}
+        {item.features && (
+          <View style={styles.featuresContainer}>
+            {item.features.map((feature, index) => (
+              <View key={index} style={styles.featureItem}>
+                <View style={[styles.featureIconContainer, { backgroundColor: item.color + '15' }]}>
+                  <Ionicons name={feature.icon} size={24} color={item.color} />
+                </View>
+                <Text style={styles.featureText}>{feature.text}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </Animated.View>
 
       {/* Botões de ação para slide de notificações */}
@@ -298,8 +319,8 @@ export default function OnboardingScreen({ navigation }) {
       {/* Next/Finish Button - Não mostrar no slide de ativação */}
       {!slides[currentIndex]?.hasAction && (
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-          <TouchableOpacity 
-            style={styles.nextButton} 
+          <TouchableOpacity
+            style={styles.nextButton}
             onPress={scrollTo}
             activeOpacity={0.8}
           >
@@ -359,6 +380,39 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  featuresContainer: {
+    marginTop: 32,
+    width: '100%',
+    gap: 16,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  featureIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featureText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
   },
   pagination: {
     flexDirection: 'row',

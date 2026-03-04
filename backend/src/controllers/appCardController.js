@@ -45,7 +45,7 @@ class AppCardController {
     // Criar card (admin)
     static async create(req, res, next) {
         try {
-            const { title, subtitle, image_url, background_color, text_color, action_type, action_value, product_ids, position } = req.body;
+            const { title, subtitle, image_url, background_color, text_color, action_type, action_value, product_ids, position, icon } = req.body;
 
             if (!title) {
                 return res.status(400).json(errorResponse('Título é obrigatório', 'VALIDATION_ERROR'));
@@ -61,6 +61,7 @@ class AppCardController {
                 action_value: action_value || null,
                 product_ids: product_ids || [],
                 position: position || 0,
+                icon: icon || 'gift',
             });
 
             logger.info(`Card criado: ${card.title} (${card.id})`);

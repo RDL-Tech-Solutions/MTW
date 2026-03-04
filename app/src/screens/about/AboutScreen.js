@@ -109,7 +109,7 @@ export default function AboutScreen({ navigation }) {
         <View style={s.section}>
           <Text style={s.sectionTitle}>Versão</Text>
           <Text style={s.versionText}>1.0.0</Text>
-          <Text style={s.versionDate}>Lançado em 2025</Text>
+          <Text style={s.versionDate}>Lançado em 2026</Text>
         </View>
 
         {/* Social */}

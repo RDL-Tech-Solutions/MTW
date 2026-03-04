@@ -39,19 +39,28 @@ class FCMService {
             }
 
             // Tentar carregar service account JSON
+            // Caminho padrão: backend/firebase-service-account.json
             const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
                 path.resolve(__dirname, '../../firebase-service-account.json');
 
             let credential;
 
             try {
+                // Verificar se arquivo existe antes de tentar carregar
+                const fs = await import('fs');
+                if (!fs.existsSync(serviceAccountPath)) {
+                    throw new Error(`Arquivo não encontrado: ${serviceAccountPath}`);
+                }
+
                 const require = createRequire(import.meta.url);
                 const serviceAccount = require(serviceAccountPath);
                 credential = admin.credential.cert(serviceAccount);
                 logger.info(`✅ FCM: Service account carregado de ${serviceAccountPath}`);
             } catch (fileError) {
                 // Fallback: usar Application Default Credentials (para Cloud Run / GCP)
-                logger.warn(`⚠️ FCM: Service account não encontrado (${serviceAccountPath}), tentando Application Default Credentials`);
+                logger.warn(`⚠️ FCM: Service account não encontrado (${serviceAccountPath})`);
+                logger.warn(`   Erro: ${fileError.message}`);
+                logger.warn(`   Tentando Application Default Credentials...`);
                 credential = admin.credential.applicationDefault();
             }
 
@@ -246,13 +255,21 @@ class FCMService {
                     totalSuccess += response.successCount;
                     totalFailed += response.failureCount;
 
-                    // Coletar tokens inválidos para possível limpeza
+                    // Coletar tokens inválidos para possível limpeza e logar erros detalhados
                     response.responses.forEach((resp, idx) => {
                         if (!resp.success) {
                             const code = resp.error?.code;
+                            const errorMsg = resp.error?.message;
+                            
+                            // Log detalhado do erro
+                            logger.error(`❌ FCM: Falha ao enviar para token ${batch[idx].substring(0, 20)}...`);
+                            logger.error(`   Código: ${code || 'UNKNOWN'}`);
+                            logger.error(`   Mensagem: ${errorMsg || 'Sem mensagem'}`);
+                            
                             if (code === 'messaging/registration-token-not-registered' ||
                                 code === 'messaging/invalid-registration-token') {
                                 invalidTokens.push(batch[idx]);
+                                logger.warn(`   ⚠️ Token inválido/expirado - deve ser removido do banco`);
                             }
                         }
                     });

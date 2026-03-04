@@ -10,10 +10,10 @@ import {
   ScrollView,
   Platform,
   StatusBar,
-  Dimensions,
   Image,
   Linking,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,9 +29,49 @@ import ModernLoading from '../../components/common/ModernLoading';
 import { SCREEN_NAMES, PLATFORM_LABELS, PLATFORMS } from '../../utils/constants';
 import { getPlatformColor, PlatformLogoBadge } from '../../utils/platformIcons';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 8;
 const GRID_PADDING = 16;
+
+// ── Banner responsive sizes ───────────────────────────────────────
+function getBannerSizes(screenWidth) {
+  if (screenWidth <= 360) {
+    return {
+      bannerPaddingV: 16,
+      bannerPaddingH: 16,
+      bannerHeight: 140,
+      titleFontSize: 12,
+      subtitleFontSize: 20,
+      iconSize: 48,
+      platformCircle: 48,
+      platformIconSize: 40,
+      platformItemWidth: 62,
+    };
+  } else if (screenWidth >= 414) {
+    return {
+      bannerPaddingV: 28,
+      bannerPaddingH: 24,
+      bannerHeight: 200,
+      titleFontSize: 18,
+      subtitleFontSize: 26,
+      iconSize: 66,
+      platformCircle: 62,
+      platformIconSize: 56,
+      platformItemWidth: 80,
+    };
+  } else {
+    return {
+      bannerPaddingV: 24,
+      bannerPaddingH: 20,
+      bannerHeight: 170,
+      titleFontSize: 15,
+      subtitleFontSize: 22,
+      iconSize: 58,
+      platformCircle: 56,
+      platformIconSize: 50,
+      platformItemWidth: 72,
+    };
+  }
+}
 
 // ── Platform shortcuts for the icon row ──
 const PLATFORM_SHORTCUTS = [
@@ -50,6 +90,8 @@ export default function HomeScreen({ navigation, route }) {
   const { preferences } = useNotificationStore();
   const { user } = useAuthStore();
   const { colors } = useThemeStore();
+  const { width: screenWidth } = useWindowDimensions();
+  const bannerSizes = getBannerSizes(screenWidth);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -277,55 +319,86 @@ export default function HomeScreen({ navigation, route }) {
   );
 
   // ─── LIST HEADER (banner + platform icons + active filter) ───────
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+
   const renderListHeader = () => (
     <View style={s.listHeaderContent}>
       {/* ── Dynamic Card Carousel ── */}
       {appCards.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          pagingEnabled={appCards.length > 1}
-          contentContainerStyle={s.cardCarouselScroll}
-          style={s.cardCarousel}
-        >
-          {appCards.map((card) => (
-            <TouchableOpacity
-              key={card.id}
-              style={[s.bannerContainer, appCards.length > 1 && { width: SCREEN_WIDTH - 40 }]}
-              activeOpacity={0.9}
-              onPress={() => handleCardPress(card)}
-            >
-              {card.image_url ? (
-                <View style={s.bannerGradient}>
-                  <Image source={{ uri: card.image_url }} style={s.cardImage} resizeMode="cover" />
-                  <View style={[s.bannerContent, { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: 'rgba(0,0,0,0.35)' }]}>
-                    <View style={s.bannerTextArea}>
-                      <Text style={[s.bannerTitle, { color: card.text_color || '#fff' }]}>{card.title}</Text>
-                      {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff' }]}>{card.subtitle}</Text> : null}
+        <View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={screenWidth - GRID_PADDING * 2}
+            snapToAlignment="center"
+            onScroll={(e) => {
+              const offset = e.nativeEvent.contentOffset.x;
+              const cardW = screenWidth - GRID_PADDING * 2;
+              const idx = Math.round(offset / cardW);
+              if (idx !== activeCardIndex) setActiveCardIndex(idx);
+            }}
+            scrollEventThrottle={16}
+            contentContainerStyle={s.cardCarouselScroll}
+            style={s.cardCarousel}
+          >
+            {appCards.map((card) => (
+              <TouchableOpacity
+                key={card.id}
+                style={[
+                  s.bannerContainer,
+                  { width: screenWidth - GRID_PADDING * 2 - 8 },
+                ]}
+                activeOpacity={0.9}
+                onPress={() => handleCardPress(card)}
+              >
+                {card.image_url ? (
+                  <View style={[s.bannerGradient, { height: bannerSizes.bannerHeight }]}>
+                    <Image source={{ uri: card.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    <View style={[s.bannerContent, { position: 'absolute', bottom: 0, left: 0, right: 0, padding: bannerSizes.bannerPaddingH, backgroundColor: 'rgba(0,0,0,0.38)' }]}>
+                      <View style={s.bannerTextArea}>
+                        <Text style={[s.bannerTitle, { color: card.text_color || '#fff', fontSize: bannerSizes.titleFontSize }]}>{card.title}</Text>
+                        {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff', fontSize: bannerSizes.subtitleFontSize }]}>{card.subtitle}</Text> : null}
+                      </View>
                     </View>
                   </View>
-                </View>
-              ) : (
-                <LinearGradient
-                  colors={[card.background_color || colors.primary, darkenColor(card.background_color || colors.primary)]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={s.bannerGradient}
-                >
-                  <View style={s.bannerContent}>
-                    <View style={s.bannerTextArea}>
-                      <Text style={[s.bannerTitle, { color: card.text_color || '#fff' }]}>{card.title}</Text>
-                      {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff' }]}>{card.subtitle}</Text> : null}
+                ) : (
+                  <LinearGradient
+                    colors={[card.background_color || colors.primary, darkenColor(card.background_color || colors.primary)]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[s.bannerGradient, { height: bannerSizes.bannerHeight, paddingHorizontal: bannerSizes.bannerPaddingH, paddingVertical: bannerSizes.bannerPaddingV }]}
+                  >
+                    <View style={s.bannerContent}>
+                      <View style={s.bannerTextArea}>
+                        <Text style={[s.bannerTitle, { color: card.text_color || '#fff', fontSize: bannerSizes.titleFontSize }]}>{card.title}</Text>
+                        {card.subtitle ? <Text style={[s.bannerSubtitle, { color: card.text_color || '#fff', fontSize: bannerSizes.subtitleFontSize }]}>{card.subtitle}</Text> : null}
+                      </View>
+                      <View style={s.bannerIconArea}>
+                        <Ionicons name={card.icon || 'gift'} size={bannerSizes.iconSize} color="rgba(255,255,255,0.18)" />
+                      </View>
                     </View>
-                    <View style={s.bannerIconArea}>
-                      <Ionicons name="gift" size={58} color="rgba(255,255,255,0.18)" />
-                    </View>
-                  </View>
-                </LinearGradient>
-              )}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+                  </LinearGradient>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Pagination dots */}
+          {appCards.length > 1 && (
+            <View style={s.paginationDots}>
+              {appCards.map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    s.dot,
+                    i === activeCardIndex && s.dotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+        </View>
       )}
 
       {/* ── Platform Icon Row ── */}
@@ -340,15 +413,20 @@ export default function HomeScreen({ navigation, route }) {
             return (
               <TouchableOpacity
                 key={p.key}
-                style={s.platformItem}
+                style={[s.platformItem, { width: bannerSizes.platformItemWidth }]}
                 onPress={() => handlePlatformSelect(p.key)}
                 activeOpacity={0.7}
               >
                 <View style={[
                   s.platformIconCircle,
+                  {
+                    width: bannerSizes.platformCircle,
+                    height: bannerSizes.platformCircle,
+                    borderRadius: bannerSizes.platformCircle / 2,
+                  },
                   isActive && { borderColor: p.color, borderWidth: 2.5 },
                 ]}>
-                  <PlatformLogoBadge platform={p.key} size={52} />
+                  <PlatformLogoBadge platform={p.key} size={bannerSizes.platformIconSize} />
                 </View>
                 <Text style={[
                   s.platformLabel,
@@ -418,7 +496,7 @@ export default function HomeScreen({ navigation, route }) {
     if (item.skeleton) {
       return <ProductCardSkeleton />;
     }
-    
+
     return (
       <ProductCard
         product={item}
@@ -548,18 +626,18 @@ const dynamicStyles = (colors) =>
       borderRadius: 16,
       overflow: 'hidden',
       ...(Platform.OS === 'web' ? {
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
       } : {
         elevation: 4,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
       }),
     },
     bannerGradient: {
-      paddingHorizontal: 20,
-      paddingVertical: 24,
+      overflow: 'hidden',
+      borderRadius: 16,
     },
     bannerContent: {
       flexDirection: 'row',
@@ -570,36 +648,47 @@ const dynamicStyles = (colors) =>
       flex: 1,
     },
     bannerTitle: {
-      fontSize: 17,
       fontWeight: '800',
       color: '#fff',
       letterSpacing: 0.5,
     },
     bannerSubtitle: {
-      fontSize: 24,
       fontWeight: '900',
       color: '#fff',
       marginTop: 4,
       letterSpacing: 0.3,
     },
     bannerIconArea: {
-      width: 70,
-      height: 70,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cardImage: {
-      width: '100%',
-      height: 160,
-      borderRadius: 16,
-    },
     cardCarousel: {
       marginTop: 12,
-      marginBottom: 4,
+      marginBottom: 0,
     },
     cardCarouselScroll: {
       paddingHorizontal: 4,
-      gap: 12,
+      gap: 0,
+    },
+    // ─── Pagination dots ─────────────────────────────────
+    paginationDots: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 8,
+      gap: 6,
+    },
+    dot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.border,
+    },
+    dotActive: {
+      width: 18,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.primary,
     },
 
     // ─── Platform Icons ──────────────────────────────────
@@ -608,7 +697,7 @@ const dynamicStyles = (colors) =>
       marginTop: 12,
       marginHorizontal: 4,
       borderRadius: 12,
-      paddingVertical: 16,
+      paddingVertical: 14,
       borderWidth: 1,
       borderColor: colors.border,
       ...(Platform.OS === 'web' ? {
@@ -626,13 +715,9 @@ const dynamicStyles = (colors) =>
     },
     platformItem: {
       alignItems: 'center',
-      width: (SCREEN_WIDTH - 32) / 5.5,
       marginHorizontal: 2,
     },
     platformIconCircle: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
       backgroundColor: colors.background,
       alignItems: 'center',
       justifyContent: 'center',

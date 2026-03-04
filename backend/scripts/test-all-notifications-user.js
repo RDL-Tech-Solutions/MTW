@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '../.env') });
 
-const userEmail = process.argv[2] || 'robertossh@gmail.com';
+const userEmail = process.argv[2] || 'robertosshbrasil@gmail.com';
 
 console.log('🧪 ========================================');
 console.log('🧪 TESTE COMPLETO DE NOTIFICAÇÕES');

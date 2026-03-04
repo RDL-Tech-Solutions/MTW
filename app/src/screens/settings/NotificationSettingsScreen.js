@@ -33,13 +33,23 @@ export default function NotificationSettingsScreen({ navigation }) {
   
   // Preferências
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [couponsOnly, setCouponsOnly] = useState(false);
   const [categories, setCategories] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [couponPlatforms, setCouponPlatforms] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [newKeyword, setNewKeyword] = useState('');
   const [productNames, setProductNames] = useState([]);
   const [newProductName, setNewProductName] = useState('');
+
+  // Plataformas disponíveis para cupons
+  const availablePlatforms = [
+    { id: 'amazon', name: 'Amazon', icon: 'logo-amazon' },
+    { id: 'mercadolivre', name: 'Mercado Livre', icon: 'cart' },
+    { id: 'shopee', name: 'Shopee', icon: 'bag' },
+    { id: 'aliexpress', name: 'AliExpress', icon: 'globe' },
+    { id: 'magalu', name: 'Magazine Luiza', icon: 'storefront' },
+  ];
 
   useEffect(() => {
     loadCategories();
@@ -63,8 +73,9 @@ export default function NotificationSettingsScreen({ navigation }) {
       
       if (prefs) {
         setPushEnabled(prefs.push_enabled ?? true);
-        setEmailEnabled(prefs.email_enabled ?? false);
+        setCouponsOnly(prefs.coupons_only ?? false);
         setSelectedCategories(prefs.category_preferences || []);
+        setCouponPlatforms(prefs.coupon_platforms || []);
         setKeywords(prefs.keyword_preferences || []);
         setProductNames(prefs.product_name_preferences || []);
       }
@@ -80,8 +91,9 @@ export default function NotificationSettingsScreen({ navigation }) {
       setLoading(true);
       await api.put('/notification-preferences', {
         push_enabled: pushEnabled,
-        email_enabled: emailEnabled,
+        coupons_only: couponsOnly,
         category_preferences: selectedCategories,
+        coupon_platforms: couponPlatforms,
         keyword_preferences: keywords,
         product_name_preferences: productNames,
       });
@@ -93,6 +105,16 @@ export default function NotificationSettingsScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const togglePlatform = (platformId) => {
+    setCouponPlatforms(prev => {
+      if (prev.includes(platformId)) {
+        return prev.filter(id => id !== platformId);
+      } else {
+        return [...prev, platformId];
+      }
+    });
   };
 
   const handleRequestPermission = async () => {
@@ -252,45 +274,67 @@ export default function NotificationSettingsScreen({ navigation }) {
 
         {/* Configurações Gerais */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Configurações Gerais</Text>
+          <Text style={styles.sectionTitle}>Tipo de Notificação</Text>
 
           <View style={styles.switchItem}>
             <View style={styles.switchLeft}>
-              <Ionicons name="notifications" size={24} color="#DC2626" />
+              <Ionicons name="pricetag" size={24} color="#DC2626" />
               <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Notificações Push</Text>
+                <Text style={styles.switchLabel}>Apenas Cupons</Text>
                 <Text style={styles.switchDescription}>
-                  Receber notificações no dispositivo
+                  Receber notificações apenas de cupons
                 </Text>
               </View>
             </View>
             <Switch
-              value={pushEnabled}
-              onValueChange={setPushEnabled}
+              value={couponsOnly}
+              onValueChange={setCouponsOnly}
               trackColor={{ false: '#D1D5DB', true: '#FCA5A5' }}
-              thumbColor={pushEnabled ? '#DC2626' : '#9CA3AF'}
-              disabled={!hasPermission}
+              thumbColor={couponsOnly ? '#DC2626' : '#9CA3AF'}
+              disabled={!hasPermission || !pushEnabled}
             />
           </View>
 
-          <View style={styles.switchItem}>
-            <View style={styles.switchLeft}>
-              <Ionicons name="mail" size={24} color="#DC2626" />
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Notificações por Email</Text>
-                <Text style={styles.switchDescription}>
-                  Receber resumo diário por email
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={emailEnabled}
-              onValueChange={setEmailEnabled}
-              trackColor={{ false: '#D1D5DB', true: '#FCA5A5' }}
-              thumbColor={emailEnabled ? '#DC2626' : '#9CA3AF'}
-            />
-          </View>
+          {couponsOnly && (
+            <Text style={styles.infoText}>
+              ℹ️ Com esta opção ativada, você receberá notificações apenas de cupons e produtos com palavras-chave configuradas abaixo.
+            </Text>
+          )}
         </View>
+
+        {/* Plataformas de Cupons */}
+        {couponsOnly && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Plataformas de Cupons</Text>
+            <Text style={styles.sectionDescription}>
+              Selecione as plataformas de cupons que deseja receber
+            </Text>
+
+            {availablePlatforms.map((platform, index) => (
+              <TouchableOpacity
+                key={platform.id}
+                style={[styles.categoryItem, index === availablePlatforms.length - 1 && { borderBottomWidth: 0 }]}
+                onPress={() => togglePlatform(platform.id)}
+              >
+                <View style={styles.categoryLeft}>
+                  <Ionicons 
+                    name={couponPlatforms.includes(platform.id) ? 'checkbox' : 'square-outline'} 
+                    size={24} 
+                    color={couponPlatforms.includes(platform.id) ? '#DC2626' : '#9CA3AF'} 
+                  />
+                  <Ionicons name={platform.icon} size={20} color="#6B7280" style={{ marginLeft: 8 }} />
+                  <Text style={styles.categoryLabel}>{platform.name}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            {couponPlatforms.length === 0 && (
+              <Text style={styles.infoText}>
+                ℹ️ Se nenhuma plataforma for selecionada, você receberá cupons de todas as plataformas.
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Categorias */}
         <View style={styles.section}>
@@ -404,6 +448,9 @@ export default function NotificationSettingsScreen({ navigation }) {
         {/* Ajuda */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Dicas</Text>
+          <Text style={styles.helpText}>
+            • Se "Apenas Cupons" estiver ativado, você receberá apenas cupons e produtos com palavras-chave
+          </Text>
           <Text style={styles.helpText}>
             • Se não selecionar categorias, receberá notificações de todas
           </Text>
@@ -602,6 +649,15 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 8,
     paddingLeft: 8,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#6B7280',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    lineHeight: 18,
   },
   unavailableContainer: {
     flex: 1,

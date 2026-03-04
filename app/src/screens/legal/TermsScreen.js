@@ -27,7 +27,7 @@ export default function TermsScreen({ navigation }) {
             </View>
 
             <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-                <Text style={s.lastUpdated}>Última atualização: 25 de fevereiro de 2025</Text>
+                <Text style={s.lastUpdated}>Última atualização: 25 de fevereiro de 2026</Text>
 
                 <Text style={s.sectionTitle}>1. Aceitação dos Termos</Text>
                 <Text style={s.paragraph}>
@@ -71,11 +71,11 @@ export default function TermsScreen({ navigation }) {
 
                 <Text style={s.sectionTitle}>9. Contato</Text>
                 <Text style={s.paragraph}>
-                    Em caso de dúvidas sobre estes Termos de Uso, entre em contato pelo e-mail contato@mtwpromo.com.
+                    Em caso de dúvidas sobre estes Termos de Uso, entre em contato pelo e-mail suporte@rdltech.com.br.
                 </Text>
 
                 <View style={s.footer}>
-                    <Text style={s.footerText}>© 2025 RDL Tech Solutions. Todos os direitos reservados.</Text>
+                    <Text style={s.footerText}>© 2026 RDL Tech Solutions. Todos os direitos reservados.</Text>
                 </View>
             </ScrollView>
         </View>

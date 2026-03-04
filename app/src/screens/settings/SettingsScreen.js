@@ -110,7 +110,7 @@ export default function SettingsScreen({ navigation }) {
             icon="notifications"
             iconBg="#3B82F6"
             title="Notificações Push"
-            subtitle="Alertas de novas ofertas"
+            subtitle="Ativar/desativar notificações push"
             value={preferences?.push_enabled || false}
             onToggle={() => handleToggle('push_enabled')}
           />
@@ -118,9 +118,20 @@ export default function SettingsScreen({ navigation }) {
             icon="options"
             iconBg="#0EA5E9"
             title="Configurar Notificações"
-            subtitle="Ativar e gerenciar notificações push"
-            onPress={() => navigation.navigate(SCREEN_NAMES.NOTIFICATION_SETTINGS)}
+            subtitle={preferences?.push_enabled ? "Gerenciar preferências" : "Ative as notificações para configurar"}
+            onPress={() => {
+              if (preferences?.push_enabled) {
+                navigation.navigate(SCREEN_NAMES.NOTIFICATION_SETTINGS);
+              } else {
+                Alert.alert(
+                  'Notificações Desativadas',
+                  'Ative as notificações push primeiro para poder configurá-las.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }}
             isLast
+            badge={!preferences?.push_enabled ? { bg: '#FEE2E2', text: '#DC2626', label: 'Bloqueado' } : null}
           />
         </View>
 
