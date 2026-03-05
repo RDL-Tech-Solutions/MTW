@@ -615,68 +615,16 @@ Fique de olho para não perder as próximas ofertas!
       logger.info(`   Plataforma: ${coupon.platform}`);
       logger.info(`   ID: ${coupon.id}`);
 
-      // Preparar variáveis do template
-      const variables = {
-        coupon_code: coupon.code || 'N/A',
-        platform_name: this.getPlatformName(coupon.platform),
-        platform_emoji: this.getPlatformEmoji(coupon.platform)
-      };
-
-      // Preparar contextData para IA ADVANCED
-      const contextData = { coupon };
-
-      // Renderizar templates para cada plataforma
-      let whatsappMessage, telegramMessage;
-      
-      try {
-        whatsappMessage = await templateRenderer.render('out_of_stock_coupon', 'whatsapp', variables, contextData);
-        telegramMessage = await templateRenderer.render('out_of_stock_coupon', 'telegram', variables, contextData);
-        logger.info(`   Templates renderizados (WhatsApp: ${whatsappMessage.length} chars, Telegram: ${telegramMessage.length} chars)`);
-      } catch (templateError) {
-        // Fallback: usar mensagem formatada manualmente
-        logger.warn(`⚠️ Template 'out_of_stock_coupon' não encontrado, usando fallback`);
-        whatsappMessage = this.formatOutOfStockCouponMessage(coupon);
-        telegramMessage = this.formatOutOfStockCouponMessage(coupon);
-      }
-
-      // Enviar para WhatsApp
-      let whatsappResult = null;
-      try {
-        logger.info(`📤 Enviando para WhatsApp...`);
-        whatsappResult = await notificationDispatcher.sendToWhatsApp(whatsappMessage, 'coupon_out_of_stock');
-        logger.info(`✅ Mensagem WhatsApp enviada: ${JSON.stringify(whatsappResult)}`);
-      } catch (error) {
-        logger.error(`❌ Erro ao enviar WhatsApp: ${error.message}`);
-      }
-
-      // Enviar para Telegram (sem imagem)
-      let telegramResult = null;
-      try {
-        logger.info(`📤 Enviando para Telegram...`);
-        // Usar sendToTelegramWithImage sem imagem (null) para enviar apenas texto
-        telegramResult = await notificationDispatcher.sendToTelegramWithImage(
-          telegramMessage,
-          null, // Sem imagem
-          'coupon_out_of_stock',
-          { coupon_id: coupon.id, id: coupon.id },
-          { bypassDuplicates: false }
-        );
-        logger.info(`✅ Mensagem Telegram enviada: ${JSON.stringify(telegramResult)}`);
-      } catch (error) {
-        logger.error(`❌ Erro ao enviar Telegram: ${error.message}`);
-      }
+      // Usar dispatcher unificado para garantir que templates sejam usados corretamente
+      const result = await notificationDispatcher.dispatch('coupon_out_of_stock', coupon, {
+        manual: false,
+        bypassDuplicates: false
+      });
 
       // Criar notificações push para usuários
       logger.info(`📱 Criando notificações push...`);
       await this.createPushNotifications(coupon, 'out_of_stock_coupon');
       logger.info(`✅ Notificações push criadas`);
-
-      const result = {
-        success: true,
-        message: 'Notificações de cupom esgotado enviadas',
-        whatsapp: whatsappResult,
-        telegram: telegramResult
-      };
 
       logger.info(`✅ ========== NOTIFICAÇÃO CONCLUÍDA ==========`);
       logger.info(`   Resultado: ${JSON.stringify(result)}`);

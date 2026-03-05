@@ -15,6 +15,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import { startCronJobs } from './services/cron/index.js';
 import { startMemoryMonitoring, stopMemoryMonitoring } from './utils/memoryMonitor.js';
+import autoRepublishScheduler from './services/schedulers/autoRepublishScheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -169,6 +170,10 @@ const startServer = async () => {
     if (process.env.ENABLE_CRON_JOBS === 'true' && !process.env.VERCEL) {
       logger.info('🔄 Iniciando cron jobs (Node-Cron)...');
       startCronJobs();
+      
+      // Iniciar scheduler de auto-republicação
+      logger.info('🤖 Iniciando scheduler de auto-republicação...');
+      autoRepublishScheduler.start();
     }
 
     // Iniciar servidor e salvar referência
@@ -240,6 +245,10 @@ const gracefulShutdown = async (signal) => {
   try {
     // Parar monitor de memória
     stopMemoryMonitoring();
+    
+    // Parar scheduler de auto-republicação
+    autoRepublishScheduler.stop();
+    logger.info('✅ Scheduler de auto-republicação parado');
 
     // Limpar cache AI
     const openrouterClient = (await import('./ai/openrouterClient.js')).default;

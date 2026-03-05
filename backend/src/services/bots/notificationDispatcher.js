@@ -389,10 +389,14 @@ class NotificationDispatcher {
           if (options.manual && eventType === 'coupon_new') {
             logger.info(`   ⚠️ Canal ${channel.name} (${channel.id}): Item sem categoria, mas bypass ativo por envio manual de cupom.`);
             // NÃO bloquear - permitir que o cupom seja enviado
+          } else if (eventType === 'coupon_new' || eventType === 'coupon_out_of_stock' || eventType === 'coupon_expired') {
+            // NOVO: Cupons sem categoria são enviados para todos os canais (não aplicar filtro de categoria)
+            logger.info(`   ℹ️ Canal ${channel.name} (${channel.id}): Cupom sem categoria - enviando para todos os canais (filtro de categoria ignorado para cupons)`);
+            // NÃO bloquear - permitir que o cupom seja enviado
           } else {
             const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
             logger.info(`🚫 Canal ${channel.name} (${channel.id}) ignorado: Item (${itemType}) sem categoria definida e canal possui filtro restrito.`);
-            continue; // Bloquear apenas se NÃO for manual
+            continue; // Bloquear apenas produtos sem categoria
           }
         }
       }
@@ -707,6 +711,11 @@ class NotificationDispatcher {
         case 'coupon_expired':
           templateType = 'expired_coupon';
           variables = templateRenderer.prepareExpiredCouponVariables(data);
+          break;
+
+        case 'coupon_out_of_stock':
+          templateType = 'out_of_stock_coupon';
+          variables = templateRenderer.prepareCouponVariables(data);
           break;
 
         default:
