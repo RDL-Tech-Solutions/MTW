@@ -576,7 +576,7 @@ export default function Coupons() {
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, skipNotifications = false) => {
     e.preventDefault();
     setErrors({});
 
@@ -611,6 +611,7 @@ export default function Coupons() {
         valid_until: formData.valid_until && formData.valid_until.trim() !== ''
           ? new Date(formData.valid_until + 'T23:59:59').toISOString()
           : null,
+        skip_notifications: skipNotifications // Flag para pular notificações
       };
 
       // Adicionar current_uses apenas na edição
@@ -645,6 +646,12 @@ export default function Coupons() {
       } else {
         await api.post('/coupons', submitData);
       }
+      
+      // Mensagem de sucesso diferente dependendo do modo
+      if (skipNotifications) {
+        alert('Cupom salvo com sucesso! Disponível apenas no app (sem notificações nos canais).');
+      }
+      
       setIsDialogOpen(false);
       setEditingCoupon(null);
       setErrors({});
@@ -1072,11 +1079,21 @@ export default function Coupons() {
                 )}
 
                 <DialogFooter className="flex-col sm:flex-row gap-3 mt-6 sm:mt-4 sm:space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto order-2 sm:order-1">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto order-3 sm:order-1">
                     Cancelar
                   </Button>
-                  <Button type="submit" className="w-full sm:w-auto order-1 sm:order-2">
-                    {editingCoupon ? 'Salvar' : 'Criar'}
+                  {!editingCoupon && (
+                    <Button 
+                      type="button" 
+                      variant="secondary" 
+                      onClick={(e) => handleSubmit(e, true)} 
+                      className="w-full sm:w-auto order-2 sm:order-2 bg-blue-100 hover:bg-blue-200 text-blue-700"
+                    >
+                      📱 Salvar Apenas no App
+                    </Button>
+                  )}
+                  <Button type="submit" className="w-full sm:w-auto order-1 sm:order-3">
+                    {editingCoupon ? 'Salvar' : '📢 Criar e Publicar'}
                   </Button>
                 </DialogFooter>
               </form>

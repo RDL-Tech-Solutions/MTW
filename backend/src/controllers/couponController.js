@@ -202,29 +202,39 @@ class CouponController {
         return res.status(400).json(errorResponse(errorMsg, 'VALIDATION_ERROR'));
       }
 
-      const coupon = await Coupon.create(req.body);
+      // Extrair flag skip_notifications
+      const { skip_notifications, ...couponData } = req.body;
+      const skipNotifications = skip_notifications === true;
+
+      const coupon = await Coupon.create(couponData);
       await cacheDelByPattern('coupons:*');
 
       logger.info(`✅ Cupom criado com sucesso: ${coupon.code} (ID: ${coupon.id})`);
       logger.debug(`   Dados do cupom criado: ${JSON.stringify(coupon, null, 2)}`);
+      logger.info(`   Skip notifications: ${skipNotifications}`);
 
       // Enviar notificação automática via bots COM IMAGEM DA PLATAFORMA
       // IMPORTANTE: Usar couponNotificationService que envia imagem com logo da plataforma
-      try {
-        logger.info(`📢 Iniciando envio de notificação para cupom: ${coupon.code}`);
-        logger.debug(`   Plataforma: ${coupon.platform}`);
-        logger.debug(`   is_pending_approval: ${coupon.is_pending_approval}`);
+      // SKIP se skip_notifications for true
+      if (!skipNotifications) {
+        try {
+          logger.info(`📢 Iniciando envio de notificação para cupom: ${coupon.code}`);
+          logger.debug(`   Plataforma: ${coupon.platform}`);
+          logger.debug(`   is_pending_approval: ${coupon.is_pending_approval}`);
 
-        const notificationResult = await couponNotificationService.notifyNewCoupon(coupon);
+          const notificationResult = await couponNotificationService.notifyNewCoupon(coupon);
 
-        logger.info(`✅ Notificação enviada com sucesso para cupom: ${coupon.code}`);
-        logger.debug(`   Resultado da notificação: ${JSON.stringify(notificationResult, null, 2)}`);
-      } catch (notifError) {
-        logger.error(`❌ Erro ao enviar notificação de cupom: ${notifError.message}`);
-        logger.error(`   Cupom: ${coupon.code} (ID: ${coupon.id})`);
-        logger.error(`   Stack: ${notifError.stack}`);
-        logger.warn(`   ⚠️ Cupom foi criado mas a notificação falhou. Verifique os logs acima.`);
-        // Não falhar a criação do cupom se a notificação falhar
+          logger.info(`✅ Notificação enviada com sucesso para cupom: ${coupon.code}`);
+          logger.debug(`   Resultado da notificação: ${JSON.stringify(notificationResult, null, 2)}`);
+        } catch (notifError) {
+          logger.error(`❌ Erro ao enviar notificação de cupom: ${notifError.message}`);
+          logger.error(`   Cupom: ${coupon.code} (ID: ${coupon.id})`);
+          logger.error(`   Stack: ${notifError.stack}`);
+          logger.warn(`   ⚠️ Cupom foi criado mas a notificação falhou. Verifique os logs acima.`);
+          // Não falhar a criação do cupom se a notificação falhar
+        }
+      } else {
+        logger.info(`📱 Cupom criado apenas para o app (sem notificações nos canais): ${coupon.code}`);
       }
 
       res.status(201).json(successResponse(coupon, 'Cupom criado com sucesso'));

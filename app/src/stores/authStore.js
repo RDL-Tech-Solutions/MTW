@@ -17,7 +17,14 @@ export const useAuthStore = create((set, get) => ({
 
       if (token && user) {
         set({ user, token, isAuthenticated: true, isLoading: false });
-        // FCM login será feito no App.js após autenticação
+        
+        // Enviar token FCM imediatamente após inicialização
+        try {
+          await useFcmStore.getState().login(user.id);
+          console.log('✅ Token FCM enviado após inicialização');
+        } catch (fcmError) {
+          console.error('⚠️ Erro ao enviar token FCM na inicialização:', fcmError);
+        }
       } else {
         set({ isLoading: false });
       }
@@ -39,7 +46,14 @@ export const useAuthStore = create((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
-      // FCM login será feito no App.js após autenticação
+      // Enviar token FCM imediatamente após login
+      try {
+        await useFcmStore.getState().login(user.id);
+        console.log('✅ Token FCM enviado imediatamente após login');
+      } catch (fcmError) {
+        console.error('⚠️ Erro ao enviar token FCM no login:', fcmError);
+      }
+
       console.log('✅ Login realizado com sucesso');
 
       return { success: true };
@@ -64,7 +78,14 @@ export const useAuthStore = create((set, get) => ({
 
       set({ user, token, isAuthenticated: true });
 
-      // FCM login será feito no App.js após autenticação
+      // Enviar token FCM imediatamente após registro
+      try {
+        await useFcmStore.getState().login(user.id);
+        console.log('✅ Token FCM enviado imediatamente após registro');
+      } catch (fcmError) {
+        console.error('⚠️ Erro ao enviar token FCM no registro:', fcmError);
+      }
+
       console.log('✅ Registro realizado com sucesso');
 
       return { success: true };

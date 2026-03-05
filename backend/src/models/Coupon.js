@@ -4,7 +4,7 @@ import logger from '../config/logger.js';
 
 class Coupon {
   // Plataformas válidas no banco de dados
-  static VALID_PLATFORMS = ['shopee', 'mercadolivre', 'amazon', 'aliexpress', 'general'];
+  static VALID_PLATFORMS = ['shopee', 'mercadolivre', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau', 'general'];
 
   // Normalizar plataforma para valor válido
   static normalizePlatform(platform) {
@@ -20,6 +20,11 @@ class Coupon {
       'amazon': 'amazon',
       'aliexpress': 'aliexpress',
       'ali express': 'aliexpress',
+      'kabum': 'kabum',
+      'magazineluiza': 'magazineluiza',
+      'magazine luiza': 'magazineluiza',
+      'magalu': 'magazineluiza',
+      'pichau': 'pichau',
       'general': 'general'
     };
 

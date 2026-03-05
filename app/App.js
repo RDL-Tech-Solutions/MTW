@@ -9,6 +9,7 @@ import { useThemeStore } from './src/theme/theme';
 import { useNotificationStore } from './src/stores/notificationStore';
 import { useAuthStore } from './src/stores/authStore';
 import { useFcmStore } from './src/stores/fcmStore';
+import permissionsService from './src/services/permissionsService';
 
 // Ignorar warnings específicos
 LogBox.ignoreLogs([
@@ -29,28 +30,38 @@ export default function App() {
         // Aguardar um pouco para garantir que os módulos nativos estejam prontos
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // 1. Inicializar tema
+        // 1. Solicitar permissões necessárias
+        try {
+          console.log('📱 Solicitando permissões do sistema...');
+          const permissionsStatus = await permissionsService.requestAllPermissions();
+          console.log('✅ Permissões solicitadas:', permissionsStatus);
+        } catch (error) {
+          console.error('⚠️ Erro ao solicitar permissões:', error);
+          // Continuar mesmo se houver erro nas permissões
+        }
+
+        // 2. Inicializar tema
         try {
           await initializeTheme();
         } catch (error) {
           console.error('Erro ao inicializar tema:', error);
         }
 
-        // 2. Inicializar FCM (antes de auth para estar pronto)
+        // 3. Inicializar FCM (antes de auth para estar pronto)
         try {
           await initializeFcm();
         } catch (error) {
           console.error('Erro ao inicializar FCM:', error);
         }
 
-        // 3. Inicializar autenticação
+        // 4. Inicializar autenticação
         try {
           await initializeAuth();
         } catch (error) {
           console.error('Erro ao inicializar auth:', error);
         }
 
-        // 4. Inicializar preferências de notificação
+        // 5. Inicializar preferências de notificação
         try {
           await initializePreferences();
         } catch (error) {
