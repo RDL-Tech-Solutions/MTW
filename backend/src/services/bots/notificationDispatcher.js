@@ -161,15 +161,12 @@ class NotificationDispatcher {
         }
 
         if (channel.platform === 'telegram' && botConfig.telegram_enabled === false) {
-          logger.debug(`   🚫 Canal Telegram ${channel.id} ignorado (Telegram desabilitado globalmente)`);
           return false;
         }
         if (channel.platform === 'whatsapp' && botConfig.whatsapp_enabled === false) {
-          logger.debug(`   🚫 Canal WhatsApp ${channel.id} ignorado (WhatsApp desabilitado globalmente)`);
           return false;
         }
         if (channel.platform === 'whatsapp_web' && botConfig.whatsapp_web_enabled === false) {
-          logger.debug(`   🚫 Canal WhatsApp Web ${channel.id} ignorado (WhatsApp Web desabilitado globalmente)`);
           return false;
         }
         return true;
@@ -181,9 +178,7 @@ class NotificationDispatcher {
       }
 
       // Filtrar canais usando segmentação inteligente
-      console.time('🔍 Time: Filtering Channels');
       const channels = await this.filterChannelsBySegmentation(activeChannels, eventType, data, options);
-      console.timeEnd('🔍 Time: Filtering Channels');
 
       if (channels.length === 0) {
         logger.info(`⏸️ Nenhum canal passou nos filtros de segmentação`);
@@ -215,14 +210,12 @@ class NotificationDispatcher {
             const useWebVersionAny = channels.some(c => c.platform === 'whatsapp_web');
 
             if (useWebVersionAny) {
-              console.time('🖼️ Time: Image Download');
               logger.info('🖼️ [Dispatcher] Baixando e convertendo imagem ANTES do loop de envio (Otimização)...');
               try {
                 sharedLocalImagePath = await imageConverterService.processImageForWhatsApp(imageUrl);
               } catch (e) {
                 logger.error(`❌ Erro no download da imagem: ${e.message}`);
               }
-              console.timeEnd('🖼️ Time: Image Download');
             }
           }
         }
@@ -233,10 +226,8 @@ class NotificationDispatcher {
 
       // 2. Loop de envio (Sequencial para evitar Race Conditions e Duplicações)
       // Revertendo paralelismo temporariamente para estabilidade
-      console.time('🚀 Time: Total Dispatch Loop');
 
       for (const [index, channel] of channels.entries()) {
-        console.time(`📦 Time: Channel ${index + 1}/${channels.length} (${channel.name})`);
 
         try {
           // Validar se imagem local ainda existe
@@ -248,7 +239,6 @@ class NotificationDispatcher {
           // Verificar duplicação logicamente
           const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, data, options.manual);
           if (isDuplicate) {
-            logger.debug(`⏸️ Pulando canal ${channel.id} - oferta já enviada recentemente`);
             results.details.push({
               channelId: channel.id,
               platform: channel.platform,
@@ -256,7 +246,6 @@ class NotificationDispatcher {
               skipped: true,
               reason: 'Duplicado'
             });
-            console.timeEnd(`📦 Time: Channel ${index + 1}/${channels.length} (${channel.name})`);
             continue;
           }
 
@@ -288,9 +277,7 @@ class NotificationDispatcher {
           results.details.push({ success: false, error: err.message, channelId: channel.id });
         }
 
-        console.timeEnd(`📦 Time: Channel ${index + 1}/${channels.length} (${channel.name})`);
       }
-      console.timeEnd('🚀 Time: Total Dispatch Loop');
 
       // 3. Limpeza da imagem compartilhada
       if (sharedLocalImagePath && fs.existsSync(sharedLocalImagePath)) {
@@ -378,11 +365,9 @@ class NotificationDispatcher {
             continue;
           } else {
             const itemType = eventType === 'promotion_new' ? 'produto' : 'cupom';
-            logger.debug(`   ✅ Canal ${channel.id} aceita categoria ${data.category_id} para ${itemType}`);
-          }
+            }
         } else {
-          logger.debug(`   ℹ️ Canal ${channel.id} não tem filtro de categoria, aceitando item com categoria ${data.category_id}`);
-        }
+          }
       } else {
         if (channel.category_filter && Array.isArray(channel.category_filter) && channel.category_filter.length > 0) {
           // Bypass para cupons manuais sem categoria
@@ -405,7 +390,6 @@ class NotificationDispatcher {
       if (data.platform) {
         if (channel.platform_filter && Array.isArray(channel.platform_filter) && channel.platform_filter.length > 0) {
           if (!channel.platform_filter.includes(data.platform)) {
-            logger.debug(`   🚫 Canal ${channel.id} não aceita plataforma ${data.platform}`);
             continue;
           }
         }
@@ -433,7 +417,6 @@ class NotificationDispatcher {
       if (data.offer_score !== undefined) {
         const minScore = channel.min_offer_score || 0;
         if (data.offer_score < minScore) {
-          logger.debug(`   🚫 Canal ${channel.id} requer score mínimo ${minScore}, item tem ${data.offer_score}`);
           continue;
         }
       }
@@ -456,13 +439,11 @@ class NotificationDispatcher {
     try {
       // Verificar se data existe e tem propriedades válidas
       if (!data || typeof data !== 'object') {
-        logger.debug(`   ⚠️ Data inválido ou null - permitindo envio`);
         return false;
       }
 
       const entityId = data.id || data.product_id || data.coupon_id;
       if (!entityId) {
-        logger.debug(`   ⚠️ Nenhum ID encontrado em data - permitindo envio`);
         return false;
       }
 
@@ -472,7 +453,6 @@ class NotificationDispatcher {
         const hasPublished = await Coupon.hasPublishedCouponWithCode(data.code, entityId);
 
         if (hasPublished) {
-          logger.debug(`   🚫 Cupom com código ${data.code} já foi publicado anteriormente`);
           return true; // Bloquear envio
         }
       }
@@ -942,7 +922,6 @@ class NotificationDispatcher {
       const results = [];
 
       for (const channel of channels) {
-        logger.debug(`   🔍 Verificando duplicação para canal ${channel.id}`);
         // Garantir que data existe antes de acessar propriedades
         const itemData = data ? { ...data, id: data.product_id || data.coupon_id || data.id } : { id: null };
         const isDuplicate = await this.checkDuplicateSend(channel.id, eventType, itemData, options.bypassDuplicates);
@@ -1199,3 +1178,5 @@ class NotificationDispatcher {
 }
 
 export default new NotificationDispatcher();
+
+

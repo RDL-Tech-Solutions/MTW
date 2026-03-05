@@ -189,7 +189,6 @@ ${coupon.affiliate_link || 'Link não disponível'}
       } else {
         // Para outras plataformas sem logo padrão, NÃO gerar imagem
         logger.info(`⚠️ Plataforma ${coupon.platform} não tem logo padrão em backend/assets`);
-        logger.info(`   ⚠️ Geração de imagem do cupom DESABILITADA - enviando apenas mensagem sem imagem`);
         imageToSend = null;
       }
 
@@ -281,8 +280,6 @@ ${coupon.affiliate_link || 'Link não disponível'}
    */
   async notifyExpiredCoupon(coupon) {
     try {
-      logger.info(`📢 Enviando notificação de cupom expirado: ${coupon.code}`);
-
       // Preparar variáveis do template
       const variables = templateRenderer.prepareExpiredCouponVariables(coupon);
 
@@ -325,8 +322,6 @@ ${coupon.affiliate_link || 'Link não disponível'}
    */
   async notifyExpiringCoupon(coupon, daysLeft) {
     try {
-      logger.info(`📢 Enviando notificação de cupom expirando: ${coupon.code}`);
-
       const message = this.formatExpiringCouponMessage(coupon, daysLeft);
 
       // Enviar para bots
@@ -369,10 +364,7 @@ Fique de olho para não perder as próximas ofertas!
    */
   async notifyOutOfStockCoupon(coupon) {
     try {
-      logger.info(`📢 ========== NOTIFICAÇÃO DE CUPOM ESGOTADO ==========`);
-      logger.info(`   Cupom: ${coupon.code}`);
-      logger.info(`   Plataforma: ${coupon.platform}`);
-      logger.info(`   ID: ${coupon.id}`);
+      logger.info(`⚠️ Cupom esgotado: ${coupon.code}`);
 
       // Usar dispatcher unificado para garantir que templates sejam usados corretamente
       const result = await notificationDispatcher.dispatch('coupon_out_of_stock', coupon, {
@@ -381,18 +373,14 @@ Fique de olho para não perder as próximas ofertas!
       });
 
       // Criar notificações push para usuários
-      logger.info(`📱 Criando notificações push...`);
       await this.createPushNotifications(coupon, 'out_of_stock_coupon');
-      logger.info(`✅ Notificações push criadas`);
 
-      logger.info(`✅ ========== NOTIFICAÇÃO CONCLUÍDA ==========`);
-      logger.info(`   Resultado: ${JSON.stringify(result)}`);
+      logger.info(`✅ Notificação de cupom esgotado enviada`);
 
       return result;
 
     } catch (error) {
       logger.error(`❌ Erro ao notificar cupom esgotado: ${error.message}`);
-      logger.error(`   Stack: ${error.stack}`);
       throw error;
     }
   }

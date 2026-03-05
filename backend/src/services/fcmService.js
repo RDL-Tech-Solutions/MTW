@@ -150,10 +150,6 @@ class FCMService {
                 }
             };
 
-            logger.info(`📤 FCM: Enviando notificação para token ${fcm_token.substring(0, 20)}...`);
-            logger.debug(`   Título: ${title}`);
-            logger.debug(`   Corpo: ${message.substring(0, 50)}`);
-
             const response = await this.messaging.send(payload);
 
             logger.info(`✅ FCM: Notificação enviada. Message ID: ${response}`);
@@ -274,8 +270,7 @@ class FCMService {
                         }
                     });
 
-                    logger.info(`   ✅ ${response.successCount} enviados, ${response.failureCount} falhas`);
-                } catch (batchError) {
+                    } catch (batchError) {
                     logger.error(`❌ FCM: Erro no batch: ${batchError.message}`);
                     totalFailed += batch.length;
                 }
