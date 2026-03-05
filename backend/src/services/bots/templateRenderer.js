@@ -655,6 +655,17 @@ ${variables.coupon_section || ''}
 😔 Este cupom não está mais disponível.
 🔔 Fique atento às próximas promoções!`;
 
+      case 'out_of_stock_coupon':
+        // Template para cupom esgotado
+        // Variáveis: platform_name, platform_emoji, coupon_code
+        return `⚠️ **CUPOM ESGOTADO**
+
+${variables.platform_emoji || '🏪'} **Plataforma:** ${variables.platform_name || '{platform_name}'}
+🎟️ **Cupom:** \`${variables.coupon_code || '{coupon_code}'}\`
+
+😢 Este cupom esgotou! Mas não se preocupe, novos cupons estão chegando.
+Fique de olho para não perder as próximas ofertas!`;
+
       default:
         return 'Mensagem não configurada';
     }

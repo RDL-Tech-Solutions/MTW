@@ -503,8 +503,22 @@ class NotificationDispatcher {
    */
   async logSend(channelId, eventType, data) {
     try {
+      // Validar parâmetros
+      if (!channelId) {
+        logger.warn('⚠️ channelId não fornecido para logSend');
+        return;
+      }
+
+      if (!data || typeof data !== 'object') {
+        logger.warn('⚠️ data inválido para logSend');
+        return;
+      }
+
       const entityId = data.id || data.product_id || data.coupon_id;
-      if (!entityId) return;
+      if (!entityId) {
+        logger.warn('⚠️ Nenhum ID encontrado em data para logSend');
+        return;
+      }
 
       const BotSendLog = (await import('../../models/BotSendLog.js')).default;
       await BotSendLog.create({

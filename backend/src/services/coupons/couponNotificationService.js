@@ -236,17 +236,18 @@ ${coupon.affiliate_link || 'Link não disponível'}
             if (!backendUrl) {
               backendUrl = process.env.API_URL;
             }
-            if (!backendUrl) {
-              // Último recurso: usar localhost com porta padrão
-              backendUrl = 'http://localhost:3000';
-              logger.warn(`⚠️ backend_url não configurado, usando padrão: ${backendUrl}`);
+            
+            // IMPORTANTE: Não usar URL HTTP para logos locais
+            // WhatsApp Web pode usar arquivos locais diretamente
+            if (!backendUrl || backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1')) {
+              logger.info(`⚠️ backend_url não configurado ou é localhost, WhatsApp Web usará arquivo local`);
+              imageUrlForWhatsApp = null; // Forçar uso de arquivo local
+            } else {
+              // Remover barra final se houver
+              const cleanBackendUrl = backendUrl.replace(/\/$/, '');
+              imageUrlForWhatsApp = `${cleanBackendUrl}/assets/logos/${logoFileName}`;
+              logger.info(`✅ URL HTTP gerada para WhatsApp: ${imageUrlForWhatsApp}`);
             }
-
-            // Remover barra final se houver
-            const cleanBackendUrl = backendUrl.replace(/\/$/, '');
-            imageUrlForWhatsApp = `${cleanBackendUrl}/assets/logos/${logoFileName}`;
-
-            logger.info(`✅ URL HTTP gerada para WhatsApp: ${imageUrlForWhatsApp}`);
 
             // Validar URL
             try {
