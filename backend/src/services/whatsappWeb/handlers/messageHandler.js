@@ -106,8 +106,17 @@ export const handleMessage = async (client, msg) => {
         if (!isAllowed) return;
 
         const chat = await msg.getChat();
+        
+        // CORREÇÃO: Ignorar mensagens de grupos E canais (newsletters)
         if (chat.isGroup) {
-            // logger.debug(`[MsgHandler] Grupo detectado (${chat.name}). Ignorando interação.`);
+            logger.debug(`[MsgHandler] Grupo detectado (${chat.name}). Ignorando interação.`);
+            return;
+        }
+        
+        // Verificar se é um canal/newsletter (id termina com @newsletter)
+        const isChannel = msg.from.includes('@newsletter') || chat.id._serialized.includes('@newsletter');
+        if (isChannel) {
+            logger.debug(`[MsgHandler] Canal/Newsletter detectado (${chat.name || msg.from}). Ignorando interação.`);
             return;
         }
 

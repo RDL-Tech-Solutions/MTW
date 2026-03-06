@@ -28,7 +28,7 @@ const isMediumScreen = SCREEN_WIDTH >= 360 && SCREEN_WIDTH < 400;
 export default function ProductDetailsScreen({ route, navigation }) {
   const { colors } = useThemeStore();
   const { product: initialProduct, productId } = route.params || {};
-  const { addFavorite, removeFavorite, isFavorite, fetchProductById } = useProductStore();
+  const { addFavorite, removeFavorite, isFavorite, fetchProductById, registerClick } = useProductStore();
   const [product, setProduct] = useState(initialProduct);
   const [loading, setLoading] = useState(!initialProduct && !!productId);
   const [favorite, setFavorite] = useState(initialProduct?.id ? isFavorite(initialProduct.id) : false);
@@ -47,6 +47,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
       ]);
     } else if (initialProduct) {
       setFavorite(isFavorite(initialProduct.id));
+      // Registrar visualização do produto
+      registerClick(initialProduct.id);
     }
 
     Animated.parallel([
@@ -62,6 +64,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
       if (result.success && result.product) {
         setProduct(result.product);
         setFavorite(isFavorite(result.product.id));
+        // Registrar visualização do produto
+        registerClick(result.product.id);
       } else {
         Alert.alert('Erro', 'Produto não encontrado', [
           { text: 'OK', onPress: () => navigation.goBack() }

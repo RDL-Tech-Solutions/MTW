@@ -164,17 +164,12 @@ export const useThemeStore = create((set, get) => ({
     try {
       await storage.setTheme(newIsDark ? 'dark' : 'light');
 
-      // Atualizar no backend se usuário estiver logado
-      try {
-        await api.put('/notification-preferences/theme', { dark_mode: newIsDark });
-      } catch (error) {
-        console.error('Erro ao atualizar tema no backend:', error);
-      }
-
       set({
         isDark: newIsDark,
         colors: newIsDark ? darkColors : lightColors
       });
+      
+      console.log('✅ Tema alterado para:', newIsDark ? 'escuro' : 'claro');
     } catch (error) {
       console.error('Erro ao salvar tema:', error);
     }
@@ -185,17 +180,12 @@ export const useThemeStore = create((set, get) => ({
     try {
       await storage.setTheme(isDark ? 'dark' : 'light');
 
-      // Atualizar no backend se usuário estiver logado
-      try {
-        await api.put('/notification-preferences/theme', { dark_mode: isDark });
-      } catch (error) {
-        console.error('Erro ao atualizar tema no backend:', error);
-      }
-
       set({
         isDark,
         colors: isDark ? darkColors : lightColors
       });
+      
+      console.log('✅ Tema definido para:', isDark ? 'escuro' : 'claro');
     } catch (error) {
       console.error('Erro ao salvar tema:', error);
     }

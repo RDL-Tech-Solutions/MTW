@@ -1,5 +1,4 @@
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
-import * as Notifications from 'expo-notifications';
 
 /**
  * Serviço de Gerenciamento de Permissões
@@ -114,20 +113,14 @@ class PermissionsService {
    */
   async requestIOSPermissions() {
     try {
-      // 1. Notificações
-      const { status } = await Notifications.requestPermissionsAsync();
-      this.permissionsStatus.notifications = status === 'granted';
-
-      console.log('📱 Permissão de notificações iOS:', status);
-
-      // iOS não precisa de permissões explícitas para storage
-      this.permissionsStatus.storage = true;
-      this.permissionsStatus.all = this.permissionsStatus.notifications;
-
-      if (!this.permissionsStatus.notifications) {
-        console.warn('⚠️ Permissão de notificações negada no iOS');
-        this.showPermissionsDeniedAlert();
-      }
+      // iOS: Permissões de notificação são gerenciadas pelo FCM
+      // Não precisamos do expo-notifications aqui
+      console.log('📱 iOS: Permissões de notificação gerenciadas pelo FCM');
+      
+      // Assumir que permissões serão solicitadas pelo FCM
+      this.permissionsStatus.notifications = true;
+      this.permissionsStatus.storage = true; // iOS não precisa de permissões explícitas para storage
+      this.permissionsStatus.all = true;
 
     } catch (error) {
       console.error('❌ Erro ao solicitar permissões iOS:', error);
@@ -198,10 +191,10 @@ class PermissionsService {
    */
   async checkIOSPermissions() {
     try {
-      const { status } = await Notifications.getPermissionsAsync();
-      this.permissionsStatus.notifications = status === 'granted';
+      // iOS: Permissões gerenciadas pelo FCM
+      this.permissionsStatus.notifications = true;
       this.permissionsStatus.storage = true;
-      this.permissionsStatus.all = this.permissionsStatus.notifications;
+      this.permissionsStatus.all = true;
 
       return this.permissionsStatus.all;
 
@@ -276,12 +269,10 @@ class PermissionsService {
           return true;
         }
       } else if (Platform.OS === 'ios') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        const granted = status === 'granted';
-        this.permissionsStatus.notifications = granted;
-        
-        console.log('📱 Permissão de notificações iOS:', status);
-        return granted;
+        // iOS: Permissões gerenciadas pelo FCM
+        console.log('📱 iOS: Permissão de notificações gerenciada pelo FCM');
+        this.permissionsStatus.notifications = true;
+        return true;
       }
 
       return false;

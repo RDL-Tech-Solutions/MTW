@@ -73,6 +73,15 @@ export const useNotificationStore = create((set, get) => ({
     try {
       set({ isLoading: true });
 
+      // Validar que updates não é null/undefined
+      if (!updates || typeof updates !== 'object') {
+        console.error('❌ Updates inválido:', updates);
+        return {
+          success: false,
+          error: 'Dados de atualização inválidos'
+        };
+      }
+
       const response = await api.put('/notification-preferences', updates);
 
       const preferences = response.data.data;
@@ -85,6 +94,8 @@ export const useNotificationStore = create((set, get) => ({
       return { success: true };
     } catch (error) {
       console.error('❌ Erro ao atualizar preferências:', error);
+      console.error('   Updates:', updates);
+      console.error('   Stack:', error.stack);
 
       return {
         success: false,
@@ -98,7 +109,13 @@ export const useNotificationStore = create((set, get) => ({
   // Adicionar categoria às preferências
   addCategory: async (categoryId) => {
     const { preferences } = get();
-    if (!preferences) return;
+    
+    // Validar que preferences existe
+    if (!preferences || typeof preferences !== 'object') {
+      console.warn('⚠️ Preferências não inicializadas, inicializando com valores padrão');
+      await get().fetchPreferences();
+      return;
+    }
 
     const categories = [...(preferences.category_preferences || [])];
     if (!categories.includes(categoryId)) {
@@ -113,7 +130,12 @@ export const useNotificationStore = create((set, get) => ({
   // Remover categoria das preferências
   removeCategory: async (categoryId) => {
     const { preferences } = get();
-    if (!preferences) return;
+    
+    // Validar que preferences existe
+    if (!preferences || typeof preferences !== 'object') {
+      console.warn('⚠️ Preferências não inicializadas');
+      return;
+    }
 
     const categories = (preferences.category_preferences || []).filter(
       id => id !== categoryId
@@ -127,7 +149,13 @@ export const useNotificationStore = create((set, get) => ({
   // Adicionar palavra-chave
   addKeyword: async (keyword) => {
     const { preferences } = get();
-    if (!preferences) return;
+    
+    // Validar que preferences existe
+    if (!preferences || typeof preferences !== 'object') {
+      console.warn('⚠️ Preferências não inicializadas, inicializando com valores padrão');
+      await get().fetchPreferences();
+      return;
+    }
 
     const keywords = [...(preferences.keyword_preferences || [])];
     if (!keywords.includes(keyword.toLowerCase())) {
@@ -142,7 +170,12 @@ export const useNotificationStore = create((set, get) => ({
   // Remover palavra-chave
   removeKeyword: async (keyword) => {
     const { preferences } = get();
-    if (!preferences) return;
+    
+    // Validar que preferences existe
+    if (!preferences || typeof preferences !== 'object') {
+      console.warn('⚠️ Preferências não inicializadas');
+      return;
+    }
 
     const keywords = (preferences.keyword_preferences || []).filter(
       k => k.toLowerCase() !== keyword.toLowerCase()
@@ -156,7 +189,13 @@ export const useNotificationStore = create((set, get) => ({
   // Adicionar nome de produto
   addProductName: async (productName) => {
     const { preferences } = get();
-    if (!preferences) return;
+    
+    // Validar que preferences existe
+    if (!preferences || typeof preferences !== 'object') {
+      console.warn('⚠️ Preferências não inicializadas, inicializando com valores padrão');
+      await get().fetchPreferences();
+      return;
+    }
 
     const productNames = [...(preferences.product_name_preferences || [])];
     if (!productNames.includes(productName)) {
@@ -171,7 +210,12 @@ export const useNotificationStore = create((set, get) => ({
   // Remover nome de produto
   removeProductName: async (productName) => {
     const { preferences } = get();
-    if (!preferences) return;
+    
+    // Validar que preferences existe
+    if (!preferences || typeof preferences !== 'object') {
+      console.warn('⚠️ Preferências não inicializadas');
+      return;
+    }
 
     const productNames = (preferences.product_name_preferences || []).filter(
       pn => pn !== productName
