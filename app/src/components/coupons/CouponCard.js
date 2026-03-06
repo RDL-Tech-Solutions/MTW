@@ -122,30 +122,8 @@ export default function CouponCard({ coupon, onPress, index = 0 }) {
   };
 
   const handlePress = () => {
-    // Animação de "pop" antes de abrir o modal
-    Animated.sequence([
-      Animated.spring(scaleAnim, {
-        toValue: 0.92,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1.05,
-        friction: 4,
-        tension: 50,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 5,
-        tension: 50,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // Chama o onPress após a animação
-      onPress();
-    });
+    // Chama o onPress imediatamente sem animação
+    onPress();
   };
 
   const handleCopy = async () => {

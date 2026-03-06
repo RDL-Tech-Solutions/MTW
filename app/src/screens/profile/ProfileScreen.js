@@ -210,7 +210,7 @@ export default function ProfileScreen({ navigation }) {
             { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
           ]}
         >
-          <Text style={dynamicStyles.footerText}>PreçoCerto © 2025</Text>
+          <Text style={dynamicStyles.footerText}>PreçoCerto © 2026</Text>
           <Text style={dynamicStyles.footerSubtext}>
             Feito com ❤️ para você economizar
           </Text>

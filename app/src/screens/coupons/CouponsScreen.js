@@ -45,10 +45,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const contentFadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-  const headerSlideAnim = useRef(new Animated.Value(-50)).current;
-  const infoSlideAnim = useRef(new Animated.Value(30)).current;
-  const buttonSlideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkedProductsCount, setLinkedProductsCount] = useState(0);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -65,66 +62,36 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
       // Verificar produtos vinculados
       checkLinkedProducts();
 
-      // Animação de abertura em cascata
+      // Animação de abertura suave e elegante
       Animated.parallel([
         // Backdrop fade in
         Animated.timing(backdropAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 250,
           useNativeDriver: true
         }),
-        // Sheet slide up com bounce
-        Animated.spring(slideAnim, {
+        // Sheet slide up com easing suave
+        Animated.timing(slideAnim, {
           toValue: 0,
+          duration: 300,
           useNativeDriver: true,
-          friction: 9,
-          tension: 65,
-          velocity: 2,
         }),
-        // Sheet scale up
-        Animated.spring(scaleAnim, {
+        // Scale up suave
+        Animated.timing(scaleAnim, {
           toValue: 1,
+          duration: 300,
           useNativeDriver: true,
-          friction: 8,
-          tension: 50,
-          delay: 50,
+        }),
+        // Conteúdo fade in
+        Animated.timing(contentFadeAnim, {
+          toValue: 1,
+          duration: 250,
+          delay: 100,
+          useNativeDriver: true
         }),
       ]).start();
-
-      // Animações em cascata do conteúdo
-      Animated.stagger(80, [
-        // Header slide in
-        Animated.spring(headerSlideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-        // Info section slide in
-        Animated.spring(infoSlideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-        // Button slide in
-        Animated.spring(buttonSlideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Content fade in
-      Animated.timing(contentFadeAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: 150,
-        useNativeDriver: true
-      }).start();
     } else {
-      // Animação de fechamento
+      // Animação de fechamento suave
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
@@ -137,7 +104,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
           useNativeDriver: true
         }),
         Animated.timing(scaleAnim, {
-          toValue: 0.85,
+          toValue: 0.9,
           duration: 200,
           useNativeDriver: true
         }),
@@ -147,11 +114,6 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
           useNativeDriver: true
         }),
       ]).start();
-
-      // Reset das animações do conteúdo
-      headerSlideAnim.setValue(-50);
-      infoSlideAnim.setValue(30);
-      buttonSlideAnim.setValue(50);
     }
   }, [visible, coupon]);
 
@@ -234,13 +196,10 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
 
         <Animated.View style={{ opacity: contentFadeAnim }}>
           {/* Platform header strip */}
-          <Animated.View
+          <View
             style={[
               s.platformStrip,
-              {
-                backgroundColor: platformColor + '12',
-                transform: [{ translateY: headerSlideAnim }]
-              }
+              { backgroundColor: platformColor + '12' }
             ]}
           >
             <PlatformIcon platform={coupon.platform} size={22} />
@@ -257,27 +216,17 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
             <View style={[s.discountPill, { backgroundColor: platformColor }]}>
               <Text style={s.discountPillText}>{formatDiscount()}</Text>
             </View>
-          </Animated.View>
+          </View>
 
           {/* Title */}
           {coupon.title && (
-            <Animated.Text
-              style={[
-                s.couponTitle,
-                { transform: [{ translateY: headerSlideAnim }] }
-              ]}
-            >
+            <Text style={s.couponTitle}>
               {coupon.title}
-            </Animated.Text>
+            </Text>
           )}
 
           {/* Info rows */}
-          <Animated.View
-            style={[
-              s.infoSection,
-              { transform: [{ translateY: infoSlideAnim }] }
-            ]}
-          >
+          <View style={s.infoSection}>
             <InfoRow icon="bag-handle-outline" label="Escopo" value={scope} colors={colors} />
             {coupon.min_purchase > 0 && (
               <InfoRow icon="wallet-outline" label="Compra mínima" value={formatPrice(coupon.min_purchase)} colors={colors} />
@@ -291,7 +240,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
             {coupon.valid_until && (
               <InfoRow icon="calendar-outline" label="Válido até" value={new Date(coupon.valid_until).toLocaleDateString('pt-BR')} colors={colors} />
             )}
-          </Animated.View>
+          </View>
 
           {/* Code Section */}
           {coupon.code ? (
@@ -337,7 +286,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
 
           {/* Linked Products Button */}
           {hasLinkedProducts && (
-            <Animated.View style={{ transform: [{ translateY: buttonSlideAnim }] }}>
+            <View>
               <TouchableOpacity
                 style={[s.productsBtn, { borderColor: platformColor, marginTop: hasProducts ? 8 : 0 }]}
                 onPress={handleSeeLinkedProducts}
@@ -350,7 +299,7 @@ function CouponDetailModal({ coupon, visible, onClose, navigation, colors }) {
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color={platformColor} />
               </TouchableOpacity>
-            </Animated.View>
+            </View>
           )}
 
           <View style={s.bottomSpacer} />

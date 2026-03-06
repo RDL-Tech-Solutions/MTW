@@ -250,7 +250,39 @@ class CouponController {
   static async update(req, res, next) {
     try {
       const { id } = req.params;
-      const coupon = await Coupon.update(id, req.body);
+      
+      // Filtrar campos permitidos (remover campos que não existem na tabela)
+      const allowedFields = [
+        'code',
+        'title',
+        'description',
+        'platform',
+        'discount_type',
+        'discount_value',
+        'min_purchase',
+        'max_discount_value',
+        'max_uses',
+        'usage_limit',
+        'valid_from',
+        'valid_until',
+        'is_active',
+        'is_exclusive',
+        'is_general',
+        'is_out_of_stock',
+        'store_name',
+        'applicable_products',
+        'terms',
+        'usage_instructions'
+      ];
+      
+      const filteredUpdates = {};
+      for (const key of Object.keys(req.body)) {
+        if (allowedFields.includes(key)) {
+          filteredUpdates[key] = req.body[key];
+        }
+      }
+      
+      const coupon = await Coupon.update(id, filteredUpdates);
       await cacheDelByPattern('coupons:*');
 
       logger.info(`Cupom atualizado: ${id}`);
