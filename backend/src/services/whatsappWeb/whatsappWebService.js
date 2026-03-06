@@ -36,9 +36,42 @@ class WhatsAppWebService {
             if (imagePathOrUrl.startsWith('http')) {
                 // De URL publicamente acessível
                 try {
-                    media = await MessageMedia.fromUrl(imagePathOrUrl, { unsafeMime: true });
+                    logger.info(`📥 [WhatsApp] Baixando imagem de URL: ${imagePathOrUrl.substring(0, 100)}...`);
+                    
+                    // CORREÇÃO: Usar axios para download manual com headers apropriados
+                    // MessageMedia.fromUrl pode falhar com URLs do AliExpress
+                    const axios = (await import('axios')).default;
+                    const response = await axios.get(imagePathOrUrl, {
+                        responseType: 'arraybuffer',
+                        timeout: 20000,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                            'Referer': imagePathOrUrl.includes('aliexpress') || imagePathOrUrl.includes('alicdn') 
+                                ? 'https://www.aliexpress.com/' 
+                                : imagePathOrUrl.includes('shopee') 
+                                ? 'https://shopee.com.br/' 
+                                : undefined
+                        }
+                    });
+
+                    const buffer = Buffer.from(response.data);
+                    logger.info(`   ✅ Imagem baixada. Tamanho: ${buffer.length} bytes`);
+
+                    // Detectar mimetype do response ou usar padrão
+                    const mimetype = response.headers['content-type'] || 'image/jpeg';
+                    const base64 = buffer.toString('base64');
+                    
+                    // Gerar filename baseado na URL
+                    const urlParts = imagePathOrUrl.split('/');
+                    const filename = urlParts[urlParts.length - 1].split('?')[0] || 'image.jpg';
+
+                    media = new MessageMedia(mimetype, base64, filename);
+                    logger.info(`   ✅ MessageMedia criado: ${mimetype}, ${filename}`);
+                    
                 } catch (urlErr) {
-                    logger.error(`❌ [SafeMode] Erro ao baixar URL ${imagePathOrUrl}: ${urlErr.message}`);
+                    logger.error(`❌ [WhatsApp] Erro ao baixar URL ${imagePathOrUrl.substring(0, 100)}: ${urlErr.message}`);
+                    logger.error(`   Stack: ${urlErr.stack}`);
                     media = null;
                 }
             } else {
@@ -71,6 +104,7 @@ class WhatsAppWebService {
 
             if (media) {
                 await client.sendMessage(chatId, media, { caption });
+                logger.info(`✅ [WhatsApp] Imagem enviada com sucesso para ${chatId}`);
                 return { success: true, messageId: 'wwebjs-media-' + Date.now() };
             } else {
                 // Fallback de segurança: Enviar Texto

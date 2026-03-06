@@ -67,8 +67,6 @@ export default function Coupons() {
   });
 
   const [errors, setErrors] = useState({});
-  const [isLoadingCoupon, setIsLoadingCoupon] = useState(false);
-  const [codeSearchTimeout, setCodeSearchTimeout] = useState(null);
   const [templateMode, setTemplateMode] = useState('custom');
 
   useEffect(() => {
@@ -114,116 +112,11 @@ export default function Coupons() {
     return modeNames[templateMode] || modeNames['custom'];
   };
 
-  // Função para buscar cupom por código e auto-preencher
+  // Função para atualizar código do cupom (sem autopreenchimento)
   const handleCodeChange = (code) => {
     const upperCode = code.toUpperCase().trim();
     setFormData({ ...formData, code: upperCode });
-
-    // Limpar timeout anterior
-    if (codeSearchTimeout) {
-      clearTimeout(codeSearchTimeout);
-    }
-
-    // Se o código tiver pelo menos 4 caracteres e não estiver editando, buscar após delay
-    if (upperCode.length >= 4 && !editingCoupon) {
-      const timeout = setTimeout(async () => {
-        setIsLoadingCoupon(true);
-        let couponFound = false;
-
-        try {
-          // Primeiro tentar buscar via API da plataforma selecionada
-          const platform = formData.platform;
-
-          if (platform && platform !== 'general' && ['mercadolivre', 'shopee', 'amazon', 'aliexpress', 'kabum', 'magazineluiza', 'pichau'].includes(platform)) {
-            try {
-              const apiResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}?platform=${platform}`, {
-                validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
-              });
-
-              if (apiResponse.status === 200 && apiResponse.data.success && apiResponse.data.data) {
-                const coupon = apiResponse.data.data;
-                couponFound = true;
-
-                // Preencher formulário com os dados do cupom encontrado
-                setFormData({
-                  code: coupon.code || upperCode,
-                  platform: coupon.platform || platform || 'general',
-                  description: coupon.description || coupon.title || '',
-                  discount_type: coupon.discount_type || 'percentage',
-                  discount_value: coupon.discount_value || '',
-                  min_purchase: coupon.min_purchase || '',
-                  max_discount_value: coupon.max_discount_value || '',
-                  is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
-                  applicable_products: coupon.applicable_products || [],
-                  max_uses: coupon.max_uses || '',
-                  current_uses: coupon.current_uses || 0,
-                  valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
-                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
-                  is_exclusive: coupon.is_exclusive || false
-                });
-              }
-            } catch (apiError) {
-              // validateStatus já previne erro para 404, mas se ainda houver erro, ignorar silenciosamente
-              // Não fazer nada - cupom não encontrado é esperado
-            }
-          }
-
-          // Se não encontrou via API, buscar no banco local
-          if (!couponFound) {
-            try {
-              const localResponse = await api.get(`/coupons/code/${encodeURIComponent(upperCode)}`, {
-                validateStatus: (status) => status === 200 || status === 404 // Não lançar erro para 404
-              });
-
-              if (localResponse.status === 200 && localResponse.data.success && localResponse.data.data) {
-                const coupon = localResponse.data.data;
-                couponFound = true;
-
-                // Preencher formulário com os dados do cupom encontrado
-                setFormData({
-                  code: coupon.code || upperCode,
-                  platform: coupon.platform || formData.platform || 'general',
-                  description: coupon.description || coupon.title || '',
-                  discount_type: coupon.discount_type || 'percentage',
-                  discount_value: coupon.discount_value || '',
-                  min_purchase: coupon.min_purchase || '',
-                  max_discount_value: coupon.max_discount_value || '',
-                  is_general: coupon.is_general !== undefined && coupon.is_general !== null ? coupon.is_general : null,
-                  applicable_products: coupon.applicable_products || [],
-                  max_uses: coupon.max_uses || '',
-                  current_uses: coupon.current_uses || 0,
-                  valid_from: coupon.valid_from ? format(new Date(coupon.valid_from), 'yyyy-MM-dd') : '',
-                  valid_until: coupon.valid_until ? format(new Date(coupon.valid_until), 'yyyy-MM-dd') : '',
-                  is_exclusive: coupon.is_exclusive || false
-                });
-              }
-            } catch (localError) {
-              // validateStatus já previne erro para 404, mas se ainda houver erro, ignorar silenciosamente
-              // Não fazer nada - cupom não encontrado é esperado
-            }
-          }
-        } catch (error) {
-          // validateStatus já previne erro para 404
-          // Se ainda houver erro, ignorar silenciosamente
-        } finally {
-          setIsLoadingCoupon(false);
-        }
-      }, 800); // Delay de 800ms após parar de digitar
-
-      setCodeSearchTimeout(timeout);
-    } else {
-      setIsLoadingCoupon(false);
-    }
   };
-
-  // Limpar timeout ao desmontar
-  useEffect(() => {
-    return () => {
-      if (codeSearchTimeout) {
-        clearTimeout(codeSearchTimeout);
-      }
-    };
-  }, [codeSearchTimeout]);
 
   const fetchPendingCoupons = async (page = 1) => {
     try {
@@ -809,7 +702,6 @@ export default function Coupons() {
                   is_exclusive: false
                 });
                 setErrors({});
-                setIsLoadingCoupon(false);
               }}>
                 <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Novo </span>Cupom
@@ -852,28 +744,12 @@ export default function Coupons() {
                         id="code"
                         value={formData.code || ''}
                         onChange={(e) => handleCodeChange(e.target.value)}
-                        onBlur={(e) => {
-                          // Buscar novamente ao perder o foco se tiver código
-                          if (e.target.value.trim().length >= 4 && !editingCoupon) {
-                            handleCodeChange(e.target.value);
-                          }
-                        }}
                         placeholder="Ex: PROMO10"
                         required
-                        disabled={isLoadingCoupon}
+                        autoComplete="off"
                       />
-                      {isLoadingCoupon && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
-                        </div>
-                      )}
                     </div>
                     {errors.code && <p className="text-sm text-red-500">{errors.code}</p>}
-                    {!editingCoupon && (
-                      <p className="text-xs text-muted-foreground">
-                        💡 Digite o código do cupom para auto-preenchimento (mínimo 4 caracteres)
-                      </p>
-                    )}
                   </div>
                 </div>
 

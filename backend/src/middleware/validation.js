@@ -95,7 +95,8 @@ export const createCouponSchema = Joi.object({
   max_uses: Joi.number().integer().positive().allow(null, '').optional(),
   current_uses: Joi.number().integer().min(0).default(0),
   is_vip: Joi.boolean().default(false),
-  is_exclusive: Joi.boolean().default(false)
+  is_exclusive: Joi.boolean().default(false),
+  skip_notifications: Joi.boolean().default(false) // Flag para pular notificações (apenas criação)
 }).custom((value, helpers) => {
   // Se valid_until foi fornecido, validar que é maior que valid_from (se fornecido)
   if (value.valid_until && value.valid_from) {
