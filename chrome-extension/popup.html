@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Captura de Produtos</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📦 Captura de Produtos</h1>
+      <p>Extensão v2.7 - Powered by IA</p>
+    </div>
+
+    <!-- Seção de Configuração -->
+    <div id="config-section" class="section">
+      <h3>⚙️ Configuração</h3>
+      
+      <label for="api-url">URL da API:</label>
+      <input type="text" id="api-url" placeholder="https://sua-api.com">
+      
+      <label for="api-token">Token de Autenticação:</label>
+      <input type="password" id="api-token" placeholder="Seu token JWT">
+      
+      <button id="save-config" class="btn btn-info">
+        <span class="icon">💾</span>
+        Salvar Configuração
+      </button>
+    </div>
+
+    <!-- Seção de Captura -->
+    <div id="capture-section" class="section">
+      <h3>🎯 Ações Rápidas</h3>
+      
+      <button id="capture-btn" class="btn btn-primary">
+        <span class="icon">📦</span>
+        Capturar Produto Atual
+      </button>
+      
+      <button id="batch-capture-btn" class="btn btn-secondary">
+        <span class="icon">📦📦</span>
+        Capturar Todos da Página
+      </button>
+      <small class="batch-hint">💡 Captura todos os produtos visíveis na listagem</small>
+    </div>
+
+    <!-- Seção de Edição (oculta inicialmente) -->
+    <div id="edit-section" class="section hidden">
+      <h3>✏️ Editar Produto</h3>
+      
+      <div class="form-group">
+        <label for="edit-title">📝 Título do Produto:</label>
+        <input type="text" id="edit-title" class="form-control" placeholder="Nome do produto">
+      </div>
+
+      <div class="form-group">
+        <label for="edit-description">📄 Descrição:</label>
+        <textarea id="edit-description" class="form-control" rows="3" placeholder="Descrição detalhada do produto"></textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="edit-price">💰 Preço Atual (R$):</label>
+          <input type="number" id="edit-price" class="form-control" step="0.01" min="0" placeholder="99.90">
+        </div>
+        <div class="form-group">
+          <label for="edit-original-price">💵 Preço Original (R$):</label>
+          <input type="number" id="edit-original-price" class="form-control" step="0.01" min="0" placeholder="149.90">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-affiliate-link">🔗 Link de Afiliado:</label>
+        <div class="input-with-button">
+          <input type="text" id="edit-affiliate-link" class="form-control" placeholder="https://...">
+          <button id="paste-link-btn" class="btn-icon" title="Colar da área de transferência">
+            <span class="icon">📋</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-category">📂 Categoria:</label>
+        <select id="edit-category" class="form-control">
+          <option value="">🤖 IA vai definir automaticamente</option>
+          <!-- Categorias serão carregadas dinamicamente -->
+        </select>
+        <small class="form-hint">💡 Deixe em branco para a IA escolher a melhor categoria</small>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-coupon">🎟️ Vincular Cupom (Opcional):</label>
+        <select id="edit-coupon" class="form-control">
+          <option value="">Nenhum cupom</option>
+          <!-- Cupons serão carregados dinamicamente -->
+        </select>
+        <small class="form-hint">💡 Cupons filtrados pela plataforma do produto</small>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-image">🖼️ URL da Imagem:</label>
+        <input type="text" id="edit-image" class="form-control" placeholder="https://...">
+        <div id="image-preview" class="image-preview hidden">
+          <img id="preview-img" src="" alt="Preview">
+        </div>
+      </div>
+
+      <!-- Botões de Ação -->
+      <h3 style="margin-top: 20px;">🚀 Escolha uma Ação</h3>
+      <div class="action-buttons">
+        <button id="save-pending-btn" class="btn btn-secondary" title="Salvar como pendente para aprovar depois">
+          <span class="icon">⏸️</span>
+          Pendente
+        </button>
+        
+        <button id="save-only-btn" class="btn btn-info" title="Salvar no app sem publicar nos canais">
+          <span class="icon">💾</span>
+          Só App
+        </button>
+        
+        <button id="save-publish-btn" class="btn btn-success" title="Salvar e publicar imediatamente">
+          <span class="icon">🚀</span>
+          Publicar
+        </button>
+        
+        <button id="save-schedule-btn" class="btn btn-primary" title="IA define melhor horário para publicar">
+          <span class="icon">🤖</span>
+          IA Agendar
+        </button>
+      </div>
+
+      <button id="cancel-btn" class="btn btn-link">❌ Cancelar</button>
+    </div>
+
+    <!-- Status -->
+    <div id="status" class="status hidden"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

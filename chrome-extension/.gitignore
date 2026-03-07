@@ -1,0 +1,11 @@
+# Arquivos temporários
+*.log
+*.tmp
+
+# Arquivos de build
+*.crx
+*.pem
+*.zip
+
+# Configurações locais
+config.local.json

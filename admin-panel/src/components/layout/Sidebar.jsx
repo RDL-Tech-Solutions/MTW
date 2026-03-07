@@ -13,7 +13,8 @@ import {
   Settings,
   Clock,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Chrome
 } from 'lucide-react';
 import Logo from '../Logo';
 
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Bots', href: '/bots', icon: Bot },
   { name: 'Canais Telegram', href: '/telegram-channels', icon: MessageSquare },
   { name: 'Cards do App', href: '/app-cards', icon: ImageIcon },
+  { name: 'Extensão Chrome', href: '/extension-token', icon: Chrome },
   { name: 'Configurações', href: '/settings', icon: Settings },
 ];
 

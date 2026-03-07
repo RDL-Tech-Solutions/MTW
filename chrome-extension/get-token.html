@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Obter Token de Autenticação</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      display: none;
+    }
+    .result.success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+    }
+    .result.error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+    }
+    .token-display {
+      background: white;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      width: auto;
+    }
+    .copy-btn:hover {
+      background: #5568d3;
+    }
+    .instructions {
+      background: #e3f2fd;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 30px;
+      border-left: 4px solid #2196F3;
+    }
+    .instructions h3 {
+      margin-top: 0;
+      color: #1976D2;
+    }
+    .instructions ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .instructions li {
+      margin: 8px 0;
+      color: #555;
+    }
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .warning strong {
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔑 Obter Token de Autenticação</h1>
+    <p class="subtitle">Para usar a extensão Chrome</p>
+
+    <div class="warning">
+      <strong>⚠️ Importante:</strong> Você precisa ser um administrador da plataforma para usar a extensão.
+    </div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="apiUrl">URL da API:</label>
+        <input 
+          type="text" 
+          id="apiUrl" 
+          placeholder="http://localhost:3000 ou https://sua-api.com"
+          value="http://localhost:3000"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email (Admin):</label>
+        <input 
+          type="email" 
+          id="email" 
+          placeholder="seu-email@exemplo.com"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="password">Senha:</label>
+        <input 
+          type="password" 
+          id="password" 
+          placeholder="Sua senha"
+          required
+        >
+      </div>
+
+      <button type="submit" id="submitBtn">
+        🔓 Fazer Login e Obter Token
+      </button>
+    </form>
+
+    <div id="result" class="result">
+      <h3 id="resultTitle"></h3>
+      <p id="resultMessage"></p>
+      <div id="tokenDisplay" class="token-display" style="display: none;">
+        <button class="copy-btn" onclick="copyToken()">📋 Copiar</button>
+        <div id="tokenText"></div>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <h3>📋 Solução para Erro de CORS:</h3>
+      <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+        <strong>⚠️ Problema:</strong> Arquivos HTML locais não podem fazer requisições HTTP devido ao CORS.
+      </div>
+      
+      <h4>✅ Solução 1: Via Painel Admin (Mais Fácil)</h4>
+      <ol>
+        <li>Acesse o painel admin: <code>http://localhost:3001</code></li>
+        <li>Faça login com sua conta de administrador</li>
+        <li>Pressione <strong>F12</strong> para abrir o DevTools</li>
+        <li>Vá para a aba <strong>Console</strong></li>
+        <li>Digite: <code>localStorage.getItem('token')</code></li>
+        <li>Copie o token (sem as aspas)</li>
+      </ol>
+
+      <h4>✅ Solução 2: Via Script Node.js</h4>
+      <ol>
+        <li>Abra o terminal na pasta <code>chrome-extension/</code></li>
+        <li>Execute: <code>node get-token.js</code></li>
+        <li>Siga as instruções e copie o token</li>
+      </ol>
+
+      <h4>✅ Solução 3: Via cURL</h4>
+      <pre style="background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 6px; overflow-x: auto;">curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"seu-email@exemplo.com","password":"sua-senha"}'</pre>
+      
+      <p style="margin-top: 20px;">
+        <strong>📖 Documentação completa:</strong> Veja o arquivo <code>COMO_OBTER_TOKEN.md</code>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const result = document.getElementById('result');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultMessage = document.getElementById('resultMessage');
+    const tokenDisplay = document.getElementById('tokenDisplay');
+    const tokenText = document.getElementById('tokenText');
+
+    let currentToken = '';
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const apiUrl = document.getElementById('apiUrl').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!apiUrl || !email || !password) {
+        showResult('error', '❌ Erro', 'Por favor, preencha todos os campos.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Fazendo login...';
+
+      try {
+        // Fazer login
+        const response = await fetch(`${apiUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Erro ao fazer login');
+        }
+
+        if (!data.data || !data.data.token) {
+          throw new Error('Token não encontrado na resposta');
+        }
+
+        // Verificar se é admin
+        if (data.data.user && data.data.user.role !== 'admin') {
+          throw new Error('Você precisa ser um administrador para usar a extensão');
+        }
+
+        currentToken = data.data.token;
+
+        showResult(
+          'success', 
+          '✅ Login Realizado com Sucesso!', 
+          `Bem-vindo, ${data.data.user?.name || email}! Seu token foi gerado.`
+        );
+
+        tokenText.textContent = currentToken;
+        tokenDisplay.style.display = 'block';
+
+        // Salvar no localStorage para facilitar
+        localStorage.setItem('extensionToken', currentToken);
+        localStorage.setItem('extensionApiUrl', apiUrl);
+
+      } catch (error) {
+        console.error('Erro:', error);
+        showResult('error', '❌ Erro ao Fazer Login', error.message);
+        tokenDisplay.style.display = 'none';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🔓 Fazer Login e Obter Token';
+      }
+    });
+
+    function showResult(type, title, message) {
+      result.className = `result ${type}`;
+      result.style.display = 'block';
+      resultTitle.textContent = title;
+      resultMessage.textContent = message;
+    }
+
+    function copyToken() {
+      navigator.clipboard.writeText(currentToken).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Copiado!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 2000);
+      }).catch(err => {
+        alert('Erro ao copiar. Selecione e copie manualmente.');
+      });
+    }
+
+    // Carregar valores salvos
+    window.onload = function() {
+      const savedApiUrl = localStorage.getItem('extensionApiUrl');
+      const savedToken = localStorage.getItem('extensionToken');
+      
+      if (savedApiUrl) {
+        document.getElementById('apiUrl').value = savedApiUrl;
+      }
+      
+      if (savedToken) {
+        currentToken = savedToken;
+        showResult(
+          'success', 
+          '✅ Token Salvo Encontrado', 
+          'Um token anterior foi encontrado. Você pode usá-lo ou fazer login novamente.'
+        );
+        tokenText.textContent = currentToken;
+        tokenDisplay.style.display = 'block';
+      }
+    };
+  </script>
+</body>
+</html>

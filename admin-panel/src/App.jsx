@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import PendingProducts from './pages/PendingProducts';
 import ScheduledPosts from './pages/ScheduledPosts';
 import AppCards from './pages/AppCards';
+import ExtensionToken from './pages/ExtensionToken';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
@@ -48,6 +49,7 @@ function App() {
           <Route path="pending-products" element={<PendingProducts />} />
           <Route path="scheduled-posts" element={<ScheduledPosts />} />
           <Route path="app-cards" element={<AppCards />} />
+          <Route path="extension-token" element={<ExtensionToken />} />
         </Route>
       </Routes>
       <Toaster />

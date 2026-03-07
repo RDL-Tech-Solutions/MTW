@@ -1,0 +1,38 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradiente de fundo -->
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Fundo com gradiente -->
+  <rect width="128" height="128" rx="24" fill="url(#grad1)"/>
+  
+  <!-- Ícone de caixa/pacote -->
+  <g transform="translate(24, 24)">
+    <!-- Base da caixa -->
+    <path d="M 10 30 L 40 15 L 70 30 L 70 60 L 40 75 L 10 60 Z" 
+          fill="white" opacity="0.9" stroke="white" stroke-width="2"/>
+    
+    <!-- Tampa da caixa -->
+    <path d="M 10 30 L 40 15 L 70 30 L 40 45 Z" 
+          fill="white" stroke="white" stroke-width="2"/>
+    
+    <!-- Linha central -->
+    <line x1="40" y1="15" x2="40" y2="75" 
+          stroke="white" stroke-width="2" opacity="0.7"/>
+    
+    <!-- Detalhes da caixa -->
+    <line x1="10" y1="30" x2="40" y2="45" 
+          stroke="#667eea" stroke-width="1.5" opacity="0.5"/>
+    <line x1="70" y1="30" x2="40" y2="45" 
+          stroke="#667eea" stroke-width="1.5" opacity="0.5"/>
+  </g>
+  
+  <!-- Badge de captura (ícone de download/seta) -->
+  <circle cx="96" cy="96" r="18" fill="#4CAF50"/>
+  <path d="M 96 86 L 96 102 M 88 96 L 96 104 L 104 96" 
+        stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

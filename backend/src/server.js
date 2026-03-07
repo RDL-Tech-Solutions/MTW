@@ -76,6 +76,18 @@ const corsOptions = {
       return callback(null, true);
     }
 
+    // Permitir extensões Chrome (chrome-extension://)
+    if (origin.startsWith('chrome-extension://')) {
+      logger.info(`✅ CORS: Extensão Chrome permitida: ${origin}`);
+      return callback(null, true);
+    }
+
+    // Permitir extensões Edge (extension://)
+    if (origin.startsWith('extension://')) {
+      logger.info(`✅ CORS: Extensão Edge permitida: ${origin}`);
+      return callback(null, true);
+    }
+
     // Verificar se origin está na lista
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -102,6 +114,15 @@ app.use(cors(corsOptions));
 // Handle preflight requests explicitamente (antes das rotas)
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
+
+  // Permitir extensões Chrome e Edge
+  if (origin && (origin.startsWith('chrome-extension://') || origin.startsWith('extension://'))) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    return res.sendStatus(204);
+  }
 
   if (origin && allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);

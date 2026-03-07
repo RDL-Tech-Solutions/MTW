@@ -1045,6 +1045,90 @@ class ProductController {
     }
   }
 
+  // Captura de produto via extensão Chrome (admin)
+  static async captureFromExtension(req, res, next) {
+    try {
+      const {
+        title,
+        description,
+        price,
+        originalPrice,
+        imageUrl,
+        affiliateLink,
+        platform,
+        sourceUrl,
+        capturedAt,
+        coupon_id  // NOVO: Extrair coupon_id do request
+      } = req.body;
+
+      logger.info(`🔌 Captura via extensão Chrome recebida`);
+      logger.info(`   Título: ${title?.substring(0, 50) || 'N/A'}...`);
+      logger.info(`   Plataforma: ${platform || 'N/A'}`);
+      logger.info(`   URL: ${sourceUrl?.substring(0, 80) || 'N/A'}...`);
+      if (coupon_id) {
+        logger.info(`   🎟️ Cupom vinculado: ${coupon_id}`);
+      }
+
+      // Validações básicas
+      if (!title || !sourceUrl) {
+        return res.status(400).json(
+          errorResponse('Título e URL são obrigatórios', 'MISSING_REQUIRED_FIELDS')
+        );
+      }
+
+      // Detectar categoria com IA
+      let categoryId = null;
+      try {
+        const categoryDetector = (await import('../services/categoryDetector.js')).default;
+        const detectedCategory = await categoryDetector.detectWithAI(title);
+        
+        if (detectedCategory) {
+          categoryId = detectedCategory.id;
+          logger.info(`   🤖 IA detectou categoria: ${detectedCategory.name}`);
+        }
+      } catch (categoryError) {
+        logger.warn(`   ⚠️ Erro ao detectar categoria: ${categoryError.message}`);
+      }
+
+      // Calcular desconto se houver preço antigo
+      let discountPercentage = 0;
+      if (originalPrice && price && originalPrice > price) {
+        discountPercentage = Math.round(((originalPrice - price) / originalPrice) * 100);
+      }
+
+      // Criar produto como pendente
+      const product = await Product.create({
+        name: title,
+        description: description || '',
+        current_price: price || 0,
+        old_price: originalPrice || price || 0,
+        discount_percentage: discountPercentage,
+        image_url: imageUrl || '',
+        platform: platform || 'other',
+        original_link: sourceUrl,
+        affiliate_link: affiliateLink || sourceUrl,
+        external_id: `ext_${Date.now()}`,
+        category_id: categoryId,
+        coupon_id: coupon_id || null,  // NOVO: Salvar coupon_id se fornecido
+        status: 'pending',
+        captured_at: capturedAt || new Date()
+      });
+
+      logger.info(`✅ Produto capturado via extensão: ${product.name} (ID: ${product.id})`);
+
+      res.status(201).json(successResponse({
+        id: product.id,
+        name: product.name,
+        status: 'pending',
+        category_id: categoryId
+      }, 'Produto capturado com sucesso! Aguardando aprovação.'));
+
+    } catch (error) {
+      logger.error(`❌ Erro ao capturar produto via extensão: ${error.message}`);
+      next(error);
+    }
+  }
+
   // Captura em lote de produtos (admin)
   static async batchCapture(req, res, next) {
     try {
@@ -1196,6 +1280,7 @@ class ProductController {
       next(error);
     }
   }
+
 }
 
 export default ProductController;

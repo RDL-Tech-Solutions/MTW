@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste de Clipboard - Extensão</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 30px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .test-section {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .test-section h2 {
+      margin-top: 0;
+      font-size: 18px;
+    }
+    
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    
+    button {
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: all 0.3s;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    .result {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+      padding: 15px;
+      margin-top: 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      min-height: 50px;
+      word-break: break-all;
+    }
+    
+    .success {
+      background: rgba(76, 175, 80, 0.3);
+      border-left: 4px solid #4CAF50;
+    }
+    
+    .error {
+      background: rgba(244, 67, 54, 0.3);
+      border-left: 4px solid #f44336;
+    }
+    
+    .info {
+      background: rgba(33, 150, 243, 0.3);
+      border-left: 4px solid #2196F3;
+    }
+    
+    .instructions {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 20px;
+      font-size: 13px;
+    }
+    
+    .instructions ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    
+    .instructions li {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Teste de Clipboard</h1>
+    
+    <!-- Teste 1: Copiar -->
+    <div class="test-section">
+      <h2>📋 Teste 1: Copiar para Clipboard</h2>
+      <input type="text" id="copy-input" value="https://exemplo.com/produto-teste-123" placeholder="Digite algo para copiar">
+      <button onclick="testCopy()">📋 Copiar Texto</button>
+      <div id="copy-result" class="result info">Clique no botão para copiar</div>
+    </div>
+    
+    <!-- Teste 2: Colar -->
+    <div class="test-section">
+      <h2>📥 Teste 2: Ler do Clipboard</h2>
+      <button onclick="testPaste()">📥 Ler Clipboard</button>
+      <div id="paste-result" class="result info">Clique no botão para ler</div>
+    </div>
+    
+    <!-- Teste 3: Permissões -->
+    <div class="test-section">
+      <h2>🔐 Teste 3: Verificar Permissões</h2>
+      <button onclick="checkPermissions()">🔍 Verificar Permissões</button>
+      <div id="permissions-result" class="result info">Clique no botão para verificar</div>
+    </div>
+    
+    <!-- Instruções -->
+    <div class="instructions">
+      <h3>📝 Como Usar:</h3>
+      <ol>
+        <li><strong>Teste 1:</strong> Clique em "Copiar Texto" para copiar o link</li>
+        <li><strong>Teste 2:</strong> Clique em "Ler Clipboard" para verificar se consegue ler</li>
+        <li><strong>Teste 3:</strong> Verifica se as permissões estão corretas</li>
+      </ol>
+      
+      <h3>⚠️ Se o Teste 2 Falhar:</h3>
+      <ol>
+        <li>Vá em <code>chrome://extensions/</code></li>
+        <li>Encontre "Captura de Produtos"</li>
+        <li>Clique no botão de recarregar 🔄</li>
+        <li>Tente novamente</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    // Teste 1: Copiar
+    async function testCopy() {
+      const input = document.getElementById('copy-input');
+      const result = document.getElementById('copy-result');
+      
+      try {
+        await navigator.clipboard.writeText(input.value);
+        result.className = 'result success';
+        result.innerHTML = `✅ Copiado com sucesso!<br><br><strong>Texto:</strong> ${input.value}`;
+      } catch (error) {
+        result.className = 'result error';
+        result.innerHTML = `❌ Erro ao copiar:<br><br>${error.message}`;
+      }
+    }
+    
+    // Teste 2: Colar
+    async function testPaste() {
+      const result = document.getElementById('paste-result');
+      
+      try {
+        const text = await navigator.clipboard.readText();
+        
+        if (text && text.trim()) {
+          result.className = 'result success';
+          result.innerHTML = `✅ Leitura bem-sucedida!<br><br><strong>Conteúdo:</strong> ${text}`;
+        } else {
+          result.className = 'result info';
+          result.innerHTML = `⚠️ Clipboard está vazio<br><br>Copie algo primeiro (Ctrl+C ou use o Teste 1)`;
+        }
+      } catch (error) {
+        result.className = 'result error';
+        result.innerHTML = `❌ Erro ao ler clipboard:<br><br><strong>Erro:</strong> ${error.message}<br><br><strong>Solução:</strong> Recarregue a extensão em chrome://extensions/`;
+      }
+    }
+    
+    // Teste 3: Verificar Permissões
+    async function checkPermissions() {
+      const result = document.getElementById('permissions-result');
+      
+      try {
+        // Verificar se a API está disponível
+        if (!navigator.clipboard) {
+          result.className = 'result error';
+          result.innerHTML = `❌ API Clipboard não disponível<br><br>Seu navegador pode não suportar esta funcionalidade`;
+          return;
+        }
+        
+        // Verificar se pode ler
+        const canRead = typeof navigator.clipboard.readText === 'function';
+        
+        // Verificar se pode escrever
+        const canWrite = typeof navigator.clipboard.writeText === 'function';
+        
+        // Verificar contexto seguro (HTTPS)
+        const isSecure = window.isSecureContext;
+        
+        let html = '<strong>Status das Permissões:</strong><br><br>';
+        html += `📋 API Clipboard: ${navigator.clipboard ? '✅ Disponível' : '❌ Não disponível'}<br>`;
+        html += `📥 Leitura (readText): ${canRead ? '✅ Suportado' : '❌ Não suportado'}<br>`;
+        html += `📤 Escrita (writeText): ${canWrite ? '✅ Suportado' : '❌ Não suportado'}<br>`;
+        html += `🔒 Contexto Seguro: ${isSecure ? '✅ Sim' : '❌ Não (precisa HTTPS)'}<br>`;
+        
+        if (canRead && canWrite && isSecure) {
+          result.className = 'result success';
+          html += '<br>✅ Tudo OK! A extensão deve funcionar.';
+        } else {
+          result.className = 'result error';
+          html += '<br>⚠️ Algumas funcionalidades podem não funcionar.';
+        }
+        
+        result.innerHTML = html;
+        
+      } catch (error) {
+        result.className = 'result error';
+        result.innerHTML = `❌ Erro ao verificar permissões:<br><br>${error.message}`;
+      }
+    }
+    
+    // Auto-verificar ao carregar
+    window.addEventListener('load', () => {
+      setTimeout(checkPermissions, 500);
+    });
+  </script>
+</body>
+</html>
