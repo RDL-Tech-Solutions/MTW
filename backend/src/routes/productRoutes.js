@@ -33,6 +33,8 @@ router.post('/save', authenticateToken, requireAdmin, createLimiterDefault, vali
 router.put('/:id', authenticateToken, requireAdmin, validate(updateProductSchema), ProductController.update);
 router.delete('/:id', authenticateToken, requireAdmin, ProductController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, ProductController.batchDelete);
+router.delete('/bulk/all-approved', authenticateToken, requireAdmin, ProductController.deleteAllApproved); // NOVO: Deletar todos aprovados (com senha)
+router.delete('/bulk/all-pending', authenticateToken, requireAdmin, ProductController.deleteAllPending); // NOVO: Deletar todos pendentes
 router.post('/:id/republish', authenticateToken, requireAdmin, ProductController.republish);
 
 export default router;

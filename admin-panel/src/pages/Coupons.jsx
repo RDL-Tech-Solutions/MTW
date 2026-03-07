@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, Copy, Calendar, Brain, Send, XCircle, CheckCircle, Filter, Download, Loader2, ExternalLink } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Copy, Calendar, Brain, Send, XCircle, CheckCircle, Filter, Download, Loader2, ExternalLink, Trash } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -12,8 +12,10 @@ import { format } from 'date-fns';
 import { Pagination } from '../components/ui/Pagination';
 import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { useToast } from '../hooks/use-toast';
 
 export default function Coupons() {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('all'); // 'all' ou 'pending'
   const [coupons, setCoupons] = useState([]);
   const [pendingCoupons, setPendingCoupons] = useState([]);
@@ -590,6 +592,7 @@ export default function Coupons() {
     rejecting: new Set()
   });
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   // Toggle selection
   const toggleSelection = (id) => {
@@ -619,6 +622,41 @@ export default function Coupons() {
       alert('Cupons deletados com sucesso!');
     } catch (error) {
       alert('Erro ao deletar cupons em lote');
+    }
+  };
+
+  // Delete all coupons (no password required)
+  const handleDeleteAll = async () => {
+    const totalCoupons = activeTab === 'all' ? pagination.total : pendingPagination.total;
+    const couponType = activeTab === 'all' ? 'cupons' : 'cupons pendentes';
+    
+    if (!confirm(`⚠️ ATENÇÃO: Você está prestes a deletar TODOS os ${totalCoupons} ${couponType}.\n\nEsta ação é IRREVERSÍVEL.\n\nDeseja continuar?`)) {
+      return;
+    }
+
+    setDeletingAll(true);
+    try {
+      const response = await api.delete('/coupons/bulk/all');
+      
+      toast({
+        title: "Sucesso!",
+        description: response.data.message || "Todos os cupons foram deletados.",
+        variant: "success",
+      });
+      
+      if (activeTab === 'all') {
+        fetchCoupons(1);
+      } else {
+        fetchPendingCoupons(1);
+      }
+    } catch (error) {
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || "Erro ao deletar cupons.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -668,6 +706,30 @@ export default function Coupons() {
               </Button>
             </>
           )}
+          
+          {/* Botão Apagar Todos */}
+          {((activeTab === 'all' && pagination.total > 0) || (activeTab === 'pending' && pendingPagination.total > 0)) && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteAll}
+              disabled={deletingAll}
+              className="bg-red-600 hover:bg-red-700 h-8 sm:h-9 text-xs sm:text-sm"
+            >
+              {deletingAll ? (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  <span className="hidden sm:inline">Deletando...</span>
+                </>
+              ) : (
+                <>
+                  <Trash className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Apagar Todos</span> ({activeTab === 'all' ? pagination.total : pendingPagination.total})
+                </>
+              )}
+            </Button>
+          )}
+          
           {selectedIds.length > 0 && (
             <Button
               variant="destructive"

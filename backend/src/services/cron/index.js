@@ -3,7 +3,7 @@ import logger from '../../config/logger.js';
 import { updatePrices } from './updatePrices.js';
 import { checkExpiredCoupons } from './checkExpiredCoupons.js';
 import { sendNotifications } from './sendNotifications.js';
-import { cleanupOldData } from './cleanupOldData.js';
+import { cleanupOldData, forceCleanup } from './cleanupOldData.js';
 import { monitorExpiredCoupons } from './monitorExpiredCoupons.js';
 import autoSyncCron from '../../cron/autoSyncCron.js';
 import couponCaptureCron from '../../cron/couponCaptureCron.js';
@@ -12,6 +12,9 @@ import AppSettings from '../../models/AppSettings.js';
 
 // Armazenar referência da tarefa de limpeza para poder reiniciá-la
 let cleanupTask = null;
+
+// Exportar forceCleanup para uso manual
+export { forceCleanup };
 
 export const startCronJobs = async () => {
   logger.info('🕐 Iniciando cron jobs...');
@@ -84,7 +87,9 @@ export const startCleanupCron = async () => {
   try {
     // Obter horário configurado
     const { hour } = await AppSettings.getCleanupSchedule();
-    const cronExpression = `0 ${hour} * * *`;
+    
+    // Executar a cada hora (a função cleanupOldData verifica internamente se deve executar)
+    const cronExpression = `0 * * * *`; // A cada hora no minuto 0
 
     // Parar tarefa anterior se existir
     if (cleanupTask) {
@@ -92,17 +97,18 @@ export const startCleanupCron = async () => {
       logger.info('🛑 Cron de limpeza anterior parado');
     }
 
-    // Criar nova tarefa
+    // Criar nova tarefa que executa a cada hora
     cleanupTask = cron.schedule(cronExpression, async () => {
-      logger.info('⏰ Executando: Limpeza de dados antigos');
+      logger.debug('⏰ Verificando se deve executar limpeza...');
       try {
-        await cleanupOldData();
+        await cleanupOldData(); // A função verifica internamente se deve executar
       } catch (error) {
         logger.error(`Erro no cron de limpeza: ${error.message}`);
       }
     });
 
-    logger.info(`✅ Cron de limpeza agendado para ${hour}:00 (${cronExpression})`);
+    logger.info(`✅ Cron de limpeza configurado (horário programado: ${hour}:00)`);
+    logger.info(`   Verificação: a cada hora (executa apenas no horário programado)`);
   } catch (error) {
     logger.error(`❌ Erro ao iniciar cron de limpeza: ${error.message}`);
   }

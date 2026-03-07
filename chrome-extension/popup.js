@@ -591,6 +591,13 @@ async function saveProduct(action) {
       return;
     }
 
+    if (!productData.price || productData.price === 0) {
+      showStatus('❌ Preço é obrigatório e deve ser maior que zero', 'error');
+      disableActionButtons(false);
+      editPrice.focus();
+      return;
+    }
+
     if (!productData.affiliateLink) {
       showStatus('❌ Link de afiliado é obrigatório', 'error');
       disableActionButtons(false);

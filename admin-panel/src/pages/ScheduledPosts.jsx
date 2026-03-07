@@ -17,6 +17,7 @@ export default function ScheduledPosts() {
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState('pending');
+    const [platformFilter, setPlatformFilter] = useState('all');
     const [pagination, setPagination] = useState({
         page: 1,
         limit: 20,
@@ -40,7 +41,7 @@ export default function ScheduledPosts() {
 
     useEffect(() => {
         fetchPosts(1);
-    }, [statusFilter]);
+    }, [statusFilter, platformFilter]);
 
     const fetchPosts = async (page = 1) => {
         try {
@@ -49,7 +50,13 @@ export default function ScheduledPosts() {
             if (statusFilter !== 'all') params.status = statusFilter;
 
             const response = await api.get('/scheduled-posts', { params });
-            const { data, count } = response.data.data;
+            let { data, count } = response.data.data;
+
+            // Filtrar por plataforma no frontend (backend não tem esse filtro ainda)
+            if (platformFilter !== 'all' && data) {
+                data = data.filter(post => post.platform === platformFilter);
+                count = data.length;
+            }
 
             setPosts(data || []);
             setPagination(prev => ({
@@ -88,6 +95,13 @@ export default function ScheduledPosts() {
 
     const handlePublishNow = async (id) => {
         // Abrir modal para vincular cupom
+        setSelectedPostId(id);
+        setCouponModalOpen(true);
+        fetchCoupons();
+    };
+
+    const handleRetry = async (id) => {
+        // Retry é igual a publish now, mas para posts falhados
         setSelectedPostId(id);
         setCouponModalOpen(true);
         fetchCoupons();
@@ -256,21 +270,42 @@ export default function ScheduledPosts() {
                 </div>
             </div>
 
-            <div className="flex gap-2 bg-muted/50 p-1 rounded-lg w-fit">
-                {['all', 'pending', 'published', 'failed'].map(status => (
-                    <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${statusFilter === status
-                            ? 'bg-background shadow text-foreground'
-                            : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                    >
-                        {status === 'all' ? 'Todos' :
-                            status === 'pending' ? 'Pendentes' :
-                                status === 'published' ? 'Publicados' : 'Falhas'}
-                    </button>
-                ))}
+            <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex gap-2 bg-muted/50 p-1 rounded-lg w-fit">
+                    {['all', 'pending', 'published', 'failed'].map(status => (
+                        <button
+                            key={status}
+                            onClick={() => setStatusFilter(status)}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${statusFilter === status
+                                ? 'bg-background shadow text-foreground'
+                                : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            {status === 'all' ? 'Todos' :
+                                status === 'pending' ? 'Pendentes' :
+                                    status === 'published' ? 'Publicados' : 'Falhas'}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex gap-2 bg-muted/50 p-1 rounded-lg w-fit">
+                    {['all', 'telegram', 'whatsapp', 'mercadolivre', 'shopee', 'aliexpress'].map(platform => (
+                        <button
+                            key={platform}
+                            onClick={() => setPlatformFilter(platform)}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${platformFilter === platform
+                                ? 'bg-background shadow text-foreground'
+                                : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            {platform === 'all' ? '🌐 Todas' :
+                                platform === 'telegram' ? '✈️ Telegram' :
+                                    platform === 'whatsapp' ? '💬 WhatsApp' :
+                                        platform === 'mercadolivre' ? '🛒 ML' :
+                                            platform === 'shopee' ? '🛍️ Shopee' : '📦 AliExpress'}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <Card>
@@ -284,6 +319,7 @@ export default function ScheduledPosts() {
                                 <TableHead>Plataforma</TableHead>
                                 <TableHead>Agendado Para</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>Tentativas</TableHead>
                                 <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -331,7 +367,14 @@ export default function ScheduledPosts() {
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            <PlatformLogo platform={post.platform} size={16} />
+                                            <div className="flex flex-col gap-1">
+                                                <PlatformLogo platform={post.platform} size={16} />
+                                                {!['telegram', 'whatsapp'].includes(post.platform) && (
+                                                    <Badge variant="outline" className="text-xs w-fit">
+                                                        Sem publicação automática
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-col">
@@ -358,6 +401,13 @@ export default function ScheduledPosts() {
                                                 </p>
                                             )}
                                         </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                <span className={`text-sm font-medium ${post.attempts >= 2 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                                    {post.attempts || 0}/3
+                                                </span>
+                                            </div>
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             {post.status === 'pending' && (
                                                 <div className="flex justify-end gap-2">
@@ -376,6 +426,30 @@ export default function ScheduledPosts() {
                                                         variant="destructive"
                                                         className="h-8 w-8 p-0"
                                                         title="Cancelar"
+                                                        onClick={() => handleCancel(post.id)}
+                                                        disabled={processing.delete === post.id}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                            {post.status === 'failed' && (
+                                                <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="default"
+                                                        className="h-8 w-8 p-0 bg-orange-600 hover:bg-orange-700"
+                                                        title="Tentar Novamente"
+                                                        onClick={() => handleRetry(post.id)}
+                                                        disabled={processing.publish === post.id}
+                                                    >
+                                                        <RefreshCw className="h-4 w-4 text-white" />
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        className="h-8 w-8 p-0"
+                                                        title="Remover"
                                                         onClick={() => handleCancel(post.id)}
                                                         disabled={processing.delete === post.id}
                                                     >

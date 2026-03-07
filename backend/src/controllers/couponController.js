@@ -327,6 +327,51 @@ class CouponController {
     }
   }
 
+  /**
+   * DELETE ALL COUPONS
+   * DELETE /api/coupons/bulk/all
+   */
+  static async deleteAll(req, res, next) {
+    try {
+      const userId = req.user.id;
+
+      logger.warn(`⚠️ Deletando TODOS os cupons pelo usuário ${userId}`);
+
+      const { supabase } = await import('../config/database.js');
+      
+      // Contar cupons antes de deletar
+      const { count: totalCount, error: countError } = await supabase
+        .from('coupons')
+        .select('*', { count: 'exact', head: true });
+
+      if (countError) throw countError;
+
+      if (totalCount === 0) {
+        return res.json(successResponse({ deletedCount: 0 }, 'Nenhum cupom para deletar'));
+      }
+
+      // Deletar todos os cupons
+      const { error: deleteError } = await supabase
+        .from('coupons')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Deletar todos (condição sempre verdadeira)
+
+      if (deleteError) throw deleteError;
+
+      await cacheDelByPattern('coupons:*');
+
+      logger.warn(`🗑️ ${totalCount} cupons deletados`);
+
+      res.json(successResponse(
+        { deletedCount: totalCount },
+        `${totalCount} cupons deletados com sucesso`
+      ));
+    } catch (error) {
+      logger.error(`❌ Erro ao deletar todos os cupons: ${error.message}`);
+      next(error);
+    }
+  }
+
   // Registrar uso do cupom
   static async use(req, res, next) {
     try {

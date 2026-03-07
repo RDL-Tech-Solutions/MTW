@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp, Calendar, Clipboard } from 'lucide-react';
+import { CheckCircle, XCircle, Search, ExternalLink, Clock, Eye, X, Zap, Brain, Link2, Loader2, CheckSquare, Square, Filter, Download, FileText, ChevronDown, ChevronUp, Calendar, Clipboard, Trash } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -50,6 +50,7 @@ export default function PendingProducts() {
   const [minDiscountFilter, setMinDiscountFilter] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [batchProcessing, setBatchProcessing] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [editableCurrentPrice, setEditableCurrentPrice] = useState('');
   const [editableOldPrice, setEditableOldPrice] = useState('');
 
@@ -493,6 +494,34 @@ export default function PendingProducts() {
     }
   };
 
+  // Delete all pending products (no password required)
+  const handleDeleteAllPending = async () => {
+    if (!confirm(`⚠️ ATENÇÃO: Você está prestes a deletar TODOS os ${pagination.total} produtos pendentes.\n\nEsta ação é IRREVERSÍVEL.\n\nDeseja continuar?`)) {
+      return;
+    }
+
+    setDeletingAll(true);
+    try {
+      const response = await api.delete('/products/bulk/all-pending');
+      
+      toast({
+        title: "Sucesso!",
+        description: response.data.message || "Todos os produtos pendentes foram deletados.",
+        variant: "success",
+      });
+      
+      fetchPendingProducts(1); // Voltar para primeira página
+    } catch (error) {
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || "Erro ao deletar produtos pendentes.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   // NOVO: Captura em lote
   const handleBatchCapture = async () => {
     if (!batchCaptureLinks.trim()) {
@@ -838,13 +867,35 @@ export default function PendingProducts() {
             Aprove produtos capturados automaticamente antes de publicá-los
           </p>
         </div>
-        <Button
-          onClick={() => setIsBatchCaptureDialogOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Captura em Lote
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setIsBatchCaptureDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Captura em Lote
+          </Button>
+          {pagination.total > 0 && (
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAllPending}
+              disabled={deletingAll}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingAll ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deletando...
+                </>
+              ) : (
+                <>
+                  <Trash className="h-4 w-4 mr-2" />
+                  Apagar Todos ({pagination.total})
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>

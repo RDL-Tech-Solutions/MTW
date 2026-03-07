@@ -666,11 +666,8 @@ class AppSettingsController {
     try {
       logger.info('🚀 Executando limpeza manual...');
 
-      const { cleanupOldData } = await import('../services/cron/cleanupOldData.js');
-      await cleanupOldData();
-
-      // Registrar última execução
-      await AppSettings.recordCleanupRun();
+      const { forceCleanup } = await import('../services/cron/cleanupOldData.js');
+      const result = await forceCleanup();
 
       logger.info('✅ Limpeza manual concluída');
 
@@ -678,7 +675,8 @@ class AppSettingsController {
         success: true,
         message: 'Limpeza executada com sucesso',
         data: {
-          executedAt: new Date().toISOString()
+          executedAt: new Date().toISOString(),
+          ...result
         }
       });
     } catch (error) {

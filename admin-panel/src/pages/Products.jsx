@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap, Loader2, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ExternalLink, Sparkles, Brain, Zap, Loader2, Calendar, Trash } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -12,6 +12,7 @@ import { useToast } from '../hooks/use-toast';
 import { Pagination } from '../components/ui/Pagination';
 import { PlatformLogo, getPlatformName } from '../utils/platformLogos.jsx';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { PasswordConfirmDialog } from '../components/ui/PasswordConfirmDialog';
 
 export default function Products() {
   const { toast } = useToast();
@@ -41,12 +42,16 @@ export default function Products() {
     batchDeleting: false,
     scheduling: false,
     republishing: false,
-    autoRepublishing: false
+    autoRepublishing: false,
+    deletingAll: false
   });
 
   // Estados para republicação automática
   const [autoRepublishEnabled, setAutoRepublishEnabled] = useState(false);
   const [loadingAutoRepublishStatus, setLoadingAutoRepublishStatus] = useState(true);
+
+  // Estados para delete all
+  const [isDeleteAllDialogOpen, setIsDeleteAllDialogOpen] = useState(false);
 
   const [isRepublishDialogOpen, setIsRepublishDialogOpen] = useState(false);
   const [republishingProduct, setRepublishingProduct] = useState(null);
@@ -714,6 +719,33 @@ export default function Products() {
     }
   };
 
+  // Delete all approved products (requires password)
+  const handleDeleteAll = async (password) => {
+    setProcessingActions(prev => ({ ...prev, deletingAll: true }));
+    try {
+      const response = await api.delete('/products/bulk/all-approved', {
+        data: { password }
+      });
+      
+      toast({
+        title: "Sucesso!",
+        description: response.data.message || "Todos os produtos aprovados foram deletados.",
+        variant: "success",
+      });
+      
+      setIsDeleteAllDialogOpen(false);
+      fetchProducts(1); // Voltar para primeira página
+    } catch (error) {
+      toast({
+        title: "Erro!",
+        description: error.response?.data?.error || "Erro ao deletar produtos. Verifique sua senha.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingActions(prev => ({ ...prev, deletingAll: false }));
+    }
+  };
+
   // Função para detectar categoria automaticamente
   const detectCategory = (productName) => {
     if (!productName) return '';
@@ -796,6 +828,20 @@ export default function Products() {
               </Button>
             )}
           </div>
+
+          {/* Botão Apagar Todos (requer senha) */}
+          {pagination.total > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsDeleteAllDialogOpen(true)}
+              disabled={processingActions.deletingAll}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash className="mr-2 h-4 w-4" />
+              Apagar Todos ({pagination.total})
+            </Button>
+          )}
 
           {selectedIds.length > 0 && (
             <Button
@@ -1658,6 +1704,17 @@ export default function Products() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Confirmação com Senha para Apagar Todos */}
+      <PasswordConfirmDialog
+        open={isDeleteAllDialogOpen}
+        onOpenChange={setIsDeleteAllDialogOpen}
+        onConfirm={handleDeleteAll}
+        title="Apagar Todos os Produtos Aprovados"
+        description={`Você está prestes a deletar TODOS os ${pagination.total} produtos aprovados. Esta ação é IRREVERSÍVEL. Digite sua senha para confirmar.`}
+        confirmText="Apagar Todos"
+        loading={processingActions.deletingAll}
+      />
     </div>
   );
 }

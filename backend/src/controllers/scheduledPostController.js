@@ -48,23 +48,41 @@ class ScheduledPostController {
                 logger.info(`   🎟️ Cupom vinculado: ${coupon_id}`);
             }
 
+            // Buscar post com produto
+            logger.info(`   Buscando post ${id}...`);
             const post = await ScheduledPost.findById(id);
+            
             if (!post) {
+                logger.error(`   ❌ Post ${id} não encontrado`);
                 return res.status(404).json(errorResponse('Agendamento não encontrado'));
             }
 
+            logger.info(`   ✅ Post encontrado: ${post.platform} - ${post.products?.name || 'N/A'}`);
+            logger.info(`   Status atual: ${post.status}`);
+
             if (post.status === 'published') {
+                logger.warn(`   ⚠️ Post ${id} já foi publicado`);
                 return res.status(400).json(errorResponse('Este item já foi publicado'));
             }
 
-            const success = await schedulerService.processSinglePost(post, { couponId: coupon_id });
+            // Processar publicação
+            logger.info(`   Processando publicação...`);
+            const success = await schedulerService.processSinglePost(post, { 
+                couponId: coupon_id,
+                isForced: true 
+            });
 
             if (success) {
+                logger.info(`   ✅ Post ${id} publicado com sucesso!`);
                 res.json(successResponse(null, 'Publicado com sucesso!'));
             } else {
+                logger.error(`   ❌ Falha ao publicar post ${id}`);
                 res.status(500).json(errorResponse('Falha ao publicar. Verifique os logs.'));
             }
         } catch (error) {
+            logger.error(`❌ Erro ao forçar publicação do post ${req.params.id}:`, error);
+            logger.error(`   Mensagem: ${error.message}`);
+            logger.error(`   Stack: ${error.stack}`);
             next(error);
         }
     }

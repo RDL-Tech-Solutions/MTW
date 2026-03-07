@@ -70,9 +70,10 @@ router.get('/send-notifications', async (req, res) => {
 
 router.get('/cleanup', async (req, res) => {
     try {
-        logger.info('🚀 Cron Trigger: Limpeza');
-        await cleanupOldData();
-        res.json({ success: true, message: 'Cleanup done' });
+        logger.info('🚀 Cron Trigger: Limpeza (forçada)');
+        const { forceCleanup } = await import('../services/cron/cleanupOldData.js');
+        const result = await forceCleanup();
+        res.json({ success: true, message: 'Cleanup done', data: result });
     } catch (error) {
         logger.error('Erro no cron cleanup:', error);
         res.status(500).json({ error: error.message });

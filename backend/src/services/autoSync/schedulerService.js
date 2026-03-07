@@ -135,12 +135,10 @@ class SchedulerService {
      */
     async releaseStuckPosts() {
         try {
-            logger.debug(`🔍 Verificando posts travados em "processing"...`);
             const stuckPosts = await ScheduledPost.getStuckPosts(5); // 5 minutos de timeout
 
             if (stuckPosts.length === 0) {
-                logger.debug(`   ✅ Nenhum post travado encontrado`);
-                return;
+                return; // Sem log se não houver posts travados
             }
 
             logger.warn(`⚠️ Encontrados ${stuckPosts.length} post(s) travado(s) em "processing"`);
@@ -153,7 +151,6 @@ class SchedulerService {
             }
         } catch (error) {
             logger.error(`❌ Erro ao liberar posts travados: ${error.message}`);
-            logger.error(`   Stack: ${error.stack}`);
         }
     }
 
@@ -163,27 +160,22 @@ class SchedulerService {
     async processScheduledQueue() {
         try {
             const now = new Date();
-            logger.debug(`📊 [processScheduledQueue] Iniciando processamento`);
-            logger.debug(`   Horário atual (ISO): ${now.toISOString()}`);
-            logger.debug(`   Horário atual (Local BR): ${now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
-            logger.debug(`   Timezone do processo: ${process.env.TZ || 'não configurado'}`);
-
+            
             // 1. Primeiro, liberar posts travados (timeout)
             await this.releaseStuckPosts();
 
             // 2. Buscar posts pendentes prontos para processar
-            logger.debug(`🔍 Buscando posts pendentes prontos para processar...`);
             const posts = await ScheduledPost.getPendingPosts(10); // Processar 10 por vez
 
             if (posts.length === 0) {
-                logger.debug(`   ℹ️ Nenhum post pendente encontrado para processar agora`);
+                // Apenas log em debug mode
+                if (process.env.LOG_LEVEL === 'debug') {
+                    logger.debug(`ℹ️ Nenhum post pendente encontrado para processar agora`);
+                }
                 return;
             }
 
             logger.info(`⏰ Processando ${posts.length} posts agendados...`);
-            posts.forEach((post, index) => {
-                logger.info(`   ${index + 1}. Post ${post.id}: agendado para ${post.scheduled_at} (${post.platform})`);
-            });
 
             for (const post of posts) {
                 // Marcar como "processing" antes de executar
@@ -192,9 +184,7 @@ class SchedulerService {
                     await this.processSinglePost(post);
                 } catch (error) {
                     logger.error(`❌ Erro ao processar post ${post.id}: ${error.message}`);
-                    logger.error(`   Stack: ${error.stack}`);
                     // CRÍTICO: Garantir que o post seja marcado como failed ou pending mesmo em caso de exceção
-                    // Isso evita que posts fiquem travados em "processing" indefinidamente
                     try {
                         const currentAttempts = (post.attempts || 0) + 1;
                         const maxRetries = 3;
@@ -229,10 +219,7 @@ class SchedulerService {
         const currentAttempt = (post.attempts || 0) + 1;
 
         try {
-            logger.info(`📤 [${startTime.toISOString()}] Processando post ${post.id} (tentativa ${currentAttempt}/${maxRetries})`);
-            logger.info(`   Platform: ${post.platform}, Product: ${post.product_id}`);
-            logger.info(`   Scheduled at: ${post.scheduled_at}`);
-            logger.info(`   Current time: ${startTime.toISOString()}`);
+            logger.info(`📤 Processando post ${post.id.substring(0, 8)}... (${post.platform}, tentativa ${currentAttempt}/${maxRetries})`);
 
             if (!post.products) {
                 logger.warn(`⚠️ Produto não encontrado para agendamento ${post.id}. Marcando como falha.`);
@@ -244,21 +231,20 @@ class SchedulerService {
                 return false;
             }
 
-            // NOVO: Recuperar opções de metadata (categoria manual, etc.)
+            // Recuperar opções de metadata (categoria manual, etc.)
             const publishOptions = {};
             if (post.metadata) {
                 if (post.metadata.skipAiCategory) publishOptions.skipAiCategory = post.metadata.skipAiCategory;
                 if (post.metadata.manualCategoryId) publishOptions.manualCategoryId = post.metadata.manualCategoryId;
-                logger.info(`📂 Publicando post agendado com categoria manual protegida: ${post.metadata.manualCategoryId}`);
             }
 
-            // NOVO: Vincular cupom se fornecido
+            // Vincular cupom se fornecido
             if (options.couponId) {
                 const Coupon = (await import('../../models/Coupon.js')).default;
                 const coupon = await Coupon.findById(options.couponId);
 
                 if (coupon) {
-                    logger.info(`🎟️ Vinculando cupom ${coupon.code} ao produto ${post.products.name}`);
+                    logger.info(`🎟️ Vinculando cupom ${coupon.code} ao produto`);
 
                     // Adicionar dados do cupom ao produto
                     post.products.coupon_id = coupon.id;
@@ -269,7 +255,6 @@ class SchedulerService {
 
                     // Forçar uso do template promotion_with_coupon
                     publishOptions.forceTemplate = 'promotion_with_coupon';
-                    logger.info(`📋 Forçando template 'promotion_with_coupon'`);
                 } else {
                     logger.warn(`⚠️ Cupom ${options.couponId} não encontrado, publicando sem cupom`);
                 }
@@ -291,11 +276,14 @@ class SchedulerService {
                     result = await publishService.notifyTelegramBot(post.products, publishOptions);
                 } else if (post.platform === 'whatsapp') {
                     result = await publishService.notifyWhatsAppBot(post.products, publishOptions);
+                } else {
+                    // Plataformas sem publicação automática (mercadolivre, shopee, aliexpress, etc.)
+                    logger.info(`📋 Plataforma "${post.platform}" não suporta publicação automática. Marcando como publicado.`);
+                    result = { success: true, message: 'Plataforma sem publicação automática' };
                 }
             } catch (publishError) {
                 lastError = publishError;
                 logger.error(`❌ Erro ao publicar: ${publishError.message}`);
-                logger.error(`   Stack: ${publishError.stack}`);
             }
 
             const endTime = new Date();
@@ -308,7 +296,7 @@ class SchedulerService {
                     attempts: currentAttempt,
                     processing_started_at: null
                 });
-                logger.info(`✅ [${endTime.toISOString()}] Post agendado executado com sucesso: ${post.platform} - ${post.products.name} (${duration}ms)`);
+                logger.info(`✅ Post publicado com sucesso: ${post.platform} - ${post.products.name.substring(0, 30)}... (${duration}ms)`);
                 return true;
             } else {
                 // Falhou - verificar se deve tentar novamente
@@ -320,7 +308,7 @@ class SchedulerService {
                         attempts: currentAttempt,
                         processing_started_at: null
                     });
-                    logger.error(`❌ [${endTime.toISOString()}] Post ${post.id} falhou após ${maxRetries} tentativas (${duration}ms)`);
+                    logger.error(`❌ Post ${post.id.substring(0, 8)}... falhou após ${maxRetries} tentativas`);
                     return false;
                 } else {
                     // Ainda há tentativas restantes - retornar para pending
@@ -330,7 +318,7 @@ class SchedulerService {
                         attempts: currentAttempt,
                         processing_started_at: null
                     });
-                    logger.warn(`⚠️ [${endTime.toISOString()}] Post ${post.id} falhou (tentativa ${currentAttempt}/${maxRetries}). Será tentado novamente. (${duration}ms)`);
+                    logger.warn(`⚠️ Post ${post.id.substring(0, 8)}... falhou (tentativa ${currentAttempt}/${maxRetries}). Será tentado novamente.`);
                     return false;
                 }
             }
@@ -339,8 +327,7 @@ class SchedulerService {
             const endTime = new Date();
             const duration = endTime - startTime;
 
-            logger.error(`❌ [${endTime.toISOString()}] Erro crítico ao processar agendamento ${post.id}: ${postError.message} (${duration}ms)`);
-            logger.error(`   Stack: ${postError.stack}`);
+            logger.error(`❌ Erro crítico ao processar agendamento ${post.id}: ${postError.message}`);
 
             // Verificar se deve tentar novamente
             if (currentAttempt >= maxRetries) {

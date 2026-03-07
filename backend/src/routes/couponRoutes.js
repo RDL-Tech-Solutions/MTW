@@ -88,6 +88,7 @@ router.post('/', authenticateToken, requireAdmin, createLimiterDefault, preproce
 router.put('/:id', authenticateToken, requireAdmin, preprocessCouponData, validate(updateCouponSchema), CouponController.update);
 router.delete('/:id', authenticateToken, requireAdmin, CouponController.delete);
 router.post('/batch-delete', authenticateToken, requireAdmin, CouponController.batchDelete);
+router.delete('/bulk/all', authenticateToken, requireAdmin, CouponController.deleteAll);
 router.post('/:id/force-publish', authenticateToken, requireAdmin, CouponController.forcePublish);
 router.put('/:id/out-of-stock', authenticateToken, requireAdmin, CouponController.markAsOutOfStock);
 router.put('/:id/restore-stock', authenticateToken, requireAdmin, CouponController.restoreStock);

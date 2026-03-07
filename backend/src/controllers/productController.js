@@ -2,6 +2,7 @@ import Product from '../models/Product.js';
 import ClickTracking from '../models/ClickTracking.js';
 import { successResponse, errorResponse } from '../utils/helpers.js';
 import { ERROR_MESSAGES, ERROR_CODES } from '../config/constants.js';
+import bcrypt from 'bcrypt';
 
 import { CACHE_TTL } from '../config/constants.js';
 import logger from '../config/logger.js';
@@ -180,6 +181,21 @@ class ProductController {
   static async delete(req, res, next) {
     try {
       const { id } = req.params;
+      
+      // IMPORTANTE: Deletar scheduled_posts relacionados primeiro (foreign key constraint)
+      const { supabase } = await import('../config/database.js');
+      
+      const { error: scheduledPostsError } = await supabase
+        .from('scheduled_posts')
+        .delete()
+        .eq('product_id', id);
+
+      if (scheduledPostsError) {
+        logger.error(`❌ Erro ao deletar scheduled_posts: ${scheduledPostsError.message}`);
+        // Continuar mesmo se houver erro, pois pode não haver scheduled_posts
+      }
+
+      // Agora deletar o produto
       await Product.delete(id);
 
       logger.info(`Produto deletado: ${id}`);
@@ -200,11 +216,186 @@ class ProductController {
         );
       }
 
+      // IMPORTANTE: Deletar scheduled_posts relacionados primeiro (foreign key constraint)
+      const { supabase } = await import('../config/database.js');
+      
+      const { error: scheduledPostsError } = await supabase
+        .from('scheduled_posts')
+        .delete()
+        .in('product_id', ids);
+
+      if (scheduledPostsError) {
+        logger.error(`❌ Erro ao deletar scheduled_posts em lote: ${scheduledPostsError.message}`);
+        // Continuar mesmo se houver erro, pois pode não haver scheduled_posts
+      } else {
+        logger.info(`🗑️ Scheduled posts deletados para ${ids.length} produtos`);
+      }
+
+      // Agora deletar os produtos
       await Product.deleteMany(ids);
 
       logger.info(`Produtos deletados em lote: ${ids.length} itens`);
       res.json(successResponse(null, `${ids.length} produtos deletados com sucesso`));
     } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE ALL APPROVED PRODUCTS (com validação de senha)
+   * DELETE /api/products/bulk/all-approved
+   */
+  static async deleteAllApproved(req, res, next) {
+    try {
+      const { password } = req.body;
+      const userId = req.user.id;
+
+      logger.warn(`⚠️ Tentativa de deletar TODOS os produtos aprovados pelo usuário ${userId}`);
+
+      // Validar senha
+      if (!password) {
+        return res.status(400).json(
+          errorResponse('Senha é obrigatória para esta operação', 'PASSWORD_REQUIRED')
+        );
+      }
+
+      // Buscar usuário e verificar senha
+      const User = (await import('../models/User.js')).default;
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return res.status(404).json(
+          errorResponse('Usuário não encontrado', 'USER_NOT_FOUND')
+        );
+      }
+
+      // Verificar senha usando bcrypt importado no topo do arquivo
+      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+
+      if (!isPasswordValid) {
+        logger.warn(`❌ Senha incorreta fornecida pelo usuário ${userId}`);
+        return res.status(401).json(
+          errorResponse('Senha incorreta', 'INVALID_PASSWORD')
+        );
+      }
+
+      // Buscar e deletar todos os produtos aprovados
+      const { supabase } = await import('../config/database.js');
+      
+      // Contar produtos antes de deletar
+      const { count: totalCount, error: countError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'approved');
+
+      if (countError) throw countError;
+
+      if (totalCount === 0) {
+        return res.json(successResponse({ deletedCount: 0 }, 'Nenhum produto aprovado para deletar'));
+      }
+
+      // IMPORTANTE: Deletar scheduled_posts relacionados primeiro (foreign key constraint)
+      const { data: approvedProducts } = await supabase
+        .from('products')
+        .select('id')
+        .eq('status', 'approved');
+
+      if (approvedProducts && approvedProducts.length > 0) {
+        const productIds = approvedProducts.map(p => p.id);
+        
+        // Deletar scheduled_posts relacionados
+        const { error: scheduledPostsError } = await supabase
+          .from('scheduled_posts')
+          .delete()
+          .in('product_id', productIds);
+
+        if (scheduledPostsError) {
+          logger.error(`❌ Erro ao deletar scheduled_posts: ${scheduledPostsError.message}`);
+          // Continuar mesmo se houver erro, pois pode não haver scheduled_posts
+        }
+      }
+
+      // Agora deletar todos os produtos aprovados
+      const { error: deleteError } = await supabase
+        .from('products')
+        .delete()
+        .eq('status', 'approved');
+
+      if (deleteError) throw deleteError;
+
+      logger.warn(`🗑️ ${totalCount} produtos aprovados deletados pelo usuário ${user.email}`);
+
+      res.json(successResponse(
+        { deletedCount: totalCount },
+        `${totalCount} produtos aprovados deletados com sucesso`
+      ));
+    } catch (error) {
+      logger.error(`❌ Erro ao deletar todos os produtos aprovados: ${error.message}`);
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE ALL PENDING PRODUCTS
+   * DELETE /api/products/bulk/all-pending
+   */
+  static async deleteAllPending(req, res, next) {
+    try {
+      const userId = req.user.id;
+
+      logger.warn(`⚠️ Deletando TODOS os produtos pendentes pelo usuário ${userId}`);
+
+      const { supabase } = await import('../config/database.js');
+      
+      // Contar produtos antes de deletar
+      const { count: totalCount, error: countError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      if (countError) throw countError;
+
+      if (totalCount === 0) {
+        return res.json(successResponse({ deletedCount: 0 }, 'Nenhum produto pendente para deletar'));
+      }
+
+      // IMPORTANTE: Deletar scheduled_posts relacionados primeiro (foreign key constraint)
+      const { data: pendingProducts } = await supabase
+        .from('products')
+        .select('id')
+        .eq('status', 'pending');
+
+      if (pendingProducts && pendingProducts.length > 0) {
+        const productIds = pendingProducts.map(p => p.id);
+        
+        // Deletar scheduled_posts relacionados
+        const { error: scheduledPostsError } = await supabase
+          .from('scheduled_posts')
+          .delete()
+          .in('product_id', productIds);
+
+        if (scheduledPostsError) {
+          logger.error(`❌ Erro ao deletar scheduled_posts: ${scheduledPostsError.message}`);
+          // Continuar mesmo se houver erro, pois pode não haver scheduled_posts
+        }
+      }
+
+      // Agora deletar todos os produtos pendentes
+      const { error: deleteError } = await supabase
+        .from('products')
+        .delete()
+        .eq('status', 'pending');
+
+      if (deleteError) throw deleteError;
+
+      logger.info(`🗑️ ${totalCount} produtos pendentes deletados`);
+
+      res.json(successResponse(
+        { deletedCount: totalCount },
+        `${totalCount} produtos pendentes deletados com sucesso`
+      ));
+    } catch (error) {
+      logger.error(`❌ Erro ao deletar todos os produtos pendentes: ${error.message}`);
       next(error);
     }
   }
@@ -571,7 +762,7 @@ class ProductController {
       logger.info(`📅 ========== APROVAR E AGENDAR COM IA ==========`);
 
       const { id } = req.params;
-      const { affiliate_link, coupon_id, category_id, shorten_link } = req.body;
+      const { affiliate_link, coupon_id, category_id, shorten_link, current_price, old_price } = req.body;
 
       if (!affiliate_link || !affiliate_link.trim()) {
         return res.status(400).json(
@@ -616,6 +807,17 @@ class ProductController {
         affiliate_link: finalAffiliateLink,
         status: 'approved'
       };
+
+      // CORREÇÃO: Atualizar preços se fornecidos
+      if (current_price !== undefined && current_price !== null) {
+        updateData.current_price = parseFloat(current_price);
+        logger.info(`💰 Atualizando preço atual: R$ ${updateData.current_price.toFixed(2)}`);
+      }
+
+      if (old_price !== undefined && old_price !== null) {
+        updateData.old_price = parseFloat(old_price);
+        logger.info(`💰 Atualizando preço antigo: R$ ${updateData.old_price.toFixed(2)}`);
+      }
 
       if (category_id) {
         updateData.category_id = category_id;
@@ -1073,6 +1275,14 @@ class ProductController {
       if (!title || !sourceUrl) {
         return res.status(400).json(
           errorResponse('Título e URL são obrigatórios', 'MISSING_REQUIRED_FIELDS')
+        );
+      }
+
+      // Validação de preço
+      if (!price || price <= 0) {
+        logger.warn(`⚠️ Tentativa de salvar produto sem preço válido: ${title}`);
+        return res.status(400).json(
+          errorResponse('Preço é obrigatório e deve ser maior que zero', 'INVALID_PRICE')
         );
       }
 
